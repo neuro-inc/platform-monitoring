@@ -14,6 +14,7 @@ RUN \
 COPY platform_mon platform_mon
 RUN pip install -e .
 
+
 #RUN cp platform_api/ssh/ssh_host_rsa_key /etc/ssh/ssh_host_rsa_key
 #RUN cp platform_api/ssh/ssh_host_dsa_key /etc/ssh/ssh_host_dsa_key
 #RUN cp platform_api/ssh/ssh_host_ecdsa_key /etc/ssh/ssh_host_ecdsa_key
