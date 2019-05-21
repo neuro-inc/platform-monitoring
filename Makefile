@@ -3,34 +3,14 @@ IMAGE_TAG ?= latest
 IMAGE_NAME_K8S ?= $(IMAGE_NAME)-k8s
 IMAGE_K8S ?= $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/$(IMAGE_NAME_K8S)
 
-include k8s.mk
-
 setup:
-	pip install --no-use-pep517 --no-binary cryptography -r requirements/test.txt
+	pip install --no-use-pep517 -r requirements/test.txt
 
 test_unit:
-	#pytest -vv --cov-config=setup.cfg --cov platform_monitoring tests/unit
 	pytest -vv platform_monitoring tests/unit
 
 build_mon_k8s:
 	@docker build -f Dockerfile.k8s -t $(IMAGE_NAME_K8S):$(IMAGE_TAG) .
-
-run_mon_k8s:
-    NP_K8S_MON_URL=https://$$(minikube ip):8443 \
-	NP_K8S_CA_PATH=$$HOME/.minikube/ca.crt \
-	NP_K8S_AUTH_CERT_PATH=$$HOME/.minikube/client.crt \
-	NP_K8S_AUTH_CERT_KEY_PATH=$$HOME/.minikube/client.key \
-	platform-monitoring
-
-run_mon_k8s_container:
-	docker run --rm -it --name platformmonitoring \
-	    -p 8080:8080 \
-	    -v $$HOME/.minikube:$$HOME/.minikube \
-	    -e NP_K8S_MON_URL=https://$$(minikube ip):8443 \
-	    -e NP_K8S_CA_PATH=$$HOME/.minikube/ca.crt \
-	    -e NP_K8S_AUTH_CERT_PATH=$$HOME/.minikube/client.crt \
-	    -e NP_K8S_AUTH_CERT_KEY_PATH=$$HOME/.minikube/client.key \
-	    $(IMAGE_K8S):latest
 
 gke_login:
 	sudo /opt/google-cloud-sdk/bin/gcloud --quiet components update --version 204.0.0
