@@ -26,7 +26,6 @@ clean_k8s: stop_k8s
 	-docker rm $$(docker ps -a -q)
 
 test_k8s_platform_api:
-	kubectl config view
 	make test_unit
 	mv .coverage .coverage.unit
 	make test_integration

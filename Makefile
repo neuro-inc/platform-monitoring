@@ -11,7 +11,7 @@ else
 endif
 export PIP_INDEX_URL
 
-include k8s.mk
+include k8s.mktest_k8s_platform_api
 
 setup:
 	pip install --no-use-pep517 --no-binary cryptography -r requirements/test.txt
