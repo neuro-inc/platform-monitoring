@@ -8,10 +8,10 @@ ARG PIP_INDEX_URL
 COPY setup.py ./
 RUN \
     pip install -e . && \
-    pip uninstall -y platform-mon
+    pip uninstall -y platform-monitoring
 
-# installing platform-api
-COPY platform_mon platform_mon
+# installing platform-monitoring
+COPY platform_monitoring platform_monitoring
 RUN pip install -e .
 
 ENV NP_API_PORT=8080

@@ -3,29 +3,20 @@ IMAGE_TAG ?= latest
 IMAGE_NAME_K8S ?= $(IMAGE_NAME)-k8s
 IMAGE_K8S ?= $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/$(IMAGE_NAME_K8S)
 
-
-ifdef CIRCLECI
-    PIP_INDEX_URL ?= https://$(DEVPI_USER):$(DEVPI_PASS)@$(DEVPI_HOST)/$(DEVPI_USER)/$(DEVPI_INDEX)
-else
-    PIP_INDEX_URL ?= $(shell python pip_extra_index_url.py)
-endif
-export PIP_INDEX_URL
-
 include k8s.mk
 
 setup:
 	pip install --no-use-pep517 --no-binary cryptography -r requirements/test.txt
 
-test_integration:
-	pytest -vv --maxfail=3 --cov-config=setup.cfg --cov platform_monitoring tests/integration
+test_unit:
+	#pytest -vv --cov-config=setup.cfg --cov platform_monitoring tests/unit
+	pytest -vv platform_monitoring tests/unit
 
 build_mon_k8s:
-	@docker build --build-arg PIP_INDEX_URL="$(PIP_INDEX_URL)" \
-	    -f Dockerfile.k8s -t $(IMAGE_NAME_K8S):$(IMAGE_TAG) .
+	@docker build -f Dockerfile.k8s -t $(IMAGE_NAME_K8S):$(IMAGE_TAG) .
 
 run_mon_k8s:
-	NP_STORAGE_HOST1_MOUNT_PATH=/tmp \
-	NP_K8S_MON_URL=https://$$(minikube ip):8443 \
+    NP_K8S_MON_URL=https://$$(minikube ip):8443 \
 	NP_K8S_CA_PATH=$$HOME/.minikube/ca.crt \
 	NP_K8S_AUTH_CERT_PATH=$$HOME/.minikube/client.crt \
 	NP_K8S_AUTH_CERT_KEY_PATH=$$HOME/.minikube/client.key \
@@ -35,7 +26,6 @@ run_mon_k8s_container:
 	docker run --rm -it --name platformmonitoring \
 	    -p 8080:8080 \
 	    -v $$HOME/.minikube:$$HOME/.minikube \
-	    -e NP_STORAGE_HOST_MOUNT_PATH=/tmp \
 	    -e NP_K8S_MON_URL=https://$$(minikube ip):8443 \
 	    -e NP_K8S_CA_PATH=$$HOME/.minikube/ca.crt \
 	    -e NP_K8S_AUTH_CERT_PATH=$$HOME/.minikube/client.crt \
