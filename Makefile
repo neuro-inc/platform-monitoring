@@ -30,8 +30,8 @@ gke_docker_push: build_mon_k8s
 
 gke_k8s_deploy:
 	gcloud --quiet container clusters get-credentials $(GKE_CLUSTER_NAME) $(CLUSTER_ZONE_REGION)
-	helm \
-		--set "global.env=$(HELM_ENV)" \
-		--set "IMAGE.$(HELM_ENV)=$(IMAGE_K8S):$(CIRCLE_SHA1)" \
-		--set "INGRESS_FALLBACK_IMAGE.$(HELM_ENV)=$(INGRESS_FALLBACK_IMAGE_K8S):$(CIRCLE_SHA1)" \
-		upgrade --install platformmonitoring deploy/platformmonitoring/ --wait --timeout 600
+	#helm \
+	#	--set "global.env=$(HELM_ENV)" \
+	#	--set "IMAGE.$(HELM_ENV)=$(IMAGE_K8S):$(CIRCLE_SHA1)" \
+	#	--set "INGRESS_FALLBACK_IMAGE.$(HELM_ENV)=$(INGRESS_FALLBACK_IMAGE_K8S):$(CIRCLE_SHA1)" \
+	#	upgrade --install platformmonitoring deploy/platformmonitoring/ --wait --timeout 600
