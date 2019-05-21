@@ -15,7 +15,7 @@ setup:
 	pip install --no-use-pep517 --no-binary cryptography -r requirements/test.txt
 
 test_integration:
-	pytest -vv --maxfail=3 --cov-config=setup.cfg --cov platform_mon tests/integration
+	pytest -vv --maxfail=3 --cov-config=setup.cfg --cov platform_monitoring tests/integration
 
 build_mon_k8s:
 	@docker build --build-arg PIP_INDEX_URL="$(PIP_INDEX_URL)" \
