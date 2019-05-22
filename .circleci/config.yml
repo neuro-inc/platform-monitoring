@@ -94,15 +94,15 @@ workflows:
     jobs:
       - test:
           context: org-dev
-#          filters:
-#            branches:
-#              only:
-#                - master
+          filters:
+            branches:
+              only:
+                - master
       - gke_deploy:
           context: org-dev
           requires:
             - test
-#          filters:
-#            branches:
-#              only:
-#                - master
+          filters:
+            branches:
+              only:
+                - master
