@@ -68,7 +68,7 @@ jobs:
       - run:
           name: Build image
           command: |
-            make build_k8s
+            make build
       - run:
           name: GKE Auth
           command: |
@@ -78,9 +78,9 @@ jobs:
           command: |
             make gke_docker_push
       - run:
-          name: GKE K8s Deploy
+          name: GKE Deploy
           command: |
-            make gke_k8s_deploy
+            make gke_deploy
 
 workflows:
   version: 2
