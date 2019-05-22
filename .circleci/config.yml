@@ -58,8 +58,8 @@ jobs:
           name: Installing dependencies
           command: |
             python -m venv .env
+            source .env/bin/activate
             python --version
-            . .env/bin/activate
             make setup
             pip install codecov==2.0.15
 
