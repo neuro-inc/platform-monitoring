@@ -1,11 +1,17 @@
+version: 2.1
+
+
+executors:
+    python:
+      docker:
+        - image: circleci/python:3.6.6-stretch
+
+
 defaults: &defaults
-  machine:
-    image: circleci/classic:201711-01
-    docker_layer_caching: true
+  executor: python
   working_directory: ~/platform-monitoring
 
 
-version: 2
 jobs:
 
   gke_deploy:
