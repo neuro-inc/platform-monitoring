@@ -15,7 +15,7 @@ setup:
 	pip install --no-use-pep517 -r requirements/test.txt
 
 test_unit:
-	pytest -vv platform_monitoring tests/unit
+	pytest --cov=platform_monitoring --cov-report xml:.coverage.xml tests/unit
 
 build_k8s:
 	@docker build -f Dockerfile.k8s -t $(IMAGE_NAME_K8S):$(IMAGE_TAG) .
