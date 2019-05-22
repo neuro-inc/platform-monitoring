@@ -60,8 +60,6 @@ jobs:
             python -m venv .env
             source .env/bin/activate
             pip install --upgrade pip==19.1.1
-            python --version
-            pip --version
             make setup
 
       - save_cache:
