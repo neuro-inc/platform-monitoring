@@ -3,13 +3,21 @@ IMAGE_TAG ?= latest
 IMAGE_NAME_K8S ?= $(IMAGE_NAME)-k8s
 IMAGE_K8S ?= $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/$(IMAGE_NAME_K8S)
 
+ifdef CIRCLECI
+    PIP_EXTRA_INDEX_URL ?= https://$(DEVPI_USER):$(DEVPI_PASS)@$(DEVPI_HOST)/$(DEVPI_USER)/$(DEVPI_INDEX)
+else
+    PIP_EXTRA_INDEX_URL ?= $(shell python pip_extra_index_url.py)
+endif
+export PIP_EXTRA_INDEX_URL
+
+
 setup:
 	pip install --no-use-pep517 -r requirements/test.txt
 
 test_unit:
 	pytest -vv platform_monitoring tests/unit
 
-build_mon_k8s:
+build_k8s:
 	@docker build -f Dockerfile.k8s -t $(IMAGE_NAME_K8S):$(IMAGE_TAG) .
 
 gke_login:
