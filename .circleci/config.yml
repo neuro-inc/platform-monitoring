@@ -91,12 +91,7 @@ workflows:
   main:
     jobs:
       - test:
-          context: org-global
-          filters:
-            branches:
-              ignore:
-                - master
-                - /release.*/
+          context: org-dev
 
   dev:
     jobs:
@@ -110,45 +105,3 @@ workflows:
           context: org-dev
           requires:
             - test
-          filters:
-            branches:
-              only:
-                - master
-
-  staging:
-    jobs:
-      - test:
-          context: org-staging
-          filters:
-            branches:
-              only:
-                - /release.*/
-      - gke_deploy:
-          context: org-staging
-          requires:
-            - test
-          filters:
-            branches:
-              only:
-                - /release.*/
-
-  prod:
-    jobs:
-      - test:
-          context: org-prod
-          filters:
-            branches:
-              ignore: /.*/
-            tags:
-              only:
-                - /release.*/
-      - gke_deploy:
-          context: org-prod
-          requires:
-            - test
-          filters:
-            branches:
-              ignore: /.*/
-            tags:
-              only:
-                - /release.*/
