@@ -20,31 +20,6 @@ orbs:
 
 jobs:
 
-  gke_deploy:
-    <<: *defaults
-    steps:
-      - gcloud/install
-      - k8s/install
-      - setup_remote_docker:
-          version: 18.09.3
-      - checkout
-      - run:
-          name: Build image
-          command: |
-            make build_k8s
-      - run:
-          name: GKE Auth
-          command: |
-            make -s gke_login
-      - run:
-          name: GKE Docker Push
-          command: |
-            make gke_docker_push
-      - run:
-          name: GKE K8s Deploy
-          command: |
-            make gke_k8s_deploy
-
   test:
     <<: *defaults
     steps:
@@ -81,6 +56,31 @@ jobs:
 
       - codecov/upload:
           file: .coverage.xml
+
+  gke_deploy:
+    <<: *defaults
+    steps:
+      - gcloud/install
+      - k8s/install
+      - setup_remote_docker:
+          version: 18.09.3
+      - checkout
+      - run:
+          name: Build image
+          command: |
+            make build_k8s
+      - run:
+          name: GKE Auth
+          command: |
+            make -s gke_login
+      - run:
+          name: GKE Docker Push
+          command: |
+            make gke_docker_push
+      - run:
+          name: GKE K8s Deploy
+          command: |
+            make gke_k8s_deploy
 
 workflows:
   version: 2
