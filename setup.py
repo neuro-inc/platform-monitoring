@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 install_requires = ()
 
 setup(
-    name="platform-mon",
+    name="platform-monitoring",
     version="0.0.1b1",
     url="https://github.com/neuromation/platform-monitoring",
     packages=find_packages(),
