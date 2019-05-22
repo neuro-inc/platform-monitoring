@@ -17,7 +17,7 @@ test_unit:
 	pytest --cov=platform_monitoring --cov-report xml:.coverage.xml tests/unit
 
 build:
-	@docker build -f Dockerfile -t $(IMAGE_NAME):$(IMAGE_TAG) .
+	@docker build -f Dockerfile.k8s -t $(IMAGE_NAME):$(IMAGE_TAG) .
 
 gke_login:
 	sudo chown circleci:circleci -R $$HOME
