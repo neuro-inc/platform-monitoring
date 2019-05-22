@@ -1,6 +1,5 @@
 IMAGE_NAME ?= platformmonitoringapi
 IMAGE_TAG ?= latest
-IMAGE_NAME ?= $(IMAGE_NAME)-k8s
 IMAGE ?= $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/$(IMAGE_NAME)
 
 ifdef CIRCLECI
@@ -18,7 +17,7 @@ test_unit:
 	pytest --cov=platform_monitoring --cov-report xml:.coverage.xml tests/unit
 
 build:
-	@docker build -f Dockerfile.k8s -t $(IMAGE_NAME):$(IMAGE_TAG) .
+	@docker build -f Dockerfile -t $(IMAGE_NAME):$(IMAGE_TAG) .
 
 gke_login:
 	sudo chown circleci:circleci -R $$HOME
