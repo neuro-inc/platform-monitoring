@@ -1,0 +1,108 @@
+version: 2.1
+
+
+executors:
+    python:
+      docker:
+        - image: circleci/python:3.6.6-stretch
+
+
+defaults: &defaults
+  executor: python
+  working_directory: ~/platform-monitoring
+
+
+orbs:
+  codecov: codecov/codecov@1.0.4
+  gcloud: circleci/gcp-cli@1.3.0
+  k8s: circleci/kubernetes@0.3.0
+
+
+jobs:
+
+  test:
+    <<: *defaults
+    steps:
+      - checkout
+
+      - restore_cache:
+          keys:
+          - v1-dependencies-python_3.6.6-{{ checksum "requirements/test.txt" }}
+
+      - run:
+          name: Installing dependencies
+          command: |
+            python -m venv .env
+            source .env/bin/activate
+            pip install --upgrade pip==19.1.1
+            make setup
+
+      - save_cache:
+          paths:
+            - ./.env
+          key: v1-dependencies-python_3.6.6-{{ checksum "requirements/test.txt" }}
+
+#      - run:
+#          name: Running Static Code Analysis
+#          command: |
+#            . .env/bin/activate
+#            make lint
+
+      - run:
+          name: Running Unit Tests
+          command: |
+            . .env/bin/activate
+            make test_unit
+
+      - codecov/upload:
+          file: .coverage.xml
+
+  gke_deploy:
+    <<: *defaults
+    steps:
+      - gcloud/install
+      - k8s/install
+      - setup_remote_docker:
+          version: 18.09.3
+      - checkout
+      - run:
+          name: Build image
+          command: |
+            make build
+      - run:
+          name: GKE Auth
+          command: |
+            make -s gke_login
+      - run:
+          name: GKE Docker Push
+          command: |
+            make gke_docker_push
+      - run:
+          name: GKE Deploy
+          command: |
+            make gke_deploy
+
+workflows:
+  version: 2
+
+  main:
+    jobs:
+      - test:
+          context: org-dev
+
+  dev:
+    jobs:
+      - test:
+          context: org-dev
+          filters:
+            branches:
+              only:
+                - master
+      - gke_deploy:
+          context: org-dev
+          requires:
+            - test
+          filters:
+            branches:
+              only:
+                - master
