@@ -104,3 +104,7 @@ workflows:
           context: org-dev
           requires:
             - test
+          filters:
+            branches:
+              only:
+                - master
