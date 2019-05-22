@@ -12,6 +12,7 @@ export PIP_EXTRA_INDEX_URL
 
 
 setup:
+    pip install --upgrade pip==19.1.1
 	pip install --no-use-pep517 -r requirements/test.txt
 
 test_unit:

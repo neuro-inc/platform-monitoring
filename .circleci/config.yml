@@ -57,10 +57,11 @@ jobs:
       - run:
           name: Installing dependencies
           command: |
-            python3 -m venv .env
+            python -m venv .env
+            python --version
             . .env/bin/activate
             make setup
-            pip3 install codecov==2.0.15
+            pip install codecov==2.0.15
 
       - save_cache:
           paths:
