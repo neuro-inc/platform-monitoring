@@ -42,11 +42,11 @@ jobs:
             - ./.env
           key: v1-dependencies-python_3.6.6-{{ checksum "requirements/test.txt" }}
 
-#      - run:
-#          name: Running Static Code Analysis
-#          command: |
-#            . .env/bin/activate
-#            make lint
+      - run:
+          name: Running Static Code Analysis
+          command: |
+            source ./venv/bin/activate
+            make lint
 
       - run:
           name: Running Unit Tests
