@@ -32,7 +32,7 @@ jobs:
       - run:
           name: Installing dependencies
           command: |
-            python -m venv venv
+            python -m venv ./venv
             source ./venv/bin/activate
             pip install --upgrade pip==19.1.1
             make setup
