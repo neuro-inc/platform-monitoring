@@ -20,7 +20,7 @@ lint:
 
 format:
 	isort -rc platform_monitoring tests setup.py
-	black .
+	black --check platform_monitoring tests setup.py
 
 test_unit:
 	pytest --cov=platform_monitoring --cov-report xml:.coverage.xml tests/unit
