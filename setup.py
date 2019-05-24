@@ -1,7 +1,15 @@
 from setuptools import find_packages, setup
 
 
-install_requires = ()
+install_requires = (
+    "aiohttp>=3.5",
+    "aiohttp-security==0.4.0",
+    "async-generator==1.9",
+    'dataclasses==0.6; python_version<"3.7"',
+    "yarl>=1.3.0",
+    "async-exit-stack==1.0.1",  # backport from 3.7 stdlib
+    "neuro_auth_client==1.0.6",
+)
 
 setup(
     name="platform-monitoring",
