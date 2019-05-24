@@ -3,7 +3,6 @@ from setuptools import find_packages, setup
 
 install_requires = (
     "aiohttp>=3.5",
-    "async-generator==1.9",
     'dataclasses==0.6; python_version<"3.7"',
     "yarl>=1.3.0",
 )
