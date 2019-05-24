@@ -58,7 +58,7 @@ jobs:
       - run:
           name: Running Integration Tests
           command: |
-            source ./venv/bin/activate
+            source venv/bin/activate
             make test_integration
 
       - codecov/upload:

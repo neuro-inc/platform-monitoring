@@ -51,7 +51,7 @@ async def handle_exceptions(
         )
 
 
-async def create_api_v1_app() -> aiohttp.web.Application:
+async def create_api_v1_app() -> aiohttp.web.Application:  # pragma: no coverage
     api_v1_app = aiohttp.web.Application()
     api_v1_handler = ApiHandler()
     api_v1_handler.register(api_v1_app)
