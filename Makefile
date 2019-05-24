@@ -13,6 +13,15 @@ export PIP_EXTRA_INDEX_URL
 setup:
 	pip install --no-use-pep517 -r requirements/test.txt
 
+lint:
+	black --check platform_monitoring tests setup.py
+	flake8 platform_monitoring tests setup.py
+	mypy platform_monitoring tests setup.py
+
+format:
+	isort -rc platform_monitoring tests setup.py
+	black .
+
 test_unit:
 	pytest --cov=platform_monitoring --cov-report xml:.coverage.xml tests/unit
 

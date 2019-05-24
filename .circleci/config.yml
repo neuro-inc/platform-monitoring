@@ -32,26 +32,26 @@ jobs:
       - run:
           name: Installing dependencies
           command: |
-            python -m venv .env
-            source .env/bin/activate
+            python -m venv venv
+            source venv/bin/activate
             pip install --upgrade pip==19.1.1
             make setup
 
       - save_cache:
           paths:
-            - ./.env
+            - venv
           key: v1-dependencies-python_3.6.6-{{ checksum "requirements/test.txt" }}
 
-#      - run:
-#          name: Running Static Code Analysis
-#          command: |
-#            . .env/bin/activate
-#            make lint
+      - run:
+          name: Running Static Code Analysis
+          command: |
+            source venv/bin/activate
+            make lint
 
       - run:
           name: Running Unit Tests
           command: |
-            . .env/bin/activate
+            source venv/bin/activate
             make test_unit
 
       - codecov/upload:

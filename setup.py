@@ -10,9 +10,7 @@ setup(
     packages=find_packages(),
     install_requires=install_requires,
     entry_points={
-        "console_scripts": [
-            "platform-monitoring=platform_monitoring.api:main",
-        ]
+        "console_scripts": ["platform-monitoring=platform_monitoring.api:main"]
     },
     zip_safe=False,
 )
