@@ -9,9 +9,6 @@ from async_generator import asynccontextmanager
 from platform_monitoring.config import Config, ServerConfig
 
 
-pytest_plugins = ["tests.integration.docker"]
-
-
 @pytest.fixture(scope="session")
 def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
     asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
@@ -28,7 +25,7 @@ def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
 
 @pytest.fixture
 def config() -> Config:
-    return Config(server=ServerConfig(host="0.0.0.0", port=8080))
+    return Config(server=ServerConfig(host="0.0.0.0", port=8088))
 
 
 @dataclass(frozen=True)
