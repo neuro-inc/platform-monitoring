@@ -20,10 +20,6 @@ class ApiConfig(NamedTuple):
     def ping_url(self) -> str:
         return self.endpoint + "/ping"
 
-    @property
-    def secured_ping_url(self) -> str:
-        return self.endpoint + "/secured-ping"
-
 
 @pytest.fixture
 async def api(config: Config) -> AsyncIterator[ApiConfig]:
