@@ -7,7 +7,7 @@ from platform_monitoring.config_factory import EnvironConfigFactory
 def test_create() -> None:
     environ: Dict[str, Any] = {
         "NP_MONITORING_API_HOST": "0.0.0.0",
-        "NP_MONITORING_API_PORT": 8088,
+        "NP_MONITORING_API_PORT": 8080,
     }
     config = EnvironConfigFactory(environ).create()
-    assert config == Config(server=ServerConfig(host="0.0.0.0", port=8088))
+    assert config == Config(server=ServerConfig(host="0.0.0.0", port=8080))

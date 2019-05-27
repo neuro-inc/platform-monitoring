@@ -14,7 +14,7 @@ RUN \
 COPY platform_monitoring platform_monitoring
 RUN pip install -e .
 
-ENV NP_MON_API_PORT=8088
+ENV NP_MON_API_PORT=8080
 EXPOSE $NP_MON_API_PORT
 
 CMD platform-monitoring

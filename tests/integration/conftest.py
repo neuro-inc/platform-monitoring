@@ -26,7 +26,7 @@ def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
 
 @pytest.fixture
 def config() -> Config:
-    return Config(server=ServerConfig(host="0.0.0.0", port=8088))
+    return Config(server=ServerConfig(host="0.0.0.0", port=8080))
 
 
 @dataclass(frozen=True)
@@ -37,7 +37,7 @@ class ApiAddress:
 
 @asynccontextmanager
 async def create_local_app_server(
-    config: Config, port: int = 8088
+    config: Config, port: int = 8080
 ) -> AsyncIterator[ApiAddress]:
     app = await create_app(config)
     runner = aiohttp.web.AppRunner(app)
