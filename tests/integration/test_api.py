@@ -42,3 +42,5 @@ class TestApi:
     ) -> None:
         async with client.get(api.ping_url) as resp:
             assert resp.status == HTTPOk.status_code
+            text = await resp.text()
+            assert text == "Pong"
