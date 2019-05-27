@@ -8,22 +8,25 @@ from platform_monitoring.config import Config
 from .conftest import ApiAddress, create_local_app_server
 
 
-class ApiConfig(NamedTuple):
-    address: ApiAddress
+class ApiConfigBase:
+    def __init__(self, address: ApiAddress) -> None:
+        self._address = address
 
     @property
     def endpoint(self) -> str:
-        return f"http://{self.address.host}:{self.address.port}/api/v1"
+        return f"http://{self._address.host}:{self._address.port}/api/v1"
 
+
+class MonitoringApiConfig(ApiConfigBase):
     @property
     def ping_url(self) -> str:
-        return self.endpoint + "/ping"
+        return f"{self.endpoint}/ping"
 
 
 @pytest.fixture
-async def api(config: Config) -> AsyncIterator[ApiConfig]:
+async def api(config: Config) -> AsyncIterator[MonitoringApiConfig]:
     async with create_local_app_server(config, port=8080) as api_config:
-        yield ApiConfig(api_config)
+        yield MonitoringApiConfig(api_config)
 
 
 @pytest.fixture
@@ -34,6 +37,6 @@ async def client() -> AsyncIterator[aiohttp.ClientSession]:
 
 class TestApi:
     @pytest.mark.asyncio
-    async def test_ping(self, api: ApiConfig, client: aiohttp.ClientSession) -> None:
+    async def test_ping(self, api: MonitoringApiConfig, client: aiohttp.ClientSession) -> None:
         async with client.get(api.ping_url) as resp:
             assert resp.status == HTTPOk.status_code
