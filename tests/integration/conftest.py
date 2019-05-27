@@ -11,7 +11,7 @@ from platform_monitoring.config import Config, ServerConfig
 
 @pytest.fixture
 def config() -> Config:
-    return Config(server=ServerConfig(host="0.0.0.0", port=8080))
+    return Config(monitoring_server=ServerConfig(host="0.0.0.0", port=8080))
 
 
 @dataclass(frozen=True)

@@ -75,5 +75,7 @@ def main() -> None:  # pragma: no coverage
     config = EnvironConfigFactory().create()
     logging.info("Loaded config: %r", config)
     aiohttp.web.run_app(
-        create_app(config), host=config.server.host, port=config.server.port
+        create_app(config),
+        host=config.monitoring_server.host,
+        port=config.monitoring_server.port,
     )

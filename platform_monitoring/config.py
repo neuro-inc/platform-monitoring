@@ -9,4 +9,4 @@ class ServerConfig:
 
 @dataclass(frozen=True)
 class Config:
-    server: ServerConfig
+    monitoring_server: ServerConfig

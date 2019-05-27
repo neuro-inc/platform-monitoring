@@ -10,4 +10,4 @@ def test_create() -> None:
         "NP_MONITORING_API_PORT": 8080,
     }
     config = EnvironConfigFactory(environ).create()
-    assert config == Config(server=ServerConfig(host="0.0.0.0", port=8080))
+    assert config == Config(monitoring_server=ServerConfig(host="0.0.0.0", port=8080))
