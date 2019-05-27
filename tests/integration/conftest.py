@@ -1,6 +1,5 @@
-import asyncio
 from dataclasses import dataclass
-from typing import AsyncIterator, Iterator
+from typing import AsyncIterator
 
 import aiohttp
 import aiohttp.web
@@ -8,20 +7,6 @@ import pytest
 from async_generator import asynccontextmanager
 from platform_monitoring.api import create_app
 from platform_monitoring.config import Config, ServerConfig
-
-
-@pytest.fixture(scope="session")
-def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
-    asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    loop.set_debug(True)
-
-    watcher = asyncio.SafeChildWatcher()  # type: ignore
-    watcher.attach_loop(loop)
-    asyncio.get_event_loop_policy().set_child_watcher(watcher)
-
-    yield loop
-    loop.close()
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-from typing import AsyncIterator, NamedTuple
+from typing import AsyncIterator
 
 import aiohttp
 import pytest
@@ -37,6 +37,8 @@ async def client() -> AsyncIterator[aiohttp.ClientSession]:
 
 class TestApi:
     @pytest.mark.asyncio
-    async def test_ping(self, api: MonitoringApiConfig, client: aiohttp.ClientSession) -> None:
+    async def test_ping(
+        self, api: MonitoringApiConfig, client: aiohttp.ClientSession
+    ) -> None:
         async with client.get(api.ping_url) as resp:
             assert resp.status == HTTPOk.status_code
