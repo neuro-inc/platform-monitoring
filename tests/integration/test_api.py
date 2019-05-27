@@ -3,10 +3,9 @@ from typing import AsyncIterator, NamedTuple
 import aiohttp
 import pytest
 from aiohttp.web import HTTPOk
-from platform_monitoring.api import create_app
 from platform_monitoring.config import Config
 
-from .conftest import ApiAddress, ApiRunner
+from .conftest import ApiAddress, create_local_app_server
 
 
 class ApiConfig(NamedTuple):
@@ -23,12 +22,8 @@ class ApiConfig(NamedTuple):
 
 @pytest.fixture
 async def api(config: Config) -> AsyncIterator[ApiConfig]:
-    app = await create_app(config)
-    runner = ApiRunner(app, port=8080)
-    mon_api_address = await runner.run()
-    api_config = ApiConfig(address=mon_api_address)
-    yield api_config
-    await runner.close()
+    async with create_local_app_server(config, port=8080) as api_config:
+        yield ApiConfig(api_config)
 
 
 @pytest.fixture

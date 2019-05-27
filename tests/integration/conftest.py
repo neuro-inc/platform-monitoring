@@ -1,11 +1,12 @@
 import asyncio
 from dataclasses import dataclass
-from typing import AsyncIterator, Iterator, Optional
+from typing import AsyncIterator, Iterator
 
 import aiohttp
 import aiohttp.web
 import pytest
 from async_generator import asynccontextmanager
+from platform_monitoring.api import create_app
 from platform_monitoring.config import Config, ServerConfig
 
 
@@ -36,8 +37,9 @@ class ApiAddress:
 
 @asynccontextmanager
 async def create_local_app_server(
-    app: aiohttp.web.Application, port: int = 8088
+    config: Config, port: int = 8088
 ) -> AsyncIterator[ApiAddress]:
+    app = await create_app(config)
     runner = aiohttp.web.AppRunner(app)
     try:
         await runner.setup()
@@ -48,30 +50,3 @@ async def create_local_app_server(
     finally:
         await runner.shutdown()
         await runner.cleanup()
-
-
-class ApiRunner:
-    def __init__(self, app: aiohttp.web.Application, port: int) -> None:
-        self._app = app
-        self._port = port
-
-        self._api_address_future: asyncio.Future[ApiAddress] = asyncio.Future()
-        self._cleanup_future: asyncio.Future[None] = asyncio.Future()
-        self._task: Optional[asyncio.Task[None]] = None
-
-    async def _run(self) -> None:
-        async with create_local_app_server(self._app, port=self._port) as api_address:
-            self._api_address_future.set_result(api_address)
-            await self._cleanup_future
-
-    async def run(self) -> ApiAddress:
-        loop = asyncio.get_event_loop()
-        self._task = loop.create_task(self._run())
-        return await self._api_address_future
-
-    async def close(self) -> None:
-        if self._task:
-            task = self._task
-            self._task = None
-            self._cleanup_future.set_result(None)
-            await task
