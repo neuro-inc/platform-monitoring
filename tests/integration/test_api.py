@@ -11,11 +11,11 @@ from .conftest import ApiAddress, create_local_app_server
 
 @dataclass(frozen=True)
 class ApiConfig:
-    address: ApiAddress
+    mon_api_address: ApiAddress
 
     @property
     def endpoint(self) -> str:
-        return f"http://{self.address.host}:{self.address.port}/api/v1"
+        return f"http://{self.mon_api_address.host}:{self.mon_api_address.port}/api/v1"
 
     @property
     def ping_url(self) -> str:
@@ -24,8 +24,8 @@ class ApiConfig:
 
 @pytest.fixture
 async def api(config: Config) -> AsyncIterator[ApiConfig]:
-    async with create_local_app_server(config, port=8080) as api_config:
-        yield ApiConfig(api_config)
+    async with create_local_app_server(config, port=8080) as address:
+        yield ApiConfig(mon_api_address=address)
 
 
 @pytest.fixture
