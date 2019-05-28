@@ -30,14 +30,12 @@ function minikube::load_images {
     minikube::pull_save_k8s_image platformauthapi
     minikube::pull_save_k8s_image platformapi
     minikube::pull_save_k8s_image platformconfig
-    minikube::pull_save_k8s_image platformapi-dummy  # for the test
 
     minikube::activate_docker_env
 
     minikube::load_k8s_image platformauthapi
     minikube::load_k8s_image platformconfig
     minikube::load_k8s_image platformapi
-    minikube::load_k8s_image platformapi-dummy
 }
 
 function minikube::apply_all_configurations {

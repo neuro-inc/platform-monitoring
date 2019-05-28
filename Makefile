@@ -43,6 +43,10 @@ gke_login:
 	docker version
 	gcloud auth configure-docker
 
+gke_docker_pull_test:
+	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:latest
+	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:latest
+
 gke_docker_push: build
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE):latest
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE):$(CIRCLE_SHA1)
