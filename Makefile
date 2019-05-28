@@ -39,6 +39,8 @@ gke_login:
 	gcloud config set project $(GKE_PROJECT_ID)
 	gcloud --quiet config set container/cluster $(GKE_CLUSTER_NAME)
 	gcloud config set $(SET_CLUSTER_ZONE_REGION)
+    gcloud auth --help
+    docker version
 	gcloud auth configure-docker
 
 gke_docker_push: build
