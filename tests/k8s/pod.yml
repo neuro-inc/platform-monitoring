@@ -1,0 +1,20 @@
+---
+apiVersion: batch/v1
+kind: Job
+
+metadata:
+  name: testjob1
+
+spec:
+  template:
+    spec:
+      containers:
+      - name: testjob1
+        image: gcr.io/light-reality-205619/platformapi-dummy:latest
+        env:
+        - name: MODEL_PATH
+          value: /
+      restartPolicy: Never
+      imagePullSecrets:
+      - name: np-docker-reg-secret
+  backoffLimit: 1

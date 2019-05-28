@@ -9,6 +9,7 @@ else
 endif
 export PIP_EXTRA_INDEX_URL
 
+include k8s.mk
 
 setup:
 	pip install --no-use-pep517 -r requirements/test.txt
@@ -50,5 +51,4 @@ gke_deploy:
 	#helm \
 	#	--set "global.env=$(HELM_ENV)" \
 	#	--set "IMAGE.$(HELM_ENV)=$(IMAGE):$(CIRCLE_SHA1)" \
-	#	--set "INGRESS_FALLBACK_IMAGE.$(HELM_ENV)=$(INGRESS_FALLBACK_IMAGE):$(CIRCLE_SHA1)" \
 	#	upgrade --install platformmonitoring deploy/platformmonitoring/ --wait --timeout 600
