@@ -25,6 +25,9 @@ format:
 test_unit:
 	pytest --cov=platform_monitoring --cov-report xml:.coverage.xml tests/unit
 
+test_integration:
+	pytest --maxfail=3 --cov=platform_monitoring --cov-report xml:.coverage.xml tests/integration
+
 build:
 	@docker build -f Dockerfile.k8s -t $(IMAGE_NAME):$(IMAGE_TAG) .
 

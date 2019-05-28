@@ -1,7 +1,11 @@
 from setuptools import find_packages, setup
 
 
-install_requires = ()
+install_requires = (
+    "aiohttp>=3.5",
+    'dataclasses==0.6; python_version<"3.7"',
+    "yarl>=1.3.0",
+)
 
 setup(
     name="platform-monitoring",
