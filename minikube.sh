@@ -8,7 +8,7 @@ function minikube::install {
     kubectl config use-context minikube
 }
 
-function minikube::pull_tag_save_k8s_image {
+function minikube::pull_save_k8s_image {
     local image=$1
     local k8s_image=$(cat K8S_IMAGES_PREFIX)/$image
 
@@ -22,16 +22,22 @@ function minikube::load_k8s_image {
     docker load -i /tmp/${image}.image
 }
 
-function minikube::load_images {
-    minikube::pull_tag_save_k8s_image platformauthapi
-    minikube::pull_tag_save_k8s_image platformapi
-    minikube::pull_tag_save_k8s_image platformconfig
-
+function minikube::activate_docker_env {
     eval $(minikube docker-env)
+}
+
+function minikube::load_images {
+    minikube::pull_save_k8s_image platformauthapi
+    minikube::pull_save_k8s_image platformapi
+    minikube::pull_save_k8s_image platformconfig
+    minikube::pull_save_k8s_image platformapi-dummy  # for the test
+
+    minikube::activate_docker_env
 
     minikube::load_k8s_image platformauthapi
     minikube::load_k8s_image platformconfig
     minikube::load_k8s_image platformapi
+    minikube::load_k8s_image platformapi-dummy
 }
 
 function minikube::apply_all_configurations {
@@ -60,18 +66,22 @@ function check_service() { # attempt, max_attempt, service
     done    
 }
 
+function minikube::check {
+    max_attempts=30
+    check_service $max_attempts platformapi
+    check_service $max_attempts platformauthapi
+}
+
 
 minikube::install
 minikube::delete_all_configurations
 minikube::load_images
 minikube::apply_all_configurations
 
-max_attempts=30
-check_service $max_attempts platformapi
-check_service $max_attempts platformauthapi
-
 # wait till our services are up to prevent flakes
 sleep 10
+
+minikube::check
 
 export PLATFORM_API_URL=$(minikube service platformapi --url)/api/v1
 export AUTH_API_URL=$(minikube service platformauthapi --url)

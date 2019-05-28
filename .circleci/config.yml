@@ -20,16 +20,15 @@ jobs:
     steps:
       - checkout
 
-#      - restore_cache:
-#          keys:
-#          - v1-dependencies-python_3.6.6-{{ checksum "requirements/test.txt" }}
+      - restore_cache:
+          keys:
+          - v1-dependencies-python_3.6.6-{{ checksum "requirements/test.txt" }}
 
       - run:
           name: Installing dependencies
           command: |
-            echo 1
-#            pyenv install --debug 3.6.3
-#            pyenv local 3.6.3-debug
+            pyenv install --debug 3.6.3
+            pyenv local 3.6.3-debug
 
       - run:
           name: Running Kubernetes
@@ -55,34 +54,33 @@ jobs:
       - run:
           name: Setting up Python Virtual Environment
           command: |
-            echo 1
-#            python -m venv venv
-#            source venv/bin/activate
-#            pip install --upgrade pip==19.1.1
-#            make setup
+            python -m venv venv
+            source venv/bin/activate
+            pip install --upgrade pip==19.1.1
+            make setup
 
-#      - save_cache:
-#          paths:
-#            - venv
-#          key: v1-dependencies-python_3.6.6-{{ checksum "requirements/test.txt" }}
+      - save_cache:
+          paths:
+            - venv
+          key: v1-dependencies-python_3.6.6-{{ checksum "requirements/test.txt" }}
 
-#      - run:
-#          name: Running Static Code Analysis
-#          command: |
-#            source venv/bin/activate
-#            make lint
-#
-#      - run:
-#          name: Running Unit Tests
-#          command: |
-#            source venv/bin/activate
-#            make test_unit
-#
-#      - run:
-#          name: Running Integration Tests
-#          command: |
-#            source venv/bin/activate
-#            make test_integration
+      - run:
+          name: Running Static Code Analysis
+          command: |
+            source venv/bin/activate
+            make lint
+
+      - run:
+          name: Running Unit Tests
+          command: |
+            source venv/bin/activate
+            make test_unit
+
+      - run:
+          name: Running Integration Tests
+          command: |
+            source venv/bin/activate
+            make test_integration
 
       - run:
           name: Stopping Kubernetes

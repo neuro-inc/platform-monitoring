@@ -57,7 +57,8 @@ function k8s::setup_logging {
 function k8s::test {
     kubectl delete jobs testjob1 || :
     kubectl create -f tests/k8s/pod.yml
-    for _ in {1..300}; do
+    for i in {1..300}; do
+        echo "Attempt $i ..."
         if [ "$(kubectl get job testjob1 --template {{.status.succeeded}})" == "1" ]; then
             exit 0
         fi
@@ -66,6 +67,8 @@ function k8s::test {
         fi
         sleep 1
     done
+    echo "Could not complete test job"
+    kubectl describe job testjob1
     exit 1
 }
 
