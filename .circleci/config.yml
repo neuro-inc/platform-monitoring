@@ -50,6 +50,7 @@ jobs:
             sudo mount --make-rshared /var/lib/docker
 
             make start_k8s
+            make test_k8s
 
       - run:
           name: Setting up Python Virtual Environment
