@@ -26,16 +26,16 @@ data:
                     "token": "token",
                     "namespace": "default",
 
-                    "jobs_ingress_name": "not-supported",
-                    "jobs_ingress_auth_name": "not-supported",
+                    "jobs_ingress_name": "not-important",
+                    "jobs_ingress_auth_name": "not-important",
 
-                    "node_label_gpu": "not-supported,
-                    "node_label_preemptible": "not-supported"
+                    "node_label_gpu": "not-important,
+                    "node_label_preemptible": "not-important"
                 },
 
                 "is_http_ingress_secure": false,
-                "job_hostname_template": "not-supported",
-                "named_job_hostname_template": "not-supported",
+                "job_hostname_template": "not-important",
+                "named_job_hostname_template": "not-important",
 
                 "resource_pool_types": [
                     {}
@@ -43,11 +43,11 @@ data:
             },
 
             "ssh": {
-                "server": "not-supported"
+                "server": "not-important"
             },
 
             "monitoring": {
-                "url": "http://platformapi/api/v1/jobs",  # TODO!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                "url": "not-important",
 
                 "elasticsearch": {
                     "hosts": ["http://elasticsearch-logging.kube-system:9200"]
