@@ -14,7 +14,7 @@ install_k8s:
 start_k8s: $(K8S_CLUSTER_CMD) install_k8s clean_k8s
 	$(K8S_CLUSTER_CMD) up
 
-test_k8s: gke_login
+test_k8s:
 	$(K8S_CLUSTER_CMD) test
 
 stop_k8s:
@@ -24,12 +24,3 @@ clean_k8s: stop_k8s
 	$(K8S_CLUSTER_CMD) clean
 	-docker stop $$(docker ps -a -q)
 	-docker rm $$(docker ps -a -q)
-
-test_k8s_platform_api:
-	kubectl config view
-	make test_unit
-	mv .coverage .coverage.unit
-	make test_integration
-	mv .coverage .coverage.integration
-	coverage combine
-	codecov
