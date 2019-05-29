@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -o verbose
 
 GKE_DOCKER_REGISTRY=gcr.io
 GKE_PROJECT_ID=light-reality-205619
