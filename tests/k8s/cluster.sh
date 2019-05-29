@@ -57,7 +57,6 @@ function k8s::test {
     kubectl delete jobs testjob1 || :
     kubectl create -f tests/k8s/pod.yml
     for i in {1..300}; do
-        echo "Attempt $i ..."
         if [ "$(kubectl get job testjob1 --template {{.status.succeeded}})" == "1" ]; then
             exit 0
         fi

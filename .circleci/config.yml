@@ -36,7 +36,6 @@ jobs:
           name: Installing dependencies
           command: |
             pyenv global 3.6.5
-            python --version
 
       - run:
           name: Running Kubernetes
