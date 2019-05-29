@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -o verbose
 
+GKE_PREFIX=$(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)
+
+
 function minikube::install {
     mkdir -p ~/.minikube/files/files
     cp tests/k8s/fluentd/kubernetes.conf ~/.minikube/files/files/fluentd-kubernetes.conf
@@ -10,7 +13,7 @@ function minikube::install {
 
 function minikube::pull_save_k8s_image {
     local image=$1
-    local k8s_image=$(cat K8S_IMAGES_PREFIX)/$image
+    local k8s_image=$GKE_PREFIX/$image
 
     docker pull $k8s_image:latest
     docker tag $k8s_image:latest $image:latest
