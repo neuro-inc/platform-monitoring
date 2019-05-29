@@ -24,11 +24,11 @@ jobs:
 
       - restore_cache:
           keys:
-          - v1-dependencies-python_3.6.6-{{ checksum "requirements/test.txt" }}
+          - v2-dependencies-python_3.6.6-{{ checksum "requirements/test.txt" }}
       - run:
           name: Setup venv
           command: |
-            python3 -m venv venv
+            python -m venv venv
 
       - run:
           name: Installing dependencies
@@ -40,7 +40,7 @@ jobs:
       - save_cache:
           paths:
             - venv
-          key: v1-dependencies-python_3.6.6-{{ checksum "requirements/test.txt" }}
+          key: v2-dependencies-python_3.6.6-{{ checksum "requirements/test.txt" }}
       - run:
           name: Running Static Code Analysis
           command: |
@@ -99,12 +99,12 @@ jobs:
           command: |
             source venv/bin/activate
             make test_integration
-
-      - run:
-          name: Stopping Kubernetes
-          command: |
-            make clean_k8s
-          when: always
+#
+#      - run:
+#          name: Stopping Kubernetes
+#          command: |
+#            make clean_k8s
+#          when: always
 
       - codecov/upload:
           file: .coverage.xml
