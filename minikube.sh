@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-set -o verbose
 
 GKE_DOCKER_REGISTRY=gcr.io
 GKE_PROJECT_ID=light-reality-205619
@@ -8,6 +7,7 @@ GKE_PREFIX=$GKE_DOCKER_REGISTRY/$GKE_PROJECT_ID
 
 
 function minikube::install {
+    echo "Setting up minikube..."
     mkdir -p ~/.minikube/files/files
     cp tests/k8s/fluentd/kubernetes.conf ~/.minikube/files/files/fluentd-kubernetes.conf
     minikube start --kubernetes-version=v1.10.0
@@ -33,6 +33,7 @@ function minikube::activate_docker_env {
 }
 
 function minikube::load_images {
+    echo "Loading images to minikube..."
     minikube::pull_save_k8s_image platformauthapi
     minikube::pull_save_k8s_image platformapi
     minikube::pull_save_k8s_image platformconfig
@@ -45,12 +46,16 @@ function minikube::load_images {
 }
 
 function minikube::apply_all_configurations {
+    echo "Applying configurations..."
+    kubectl config use-context minikube
     kubectl create -f tests/k8s/rb.default.gke.yml
     kubectl create -f tests/k8s/platformconfig.yml
     kubectl create -f tests/k8s/platformapi.yml
 }
 
 function minikube::delete_all_configurations {
+    echo "Cleaning up..."
+    kubectl config use-context minikube
     kubectl delete -f tests/k8s/rb.default.gke.yml
     kubectl delete -f tests/k8s/platformconfig.yml
     kubectl delete -f tests/k8s/platformapi.yml
@@ -60,6 +65,7 @@ function check_service() { # attempt, max_attempt, service
     local attempt=1
     local max_attempts=$1
     local service=$2
+    echo "Checking service $service..."
     until minikube service $service --url; do
 	if [ $attempt == $max_attempts ]; then
 	    echo "Can't connect to the container"
@@ -76,16 +82,31 @@ function minikube::check {
     check_service $max_attempts platformauthapi
 }
 
+function minikube::start {
+    minikube status
 
-minikube::install
-minikube::delete_all_configurations
-minikube::load_images
-minikube::apply_all_configurations
+    minikube::delete_all_configurations
+    minikube::apply_all_configurations
 
-# wait till our services are up to prevent flakes
-sleep 10
+    # wait till our services are up to prevent flakes
+    sleep 10
 
-minikube::check
+    minikube::check
+    export PLATFORM_API_URL=$(minikube service platformapi --url)/api/v1
+    export AUTH_API_URL=$(minikube service platformauthapi --url)
+}
 
-export PLATFORM_API_URL=$(minikube service platformapi --url)/api/v1
-export AUTH_API_URL=$(minikube service platformauthapi --url)
+
+case "${1:-}" in
+    install)
+        minikube::install
+        minikube::load_images
+        ;;
+    start)
+        minikube::start
+        ;;
+    *)
+        echo "No correct command specified"
+        exit 1
+        ;;
+esac
