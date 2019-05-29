@@ -3,7 +3,8 @@ set -o verbose
 
 GKE_DOCKER_REGISTRY=gcr.io
 GKE_PROJECT_ID=light-reality-205619
-GKE_PREFIX=$(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)
+
+GKE_PREFIX=$GKE_DOCKER_REGISTRY/$GKE_PROJECT_ID
 
 
 function minikube::install {
@@ -44,13 +45,13 @@ function minikube::load_images {
 }
 
 function minikube::apply_all_configurations {
-    kubectl create -f deploy/platformapi/templates/rb.default.gke.yml
+    kubectl create -f tests/k8s/rb.default.gke.yml
     kubectl create -f tests/k8s/platformconfig.yml
     kubectl create -f tests/k8s/platformapi.yml
 }
 
 function minikube::delete_all_configurations {
-    kubectl delete -f deploy/platformapi/templates/rb.default.gke.yml
+    kubectl delete -f tests/k8s/rb.default.gke.yml
     kubectl delete -f tests/k8s/platformconfig.yml
     kubectl delete -f tests/k8s/platformapi.yml
 }
