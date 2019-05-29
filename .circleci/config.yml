@@ -88,9 +88,9 @@ jobs:
             # they need not do anything. In Linux environments without systemd
             # we recommend running mount --make-rshared / during boot before
             # docker is started.
-            sudo mount --make-rshared /
-            sudo mount --make-rshared /run
-            sudo mount --make-rshared /var/lib/docker
+#            sudo mount --make-rshared /
+#            sudo mount --make-rshared /run
+#            sudo mount --make-rshared /var/lib/docker
 
             make start_k8s
             make test_k8s
