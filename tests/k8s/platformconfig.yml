@@ -29,7 +29,7 @@ data:
                     "jobs_ingress_name": "not-important",
                     "jobs_ingress_auth_name": "not-important",
 
-                    "node_label_gpu": "not-important,
+                    "node_label_gpu": "not-important",
                     "node_label_preemptible": "not-important"
                 },
 
