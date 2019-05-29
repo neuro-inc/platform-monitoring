@@ -35,14 +35,14 @@ function minikube::activate_docker_env {
 function minikube::load_images {
     echo "Loading images to minikube..."
     minikube::pull_save_k8s_image platformauthapi
-    minikube::pull_save_k8s_image platformapi-k8s
+    minikube::pull_save_k8s_image platformapi
     minikube::pull_save_k8s_image platformconfig
 
     minikube::activate_docker_env
 
     minikube::load_k8s_image platformauthapi
     minikube::load_k8s_image platformconfig
-    minikube::load_k8s_image platformapi-k8s
+    minikube::load_k8s_image platformapi
 }
 
 function minikube::apply_all_configurations {
