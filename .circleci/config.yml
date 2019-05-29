@@ -22,7 +22,7 @@ jobs:
 
       - restore_cache:
           keys:
-          - v1-dependencies-python_3.6.6-{{ checksum "requirements/test.txt" }}
+          - v1-dependencies-python_3.6.5-{{ checksum "requirements/test.txt" }}
 
       - run:
           name: Configuring Docker Client
@@ -35,10 +35,8 @@ jobs:
       - run:
           name: Installing dependencies
           command: |
-            pyenv versions
+            pyenv global 3.6.5
             python --version
-            pyenv install --debug 3.6.6
-            pyenv local 3.6.6-debug
 
       - run:
           name: Running Kubernetes
@@ -72,7 +70,7 @@ jobs:
       - save_cache:
           paths:
             - venv
-          key: v1-dependencies-python_3.6.6-{{ checksum "requirements/test.txt" }}
+          key: v1-dependencies-python_3.6.5-{{ checksum "requirements/test.txt" }}
 
       - run:
           name: Running Static Code Analysis
