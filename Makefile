@@ -9,6 +9,7 @@ else
 endif
 export PIP_EXTRA_INDEX_URL
 
+include k8s.mk
 
 setup:
 	pip install --no-use-pep517 -r requirements/test.txt
@@ -38,7 +39,13 @@ gke_login:
 	gcloud config set project $(GKE_PROJECT_ID)
 	gcloud --quiet config set container/cluster $(GKE_CLUSTER_NAME)
 	gcloud config set $(SET_CLUSTER_ZONE_REGION)
+	gcloud version
+	docker version
 	gcloud auth configure-docker
+
+gke_docker_pull_test:
+	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:latest
+	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:latest
 
 gke_docker_push: build
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE):latest
@@ -50,5 +57,4 @@ gke_deploy:
 	#helm \
 	#	--set "global.env=$(HELM_ENV)" \
 	#	--set "IMAGE.$(HELM_ENV)=$(IMAGE):$(CIRCLE_SHA1)" \
-	#	--set "INGRESS_FALLBACK_IMAGE.$(HELM_ENV)=$(INGRESS_FALLBACK_IMAGE):$(CIRCLE_SHA1)" \
 	#	upgrade --install platformmonitoring deploy/platformmonitoring/ --wait --timeout 600

@@ -1,0 +1,125 @@
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: platformredis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: platformredis
+  template:
+    metadata:
+      labels:
+        service: platformredis
+    spec:
+      containers:
+      - name: platformredis
+        image: redis:4
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: platformredis
+spec:
+  ports:
+  - port: 6379
+    targetPort: 6379
+  selector:
+    service: platformredis
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: platformauthapi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: platformauthapi
+  template:
+    metadata:
+      labels:
+        service: platformauthapi
+    spec:
+      containers:
+      - name: platformauthapi
+        image: platformauthapi:latest
+        imagePullPolicy: Never
+        env:
+        - name: NP_JWT_SECRET
+          value: secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: platformauthapi
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8080
+    targetPort: 8080
+  selector:
+    service: platformauthapi
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: platformapi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: platformapi
+  template:
+    metadata:
+      labels:
+        service: platformapi
+    spec:
+      containers:
+      - name: platformapi
+        image: platformapi:latest
+        imagePullPolicy: Never
+        env:
+        - name: NP_K8S_API_URL
+          value: http://localhost:8001
+        - name: NP_K8S_AUTH_TYPE
+          value: none
+        - name: NP_STORAGE_HOST_MOUNT_PATH
+          value: /tmp
+        - name: NP_K8S_JOBS_INGRESS_NAME
+          value: not-important
+        - name: NP_K8S_JOBS_INGRESS_DOMAIN_NAME_TEMPLATE
+          value: not-important
+        - name: NP_K8S_NAMED_JOBS_INGRESS_DOMAIN_NAME_TEMPLATE
+          value: not-important
+        - name: NP_K8S_SSH_AUTH_INGRESS_DOMAIN_NAME
+          value: not-important
+        - name: NP_DB_REDIS_URI
+          value: redis://platformredis:6379/0
+        - name: NP_OAUTH_HEADLESS_CALLBACK_URL
+          value: http://not-important
+        - name: NP_AUTH_URL
+          value: http://platformauthapi:8080
+        - name: NP_AUTH_TOKEN
+          value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZGVudGl0eSI6ImNvbXB1dGUifQ.IJDlKCfbiuNGZH9Sh6p-CdUL5KxEK5JStqzfDk4-RAA
+        - name: NP_ES_HOSTS
+          value: http://elasticsearch-logging.kube-system:9200
+        - name: NP_API_URL
+          value: http://platformapi/api/v1
+        - name: NP_PLATFORM_CONFIG_URI
+          value: http://platformconfig:8080/api/v1
+      - name: kubeproxy
+        image: lachlanevenson/k8s-kubectl:v1.10.3
+        args: [proxy]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: platformapi
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8080
+    targetPort: 8080
+  selector:
+    service: platformapi

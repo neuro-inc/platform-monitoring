@@ -2,7 +2,7 @@ version: 2.1
 
 defaults: &defaults
   machine:
-    image: circleci/classic:201711-01
+    image: circleci/classic:201808-01
     docker_layer_caching: true
   working_directory: ~/platform-monitoring
 
@@ -22,13 +22,41 @@ jobs:
 
       - restore_cache:
           keys:
-          - v1-dependencies-python_3.6.6-{{ checksum "requirements/test.txt" }}
+          - v1-dependencies-python_3.6.5-{{ checksum "requirements/test.txt" }}
+
+      - run:
+          name: Configuring Docker Client
+          command: |
+            make -s gke_login
+            # docker-credential-gcloud still relies on Python 2.7,
+            # thus we'd better pull testing images before we set up Python 3
+            make gke_docker_pull_test
 
       - run:
           name: Installing dependencies
           command: |
-            pyenv install --debug 3.6.3
-            pyenv local 3.6.3-debug
+            pyenv global 3.6.5
+
+      - run:
+          name: Running Kubernetes
+          command: |
+            # https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG-1.10.md#before-upgrading
+            #
+            # MountPropagation feature is now beta. As a consequence, all
+            # volume mounts in containers are now rslave on Linux by default.
+            # To make this default work in all Linux environments the entire
+            # mount tree should be marked as shareable, e.g. via mount
+            # --make-rshared /. All Linux distributions that use systemd
+            # already have the root directory mounted as rshared and hence
+            # they need not do anything. In Linux environments without systemd
+            # we recommend running mount --make-rshared / during boot before
+            # docker is started.
+            sudo mount --make-rshared /
+            sudo mount --make-rshared /run
+            sudo mount --make-rshared /var/lib/docker
+
+            make start_k8s
+            make test_k8s
 
       - run:
           name: Setting up Python Virtual Environment
@@ -41,7 +69,7 @@ jobs:
       - save_cache:
           paths:
             - venv
-          key: v1-dependencies-python_3.6.6-{{ checksum "requirements/test.txt" }}
+          key: v1-dependencies-python_3.6.5-{{ checksum "requirements/test.txt" }}
 
       - run:
           name: Running Static Code Analysis
@@ -60,6 +88,12 @@ jobs:
           command: |
             source venv/bin/activate
             make test_integration
+
+      - run:
+          name: Stopping Kubernetes
+          command: |
+            make clean_k8s
+          when: always
 
       - codecov/upload:
           file: .coverage.xml
