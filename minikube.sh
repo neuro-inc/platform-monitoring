@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -o verbose
 
-GKE_PREFIX=$(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)
+#GKE_PREFIX=$(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)
+GKE_PREFIX=gcr.io/light-reality-205619
 
 
 function minikube::install {
