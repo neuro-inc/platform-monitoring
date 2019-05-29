@@ -35,8 +35,9 @@ jobs:
       - run:
           name: Installing dependencies
           command: |
-            pyenv install --debug 3.6.6
             pyenv versions
+            python --version
+            pyenv install --debug 3.6.6
             pyenv local 3.6.6-debug
 
       - run:
