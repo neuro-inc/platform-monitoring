@@ -73,6 +73,7 @@ function check_service() { # attempt, max_attempt, service
             exit 1
 	fi
 	sleep 1
+	kubectl get all
 	((attempt++))
     done    
 }
