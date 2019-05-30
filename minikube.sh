@@ -78,8 +78,6 @@ function check_service() { # attempt, max_attempt, service
 }
 
 function minikube::check {
-    kubectl get all
-
     max_attempts=30
     check_service $max_attempts platformapi
     check_service $max_attempts platformauthapi
