@@ -48,6 +48,7 @@ function k8s::start {
         exit 1
     fi
     ${MINIKUBE_SCRIPT} start
+    k8s::setup_dns
 }
 
 function k8s::stop {
@@ -55,6 +56,11 @@ function k8s::stop {
     sudo -E minikube delete || :
     sudo -E rm -rf ~/.minikube
     sudo rm -rf /root/.minikube
+}
+
+
+function k8s::setup_dns {
+    find /etc/kubernetes/addons/ -name kube-dns* | xargs -L 1 sudo kubectl -n kube-system apply -f
 }
 
 function k8s::test {

@@ -52,7 +52,6 @@ jobs:
 
             make start_k8s
             make test_k8s
-            sleep 2h
 
       - run:
           name: Setting up Python Virtual Environment
