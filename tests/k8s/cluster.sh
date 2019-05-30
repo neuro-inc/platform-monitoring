@@ -47,7 +47,6 @@ function k8s::start {
         echo "minikube.sh script '${MINIKUBE_SCRIPT}' does not exist"
         exit 1
     fi
-    ${MINIKUBE_SCRIPT} install
     ${MINIKUBE_SCRIPT} start
 }
 
