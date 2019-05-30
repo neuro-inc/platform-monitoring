@@ -66,9 +66,9 @@ class ApiAddress:
 
 @asynccontextmanager
 async def create_local_app_server(
-    config: Config, port: int = 8080
+    server_config: ServerConfig, port: int = 8080
 ) -> AsyncIterator[ApiAddress]:
-    app = await create_app(config)
+    app = await create_app(server_config)
     runner = aiohttp.web.AppRunner(app)
     try:
         await runner.setup()

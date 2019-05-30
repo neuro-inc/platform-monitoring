@@ -7,14 +7,14 @@ import aiohttp
 import pytest
 from aiohttp.web import HTTPOk
 from aiohttp.web_exceptions import HTTPAccepted
-from platform_monitoring.config import Config
+from platform_monitoring.config import Config, PlatformApiConfig
 
 from .auth import _User
 from .conftest import ApiAddress, create_local_app_server
 
 
 @dataclass(frozen=True)
-class MonitoringApiConfig:
+class MonitoringApiEndpoints:
     address: ApiAddress
 
     @property
@@ -27,7 +27,7 @@ class MonitoringApiConfig:
 
 
 @dataclass(frozen=True)
-class PlatformApiConfig:
+class PlatformApiEndpoints:
     endpoint: str
 
     @property
@@ -47,14 +47,14 @@ class PlatformApiConfig:
 
 
 @pytest.fixture
-async def monitoring_api(config: Config) -> AsyncIterator[MonitoringApiConfig]:
-    async with create_local_app_server(config, port=8080) as address:
-        yield MonitoringApiConfig(address=address)
+async def monitoring_api(config: Config) -> AsyncIterator[MonitoringApiEndpoints]:
+    async with create_local_app_server(config.server, port=8080) as address:
+        yield MonitoringApiEndpoints(address=address)
 
 
 @pytest.fixture
-async def platform_api(config: Config) -> AsyncIterator[PlatformApiConfig]:
-    yield PlatformApiConfig(endpoint=str(config.platform_api.url))
+async def platform_api(platform_api_config: PlatformApiConfig) -> AsyncIterator[PlatformApiEndpoints]:
+    yield PlatformApiEndpoints(endpoint=str(platform_api_config.url))
 
 
 @pytest.fixture
@@ -66,16 +66,16 @@ async def client() -> AsyncIterator[aiohttp.ClientSession]:
 class JobsClient:
     def __init__(
         self,
-        platform_api_config: PlatformApiConfig,
+        platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
         headers: Dict[str, str],
     ) -> None:
-        self._platform_api_config = platform_api_config
+        self._platform_api = platform_api
         self._client = client
         self._headers = headers
 
     async def get_job_by_id(self, job_id: str) -> Dict[str, Any]:
-        url = self._platform_api_config.generate_job_url(job_id)
+        url = self._platform_api.generate_job_url(job_id)
         async with self._client.get(url, headers=self._headers) as response:
             response_text = await response.text()
             assert response.status == HTTPOk.status_code, response_text
@@ -99,7 +99,7 @@ class JobsClient:
 
 @pytest.fixture
 def jobs_client_factory(
-    platform_api: PlatformApiConfig, client: aiohttp.ClientSession
+    platform_api: PlatformApiEndpoints, client: aiohttp.ClientSession
 ) -> Iterator[Callable[[_User], JobsClient]]:
     def impl(user: _User) -> JobsClient:
         return JobsClient(platform_api, client, headers=user.headers)
@@ -138,7 +138,7 @@ async def job_submit(
 class TestApi:
     @pytest.mark.asyncio
     async def test_ping(
-        self, monitoring_api: MonitoringApiConfig, client: aiohttp.ClientSession
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
     ) -> None:
         async with client.get(monitoring_api.ping_url) as resp:
             assert resp.status == HTTPOk.status_code
@@ -147,7 +147,7 @@ class TestApi:
 
     @pytest.mark.asyncio
     async def test_platform_ping(
-        self, platform_api: PlatformApiConfig, client: aiohttp.ClientSession
+        self, platform_api: PlatformApiEndpoints, client: aiohttp.ClientSession
     ) -> None:
         async with client.get(platform_api.ping_url) as resp:
             assert resp.status == HTTPOk.status_code
@@ -157,7 +157,7 @@ class TestApi:
     @pytest.mark.asyncio
     async def test_platform_create_job(
         self,
-        platform_api: PlatformApiConfig,
+        platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
         job_submit: Dict[str, Any],
         jobs_client: JobsClient,
