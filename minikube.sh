@@ -24,6 +24,18 @@ function minikube::pull_save_k8s_image {
     docker save -o /tmp/${image}.image $image:latest
 }
 
+function minikube::temp_pull_save_platformapi_k8s_image {
+    # TODO (A Yushkovskiy 30-May-2019) Drop this method after platform-api
+    #  has deployed and updated the image `platformapi` in gcr.io
+    #  (fixed in https://github.com/neuromation/platform-api/pull/726
+    #  but the image has not yet being updated in gcr.io)
+    local image=platformapi
+    local k8s_image=$GKE_PREFIX/platformapi-k8s
+    docker pull $k8s_image:latest
+    docker tag $k8s_image:latest $image:latest
+    docker save -o /tmp/${image}.image $image:latest
+}
+
 function minikube::load_k8s_image {
     local image=$1
     docker load -i /tmp/${image}.image
@@ -36,7 +48,7 @@ function minikube::activate_docker_env {
 function minikube::load_images {
     echo "Loading images to minikube..."
     minikube::pull_save_k8s_image platformauthapi
-    minikube::pull_save_k8s_image platformapi
+    minikube::temp_pull_save_platformapi_k8s_image
     minikube::pull_save_k8s_image platformconfig
 
     minikube::activate_docker_env
