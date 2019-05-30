@@ -7,6 +7,8 @@ import aiohttp
 import pytest
 from aiohttp.web import HTTPOk
 from aiohttp.web_exceptions import HTTPAccepted
+from yarl import URL
+
 from platform_monitoring.config import Config, PlatformApiConfig
 
 from .auth import _User
@@ -28,7 +30,11 @@ class MonitoringApiEndpoints:
 
 @dataclass(frozen=True)
 class PlatformApiEndpoints:
-    endpoint: str
+    url: URL
+
+    @property
+    def endpoint(self):
+        return str(self.url)
 
     @property
     def ping_url(self) -> str:
@@ -54,7 +60,7 @@ async def monitoring_api(config: Config) -> AsyncIterator[MonitoringApiEndpoints
 
 @pytest.fixture
 async def platform_api(platform_api_config: PlatformApiConfig) -> AsyncIterator[PlatformApiEndpoints]:
-    yield PlatformApiEndpoints(endpoint=str(platform_api_config.url))
+    yield PlatformApiEndpoints(url=platform_api_config.url)
 
 
 @pytest.fixture
