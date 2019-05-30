@@ -7,9 +7,8 @@ import aiohttp
 import pytest
 from aiohttp.web import HTTPOk
 from aiohttp.web_exceptions import HTTPAccepted
-from yarl import URL
-
 from platform_monitoring.config import Config, PlatformApiConfig
+from yarl import URL
 
 from .auth import _User
 from .conftest import ApiAddress, create_local_app_server
@@ -33,7 +32,7 @@ class PlatformApiEndpoints:
     url: URL
 
     @property
-    def endpoint(self):
+    def endpoint(self) -> str:
         return str(self.url)
 
     @property
@@ -54,12 +53,14 @@ class PlatformApiEndpoints:
 
 @pytest.fixture
 async def monitoring_api(config: Config) -> AsyncIterator[MonitoringApiEndpoints]:
-    async with create_local_app_server(config.server, port=8080) as address:
+    async with create_local_app_server(config, port=8080) as address:
         yield MonitoringApiEndpoints(address=address)
 
 
 @pytest.fixture
-async def platform_api(platform_api_config: PlatformApiConfig) -> AsyncIterator[PlatformApiEndpoints]:
+async def platform_api(
+    platform_api_config: PlatformApiConfig
+) -> AsyncIterator[PlatformApiEndpoints]:
     yield PlatformApiEndpoints(url=platform_api_config.url)
 
 
