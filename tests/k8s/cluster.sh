@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+MINIKUBE_SCRIPT="$(dirname $0)/../../minikube.sh"
+
 # based on
 # https://github.com/kubernetes/minikube#linux-continuous-integration-without-vm-support
 
@@ -40,6 +42,13 @@ function k8s::start {
 
     sudo -E minikube config set WantReportErrorPrompt false
     sudo -E minikube start --vm-driver=none --kubernetes-version=v1.10.0
+
+    if [ ! -f ${MINIKUBE_SCRIPT} ]; then
+        echo "minikube.sh script '${MINIKUBE_SCRIPT}' does not exist"
+        exit 1
+    fi
+    ${MINIKUBE_SCRIPT} start
+    k8s::setup_dns
 }
 
 function k8s::stop {
@@ -49,8 +58,9 @@ function k8s::stop {
     sudo rm -rf /root/.minikube
 }
 
-function k8s::setup_logging {
-    kubectl apply -f tests/k8s/logging.yml
+
+function k8s::setup_dns {
+    find /etc/kubernetes/addons/ -name kube-dns* | xargs -L 1 sudo kubectl -n kube-system apply -f
 }
 
 function k8s::test {

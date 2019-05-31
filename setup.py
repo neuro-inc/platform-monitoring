@@ -5,6 +5,7 @@ install_requires = (
     "aiohttp>=3.5",
     'dataclasses==0.6; python_version<"3.7"',
     "yarl>=1.3.0",
+    "neuro_auth_client==1.0.6",
 )
 
 setup(

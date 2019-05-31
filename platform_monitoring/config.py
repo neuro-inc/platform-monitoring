@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from yarl import URL
+
 
 @dataclass(frozen=True)
 class ServerConfig:
@@ -8,5 +10,19 @@ class ServerConfig:
 
 
 @dataclass(frozen=True)
+class PlatformApiConfig:
+    url: URL
+    token: str
+
+
+@dataclass(frozen=True)
+class PlatformAuthConfig:
+    url: URL
+    token: str
+
+
+@dataclass(frozen=True)
 class Config:
-    monitoring_server: ServerConfig
+    server: ServerConfig
+    platform_api: PlatformApiConfig
+    platform_auth: PlatformAuthConfig

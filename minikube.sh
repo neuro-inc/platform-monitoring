@@ -50,6 +50,7 @@ function minikube::apply_all_configurations {
     echo "Applying configurations..."
     kubectl config use-context minikube
     kubectl create -f tests/k8s/rb.default.gke.yml
+    kubectl create -f tests/k8s/logging.yml
     kubectl create -f tests/k8s/platformconfig.yml
     kubectl create -f tests/k8s/platformapi.yml
 }
@@ -58,6 +59,7 @@ function minikube::delete_all_configurations {
     echo "Cleaning up..."
     kubectl config use-context minikube
     kubectl delete -f tests/k8s/rb.default.gke.yml
+    kubectl delete -f tests/k8s/logging.yml
     kubectl delete -f tests/k8s/platformconfig.yml
     kubectl delete -f tests/k8s/platformapi.yml
 }
