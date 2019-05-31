@@ -36,10 +36,6 @@ class PlatformApiEndpoints:
         return str(self.url)
 
     @property
-    def ping_url(self) -> str:
-        return f"{self.endpoint}/ping"
-
-    @property
     def platform_config_url(self) -> str:
         return f"{self.endpoint}/config"
 
@@ -62,12 +58,6 @@ async def platform_api(
     platform_api_config: PlatformApiConfig
 ) -> AsyncIterator[PlatformApiEndpoints]:
     yield PlatformApiEndpoints(url=platform_api_config.url)
-
-
-@pytest.fixture
-async def client() -> AsyncIterator[aiohttp.ClientSession]:
-    async with aiohttp.ClientSession() as session:
-        yield session
 
 
 class JobsClient:
@@ -151,15 +141,6 @@ class TestApi:
             assert resp.status == HTTPOk.status_code
             text = await resp.text()
             assert text == "Pong"
-
-    @pytest.mark.asyncio
-    async def test_platform_ping(
-        self, platform_api: PlatformApiEndpoints, client: aiohttp.ClientSession
-    ) -> None:
-        async with client.get(platform_api.ping_url) as resp:
-            assert resp.status == HTTPOk.status_code
-            text = await resp.text()
-            assert text == ""
 
     @pytest.mark.asyncio
     async def test_platform_create_job(

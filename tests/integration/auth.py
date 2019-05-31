@@ -18,7 +18,7 @@ from neuro_auth_client.client import User
 from platform_monitoring.config import PlatformAuthConfig
 from yarl import URL
 
-from tests.integration.conftest import random_str, wait_for_service
+from tests.integration.conftest import get_service_url, random_str
 
 
 @pytest.fixture(scope="session")
@@ -39,7 +39,7 @@ def admin_token(token_factory: Callable[[str], str]) -> str:
 async def auth_config(
     token_factory: Callable[[str], str]
 ) -> AsyncIterator[PlatformAuthConfig]:
-    platform_auth = wait_for_service("platformauthapi", namespace="default")
+    platform_auth = get_service_url("platformauthapi", namespace="default")
     yield PlatformAuthConfig(
         url=URL(platform_auth),
         token=token_factory("compute"),  # token is hard-coded in the yaml configuration
