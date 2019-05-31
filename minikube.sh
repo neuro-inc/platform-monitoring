@@ -82,10 +82,6 @@ function minikube::apply {
     minikube status
     minikube::apply_all_configurations
 
-    n_seconds=10
-    echo "Waiting $n_seconds seconds so that all services are up"
-    sleep $n_seconds
-
     max_attempts=30
     check_service $max_attempts platformapi
     check_service $max_attempts platformauthapi
