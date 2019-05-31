@@ -1,58 +1,50 @@
 #!/usr/bin/env bash
 set -o verbose
 
-GKE_DOCKER_REGISTRY=gcr.io
-GKE_PROJECT_ID=light-reality-205619
+GKE_DOCKER_REGISTRY="gcr.io"
+GKE_PROJECT_ID="light-reality-205619"
 
 GKE_PREFIX=$GKE_DOCKER_REGISTRY/$GKE_PROJECT_ID
 
 
-function minikube::install {
-    echo "Setting up minikube..."
+function minikube::start {
+    echo "Starting minikube..."
     mkdir -p ~/.minikube/files/files
     cp tests/k8s/fluentd/kubernetes.conf ~/.minikube/files/files/fluentd-kubernetes.conf
     minikube start --kubernetes-version=v1.10.0
     kubectl config use-context minikube
 }
 
-function minikube::pull_save_k8s_image {
+function save_k8s_image {
     local image=$1
-    local k8s_image=$GKE_PREFIX/$image
-
-    docker pull $k8s_image:latest
-    docker tag $k8s_image:latest $image:latest
     docker save -o /tmp/${image}.image $image:latest
 }
 
-function minikube::load_k8s_image {
+function load_k8s_image {
     local image=$1
     docker load -i /tmp/${image}.image
 }
 
-function minikube::activate_docker_env {
-    eval $(minikube docker-env)
-}
-
 function minikube::load_images {
     echo "Loading images to minikube..."
-    minikube::pull_save_k8s_image platformauthapi
-    minikube::pull_save_k8s_image platformapi
-    minikube::pull_save_k8s_image platformconfig
+    save_k8s_image platformauthapi
+    save_k8s_image platformapi
+    save_k8s_image platformconfig
 
-    minikube::activate_docker_env
+    eval $(minikube docker-env)
 
-    minikube::load_k8s_image platformauthapi
-    minikube::load_k8s_image platformconfig
-    minikube::load_k8s_image platformapi
+    load_k8s_image platformauthapi
+    load_k8s_image platformconfig
+    load_k8s_image platformapi
 }
 
 function minikube::apply_all_configurations {
     echo "Applying configurations..."
     kubectl config use-context minikube
-    kubectl create -f tests/k8s/rb.default.gke.yml
-    kubectl create -f tests/k8s/logging.yml
-    kubectl create -f tests/k8s/platformconfig.yml
-    kubectl create -f tests/k8s/platformapi.yml
+    kubectl apply -f tests/k8s/rb.default.gke.yml
+    kubectl apply -f tests/k8s/logging.yml
+    kubectl apply -f tests/k8s/platformconfig.yml
+    kubectl apply -f tests/k8s/platformapi.yml
 }
 
 function minikube::delete_all_configurations {
@@ -62,6 +54,13 @@ function minikube::delete_all_configurations {
     kubectl delete -f tests/k8s/logging.yml
     kubectl delete -f tests/k8s/platformconfig.yml
     kubectl delete -f tests/k8s/platformapi.yml
+}
+
+function minikube::stop {
+    echo "Stopping minikube..."
+    kubectl config use-context minikube
+    minikube::delete_all_configurations
+    minikube stop
 }
 
 function check_service() { # attempt, max_attempt, service
@@ -79,37 +78,34 @@ function check_service() { # attempt, max_attempt, service
     done    
 }
 
-function minikube::check {
+function minikube::setup {
+    minikube status
+    minikube::apply_all_configurations
+
+    n_seconds=10
+    echo "Waiting $n_seconds seconds so that all services are up"
+    sleep $n_seconds
+
     max_attempts=30
     check_service $max_attempts platformapi
     check_service $max_attempts platformauthapi
 }
 
-function minikube::start {
-    minikube status
-
-    minikube::delete_all_configurations
-    minikube::apply_all_configurations
-
-    # wait till our services are up to prevent flakes
-    sleep 10
-
-    minikube::check
-    export PLATFORM_API_URL=$(minikube service platformapi --url)/api/v1
-    export AUTH_API_URL=$(minikube service platformauthapi --url)
-}
-
 
 case "${1:-}" in
-    install)
-        minikube::install
-        minikube::load_images
-        ;;
     start)
         minikube::start
         ;;
-    *)
-        echo "No correct command specified"
-        exit 1
+    load-images)
+        minikube::load_images
+        ;;
+    setup)
+        minikube::setup
+        ;;
+    clean)
+        minikube::delete_all_configurations
+        ;;
+    stop)
+        minikube::stop
         ;;
 esac

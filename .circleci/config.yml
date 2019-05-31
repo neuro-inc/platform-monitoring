@@ -30,7 +30,7 @@ jobs:
             make -s gke_login
             # docker-credential-gcloud still relies on Python 2.7,
             # thus we'd better pull testing images before we set up Python 3
-            make gke_docker_pull_test
+            make gke_docker_pull_test_images
 
       - run:
           name: Running Kubernetes
@@ -50,6 +50,7 @@ jobs:
             sudo mount --make-rshared /run
             sudo mount --make-rshared /var/lib/docker
 
+            make install_k8s
             make start_k8s
             make test_k8s
 

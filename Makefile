@@ -6,6 +6,7 @@ ifdef CIRCLECI
     PIP_EXTRA_INDEX_URL ?= https://$(DEVPI_USER):$(DEVPI_PASS)@$(DEVPI_HOST)/$(DEVPI_USER)/$(DEVPI_INDEX)
 else
     PIP_EXTRA_INDEX_URL ?= $(shell python pip_extra_index_url.py)
+    MINIKUBE_SCRIPT="./minikube.sh"
 endif
 export PIP_EXTRA_INDEX_URL
 
@@ -43,11 +44,10 @@ gke_login:
 	docker version
 	gcloud auth configure-docker
 
-gke_docker_pull_test:
+gke_docker_pull_test_images:
 	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:latest
 	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:latest
 	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:latest
-
 	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:latest platformapi:latest
 	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:latest platformauthapi:latest
 	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:latest platformconfig:latest
