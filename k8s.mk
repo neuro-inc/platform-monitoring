@@ -6,6 +6,9 @@ install_k8s:
 start_k8s:
 	$(K8S_CLUSTER_CMD) start
 
+apply_configuration_k8s:
+	$(K8S_CLUSTER_CMD) apply
+
 test_k8s:
 	$(K8S_CLUSTER_CMD) test
 

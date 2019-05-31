@@ -83,7 +83,7 @@ case "${1:-}" in
         k8s::start
         ;;
     apply)
-        k8s::apply
+        k8s::apply_all_configurations
         ;;
     stop)
         k8s::stop

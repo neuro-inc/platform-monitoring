@@ -52,7 +52,7 @@ jobs:
 
             make install_k8s
             make start_k8s
-            make apply
+            make apply_configuration_k8s
             make test_k8s
 
       - run:
