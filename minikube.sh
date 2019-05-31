@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -o verbose
 
-GKE_DOCKER_REGISTRY="gcr.io"
-GKE_PROJECT_ID="light-reality-205619"
+GKE_DOCKER_REGISTRY=gcr.io
+GKE_PROJECT_ID=light-reality-205619
 
 GKE_PREFIX=$GKE_DOCKER_REGISTRY/$GKE_PROJECT_ID
 
@@ -78,7 +78,7 @@ function check_service() { # attempt, max_attempt, service
     done    
 }
 
-function minikube::setup {
+function minikube::apply {
     minikube status
     minikube::apply_all_configurations
 
@@ -99,8 +99,8 @@ case "${1:-}" in
     load-images)
         minikube::load_images
         ;;
-    setup)
-        minikube::setup
+    apply)
+        minikube::apply
         ;;
     clean)
         minikube::delete_all_configurations
