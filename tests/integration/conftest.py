@@ -60,7 +60,7 @@ async def wait_for_service(
             while True:
                 try:
                     async with client.get(service_ping_url) as resp:
-                        resp.raise_for_status()
+                        assert resp.status == aiohttp.web.HTTPOk.status_code
                         break
                 except aiohttp.ClientError as e:
                     logging.info(
