@@ -52,6 +52,7 @@ jobs:
 
             make install_k8s
             make start_k8s
+            make apply
             make test_k8s
 
       - run:

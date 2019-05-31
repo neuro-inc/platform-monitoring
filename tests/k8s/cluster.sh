@@ -40,6 +40,15 @@ function k8s::start {
     find /etc/kubernetes/addons/ -name kube-dns* | xargs -L 1 sudo kubectl -n kube-system apply -f
 }
 
+function k8s::apply_all_configurations {
+    echo "Applying configurations..."
+    kubectl config use-context minikube
+    kubectl apply -f tests/k8s/rb.default.gke.yml
+    kubectl apply -f tests/k8s/logging.yml
+    kubectl apply -f tests/k8s/platformconfig.yml
+    kubectl apply -f tests/k8s/platformapi.yml
+}
+
 function k8s::stop {
     sudo -E minikube stop || :
     sudo -E minikube delete || :
@@ -72,6 +81,9 @@ case "${1:-}" in
         ;;
     start)
         k8s::start
+        ;;
+    apply)
+        k8s::apply
         ;;
     stop)
         k8s::stop
