@@ -87,7 +87,7 @@ async def platform_api_config(
     )
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def config(
     auth_config: PlatformAuthConfig, platform_api_config: PlatformApiConfig
 ) -> Config:
