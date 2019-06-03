@@ -1,9 +1,10 @@
 import asyncio
+import json
 import logging
 import subprocess
 import time
 from dataclasses import dataclass
-from typing import AsyncIterator, Awaitable, Callable, Iterator
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator, Optional
 from uuid import uuid1
 
 import aiohttp
@@ -14,6 +15,8 @@ from async_timeout import timeout
 from platform_monitoring.api import create_app
 from platform_monitoring.config import (
     Config,
+    ElasticsearchConfig,
+    KubeConfig,
     PlatformApiConfig,
     PlatformAuthConfig,
     ServerConfig,
@@ -87,14 +90,64 @@ async def platform_api_config(
     )
 
 
+@pytest.fixture(scope="session")
+async def elasticsearch_config(
+    token_factory: Callable[[str], str]
+) -> AsyncIterator[ElasticsearchConfig]:
+    es_host = get_service_url("elasticsearch-logging", namespace="kube-system")
+    yield ElasticsearchConfig(hosts=[es_host])
+
+
+@pytest.fixture(scope="session")
+async def kube_config_payload() -> Dict[str, Any]:
+    process = await asyncio.create_subprocess_exec(
+        "kubectl", "config", "view", "-o", "json", stdout=asyncio.subprocess.PIPE
+    )
+    output, _ = await process.communicate()
+    payload_str = output.decode().rstrip()
+    return json.loads(payload_str)
+
+
+@pytest.fixture(scope="session")
+async def kube_config_cluster_payload(kube_config_payload: Dict[str, Any]) -> Any:
+    cluster_name = "minikube"
+    clusters = {
+        cluster["name"]: cluster["cluster"]
+        for cluster in kube_config_payload["clusters"]
+    }
+    return clusters[cluster_name]
+
+
+@pytest.fixture(scope="session")
+async def kube_config(
+    kube_config_cluster_payload: Dict[str, Any],
+    kube_config_user_payload: Dict[str, Any],
+    cert_authority_data_pem: Optional[str],
+) -> KubeConfig:
+    cluster = kube_config_cluster_payload
+    user = kube_config_user_payload
+    kube_config = KubeConfig(
+        endpoint_url=cluster["server"],
+        cert_authority_data_pem=cert_authority_data_pem,
+        auth_cert_path=user["client-certificate"],
+        auth_cert_key_path=user["client-key"],
+        namespace="platformapi-tests",
+    )
+    return kube_config
+
+
 @pytest.fixture
 def config(
-    auth_config: PlatformAuthConfig, platform_api_config: PlatformApiConfig
+    auth_config: PlatformAuthConfig,
+    platform_api_config: PlatformApiConfig,
+    elasticsearch_config: ElasticsearchConfig,
 ) -> Config:
     return Config(
         server=ServerConfig(host="0.0.0.0", port=8080),
         platform_auth=auth_config,
         platform_api=platform_api_config,
+        elasticsearch=elasticsearch_config,
+        orchestrator=kube_config,
     )
 
 
@@ -122,7 +175,7 @@ async def create_local_app_server(
 
 
 def get_service_url(  # type: ignore
-    service_name: str, namespace: str = "kube-system"
+    service_name: str, namespace: str = "default"
 ) -> str:
     # ignore type because the linter does not know that `pytest.fail` throws an
     # exception, so it requires to `return None` explicitly, so that the method

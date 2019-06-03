@@ -1,10 +1,19 @@
 import logging
 import os
+from pathlib import Path
 from typing import Dict, Optional
 
 from yarl import URL
 
-from .config import Config, PlatformApiConfig, PlatformAuthConfig, ServerConfig
+from .config import (
+    Config,
+    ElasticsearchConfig,
+    KubeClientAuthType,
+    KubeConfig,
+    PlatformApiConfig,
+    PlatformAuthConfig,
+    ServerConfig,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -19,6 +28,8 @@ class EnvironConfigFactory:
             server=self.create_server(),
             platform_api=self.create_platform_api(),
             platform_auth=self.create_platform_auth(),
+            elasticsearch=self.create_elasticsearch(),
+            orchestrator=self.create_orchestrator(),
         )
 
     def create_server(self) -> ServerConfig:
@@ -35,3 +46,47 @@ class EnvironConfigFactory:
         url = URL(self._environ["NP_MONITORING_PLATFORM_AUTH_URL"])
         token = self._environ["NP_MONITORING_PLATFORM_AUTH_TOKEN"]
         return PlatformAuthConfig(url=url, token=token)
+
+    def create_elasticsearch(self) -> ElasticsearchConfig:
+        hosts = self._environ["NP_MONITORING_ES_HOSTS"].split(",")
+        user = self._environ.get("NP_MONITORING_ES_AUTH_USER")
+        password = self._environ.get("NP_MONITORING_ES_AUTH_PASSWORD")
+        return ElasticsearchConfig(hosts=hosts, user=user, password=password)
+
+    def create_orchestrator(self) -> KubeConfig:
+        endpoint_url = self._environ["NP_MONITORING_K8S_API_URL"]
+        auth_type = KubeClientAuthType(
+            self._environ.get("NP_MONITORING_K8S_AUTH_TYPE", KubeConfig.auth_type.value)
+        )
+        ca_path = self._environ.get("NP_MONITORING_K8S_CA_PATH")
+        ca_data = Path(ca_path).read_text() if ca_path else None
+
+        return KubeConfig(
+            endpoint_url=endpoint_url,
+            cert_authority_data_pem=ca_data,
+            auth_type=auth_type,
+            auth_cert_path=self._environ.get("NP_MONITORING_K8S_AUTH_CERT_PATH"),
+            auth_cert_key_path=self._environ.get(
+                "NP_MONITORING_K8S_AUTH_CERT_KEY_PATH"
+            ),
+            token=self._environ.get("NP_MONITORING_K8S_TOKEN"),
+            namespace=self._environ.get("NP_MONITORING_K8S_NS", KubeConfig.namespace),
+            client_conn_timeout_s=int(
+                self._environ.get(
+                    "NP_MONITORING_K8S_CLIENT_CONN_TIMEOUT",
+                    KubeConfig.client_conn_timeout_s,
+                )
+            ),
+            client_read_timeout_s=int(
+                self._environ.get(
+                    "NP_MONITORING_K8S_CLIENT_READ_TIMEOUT",
+                    KubeConfig.client_read_timeout_s,
+                )
+            ),
+            client_conn_pool_size=int(
+                self._environ.get(
+                    "NP_MONITORING_K8S_CLIENT_CONN_POOL_SIZE",
+                    KubeConfig.client_conn_pool_size,
+                )
+            ),
+        )
