@@ -15,9 +15,10 @@ from neuromation.api import (
     Client as PlatformApiClient,
     Factory as PlatformClientFactory,
 )
-from platform_monitoring.config import Config, PlatformApiConfig
+from platform_monitoring.config import Config, KubeConfig, PlatformApiConfig
 from platform_monitoring.config_factory import EnvironConfigFactory
-from platform_monitoring.monitoring_service import MonitoringService
+
+from .kube_client import KubeClient
 
 
 logger = logging.getLogger(__name__)
@@ -47,8 +48,12 @@ class MonitoringApiHandler:
         pass
 
     @property
-    def monitoring_service(self) -> MonitoringService:
-        return self._app["monitoring_service"]
+    def platform_client(self) -> PlatformApiClient:
+        return self._app["platform_client"]
+
+    @property
+    def kube_client(self) -> KubeClient:
+        return self._app["kube_client"]
 
 
 @middleware
@@ -88,7 +93,9 @@ async def create_monitoring_app() -> aiohttp.web.Application:  # pragma: no cove
 
 
 @asynccontextmanager
-async def create_platform_api_client(config: PlatformApiConfig) -> PlatformApiClient:
+async def create_platform_api_client(
+    config: PlatformApiConfig
+) -> AsyncIterator[PlatformApiClient]:
     tmp_config = Path(mktemp())
     platform_api_factory = PlatformClientFactory(tmp_config)
     await platform_api_factory.login_with_token(url=config.url, token=config.token)
@@ -101,6 +108,29 @@ async def create_platform_api_client(config: PlatformApiConfig) -> PlatformApiCl
             await client.close()
 
 
+@asynccontextmanager
+async def create_kube_client(config: KubeConfig) -> AsyncIterator[KubeClient]:
+    client = KubeClient(
+        base_url=config.endpoint_url,
+        namespace=config.namespace,
+        cert_authority_path=config.cert_authority_path,
+        cert_authority_data_pem=config.cert_authority_data_pem,
+        auth_type=config.auth_type,
+        auth_cert_path=config.auth_cert_path,
+        auth_cert_key_path=config.auth_cert_key_path,
+        token=config.token,
+        token_path=None,  # TODO (A Yushkovskiy) add support for token_path or drop
+        conn_timeout_s=config.client_conn_timeout_s,
+        read_timeout_s=config.client_read_timeout_s,
+        conn_pool_size=config.client_conn_pool_size,
+    )
+    try:
+        await client.init()
+        yield client
+    finally:
+        await client.close()
+
+
 async def create_app(config: Config) -> aiohttp.web.Application:
     app = aiohttp.web.Application(middlewares=[handle_exceptions])
     app["config"] = config
@@ -111,10 +141,13 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             platform_client = await exit_stack.enter_async_context(
                 create_platform_api_client(config.platform_api)
             )
+            app["monitoring_app"]["platform_client"] = platform_client
 
-            logger.info("Initializing JobsService")
-            monitoring_service = MonitoringService(platform_client=platform_client)
-            app["monitoring_app"]["monitoring_service"] = monitoring_service
+            logger.info("Initializing Kubernetes client")
+            kube_client = await exit_stack.enter_async_context(
+                create_kube_client(config.kube)
+            )
+            app["monitoring_app"]["kube_client"] = kube_client
 
             yield
 
