@@ -6,7 +6,7 @@ from typing import Any, AsyncIterator, Callable, Dict, Iterator
 import aiohttp
 import pytest
 from aiohttp.web import HTTPOk
-from aiohttp.web_exceptions import HTTPAccepted
+from aiohttp.web_exceptions import HTTPAccepted, HTTPNoContent
 from platform_monitoring.config import Config, PlatformApiConfig
 from yarl import URL
 
@@ -19,12 +19,16 @@ class MonitoringApiEndpoints:
     address: ApiAddress
 
     @property
-    def endpoint(self) -> str:
+    def api_v1_endpoint(self) -> str:
         return f"http://{self.address.host}:{self.address.port}/api/v1"
 
     @property
     def ping_url(self) -> str:
-        return f"{self.endpoint}/ping"
+        return f"{self.api_v1_endpoint}/ping"
+
+    @property
+    def endpoint(self) -> str:
+        return f"{self.api_v1_endpoint}/jobs"
 
 
 @dataclass(frozen=True)
@@ -93,6 +97,12 @@ class JobsClient:
                 pytest.fail(f"too long: {current_time:.3f} sec; resp: {response}")
             interval_s *= 1.5
 
+    async def delete_job(self, job_id: str, assert_success: bool = True) -> None:
+        url = self._platform_api.generate_job_url(job_id)
+        async with self._client.delete(url, headers=self._headers) as response:
+            if assert_success:
+                assert response.status == HTTPNoContent.status_code
+
 
 @pytest.fixture
 def jobs_client_factory(
@@ -160,3 +170,4 @@ class TestApi:
             job_id = payload["id"]
             assert payload["status"] == "pending"
             await jobs_client.long_polling_by_job_id(job_id, status="succeeded")
+        await jobs_client.delete_job(job_id)

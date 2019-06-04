@@ -1,13 +1,23 @@
 import logging
-from typing import Awaitable, Callable
+from pathlib import Path
+from tempfile import mktemp
+from typing import AsyncIterator, Awaitable, Callable
 
 import aiohttp
+import aiohttp.web
 from aiohttp.abc import StreamResponse
 from aiohttp.web import Request, Response
 from aiohttp.web_middlewares import middleware
 from aiohttp.web_response import json_response
-from platform_monitoring.config import Config
+from async_exit_stack import AsyncExitStack
+from async_generator import asynccontextmanager
+from neuromation.api import (
+    Client as PlatformApiClient,
+    Factory as PlatformClientFactory,
+)
+from platform_monitoring.config import Config, PlatformApiConfig
 from platform_monitoring.config_factory import EnvironConfigFactory
+from platform_monitoring.monitoring_service import MonitoringService
 
 
 logger = logging.getLogger(__name__)
@@ -27,6 +37,18 @@ class ApiHandler:
 
     async def handle_ping(self, request: Request) -> Response:
         return Response(text="Pong")
+
+
+class MonitoringApiHandler:
+    def __init__(self, app: aiohttp.web.Application) -> None:
+        self._app = app
+
+    def register(self, app: aiohttp.web.Application) -> None:
+        pass
+
+    @property
+    def monitoring_service(self) -> MonitoringService:
+        return self._app["monitoring_service"]
 
 
 @middleware
@@ -58,15 +80,54 @@ async def create_api_v1_app() -> aiohttp.web.Application:  # pragma: no coverage
     return api_v1_app
 
 
+async def create_monitoring_app() -> aiohttp.web.Application:  # pragma: no coverage
+    monitoring_app = aiohttp.web.Application()
+    notifications_handler = MonitoringApiHandler(monitoring_app)
+    notifications_handler.register(monitoring_app)
+    return monitoring_app
+
+
+@asynccontextmanager
+async def create_platform_api_client(config: PlatformApiConfig) -> PlatformApiClient:
+    tmp_config = Path(mktemp())
+    platform_api_factory = PlatformClientFactory(tmp_config)
+    await platform_api_factory.login_with_token(url=config.url, token=config.token)
+    client = None
+    try:
+        client = await platform_api_factory.get()
+        yield client
+    finally:
+        if client:
+            await client.close()
+
+
 async def create_app(config: Config) -> aiohttp.web.Application:  # pragma: no coverage
     app = aiohttp.web.Application(middlewares=[handle_exceptions])
     app["config"] = config
 
+    async def _init_app(app: aiohttp.web.Application) -> AsyncIterator[None]:
+        async with AsyncExitStack() as exit_stack:
+            logger.info("Initializing Platform API client")
+            platform_client = await exit_stack.enter_async_context(
+                create_platform_api_client(config.platform_api)
+            )
+
+            logger.info("Initializing JobsService")
+            monitoring_service = MonitoringService(platform_client=platform_client)
+            app["monitoring_app"]["monitoring_service"] = monitoring_service
+
+            yield
+
+    app.cleanup_ctx.append(_init_app)
+
     api_v1_app = await create_api_v1_app()
     app["api_v1_app"] = api_v1_app
 
-    app.add_subapp("/api/v1", api_v1_app)
+    monitoring_app = await create_monitoring_app()
+    app["monitoring_app"] = monitoring_app
+    api_v1_app.add_subapp("/jobs", monitoring_app)
 
+    app.add_subapp("/api/v1", api_v1_app)
     return app
 
 
