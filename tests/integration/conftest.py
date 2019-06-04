@@ -1,10 +1,9 @@
 import asyncio
-import json
 import logging
 import subprocess
 import time
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator, Optional
+from typing import AsyncIterator, Awaitable, Callable, Iterator
 from uuid import uuid1
 
 import aiohttp
@@ -26,7 +25,7 @@ from yarl import URL
 
 logger = logging.getLogger(__name__)
 
-pytest_plugins = ["tests.integration.auth"]
+pytest_plugins = ["tests.integration.conftest_auth", "tests.integration.conftest_kube"]
 
 
 @pytest.fixture(scope="session")
@@ -98,49 +97,12 @@ async def elasticsearch_config(
     yield ElasticsearchConfig(hosts=[es_host])
 
 
-@pytest.fixture(scope="session")
-async def kube_config_payload() -> Dict[str, Any]:
-    process = await asyncio.create_subprocess_exec(
-        "kubectl", "config", "view", "-o", "json", stdout=asyncio.subprocess.PIPE
-    )
-    output, _ = await process.communicate()
-    payload_str = output.decode().rstrip()
-    return json.loads(payload_str)
-
-
-@pytest.fixture(scope="session")
-async def kube_config_cluster_payload(kube_config_payload: Dict[str, Any]) -> Any:
-    cluster_name = "minikube"
-    clusters = {
-        cluster["name"]: cluster["cluster"]
-        for cluster in kube_config_payload["clusters"]
-    }
-    return clusters[cluster_name]
-
-
-@pytest.fixture(scope="session")
-async def kube_config(
-    kube_config_cluster_payload: Dict[str, Any],
-    kube_config_user_payload: Dict[str, Any],
-    cert_authority_data_pem: Optional[str],
-) -> KubeConfig:
-    cluster = kube_config_cluster_payload
-    user = kube_config_user_payload
-    kube_config = KubeConfig(
-        endpoint_url=cluster["server"],
-        cert_authority_data_pem=cert_authority_data_pem,
-        auth_cert_path=user["client-certificate"],
-        auth_cert_key_path=user["client-key"],
-        namespace="platformapi-tests",
-    )
-    return kube_config
-
-
 @pytest.fixture
 def config(
     auth_config: PlatformAuthConfig,
     platform_api_config: PlatformApiConfig,
     elasticsearch_config: ElasticsearchConfig,
+    kube_config: KubeConfig,
 ) -> Config:
     return Config(
         server=ServerConfig(host="0.0.0.0", port=8080),

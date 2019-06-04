@@ -40,6 +40,7 @@ class KubeClientAuthType(str, enum.Enum):
 class KubeConfig:
     endpoint_url: str
     cert_authority_data_pem: Optional[str] = None
+    cert_authority_path: Optional[str] = None
     auth_type: KubeClientAuthType = KubeClientAuthType.CERTIFICATE
     auth_cert_path: Optional[str] = None
     auth_cert_key_path: Optional[str] = None
