@@ -36,6 +36,10 @@ function k8s::start {
     sudo -E minikube config set WantReportErrorPrompt false
     sudo -E minikube start --vm-driver=none --kubernetes-version=v1.10.0
 
+    n_seconds=5
+    echo "Sleeping $n_seconds for minikube to wake up..."
+    sleep $n_seconds
+
     # setup DNS:
     find /etc/kubernetes/addons/ -name kube-dns* | xargs -L 1 sudo kubectl -n kube-system apply -f
 }

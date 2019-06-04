@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 pytest_plugins = ["tests.integration.auth"]
 
 
-@pytest.yield_fixture(scope="session")
+@pytest.fixture(scope="session")
 def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
     """ This fixture fixes scope mismatch error with implicitly added "event_loop".
     see https://github.com/pytest-dev/pytest-asyncio/issues/68
