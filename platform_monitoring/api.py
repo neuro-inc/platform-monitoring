@@ -31,19 +31,24 @@ def init_logging() -> None:
     )
 
 
+class ApiHandler:
+    def register(self, app: aiohttp.web.Application) -> None:
+        app.add_routes([aiohttp.web.get("/ping", self.handle_ping)])
+
+    async def handle_ping(self, request: Request) -> Response:
+        return Response(text="Pong")
+
+
 class MonitoringApiHandler:
     def __init__(self, app: aiohttp.web.Application) -> None:
         self._app = app
 
     def register(self, app: aiohttp.web.Application) -> None:
-        app.add_routes([aiohttp.web.get("/ping", self.handle_ping)])
+        pass
 
     @property
     def monitoring_service(self) -> MonitoringService:
         return self._app["monitoring_service"]
-
-    async def handle_ping(self, request: Request) -> Response:
-        return Response(text="Pong")
 
 
 @middleware
@@ -70,6 +75,8 @@ async def handle_exceptions(
 
 async def create_api_v1_app() -> aiohttp.web.Application:  # pragma: no coverage
     api_v1_app = aiohttp.web.Application()
+    api_v1_handler = ApiHandler()
+    api_v1_handler.register(api_v1_app)
     return api_v1_app
 
 
@@ -97,9 +104,9 @@ async def create_platform_api_client(config: PlatformApiConfig) -> PlatformApiCl
 async def create_app(config: Config) -> aiohttp.web.Application:  # pragma: no coverage
     app = aiohttp.web.Application(middlewares=[handle_exceptions])
     app["config"] = config
-    async with AsyncExitStack() as exit_stack:
 
-        async def _init_app(app: aiohttp.web.Application) -> AsyncIterator[None]:
+    async def _init_app(app: aiohttp.web.Application) -> AsyncIterator[None]:
+        async with AsyncExitStack() as exit_stack:
             logger.info("Initializing Platform API client")
             platform_client = await exit_stack.enter_async_context(
                 create_platform_api_client(config.platform_api)

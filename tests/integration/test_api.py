@@ -19,12 +19,16 @@ class MonitoringApiEndpoints:
     address: ApiAddress
 
     @property
-    def endpoint(self) -> str:
-        return f"http://{self.address.host}:{self.address.port}/api/v1/jobs"
+    def api_v1_endpoint(self) -> str:
+        return f"http://{self.address.host}:{self.address.port}/api/v1"
 
     @property
     def ping_url(self) -> str:
-        return f"{self.endpoint}/ping"
+        return f"{self.api_v1_endpoint}/ping"
+
+    @property
+    def endpoint(self) -> str:
+        return f"{self.api_v1_endpoint}/jobs"
 
 
 @dataclass(frozen=True)
@@ -47,13 +51,13 @@ class PlatformApiEndpoints:
         return f"{self.jobs_base_url}/{job_id}"
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def monitoring_api(config: Config) -> AsyncIterator[MonitoringApiEndpoints]:
     async with create_local_app_server(config, port=8080) as address:
         yield MonitoringApiEndpoints(address=address)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def platform_api(
     platform_api_config: PlatformApiConfig
 ) -> AsyncIterator[PlatformApiEndpoints]:
