@@ -89,6 +89,22 @@ class TestKubeClient:
         await kube_client.delete_pod(job_pod.name)
 
     @pytest.mark.asyncio
+    async def test_check_pod_exists_true(
+        self, kube_client: MyKubeClient, job_pod: MyPodDescriptor
+    ) -> None:
+        await kube_client.create_pod(job_pod.payload)
+        does_exist = await kube_client.check_pod_exists(pod_name=job_pod.name)
+        assert does_exist is True
+        await kube_client.delete_pod(job_pod.name)
+
+    @pytest.mark.asyncio
+    async def test_check_pod_exists_false(
+        self, kube_client: MyKubeClient, job_pod: MyPodDescriptor
+    ) -> None:
+        does_exist = await kube_client.check_pod_exists(pod_name="unknown")
+        assert does_exist is False
+
+    @pytest.mark.asyncio
     async def test_get_pod_container_stats_error_json_response_parsing(
         self, mock_kubernetes_server: ApiAddress
     ) -> None:

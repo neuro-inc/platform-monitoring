@@ -17,6 +17,10 @@ from .config import KubeClientAuthType
 logger = logging.getLogger(__name__)
 
 
+class KubeClientException(Exception):
+    pass
+
+
 class JobException(Exception):
     pass
 
@@ -141,6 +145,12 @@ class KubeClient:
         proxy_url = self._generate_node_proxy_url(name, self._kubelet_port)
         return f"{proxy_url}/stats/summary"
 
+    def _generate_pod_log_url(self, pod_name: str, container_name: str) -> str:
+        return (
+            f"{self._generate_pod_url(pod_name)}/log"
+            f"?container={pod_name}&follow=true"
+        )
+
     async def _request(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         assert self._client, "client is not initialized"
         async with self._client.request(*args, **kwargs) as response:
@@ -205,6 +215,13 @@ class KubeClient:
         except ContentTypeError as e:
             logger.info("Failed to parse response", exc_info=True)
             return None
+
+    async def check_pod_exists(self, pod_name: str) -> bool:
+        try:
+            await self.get_pod_status(pod_name)
+            return True
+        except JobNotFoundException:
+            return False
 
     def _assert_resource_kind(
         self, expected_kind: str, payload: Dict[str, Any]

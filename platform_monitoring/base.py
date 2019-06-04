@@ -4,6 +4,18 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 
+class LogReader(ABC):
+    async def __aenter__(self) -> "LogReader":
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        pass
+
+    @abstractmethod
+    async def read(self, size: int = -1) -> bytes:
+        pass
+
+
 @dataclass(frozen=True)
 class JobStats:
     cpu: float

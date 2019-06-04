@@ -2,10 +2,11 @@ import asyncio
 import logging
 from pathlib import Path
 from tempfile import mktemp
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Optional
 
 import aiohttp
 import aiohttp.web
+from aiohttp import BasicAuth
 from aiohttp.abc import StreamResponse
 from aiohttp.web import Request, Response
 from aiohttp.web_middlewares import middleware
@@ -19,6 +20,15 @@ from neuromation.api import (
     JobDescription as Job,
     JobStatus,
 )
+from platform_monitoring.config import (
+    Config,
+    ElasticsearchConfig,
+    KubeConfig,
+    PlatformApiConfig,
+)
+from platform_monitoring.config_factory import EnvironConfigFactory
+from platform_monitoring.kube_base import JobStats
+from platform_monitoring.logs import LogReaderFactory
 
 from .base import JobStats, Telemetry
 from .config import Config, KubeConfig, PlatformApiConfig
@@ -50,7 +60,12 @@ class MonitoringApiHandler:
         self._app = app
 
     def register(self, app: aiohttp.web.Application) -> None:
-        app.add_routes([aiohttp.web.get("/{job_id}/top", self.stream_top)])
+        app.add_routes(
+            [
+                aiohttp.web.get("/{job_id}/log", self.stream_log),
+                aiohttp.web.get("/{job_id}/top", self.stream_top),
+            ]
+        )
 
     @property
     def _platform_client(self) -> PlatformApiClient:
@@ -59,6 +74,38 @@ class MonitoringApiHandler:
     @property
     def _kube_client(self) -> KubeClient:
         return self._app["kube_client"]
+
+    @property
+    def log_reader_factory(self) -> LogReaderFactory:
+        return self._app["log_reader_factory"]
+
+    async def stream_log(
+        self, request: aiohttp.web.Request
+    ) -> aiohttp.web.StreamResponse:
+        job_id = request.match_info["job_id"]
+        job = await self._get_job(job_id)
+        await self._check_job_read_permissions(job_id, job.owner)
+
+        log_reader = await self.log_reader_factory.get_job_log_reader(job_id)
+        # TODO: expose. make configurable
+        chunk_size = 1024
+
+        response = aiohttp.web.StreamResponse(status=200)
+        response.enable_chunked_encoding()
+        response.enable_compression(aiohttp.web.ContentCoding.identity)
+        response.content_type = "text/plain"
+        response.charset = "utf-8"
+        await response.prepare(request)
+
+        async with log_reader:
+            while True:
+                chunk = await log_reader.read(size=chunk_size)
+                if not chunk:
+                    break
+                await response.write(chunk)
+
+        await response.write_eof()
+        return response
 
     async def stream_top(self, request: Request) -> aiohttp.web.WebSocketResponse:
         job_id = request.match_info["job_id"]
@@ -227,6 +274,20 @@ async def create_kube_client(config: KubeConfig) -> AsyncIterator[KubeClient]:
         await client.close()
 
 
+@asynccontextmanager
+async def create_elasticsearch_client(
+    config: ElasticsearchConfig
+) -> AsyncIterator[ElasticsearchClient]:
+    http_auth: Optional[BasicAuth]
+    if config.user:
+        http_auth = BasicAuth(config.user, config.password)  # type: ignore  # noqa
+    else:
+        http_auth = None
+
+    async with ElasticsearchClient(hosts=config.hosts, http_auth=http_auth) as client:
+        yield client
+
+
 async def create_app(config: Config) -> aiohttp.web.Application:
     app = aiohttp.web.Application(middlewares=[handle_exceptions])
     app["config"] = config
@@ -239,11 +300,19 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             )
             app["monitoring_app"]["platform_client"] = platform_client
 
+            logger.info("Initializing Elasticsearc client")
+            es_client = await exit_stack.enter_async_context(
+                create_elasticsearch_client(config.elasticsearch)
+            )
+
             logger.info("Initializing Kubernetes client")
             kube_client = await exit_stack.enter_async_context(
                 create_kube_client(config.kube)
             )
             app["monitoring_app"]["kube_client"] = kube_client
+
+            log_reader_factory = LogReaderFactory(kube_client, es_client)
+            app["monitoring_app"]["log_reader_factory"] = log_reader_factory
 
             yield
 
