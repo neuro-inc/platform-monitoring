@@ -3,7 +3,7 @@ import logging
 import subprocess
 import time
 from dataclasses import dataclass
-from typing import AsyncIterator, Awaitable, Callable, Iterator
+from typing import AsyncIterator, Callable, Iterator
 from uuid import uuid1
 
 import aiohttp
@@ -91,6 +91,8 @@ async def platform_api_config(
 
 
 @pytest.fixture
+# TODO (A Yushkovskiy, 05-May-2019) This fixture should have scope="session",
+#  however this does not work
 async def elasticsearch_config(
     token_factory: Callable[[str], str]
 ) -> AsyncIterator[ElasticsearchConfig]:
