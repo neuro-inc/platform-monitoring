@@ -36,10 +36,10 @@ function k8s::start {
     sudo -E minikube config set WantReportErrorPrompt false
     sudo -E minikube start --vm-driver=none --kubernetes-version=v1.10.0
 
-    k8s::setup_ingress
+    k8s::setup_dns
 }
 
-function k8s::setup_ingress {
+function k8s::setup_dns {
     for f in $(find /etc/kubernetes/addons/ -name kube-dns*)
     do
       k8s::wait "sudo kubectl -n kube-system apply -f $f"
