@@ -218,7 +218,7 @@ class KubeClient:
 
     async def check_pod_exists(self, pod_name: str) -> bool:
         try:
-            await self.get_pod_status(pod_name)
+            await self.get_raw_pod(pod_name)
             return True
         except JobNotFoundException:
             return False

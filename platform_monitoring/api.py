@@ -2,11 +2,11 @@ import asyncio
 import logging
 from pathlib import Path
 from tempfile import mktemp
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Optional
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict
 
 import aiohttp
 import aiohttp.web
-from aiohttp import BasicAuth
+from aioelasticsearch import Elasticsearch
 from aiohttp.abc import StreamResponse
 from aiohttp.web import Request, Response
 from aiohttp.web_middlewares import middleware
@@ -20,14 +20,7 @@ from neuromation.api import (
     JobDescription as Job,
     JobStatus,
 )
-from platform_monitoring.config import (
-    Config,
-    ElasticsearchConfig,
-    KubeConfig,
-    PlatformApiConfig,
-)
-from platform_monitoring.config_factory import EnvironConfigFactory
-from platform_monitoring.kube_base import JobStats
+from platform_monitoring.config import ElasticsearchConfig
 from platform_monitoring.logs import LogReaderFactory
 
 from .base import JobStats, Telemetry
@@ -84,12 +77,13 @@ class MonitoringApiHandler:
     ) -> aiohttp.web.StreamResponse:
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
-        await self._check_job_read_permissions(job_id, job.owner)
+
+        self._check_job_read_permissions(job_id, job.owner)
 
         log_reader = await self.log_reader_factory.get_job_log_reader(job_id)
+
         # TODO: expose. make configurable
         chunk_size = 1024
-
         response = aiohttp.web.StreamResponse(status=200)
         response.enable_chunked_encoding()
         response.enable_compression(aiohttp.web.ContentCoding.identity)
@@ -277,14 +271,8 @@ async def create_kube_client(config: KubeConfig) -> AsyncIterator[KubeClient]:
 @asynccontextmanager
 async def create_elasticsearch_client(
     config: ElasticsearchConfig
-) -> AsyncIterator[ElasticsearchClient]:
-    http_auth: Optional[BasicAuth]
-    if config.user:
-        http_auth = BasicAuth(config.user, config.password)  # type: ignore  # noqa
-    else:
-        http_auth = None
-
-    async with ElasticsearchClient(hosts=config.hosts, http_auth=http_auth) as client:
+) -> AsyncIterator[Elasticsearch]:
+    async with Elasticsearch(hosts=config.hosts, http_auth=None) as client:
         yield client
 
 
