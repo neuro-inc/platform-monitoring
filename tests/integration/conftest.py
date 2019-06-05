@@ -33,7 +33,14 @@ def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
     """ This fixture fixes scope mismatch error with implicitly added "event_loop".
     see https://github.com/pytest-dev/pytest-asyncio/issues/68
     """
+    asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
     loop = asyncio.get_event_loop_policy().new_event_loop()
+    loop.set_debug(True)
+
+    watcher = asyncio.SafeChildWatcher()  # type: ignore
+    watcher.attach_loop(loop)
+    asyncio.get_event_loop_policy().set_child_watcher(watcher)
+
     yield loop
     loop.close()
 
