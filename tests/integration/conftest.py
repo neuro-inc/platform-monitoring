@@ -78,6 +78,8 @@ async def wait_for_service(
 
 
 @pytest.fixture
+# TODO (A Yushkovskiy, 05-May-2019) This fixture should have scope="session" in order
+#  to be faster, but it causes mysterious errors `RuntimeError: Event loop is closed`
 async def platform_api_config(
     token_factory: Callable[[str], str],
 ) -> AsyncIterator[PlatformApiConfig]:
@@ -91,8 +93,8 @@ async def platform_api_config(
 
 
 @pytest.fixture
-# TODO (A Yushkovskiy, 05-May-2019) This fixture should have scope="session",
-#  however this does not work
+# TODO (A Yushkovskiy, 05-May-2019) This fixture should have scope="session" in order
+#  to be faster, but it causes mysterious errors `RuntimeError: Event loop is closed`
 async def elasticsearch_config(
     token_factory: Callable[[str], str]
 ) -> AsyncIterator[ElasticsearchConfig]:
