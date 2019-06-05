@@ -49,43 +49,37 @@ def random_str(length: int = 8) -> str:
     return str(uuid1())[:length]
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def client() -> AsyncIterator[aiohttp.ClientSession]:
     async with aiohttp.ClientSession() as session:
         yield session
 
 
-@pytest.fixture(scope="session")
 async def wait_for_service(
-    client: aiohttp.ClientSession
-) -> AsyncIterator[Callable[..., Awaitable[None]]]:
-    async def _wait(
-        service_name: str,
-        service_ping_url: URL,
-        timeout_s: float = 30,
-        interval_s: float = 1,
-    ) -> None:
-        async with timeout(timeout_s):
-            while True:
-                try:
+    service_name: str,
+    service_ping_url: URL,
+    timeout_s: float = 30,
+    interval_s: float = 1,
+) -> None:
+    async with timeout(timeout_s):
+        while True:
+            try:
+                async with aiohttp.ClientSession() as client:
                     async with client.get(service_ping_url) as resp:
                         assert resp.status == aiohttp.web.HTTPOk.status_code
-                        break
-                except aiohttp.ClientError as e:
-                    logging.info(
-                        f"Failed to ping service '{service_name}' "
-                        f"via url '{service_ping_url}': {e}"
-                    )
-                    pass
-                await asyncio.sleep(interval_s)
-
-    yield _wait
+                        return
+            except aiohttp.ClientError as e:
+                logging.info(
+                    f"Failed to ping service '{service_name}' "
+                    f"via url '{service_ping_url}': {e}"
+                )
+                pass
+            await asyncio.sleep(interval_s)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def platform_api_config(
     token_factory: Callable[[str], str],
-    wait_for_service: Callable[..., Awaitable[None]],
 ) -> AsyncIterator[PlatformApiConfig]:
     base_url = get_service_url("platformapi", namespace="default")
     url = URL(base_url) / "api/v1"
@@ -96,7 +90,7 @@ async def platform_api_config(
     )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def elasticsearch_config(
     token_factory: Callable[[str], str]
 ) -> AsyncIterator[ElasticsearchConfig]:
