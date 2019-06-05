@@ -56,11 +56,7 @@ def test_create(cert_authority_path: str) -> None:
         platform_auth=PlatformAuthConfig(
             url=URL("http://platformauthapi/api/v1"), token="platform-auth-token"
         ),
-        elasticsearch=ElasticsearchConfig(
-            hosts=["http://es1", "http://es2"],
-            user="test-user",
-            password="test-password",
-        ),
+        elasticsearch=ElasticsearchConfig(hosts=["http://es1", "http://es2"]),
         orchestrator=KubeConfig(
             endpoint_url="https://localhost:8443",
             cert_authority_data_pem=CA_DATA_PEM,

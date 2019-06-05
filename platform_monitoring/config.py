@@ -26,8 +26,6 @@ class PlatformAuthConfig:
 @dataclass(frozen=True)
 class ElasticsearchConfig:
     hosts: Sequence[str]
-    user: Optional[str] = None
-    password: Optional[str] = None
 
 
 class KubeClientAuthType(str, enum.Enum):

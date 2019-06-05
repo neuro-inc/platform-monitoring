@@ -49,9 +49,7 @@ class EnvironConfigFactory:
 
     def create_elasticsearch(self) -> ElasticsearchConfig:
         hosts = self._environ["NP_MONITORING_ES_HOSTS"].split(",")
-        user = self._environ.get("NP_MONITORING_ES_AUTH_USER")
-        password = self._environ.get("NP_MONITORING_ES_AUTH_PASSWORD")
-        return ElasticsearchConfig(hosts=hosts, user=user, password=password)
+        return ElasticsearchConfig(hosts=hosts)
 
     def create_orchestrator(self) -> KubeConfig:
         endpoint_url = self._environ["NP_MONITORING_K8S_API_URL"]
