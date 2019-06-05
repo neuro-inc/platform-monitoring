@@ -1,10 +1,19 @@
 import logging
 import os
+from pathlib import Path
 from typing import Dict, Optional
 
 from yarl import URL
 
-from .config import Config, PlatformApiConfig, PlatformAuthConfig, ServerConfig
+from .config import (
+    Config,
+    ElasticsearchConfig,
+    KubeClientAuthType,
+    KubeConfig,
+    PlatformApiConfig,
+    PlatformAuthConfig,
+    ServerConfig,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -16,22 +25,66 @@ class EnvironConfigFactory:
 
     def create(self) -> Config:
         return Config(
-            server=self.create_server(),
-            platform_api=self.create_platform_api(),
-            platform_auth=self.create_platform_auth(),
+            server=self._create_server(),
+            platform_api=self._create_platform_api(),
+            platform_auth=self._create_platform_auth(),
+            elasticsearch=self._create_elasticsearch(),
+            kube=self._create_kube(),
         )
 
-    def create_server(self) -> ServerConfig:
+    def _create_server(self) -> ServerConfig:
         host = self._environ.get("NP_MONITORING_API_HOST", ServerConfig.host)
         port = int(self._environ.get("NP_MONITORING_API_PORT", ServerConfig.port))
         return ServerConfig(host=host, port=port)
 
-    def create_platform_api(self) -> PlatformApiConfig:
+    def _create_platform_api(self) -> PlatformApiConfig:
         url = URL(self._environ["NP_MONITORING_PLATFORM_API_URL"])
         token = self._environ["NP_MONITORING_PLATFORM_API_TOKEN"]
         return PlatformApiConfig(url=url, token=token)
 
-    def create_platform_auth(self) -> PlatformAuthConfig:
+    def _create_platform_auth(self) -> PlatformAuthConfig:
         url = URL(self._environ["NP_MONITORING_PLATFORM_AUTH_URL"])
         token = self._environ["NP_MONITORING_PLATFORM_AUTH_TOKEN"]
         return PlatformAuthConfig(url=url, token=token)
+
+    def _create_elasticsearch(self) -> ElasticsearchConfig:
+        hosts = self._environ["NP_MONITORING_ES_HOSTS"].split(",")
+        return ElasticsearchConfig(hosts=hosts)
+
+    def _create_kube(self) -> KubeConfig:
+        endpoint_url = self._environ["NP_MONITORING_K8S_API_URL"]
+        auth_type = KubeClientAuthType(
+            self._environ.get("NP_MONITORING_K8S_AUTH_TYPE", KubeConfig.auth_type.value)
+        )
+        ca_path = self._environ.get("NP_MONITORING_K8S_CA_PATH")
+        ca_data = Path(ca_path).read_text() if ca_path else None
+
+        return KubeConfig(
+            endpoint_url=endpoint_url,
+            cert_authority_data_pem=ca_data,
+            auth_type=auth_type,
+            auth_cert_path=self._environ.get("NP_MONITORING_K8S_AUTH_CERT_PATH"),
+            auth_cert_key_path=self._environ.get(
+                "NP_MONITORING_K8S_AUTH_CERT_KEY_PATH"
+            ),
+            token=self._environ.get("NP_MONITORING_K8S_TOKEN"),
+            namespace=self._environ.get("NP_MONITORING_K8S_NS", KubeConfig.namespace),
+            client_conn_timeout_s=int(
+                self._environ.get(
+                    "NP_MONITORING_K8S_CLIENT_CONN_TIMEOUT",
+                    KubeConfig.client_conn_timeout_s,
+                )
+            ),
+            client_read_timeout_s=int(
+                self._environ.get(
+                    "NP_MONITORING_K8S_CLIENT_READ_TIMEOUT",
+                    KubeConfig.client_read_timeout_s,
+                )
+            ),
+            client_conn_pool_size=int(
+                self._environ.get(
+                    "NP_MONITORING_K8S_CLIENT_CONN_POOL_SIZE",
+                    KubeConfig.client_conn_pool_size,
+                )
+            ),
+        )

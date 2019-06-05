@@ -101,7 +101,7 @@ async def create_platform_api_client(config: PlatformApiConfig) -> PlatformApiCl
             await client.close()
 
 
-async def create_app(config: Config) -> aiohttp.web.Application:  # pragma: no coverage
+async def create_app(config: Config) -> aiohttp.web.Application:
     app = aiohttp.web.Application(middlewares=[handle_exceptions])
     app["config"] = config
 

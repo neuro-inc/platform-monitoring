@@ -10,8 +10,8 @@ from aiohttp.web_exceptions import HTTPAccepted, HTTPNoContent
 from platform_monitoring.config import Config, PlatformApiConfig
 from yarl import URL
 
-from .auth import _User
 from .conftest import ApiAddress, create_local_app_server
+from .conftest_auth import _User
 
 
 @dataclass(frozen=True)
