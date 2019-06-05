@@ -55,4 +55,4 @@ class Config:
     platform_api: PlatformApiConfig
     platform_auth: PlatformAuthConfig
     elasticsearch: ElasticsearchConfig
-    orchestrator: KubeConfig
+    kube: KubeConfig

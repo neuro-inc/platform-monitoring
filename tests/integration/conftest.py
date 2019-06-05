@@ -109,7 +109,7 @@ def config(
         platform_auth=auth_config,
         platform_api=platform_api_config,
         elasticsearch=elasticsearch_config,
-        orchestrator=kube_config,
+        kube=kube_config,
     )
 
 
