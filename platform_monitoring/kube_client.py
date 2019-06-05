@@ -1,12 +1,15 @@
 import asyncio
 import logging
 import ssl
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, NoReturn, Optional
 from urllib.parse import urlsplit
 
 import aiohttp
 from async_timeout import timeout
+from neuromation.api import JobDescription as Job
+from platform_monitoring.kube_base import JobStats, Telemetry
 
 from .config import KubeClientAuthType
 
@@ -164,6 +167,36 @@ class KubeClient:
                 if not is_waiting:
                     return
                 await asyncio.sleep(interval_s)
+
+    def _get_job_pod_name(self, job: Job) -> str:
+        # TODO (A Danshyn 11/15/18): we will need to start storing jobs'
+        # kube pod names explicitly at some point
+        return job.id
+
+    async def get_pod_container_stats(
+        self, pod_name: str, container_name: str
+    ) -> Optional["PodContainerStats"]:
+        """
+        https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/apis/stats/v1alpha1/types.go
+        """
+        node_name = await self.get_node_name(pod_name)
+        if not node_name:
+            return None
+        url = self._generate_node_stats_summary_url(node_name)
+        payload = await self._request(method="GET", url=url)
+        summary = StatsSummary(payload)
+        return summary.get_pod_container_stats(
+            self._namespace, pod_name, container_name
+        )
+
+    async def get_job_telemetry(self, job: Job) -> Telemetry:
+        pod_name = self._get_job_pod_name(job)
+        return KubeTelemetry(
+            self,
+            namespace_name=self._namespace,
+            pod_name=pod_name,
+            container_name=pod_name,
+        )
 
     def _assert_resource_kind(
         self, expected_kind: str, payload: Dict[str, Any]

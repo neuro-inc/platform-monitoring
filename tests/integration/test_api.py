@@ -1,7 +1,9 @@
 import asyncio
+import json
 import time
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Callable, Dict, Iterator
+from unittest import mock
 
 import aiohttp
 import pytest
@@ -29,6 +31,9 @@ class MonitoringApiEndpoints:
     @property
     def endpoint(self) -> str:
         return f"{self.api_v1_endpoint}/jobs"
+
+    def generate_top_url(self, job_id: str) -> str:
+        return f"{self.endpoint}/{job_id}/top"
 
 
 @dataclass(frozen=True)
@@ -142,6 +147,29 @@ async def job_submit(
     return job_request_factory()
 
 
+@pytest.fixture
+async def infinite_job(
+    platform_api: PlatformApiEndpoints,
+    client: aiohttp.ClientSession,
+    regular_user: _User,
+    jobs_client: JobsClient,
+    job_request_factory: Callable[[], Dict[str, Any]],
+) -> AsyncIterator[str]:
+    request_payload = job_request_factory()
+    request_payload["container"]["command"] = "tail -f /dev/null"
+    async with client.post(
+        platform_api.jobs_base_url, headers=regular_user.headers, json=request_payload
+    ) as response:
+        assert response.status == HTTPAccepted.status_code, await response.text()
+        result = await response.json()
+        job_id = result["id"]
+        assert isinstance(job_id, str)
+
+    yield job_id
+
+    await jobs_client.delete_job(job_id)
+
+
 class TestApi:
     @pytest.mark.asyncio
     async def test_ping(
@@ -153,14 +181,56 @@ class TestApi:
             assert text == "Pong"
 
     @pytest.mark.asyncio
-    async def test_platform_create_job(
+    async def test_job_top(
         self,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        regular_user: _User,
+        jobs_client: JobsClient,
+        infinite_job: str,
+    ) -> None:
+        await jobs_client.long_polling_by_job_id(job_id=infinite_job, status="running")
+        url = monitoring_api.generate_top_url(job_id=infinite_job)
+        num_request = 2
+        records = []
+        async with client.ws_connect(url, headers=regular_user.headers) as ws:
+            # TODO move this ws communication to JobClient
+            while True:
+                msg = await ws.receive()
+                if msg.type == aiohttp.WSMsgType.CLOSE:
+                    break
+                else:
+                    records.append(json.loads(msg.data))
+
+                if len(records) == num_request:
+                    # TODO (truskovskiyk 09/12/18) do not use protected prop
+                    # https://github.com/aio-libs/aiohttp/issues/3443
+                    proto = ws._writer.protocol
+                    assert proto.transport is not None
+                    proto.transport.close()
+                    break
+
+        assert records
+        for message in records:
+            assert message == {
+                "cpu": mock.ANY,
+                "memory": mock.ANY,
+                "timestamp": mock.ANY,
+            }
+
+    @pytest.mark.asyncio
+    async def test_job_top_silently_wait_when_job_pending(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
         platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
-        job_submit: Dict[str, Any],
-        jobs_client: JobsClient,
         regular_user: _User,
+        jobs_client: JobsClient,
+        job_submit: Dict[str, Any],
     ) -> None:
+        command = 'bash -c "for i in {1..10}; do echo $i; sleep 1; done"'
+        job_submit["container"]["command"] = command
+
         url = platform_api.jobs_base_url
         async with client.post(
             url, headers=regular_user.headers, json=job_submit
@@ -169,5 +239,53 @@ class TestApi:
             payload = await resp.json()
             job_id = payload["id"]
             assert payload["status"] == "pending"
-            await jobs_client.long_polling_by_job_id(job_id, status="succeeded")
-        await jobs_client.delete_job(job_id)
+
+        job_top_url = monitoring_api.generate_top_url(job_id)
+        async with client.ws_connect(job_top_url, headers=regular_user.headers) as ws:
+            while True:
+                job = await jobs_client.get_job_by_id(job_id=job_id)
+                assert job["status"] == "pending"
+
+                # silently waiting for a job becomes running
+                msg = await ws.receive()
+                job = await jobs_client.get_job_by_id(job_id=job_id)
+                assert job["status"] == "running"
+                assert msg.type == aiohttp.WSMsgType.TEXT
+
+                break
+
+        await jobs_client.delete_job(job_id=job_id)
+
+    @pytest.mark.asyncio
+    async def test_job_top_close_when_job_succeeded(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        platform_api: PlatformApiEndpoints,
+        client: aiohttp.ClientSession,
+        regular_user: _User,
+        jobs_client: JobsClient,
+        job_submit: Dict[str, Any],
+    ) -> None:
+
+        command = 'bash -c "for i in {1..2}; do echo $i; sleep 1; done"'
+        job_submit["container"]["command"] = command
+        headers = regular_user.headers
+
+        url = platform_api.jobs_base_url
+        async with client.post(url, headers=headers, json=job_submit) as response:
+            assert response.status == HTTPAccepted.status_code
+            result = await response.json()
+            assert result["status"] in ["pending"]
+            job_id = result["id"]
+
+        await jobs_client.long_polling_by_job_id(job_id=job_id, status="succeeded")
+
+        job_top_url = monitoring_api.generate_top_url(job_id)
+        async with client.ws_connect(job_top_url, headers=headers) as ws:
+            msg = await ws.receive()
+            job = await jobs_client.get_job_by_id(job_id=job_id)
+
+            assert msg.type == aiohttp.WSMsgType.CLOSE
+            assert job["status"] == "succeeded"
+
+        await jobs_client.delete_job(job_id=job_id)

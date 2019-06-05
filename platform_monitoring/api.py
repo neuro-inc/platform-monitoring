@@ -1,7 +1,8 @@
+import asyncio
 import logging
 from pathlib import Path
 from tempfile import mktemp
-from typing import AsyncIterator, Awaitable, Callable
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict
 
 import aiohttp
 import aiohttp.web
@@ -14,9 +15,12 @@ from async_generator import asynccontextmanager
 from neuromation.api import (
     Client as PlatformApiClient,
     Factory as PlatformClientFactory,
+    JobDescription as Job,
+    JobStatus,
 )
 from platform_monitoring.config import Config, KubeConfig, PlatformApiConfig
 from platform_monitoring.config_factory import EnvironConfigFactory
+from platform_monitoring.kube_base import JobStats
 
 from .kube_client import KubeClient
 
@@ -45,7 +49,7 @@ class MonitoringApiHandler:
         self._app = app
 
     def register(self, app: aiohttp.web.Application) -> None:
-        pass
+        app.add_routes([aiohttp.web.get("/{job_id}/top", self.stream_top)])
 
     @property
     def platform_client(self) -> PlatformApiClient:
@@ -54,6 +58,77 @@ class MonitoringApiHandler:
     @property
     def kube_client(self) -> KubeClient:
         return self._app["kube_client"]
+
+    async def stream_top(self, request: Request) -> aiohttp.web.WebSocketResponse:
+        job_id = request.match_info["job_id"]
+        job = await self._get_job(job_id)
+        self._check_job_read_permissions(job.id, job.owner)
+
+        logger.info("Websocket connection starting")
+        ws = aiohttp.web.WebSocketResponse()
+        await ws.prepare(request)
+        logger.info("Websocket connection ready")
+
+        # TODO (truskovskiyk 09/12/18) remove CancelledError
+        # https://github.com/aio-libs/aiohttp/issues/3443
+
+        # TODO expose configuration
+        sleep_timeout = 1
+
+        telemetry = await self.kube_client.get_job_telemetry(job)
+
+        async with telemetry:
+
+            try:
+                while True:
+                    # client close connection
+                    assert request.transport is not None
+                    if request.transport.is_closing():
+                        break
+
+                    job = await self._get_job(job_id)
+
+                    if self._is_job_running(job):
+                        job_stats = await telemetry.get_latest_stats()
+                        if job_stats:
+                            message = self._convert_job_stats_to_ws_message(job_stats)
+                            await ws.send_json(message)
+
+                    if self._is_job_finished(job):
+                        await ws.close()
+                        break
+
+                    await asyncio.sleep(sleep_timeout)
+
+            except asyncio.CancelledError as ex:
+                logger.info(f"got cancelled error {ex}")
+
+        return ws
+
+    async def _get_job(self, job_id: str) -> Job:
+        return await self.platform_client.jobs.status(job_id)
+
+    def _is_job_running(self, job: Job) -> bool:
+        return job.status == JobStatus.RUNNING
+
+    def _is_job_finished(self, job: Job) -> bool:
+        return job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED)
+
+    def _convert_job_stats_to_ws_message(self, job_stats: JobStats) -> Dict[str, Any]:
+        message = {
+            "cpu": job_stats.cpu,
+            "memory": job_stats.memory,
+            "timestamp": job_stats.timestamp,
+        }
+        if job_stats.gpu_duty_cycle is not None:
+            message["gpu_duty_cycle"] = job_stats.gpu_duty_cycle
+        if job_stats.gpu_memory is not None:
+            message["gpu_memory"] = job_stats.gpu_memory
+        return message
+
+    def _check_job_read_permissions(self, job_id: str, owner: str) -> None:
+        # TODO (A Yushkovskiy, 04-Jun-2019) check READ permissions on the job
+        pass
 
 
 @middleware
