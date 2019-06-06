@@ -41,7 +41,9 @@ class TestKubeClient:
     ) -> None:
         # TODO (A Yushkovskiy, 31-May-2019) check returned pod statuses
         await kube_client.create_pod(job_pod.payload)
+        is_waiting = await kube_client.is_container_waiting(job_pod.name)
+        assert is_waiting
         await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=60.0)
-        pod_status = await kube_client.get_pod_status(job_pod.name)
-        assert pod_status.phase in ("Running", "Succeeded")
+        is_waiting = await kube_client.is_container_waiting(job_pod.name)
+        assert not is_waiting
         await kube_client.delete_pod(job_pod.name)

@@ -148,11 +148,17 @@ class KubeClient:
         self._assert_resource_kind(expected_kind="Pod", payload=payload)
         return payload
 
-    async def get_pod_status(self, pod_id: str) -> "PodStatus":
+    async def is_container_waiting(self, pod_id: str) -> bool:
         payload = await self.get_raw_pod(pod_id)
-        if "status" in payload:
-            return PodStatus.from_primitive(payload["status"])
-        raise ValueError("Missing pod status")
+        pod_status = payload.get("status")
+        if not pod_status:
+            raise ValueError("Missing pod status")
+        container_status: Dict[str, Any] = {}
+        if "containerStatuses" in pod_status:
+            container_status = pod_status["containerStatuses"][0]
+        status = container_status.get("state", {})
+        is_waiting = not status or "waiting" in status
+        return is_waiting
 
     async def get_node_name(self, pod_id: str) -> str:
         payload = await self.get_raw_pod(pod_id)
@@ -173,8 +179,8 @@ class KubeClient:
         """
         async with timeout(timeout_s):
             while True:
-                pod_status = await self.get_pod_status(pod_name)
-                if not pod_status.container_status.is_waiting:
+                is_waiting = await self.is_container_waiting(pod_name)
+                if not is_waiting:
                     return
                 await asyncio.sleep(interval_s)
 
@@ -198,129 +204,3 @@ class KubeClient:
             raise JobError(f"can not create job with id {job_id}")
         else:
             raise JobError("unexpected")
-
-
-class ContainerStatus:
-    def __init__(self, payload: Optional[Dict[str, Any]] = None) -> None:
-        self._payload = payload or {}
-
-    @property
-    def _state(self) -> Dict[str, Any]:
-        return self._payload.get("state", {})
-
-    @property
-    def is_waiting(self) -> bool:
-        return not self._state or "waiting" in self._state
-
-    @property
-    def is_terminated(self) -> bool:
-        return bool(self._state) and "terminated" in self._state
-
-    @property
-    def reason(self) -> Optional[str]:
-        """Return the reason of the current state.
-
-        'waiting' reasons:
-            'PodInitializing'
-            'ContainerCreating'
-            'ErrImagePull'
-        see
-        https://github.com/kubernetes/kubernetes/blob/29232e3edc4202bb5e34c8c107bae4e8250cd883/pkg/kubelet/kubelet_pods.go#L1463-L1468
-        https://github.com/kubernetes/kubernetes/blob/886e04f1fffbb04faf8a9f9ee141143b2684ae68/pkg/kubelet/images/types.go#L25-L43
-
-        'terminated' reasons:
-            'OOMKilled'
-            'Completed'
-            'Error'
-            'ContainerCannotRun'
-        see
-        https://github.com/kubernetes/kubernetes/blob/c65f65cf6aea0f73115a2858a9d63fc2c21e5e3b/pkg/kubelet/dockershim/docker_container.go#L306-L409
-        """
-        for state in self._state.values():
-            return state.get("reason")
-        return None
-
-    @property
-    def message(self) -> Optional[str]:
-        for state in self._state.values():
-            return state.get("message")
-        return None
-
-    @property
-    def exit_code(self) -> Optional[int]:
-        assert self.is_terminated
-        return self._state["terminated"]["exitCode"]
-
-    @property
-    def is_creating(self) -> bool:
-        # TODO (A Danshyn 07/20/18): handle PodInitializing
-        # TODO (A Danshyn 07/20/18): consider handling other reasons
-        # https://github.com/kubernetes/kubernetes/blob/886e04f1fffbb04faf8a9f9ee141143b2684ae68/pkg/kubelet/images/types.go#L25-L43
-        return self.is_waiting and self.reason in (None, "ContainerCreating")
-
-
-class PodStatus:
-    def __init__(self, payload: Dict[str, Any]) -> None:
-        self._payload = payload
-        self._container_status = self._init_container_status()
-
-    def _init_container_status(self) -> ContainerStatus:
-        payload = None
-        if "containerStatuses" in self._payload:
-            payload = self._payload["containerStatuses"][0]
-        return ContainerStatus(payload=payload)
-
-    @property
-    def phase(self) -> str:
-        """
-        "Pending", "Running", "Succeeded", "Failed", "Unknown"
-        """
-        return self._payload["phase"]
-
-    @property
-    def is_phase_pending(self) -> bool:
-        return self.phase == "Pending"
-
-    @property
-    def is_scheduled(self) -> bool:
-        # TODO (A Danshyn 11/16/18): we should consider using "conditions"
-        # type="PodScheduled" reason="unschedulable" instead.
-        return not self.is_phase_pending or self.is_container_status_available
-
-    @property
-    def reason(self) -> Optional[str]:
-        """
-
-        If kubelet decides to evict the pod, it sets the "Failed" phase along with
-        the "Evicted" reason.
-        https://github.com/kubernetes/kubernetes/blob/a3ccea9d8743f2ff82e41b6c2af6dc2c41dc7b10/pkg/kubelet/eviction/eviction_manager.go#L543-L566
-        If a node the pod scheduled on fails, node lifecycle controller sets
-        the "NodeList" reason.
-        https://github.com/kubernetes/kubernetes/blob/a3ccea9d8743f2ff82e41b6c2af6dc2c41dc7b10/pkg/controller/util/node/controller_utils.go#L109-L126
-        """
-        # the pod status reason has a greater priority
-        return self._payload.get("reason") or self._container_status.reason
-
-    @property
-    def message(self) -> Optional[str]:
-        return self._payload.get("message") or self._container_status.message
-
-    @property
-    def container_status(self) -> ContainerStatus:
-        return self._container_status
-
-    @property
-    def is_container_creating(self) -> bool:
-        return self._container_status.is_creating
-
-    @property
-    def is_container_status_available(self) -> bool:
-        return "containerStatuses" in self._payload
-
-    @property
-    def is_node_lost(self) -> bool:
-        return self.reason == "NodeLost"
-
-    @classmethod
-    def from_primitive(cls, payload: Dict[str, Any]) -> "PodStatus":
-        return cls(payload)

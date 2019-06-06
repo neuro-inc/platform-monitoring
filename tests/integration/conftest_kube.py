@@ -6,21 +6,21 @@ from typing import Any, AsyncIterator, Dict, Optional
 import pytest
 from async_timeout import timeout
 from platform_monitoring.config import KubeConfig
-from platform_monitoring.kube_client import KubeClient, PodStatus
+from platform_monitoring.kube_client import KubeClient
 
 
 class MyKubeClient(KubeClient):
 
     # TODO (A Yushkovskiy, 30-May-2019) delete pods automatically
 
-    async def create_pod(self, job_pod_descriptor: Dict[str, Any]) -> PodStatus:
+    async def create_pod(self, job_pod_descriptor: Dict[str, Any]) -> str:
         payload = await self._request(
             method="POST", url=self._pods_url, json=job_pod_descriptor
         )
         self._assert_resource_kind(expected_kind="Pod", payload=payload)
         return self._parse_pod_status(payload)
 
-    async def delete_pod(self, pod_name: str, force: bool = False) -> PodStatus:
+    async def delete_pod(self, pod_name: str, force: bool = False) -> str:
         url = self._generate_pod_url(pod_name)
         request_payload = None
         if force:
@@ -33,9 +33,9 @@ class MyKubeClient(KubeClient):
         self._assert_resource_kind(expected_kind="Pod", payload=payload)
         return self._parse_pod_status(payload)
 
-    def _parse_pod_status(self, payload: Dict[str, Any]) -> PodStatus:
+    def _parse_pod_status(self, payload: Dict[str, Any]) -> str:
         if "status" in payload:
-            return PodStatus.from_primitive(payload["status"])
+            return payload["status"]
         raise ValueError(f"Missing pod status: `{payload}`")
 
     async def wait_pod_scheduled(
