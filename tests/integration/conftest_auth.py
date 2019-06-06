@@ -77,14 +77,9 @@ async def regular_user_factory(
 ) -> AsyncIterator[Callable[[Optional[str]], Awaitable[_User]]]:
     async def _factory(name: Optional[str] = None) -> _User:
         if not name:
-            name = f"user-{random_str(4)}"
+            name = f"user-{random_str(8)}"
         user = AuthClientUser(name=name)
         await auth_client.add_user(user, token=admin_token)
         return _User(name=user.name, token=token_factory(user.name))  # type: ignore
 
     yield _factory
-
-
-@pytest.fixture
-async def regular_user(regular_user_factory: Callable[[], Awaitable[_User]]) -> _User:
-    return await regular_user_factory()
