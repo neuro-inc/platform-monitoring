@@ -124,16 +124,6 @@ class KubeClient:
     def _generate_pod_url(self, pod_id: str) -> str:
         return f"{self._pods_url}/{pod_id}"
 
-    def _generate_node_proxy_url(self, name: str, port: int) -> str:
-        return f"{self._api_v1_url}/nodes/{name}:{port}/proxy"
-
-    def _generate_node_stats_summary_url(self, name: str) -> str:
-        proxy_url = self._generate_node_proxy_url(name, self._kubelet_port)
-        return f"{proxy_url}/stats/summary"
-
-    # TODO: _check_pod_exists
-    # TODO: _generate_pod_log_url
-
     async def _request(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         assert self._client, "client is not initialized"
         async with self._client.request(*args, **kwargs) as response:
@@ -159,15 +149,6 @@ class KubeClient:
         status = container_status.get("state", {})
         is_waiting = not status or "waiting" in status
         return is_waiting
-
-    async def get_node_name(self, pod_id: str) -> str:
-        payload = await self.get_raw_pod(pod_id)
-        return payload["spec"].get("nodeName")
-
-    async def _is_pod_waiting(self, pod_name: str) -> bool:
-        payload = await self.get_raw_pod(pod_name)
-        state = payload.get("state", {})
-        return not state or "waiting" in state
 
     async def wait_pod_is_running(
         self, pod_name: str, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
@@ -197,10 +178,10 @@ class KubeClient:
         self, pod: Dict[str, Any], job_id: Optional[str]
     ) -> NoReturn:
         if pod["code"] == 409:
-            raise JobError(f"job {job_id} already exist")
+            raise JobError(f"job '{job_id}' already exist")
         elif pod["code"] == 404:
             raise JobNotFoundException(f"job '{job_id}' was not found")
         elif pod["code"] == 422:
-            raise JobError(f"can not create job with id {job_id}")
+            raise JobError(f"can not create job with id '{job_id}'")
         else:
-            raise JobError("unexpected")
+            raise JobError("unexpected error")
