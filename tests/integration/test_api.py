@@ -219,6 +219,41 @@ class TestApi:
             }
 
     @pytest.mark.asyncio
+    async def test_job_top_non_running_job(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        regular_user: _User,
+        jobs_client: JobsClient,
+        infinite_job: str,
+    ) -> None:
+        job = infinite_job
+        await jobs_client.delete_job(job)
+        await jobs_client.long_polling_by_job_id(job_id=job, status="succeeded")
+        url = monitoring_api.generate_top_url(job_id=job)
+
+        num_request = 2
+        records = []
+        async with client.ws_connect(url, headers=regular_user.headers) as ws:
+            # TODO move this ws communication to JobClient
+            while True:
+                msg = await ws.receive()
+                if msg.type == aiohttp.WSMsgType.CLOSE:
+                    break
+                else:
+                    records.append(json.loads(msg.data))
+
+                if len(records) == num_request:
+                    # TODO (truskovskiyk 09/12/18) do not use protected prop
+                    # https://github.com/aio-libs/aiohttp/issues/3443
+                    proto = ws._writer.protocol
+                    assert proto.transport is not None
+                    proto.transport.close()
+                    break
+
+        assert not records
+
+    @pytest.mark.asyncio
     async def test_job_top_silently_wait_when_job_pending(
         self,
         monitoring_api: MonitoringApiEndpoints,

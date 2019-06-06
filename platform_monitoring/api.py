@@ -18,10 +18,10 @@ from neuromation.api import (
     JobDescription as Job,
     JobStatus,
 )
-from platform_monitoring.config import Config, KubeConfig, PlatformApiConfig
-from platform_monitoring.config_factory import EnvironConfigFactory
-from platform_monitoring.kube_base import JobStats
 
+from .config import Config, KubeConfig, PlatformApiConfig
+from .config_factory import EnvironConfigFactory
+from .kube_base import JobStats
 from .kube_client import KubeClient
 
 

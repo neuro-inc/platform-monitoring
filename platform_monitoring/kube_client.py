@@ -9,9 +9,9 @@ from urllib.parse import urlsplit
 import aiohttp
 from async_timeout import timeout
 from neuromation.api import JobDescription as Job
-from platform_monitoring.kube_base import JobStats, Telemetry
 
 from .config import KubeClientAuthType
+from .kube_base import JobStats, Telemetry
 
 
 class JobException(Exception):
@@ -127,6 +127,13 @@ class KubeClient:
     def _generate_pod_url(self, pod_id: str) -> str:
         return f"{self._pods_url}/{pod_id}"
 
+    def _generate_node_proxy_url(self, name: str, port: int) -> str:
+        return f"{self._api_v1_url}/nodes/{name}:{port}/proxy"
+
+    def _generate_node_stats_summary_url(self, name: str) -> str:
+        proxy_url = self._generate_node_proxy_url(name, self._kubelet_port)
+        return f"{proxy_url}/stats/summary"
+
     async def _request(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         assert self._client, "client is not initialized"
         async with self._client.request(*args, **kwargs) as response:
@@ -173,21 +180,23 @@ class KubeClient:
         # kube pod names explicitly at some point
         return job.id
 
+    def _parse_node_name(self, payload: Dict[str, Any]) -> Optional[str]:
+        return payload["spec"].get("nodeName")
+
     async def get_pod_container_stats(
-        self, pod_name: str, container_name: str
+        self, pod_id: str, container_name: str
     ) -> Optional["PodContainerStats"]:
         """
         https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/apis/stats/v1alpha1/types.go
         """
-        node_name = await self.get_node_name(pod_name)
+        raw_pod = await self.get_raw_pod(pod_id)
+        node_name = self._parse_node_name(raw_pod)
         if not node_name:
             return None
         url = self._generate_node_stats_summary_url(node_name)
         payload = await self._request(method="GET", url=url)
         summary = StatsSummary(payload)
-        return summary.get_pod_container_stats(
-            self._namespace, pod_name, container_name
-        )
+        return summary.get_pod_container_stats(self._namespace, pod_id, container_name)
 
     async def get_job_telemetry(self, job: Job) -> Telemetry:
         pod_name = self._get_job_pod_name(job)
@@ -218,3 +227,96 @@ class KubeClient:
             raise JobError(f"can not create job with id '{job_id}'")
         else:
             raise JobError("unexpected error")
+
+
+@dataclass(frozen=True)
+class PodContainerStats:
+    cpu: float
+    memory: float
+    # TODO (A Danshyn): group into a single attribute
+    gpu_duty_cycle: Optional[int] = None
+    gpu_memory: Optional[float] = None
+
+    @classmethod
+    def from_primitive(cls, payload: Dict[str, Any]) -> "PodContainerStats":
+        cpu = payload["cpu"].get("usageNanoCores", 0) / (10 ** 9)
+        memory = payload["memory"].get("workingSetBytes", 0) / (2 ** 20)  # MB
+        gpu_memory = None
+        gpu_duty_cycle = None
+        accelerators = payload.get("accelerators") or []
+        if accelerators:
+            gpu_memory = sum(acc["memoryUsed"] for acc in accelerators) / (
+                2 ** 20
+            )  # MB
+            gpu_duty_cycle_total = sum(acc["dutyCycle"] for acc in accelerators)
+            gpu_duty_cycle = int(gpu_duty_cycle_total / len(accelerators))  # %
+        return cls(
+            cpu=cpu, memory=memory, gpu_duty_cycle=gpu_duty_cycle, gpu_memory=gpu_memory
+        )
+
+
+class StatsSummary:
+    def __init__(self, payload: Dict[str, Any]) -> None:
+        self._payload = payload
+
+    def _find_pod_in_stats_summary(
+        self, stats_summary: Dict[str, Any], namespace_name: str, name: str
+    ) -> Dict[str, Any]:
+        for pod_stats in stats_summary["pods"]:
+            ref = pod_stats["podRef"]
+            if ref["namespace"] == namespace_name and ref["name"] == name:
+                return pod_stats
+        return {}
+
+    def _find_container_in_pod_stats(
+        self, pod_stats: Dict[str, Any], name: str
+    ) -> Dict[str, Any]:
+        containers = pod_stats.get("containers") or []
+        for container_stats in containers:
+            if container_stats["name"] == name:
+                return container_stats
+        return {}
+
+    def get_pod_container_stats(
+        self, namespace_name: str, pod_name: str, container_name: str
+    ) -> Optional[PodContainerStats]:
+        pod_stats = self._find_pod_in_stats_summary(
+            self._payload, namespace_name, pod_name
+        )
+        if not pod_stats:
+            return None
+
+        container_stats = self._find_container_in_pod_stats(pod_stats, container_name)
+        if not container_stats:
+            return None
+
+        return PodContainerStats.from_primitive(container_stats)
+
+
+class KubeTelemetry(Telemetry):
+    def __init__(
+        self,
+        kube_client: KubeClient,
+        namespace_name: str,
+        pod_name: str,
+        container_name: str,
+    ) -> None:
+        self._kube_client = kube_client
+
+        self._namespace_name = namespace_name
+        self._pod_name = pod_name
+        self._container_name = container_name
+
+    async def get_latest_stats(self) -> Optional[JobStats]:
+        pod_stats = await self._kube_client.get_pod_container_stats(
+            self._pod_name, self._container_name
+        )
+        if not pod_stats:
+            return None
+
+        return JobStats(
+            cpu=pod_stats.cpu,
+            memory=pod_stats.memory,
+            gpu_duty_cycle=pod_stats.gpu_duty_cycle,
+            gpu_memory=pod_stats.gpu_memory,
+        )
