@@ -78,7 +78,7 @@ function k8s::stop {
 
 
 function k8s::test {
-    kubectl delete jobs testjob1 || :
+    kubectl delete jobs testjob1 2>/dev/null || :
     kubectl create -f tests/k8s/pod.yml
     for i in {1..300}; do
         if [ "$(kubectl get job testjob1 --template {{.status.succeeded}})" == "1" ]; then
