@@ -15,13 +15,14 @@ from async_generator import asynccontextmanager
 from neuromation.api import (
     Client as PlatformApiClient,
     Factory as PlatformClientFactory,
+    IllegalArgumentError,
     JobDescription as Job,
     JobStatus,
 )
 
 from .config import Config, KubeConfig, PlatformApiConfig
 from .config_factory import EnvironConfigFactory
-from .kube_base import JobStats
+from .base import JobStats
 from .kube_client import KubeClient
 
 
@@ -52,38 +53,37 @@ class MonitoringApiHandler:
         app.add_routes([aiohttp.web.get("/{job_id}/top", self.stream_top)])
 
     @property
-    def platform_client(self) -> PlatformApiClient:
+    def _platform_client(self) -> PlatformApiClient:
         return self._app["platform_client"]
 
     @property
-    def kube_client(self) -> KubeClient:
+    def _kube_client(self) -> KubeClient:
         return self._app["kube_client"]
 
     async def stream_top(self, request: Request) -> aiohttp.web.WebSocketResponse:
         job_id = request.match_info["job_id"]
 
-        job = await self._get_job(job_id)
-        # TODO (A Yushkovskiy 06-Jun-2019) Handle case when job does not exist properly:
-        #  1. try-except IllegalArgumentError
-        #  2. ws.set_status(aiohttp.web.HTTPBadRequest.status_code, reason=str(e))
-        #  3. await ws.close()
-        #  4. return ws
-        #  (note: now we return `json_response` by the method `handle_exceptions`)
-
-        self._check_job_read_permissions(job.id, job.owner)
+        # TODO (A Yushkovskiy, 06-Jun-2019) check READ permissions on the job
 
         logger.info("Websocket connection starting")
         ws = aiohttp.web.WebSocketResponse()
         await ws.prepare(request)
         logger.info("Websocket connection ready")
 
-        # TODO (truskovskiyk 09/12/18) remove CancelledError
-        # https://github.com/aio-libs/aiohttp/issues/3443
+        try:
+            job = await self._get_job(job_id)
+        except IllegalArgumentError as e:
+            ws.set_status(aiohttp.web.HTTPBadRequest.status_code, reason=str(e))
+            await ws.close()
+            return ws
 
         # TODO expose configuration
         sleep_timeout = 1
 
-        telemetry = await self.kube_client.get_job_telemetry(job)
+        telemetry = await self._kube_client.get_job_telemetry(job)
+
+        # TODO (truskovskiyk 09/12/18) remove CancelledError
+        # https://github.com/aio-libs/aiohttp/issues/3443
 
         async with telemetry:
 
@@ -117,7 +117,7 @@ class MonitoringApiHandler:
         return ws
 
     async def _get_job(self, job_id: str) -> Job:
-        return await self.platform_client.jobs.status(job_id)
+        return await self._platform_client.jobs.status(job_id)
 
     def _is_job_running(self, job: Job) -> bool:
         return job.status == JobStatus.RUNNING
@@ -136,10 +136,6 @@ class MonitoringApiHandler:
         if job_stats.gpu_memory is not None:
             message["gpu_memory"] = job_stats.gpu_memory
         return message
-
-    def _check_job_read_permissions(self, job_id: str, owner: str) -> None:
-        # TODO (A Yushkovskiy, 04-Jun-2019) check READ permissions on the job
-        pass
 
 
 @middleware

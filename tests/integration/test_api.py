@@ -282,9 +282,14 @@ class TestApi:
             assert "no such job" in payload
 
         url = monitoring_api.generate_top_url(job_id=job_id)
-        with pytest.raises(WSServerHandshakeError):
-            async with client.ws_connect(url, headers=headers):
-                pass
+        async with client.ws_connect(url, headers=headers) as ws:
+            # TODO move this ws communication to JobClient
+            msg = await ws.receive()
+            assert msg.type == aiohttp.WSMsgType.ERROR
+
+            msg2 = await ws.receive()
+            assert msg2.type == aiohttp.WSMsgType.CLOSED
+            assert msg2.data is None
 
     @pytest.mark.asyncio
     async def test_job_top_silently_wait_when_job_pending(

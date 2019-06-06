@@ -11,7 +11,7 @@ from async_timeout import timeout
 from neuromation.api import JobDescription as Job
 
 from .config import KubeClientAuthType
-from .kube_base import JobStats, Telemetry
+from .base import JobStats, Telemetry
 
 
 class JobException(Exception):
