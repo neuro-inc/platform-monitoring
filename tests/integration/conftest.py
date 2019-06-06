@@ -11,7 +11,6 @@ import aiohttp.web
 import pytest
 from async_generator import asynccontextmanager
 from async_timeout import timeout
-from platform_monitoring.api import create_app
 from platform_monitoring.config import (
     Config,
     ElasticsearchConfig,
@@ -24,6 +23,7 @@ from yarl import URL
 
 
 logger = logging.getLogger(__name__)
+
 
 pytest_plugins = ["tests.integration.conftest_auth", "tests.integration.conftest_kube"]
 
@@ -126,9 +126,8 @@ class ApiAddress:
 
 @asynccontextmanager
 async def create_local_app_server(
-    config: Config, port: int = 8080
+    app: aiohttp.web.Application, port: int = 8080
 ) -> AsyncIterator[ApiAddress]:
-    app = await create_app(config)
     runner = aiohttp.web.AppRunner(app)
     try:
         await runner.setup()

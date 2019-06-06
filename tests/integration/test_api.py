@@ -10,6 +10,7 @@ import aiohttp
 import pytest
 from aiohttp.web import HTTPOk
 from aiohttp.web_exceptions import HTTPAccepted, HTTPNoContent
+from platform_monitoring.api import create_app
 from platform_monitoring.config import Config, PlatformApiConfig
 from yarl import URL
 
@@ -59,7 +60,8 @@ class PlatformApiEndpoints:
 
 @pytest.fixture
 async def monitoring_api(config: Config) -> AsyncIterator[MonitoringApiEndpoints]:
-    async with create_local_app_server(config, port=8080) as address:
+    app = await create_app(config)
+    async with create_local_app_server(app, port=8080) as address:
         yield MonitoringApiEndpoints(address=address)
 
 

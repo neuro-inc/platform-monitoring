@@ -1,9 +1,13 @@
 import asyncio
+from typing import Any, AsyncIterator, Dict
 from uuid import uuid4
 
 import pytest
+from aiohttp import web
 from platform_monitoring.config import KubeConfig
 from platform_monitoring.kube_client import JobNotFoundException, KubeClient
+
+from tests.integration.conftest import ApiAddress, create_local_app_server
 
 from .conftest_kube import MyKubeClient, MyPodDescriptor
 
@@ -11,6 +15,42 @@ from .conftest_kube import MyKubeClient, MyPodDescriptor
 @pytest.fixture
 def job_pod() -> MyPodDescriptor:
     return MyPodDescriptor(f"job-{uuid4()}")
+
+
+@pytest.fixture
+async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
+    async def _get_pod(request: web.Request) -> web.Response:
+        payload: Dict[str, Any] = {
+            "kind": "Pod",
+            "metadata": {"name": "testname"},
+            "spec": {
+                "containers": [{"name": "testname", "image": "testimage"}],
+                "nodeName": "whatever",
+            },
+            "status": {"phase": "Running"},
+        }
+
+        return web.json_response(payload)
+
+    async def _stats_summary(request: web.Request) -> web.Response:
+        # Explicitly return plain text to trigger ContentTypeError
+        return web.Response(content_type="text/plain")
+
+    def _create_app() -> web.Application:
+        app = web.Application()
+        app.add_routes(
+            [
+                web.get("/api/v1/namespaces/mock/pods/whatever", _get_pod),
+                web.get(
+                    "/api/v1/nodes/whatever:10255/proxy/stats/summary", _stats_summary
+                ),
+            ]
+        )
+        return app
+
+    app = _create_app()
+    async with create_local_app_server(app) as address:
+        yield address
 
 
 class TestKubeClient:
@@ -47,3 +87,14 @@ class TestKubeClient:
         is_waiting = await kube_client.is_container_waiting(job_pod.name)
         assert not is_waiting
         await kube_client.delete_pod(job_pod.name)
+
+    @pytest.mark.asyncio
+    async def test_get_pod_container_stats_error_json_response_parsing(
+        self, mock_kubernetes_server: ApiAddress
+    ) -> None:
+        srv = mock_kubernetes_server
+        async with KubeClient(
+            base_url=str(f"http://{srv.host}:{srv.port}"), namespace="mock"
+        ) as client:
+            stats = await client.get_pod_container_stats("whatever", "whenever")
+            assert stats is None

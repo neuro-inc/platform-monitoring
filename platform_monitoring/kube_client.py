@@ -7,10 +7,14 @@ from typing import Any, Dict, NoReturn, Optional
 from urllib.parse import urlsplit
 
 import aiohttp
+from aiohttp import ContentTypeError
 from async_timeout import timeout
 
 from .base import JobStats, Telemetry
 from .config import KubeClientAuthType
+
+
+logger = logging.getLogger(__name__)
 
 
 class JobException(Exception):
@@ -142,7 +146,7 @@ class KubeClient:
         async with self._client.request(*args, **kwargs) as response:
             # TODO (A Danshyn 05/21/18): check status code etc
             payload = await response.json()
-            logging.debug("k8s response payload: %s", payload)
+            logger.debug("k8s response payload: %s", payload)
             return payload
 
     async def get_raw_pod(self, pod_id: str) -> Dict[str, Any]:
@@ -192,9 +196,15 @@ class KubeClient:
         if not node_name:
             return None
         url = self._generate_node_stats_summary_url(node_name)
-        payload = await self._request(method="GET", url=url)
-        summary = StatsSummary(payload)
-        return summary.get_pod_container_stats(self._namespace, pod_id, container_name)
+        try:
+            payload = await self._request(method="GET", url=url)
+            summary = StatsSummary(payload)
+            return summary.get_pod_container_stats(
+                self._namespace, pod_id, container_name
+            )
+        except ContentTypeError as e:
+            logger.info("Failed to parse response", exc_info=True)
+            return None
 
     def _assert_resource_kind(
         self, expected_kind: str, payload: Dict[str, Any]
@@ -228,8 +238,8 @@ class PodContainerStats:
 
     @classmethod
     def from_primitive(cls, payload: Dict[str, Any]) -> "PodContainerStats":
-        cpu = payload["cpu"].get("usageNanoCores", 0) / (10 ** 9)
-        memory = payload["memory"].get("workingSetBytes", 0) / (2 ** 20)  # MB
+        cpu = payload.get("cpu", {}).get("usageNanoCores", 0) / (10 ** 9)
+        memory = payload.get("memory", {}).get("workingSetBytes", 0) / (2 ** 20)  # MB
         gpu_memory = None
         gpu_duty_cycle = None
         accelerators = payload.get("accelerators") or []
