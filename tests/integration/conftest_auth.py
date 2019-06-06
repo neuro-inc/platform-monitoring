@@ -54,7 +54,7 @@ async def create_auth_client(
         yield client
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def auth_client(
     auth_config: PlatformAuthConfig
 ) -> AsyncGenerator[AuthClient, None]:
