@@ -20,15 +20,13 @@ from neuromation.api import (
     JobDescription as Job,
     JobStatus,
 )
+from platform_monitoring.utils import KubeHelper
 
 from .base import JobStats, Telemetry
-from .config import Config, KubeConfig, PlatformApiConfig
 from .config import Config, ElasticsearchConfig, KubeConfig, PlatformApiConfig
 from .config_factory import EnvironConfigFactory
-from .kube_base import JobStats
-from .kube_client import KubeClient
-from .logs import LogReaderFactory
 from .kube_client import KubeClient, KubeTelemetry
+from .logs import LogReaderFactory
 
 
 logger = logging.getLogger(__name__)
@@ -80,9 +78,9 @@ class MonitoringApiHandler:
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
 
-        self._check_job_read_permissions(job_id, job.owner)
+        # TODO (A Yushkovskiy, 06-Jun-2019) check READ permissions on the job
 
-        log_reader = await self.log_reader_factory.get_job_log_reader(job_id)
+        log_reader = await self.log_reader_factory.get_job_log_reader(job)
 
         # TODO: expose. make configurable
         chunk_size = 1024
@@ -168,13 +166,8 @@ class MonitoringApiHandler:
     def _is_job_finished(self, job: Job) -> bool:
         return job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED)
 
-    def _get_job_pod_name(self, job: Job) -> str:
-        # TODO (A Danshyn 11/15/18): we will need to start storing jobs'
-        # kube pod names explicitly at some point
-        return job.id
-
     async def _get_job_telemetry(self, job: Job) -> Telemetry:
-        pod_name = self._get_job_pod_name(job)
+        pod_name = KubeHelper.get_job_pod_name(job)
         return KubeTelemetry(
             self._kube_client,
             namespace_name=self._kube_client.namespace,
