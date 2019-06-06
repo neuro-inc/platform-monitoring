@@ -89,11 +89,14 @@ class MonitoringApiHandler:
 
             try:
                 while True:
-                    # client close connection
+                    # client closed connection
                     assert request.transport is not None
                     if request.transport.is_closing():
                         break
 
+                    # TODO (A Yushkovskiy 06-Jun-2019) don't make slow HTTP requests to
+                    #  platform-api to check job's status every iteration: we better
+                    #  retrieve this information directly form kubernetes
                     job = await self._get_job(job_id)
 
                     if self._is_job_running(job):
