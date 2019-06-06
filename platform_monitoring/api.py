@@ -20,10 +20,10 @@ from neuromation.api import (
     JobStatus,
 )
 
+from .base import JobStats, Telemetry
 from .config import Config, KubeConfig, PlatformApiConfig
 from .config_factory import EnvironConfigFactory
-from .base import JobStats
-from .kube_client import KubeClient
+from .kube_client import KubeClient, KubeTelemetry
 
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ class MonitoringApiHandler:
         # TODO expose configuration
         sleep_timeout = 1
 
-        telemetry = await self._kube_client.get_job_telemetry(job)
+        telemetry = await self._get_job_telemetry(job)
 
         # TODO (truskovskiyk 09/12/18) remove CancelledError
         # https://github.com/aio-libs/aiohttp/issues/3443
@@ -124,6 +124,20 @@ class MonitoringApiHandler:
 
     def _is_job_finished(self, job: Job) -> bool:
         return job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED)
+
+    def _get_job_pod_name(self, job: Job) -> str:
+        # TODO (A Danshyn 11/15/18): we will need to start storing jobs'
+        # kube pod names explicitly at some point
+        return job.id
+
+    async def _get_job_telemetry(self, job: Job) -> Telemetry:
+        pod_name = self._get_job_pod_name(job)
+        return KubeTelemetry(
+            self._kube_client,
+            namespace_name=self._kube_client.namespace,
+            pod_name=pod_name,
+            container_name=pod_name,
+        )
 
     def _convert_job_stats_to_ws_message(self, job_stats: JobStats) -> Dict[str, Any]:
         message = {

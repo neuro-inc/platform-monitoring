@@ -8,7 +8,6 @@ from uuid import uuid4
 
 import aiohttp
 import pytest
-from aiohttp import WSServerHandshakeError
 from aiohttp.web import HTTPOk
 from aiohttp.web_exceptions import HTTPAccepted, HTTPNoContent
 from platform_monitoring.config import Config, PlatformApiConfig

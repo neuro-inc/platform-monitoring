@@ -8,10 +8,9 @@ from urllib.parse import urlsplit
 
 import aiohttp
 from async_timeout import timeout
-from neuromation.api import JobDescription as Job
 
-from .config import KubeClientAuthType
 from .base import JobStats, Telemetry
+from .config import KubeClientAuthType
 
 
 class JobException(Exception):
@@ -61,6 +60,10 @@ class KubeClient:
         self._client: Optional[aiohttp.ClientSession] = None
 
         self._kubelet_port = 10255
+
+    @property
+    def namespace(self) -> str:
+        return self._namespace
 
     @property
     def _is_ssl(self) -> bool:
@@ -175,11 +178,6 @@ class KubeClient:
                     return
                 await asyncio.sleep(interval_s)
 
-    def _get_job_pod_name(self, job: Job) -> str:
-        # TODO (A Danshyn 11/15/18): we will need to start storing jobs'
-        # kube pod names explicitly at some point
-        return job.id
-
     def _parse_node_name(self, payload: Dict[str, Any]) -> Optional[str]:
         return payload["spec"].get("nodeName")
 
@@ -197,15 +195,6 @@ class KubeClient:
         payload = await self._request(method="GET", url=url)
         summary = StatsSummary(payload)
         return summary.get_pod_container_stats(self._namespace, pod_id, container_name)
-
-    async def get_job_telemetry(self, job: Job) -> Telemetry:
-        pod_name = self._get_job_pod_name(job)
-        return KubeTelemetry(
-            self,
-            namespace_name=self._namespace,
-            pod_name=pod_name,
-            container_name=pod_name,
-        )
 
     def _assert_resource_kind(
         self, expected_kind: str, payload: Dict[str, Any]
