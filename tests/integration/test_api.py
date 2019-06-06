@@ -376,3 +376,7 @@ class TestApi:
             assert job["status"] == "succeeded"
 
         await jobs_client.delete_job(job_id=job_id)
+
+    @pytest.mark.asyncio
+    async def test_sleep(self) -> None:
+        await asyncio.sleep(1000)
