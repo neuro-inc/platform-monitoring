@@ -20,12 +20,14 @@ from neuromation.api import (
     JobDescription as Job,
     JobStatus,
 )
-from platform_monitoring.config import ElasticsearchConfig
-from platform_monitoring.logs import LogReaderFactory
 
 from .base import JobStats, Telemetry
 from .config import Config, KubeConfig, PlatformApiConfig
+from .config import Config, ElasticsearchConfig, KubeConfig, PlatformApiConfig
 from .config_factory import EnvironConfigFactory
+from .kube_base import JobStats
+from .kube_client import KubeClient
+from .logs import LogReaderFactory
 from .kube_client import KubeClient, KubeTelemetry
 
 
