@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import aiohttp
 import pytest
+from aiohttp import WSServerHandshakeError
 from aiohttp.web import HTTPOk
 from aiohttp.web_exceptions import HTTPAccepted, HTTPNoContent
 from platform_monitoring.config import Config, PlatformApiConfig
@@ -91,7 +92,7 @@ class JobsClient:
 
     async def get_job_by_id(self, job_id: str) -> Dict[str, Any]:
         url = self._platform_api.generate_job_url(job_id)
-        async with self._client.get(url, headers=self._user.headers) as response:
+        async with self._client.get(url, headers=self.headers) as response:
             response_text = await response.text()
             assert response.status == HTTPOk.status_code, response_text
             result = await response.json()
@@ -113,7 +114,7 @@ class JobsClient:
 
     async def delete_job(self, job_id: str, assert_success: bool = True) -> None:
         url = self._platform_api.generate_job_url(job_id)
-        async with self._client.delete(url, headers=self._user.headers) as response:
+        async with self._client.delete(url, headers=self.headers) as response:
             if assert_success:
                 assert response.status == HTTPNoContent.status_code
 
@@ -281,15 +282,9 @@ class TestApi:
             assert "no such job" in payload
 
         url = monitoring_api.generate_top_url(job_id=job_id)
-        async with client.ws_connect(url, headers=headers) as ws:
-            # TODO move this ws communication to JobClient
-
-            msg = await ws.receive()
-            assert msg.type == aiohttp.WSMsgType.ERROR
-
-            msg2 = await ws.receive()
-            assert msg2.type == aiohttp.WSMsgType.CLOSED
-            assert msg2.data is None
+        with pytest.raises(WSServerHandshakeError):
+            async with client.ws_connect(url, headers=headers):
+                pass
 
     @pytest.mark.asyncio
     async def test_job_top_silently_wait_when_job_pending(
