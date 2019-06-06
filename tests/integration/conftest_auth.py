@@ -14,7 +14,6 @@ from aiohttp.hdrs import AUTHORIZATION
 from async_generator import asynccontextmanager
 from jose import jwt
 from neuro_auth_client import AuthClient, User as AuthClientUser
-from neuro_auth_client.client import User
 from platform_monitoring.config import PlatformAuthConfig
 from yarl import URL
 
@@ -64,7 +63,7 @@ async def auth_client(
 
 
 @dataclass(frozen=True)
-class _User(User):
+class _User(AuthClientUser):
     token: str = ""
 
     @property

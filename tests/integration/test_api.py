@@ -266,7 +266,6 @@ class TestApi:
         command = 'bash -c "for i in {1..10}; do echo $i; sleep 1; done"'
         job_submit["container"]["command"] = command
         url = platform_api.jobs_base_url
-        print(f"creating job: {url}")
         async with client.post(
             url, headers=regular_user.headers, json=job_submit
         ) as resp:
@@ -276,7 +275,6 @@ class TestApi:
             assert payload["status"] == "pending"
 
         job_top_url = monitoring_api.generate_top_url(job_id)
-        print(f"topping job: {job_top_url}")
         async with client.ws_connect(job_top_url, headers=regular_user.headers) as ws:
             while True:
                 job = await jobs_client.get_job_by_id(job_id=job_id)
@@ -290,7 +288,6 @@ class TestApi:
 
                 break
 
-        print(f"deleting job")
         await jobs_client.delete_job(job_id=job_id)
 
     @pytest.mark.asyncio
