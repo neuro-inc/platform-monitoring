@@ -15,6 +15,7 @@ from async_generator import asynccontextmanager
 from neuromation.api import (
     Client as PlatformApiClient,
     Factory as PlatformClientFactory,
+    IllegalArgumentError,
     JobDescription as Job,
     JobStatus,
 )
@@ -61,13 +62,20 @@ class MonitoringApiHandler:
 
     async def stream_top(self, request: Request) -> aiohttp.web.WebSocketResponse:
         job_id = request.match_info["job_id"]
-        job = await self._get_job(job_id)
-        self._check_job_read_permissions(job.id, job.owner)
 
         logger.info("Websocket connection starting")
         ws = aiohttp.web.WebSocketResponse()
         await ws.prepare(request)
         logger.info("Websocket connection ready")
+
+        try:
+            job = await self._get_job(job_id)
+        except IllegalArgumentError as e:
+            ws.set_status(aiohttp.web.HTTPBadRequest.status_code, reason=str(e))
+            await ws.close()
+            return ws
+
+        self._check_job_read_permissions(job.id, job.owner)
 
         # TODO (truskovskiyk 09/12/18) remove CancelledError
         # https://github.com/aio-libs/aiohttp/issues/3443

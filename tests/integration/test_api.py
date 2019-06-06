@@ -4,6 +4,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Callable, Dict, Iterator
 from unittest import mock
+from uuid import uuid4
 
 import aiohttp
 import pytest
@@ -210,7 +211,7 @@ class TestApi:
                     proto.transport.close()
                     break
 
-        assert records
+        assert len(records) == num_request
         for message in records:
             assert message == {
                 "cpu": mock.ANY,
@@ -254,6 +255,35 @@ class TestApi:
         assert not records
 
     @pytest.mark.asyncio
+    async def test_job_top_non_existing_job(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        regular_user: _User,
+        jobs_client: JobsClient,
+    ) -> None:
+        headers = regular_user.headers
+        job_id = f"job-{uuid4()}"
+
+        url = platform_api.generate_job_url(job_id)
+        async with client.get(url, headers=headers) as response:
+            assert response.status == aiohttp.web.HTTPBadRequest.status_code
+            payload = await response.text()
+            assert "no such job" in payload
+
+        url = monitoring_api.generate_top_url(job_id=job_id)
+        async with client.ws_connect(url, headers=headers) as ws:
+            # TODO move this ws communication to JobClient
+
+            msg = await ws.receive()
+            assert msg.type == aiohttp.WSMsgType.ERROR
+
+            msg2 = await ws.receive()
+            assert msg2.type == aiohttp.WSMsgType.CLOSED
+            assert msg2.data is None
+
+    @pytest.mark.asyncio
     async def test_job_top_silently_wait_when_job_pending(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -274,19 +304,42 @@ class TestApi:
             job_id = payload["id"]
             assert payload["status"] == "pending"
 
+        num_request = 2
+        records = []
+
         job_top_url = monitoring_api.generate_top_url(job_id)
         async with client.ws_connect(job_top_url, headers=regular_user.headers) as ws:
+            job = await jobs_client.get_job_by_id(job_id=job_id)
+            assert job["status"] == "pending"
+
+            # silently waiting for a job becomes running
+            msg = await ws.receive()
+            job = await jobs_client.get_job_by_id(job_id=job_id)
+            assert job["status"] == "running"
+            assert msg.type == aiohttp.WSMsgType.TEXT
+
             while True:
-                job = await jobs_client.get_job_by_id(job_id=job_id)
-                assert job["status"] == "pending"
-
-                # silently waiting for a job becomes running
                 msg = await ws.receive()
-                job = await jobs_client.get_job_by_id(job_id=job_id)
-                assert job["status"] == "running"
-                assert msg.type == aiohttp.WSMsgType.TEXT
+                if msg.type == aiohttp.WSMsgType.CLOSE:
+                    break
+                else:
+                    records.append(json.loads(msg.data))
 
-                break
+                if len(records) == num_request:
+                    # TODO (truskovskiyk 09/12/18) do not use protected prop
+                    # https://github.com/aio-libs/aiohttp/issues/3443
+                    proto = ws._writer.protocol
+                    assert proto.transport is not None
+                    proto.transport.close()
+                    break
+
+        assert len(records) == num_request
+        for message in records:
+            assert message == {
+                "cpu": mock.ANY,
+                "memory": mock.ANY,
+                "timestamp": mock.ANY,
+            }
 
         await jobs_client.delete_job(job_id=job_id)
 
