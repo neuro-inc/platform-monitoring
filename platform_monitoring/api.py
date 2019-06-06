@@ -18,9 +18,8 @@ from neuromation.api import (
     Factory as PlatformClientFactory,
     IllegalArgumentError,
     JobDescription as Job,
-    JobStatus,
 )
-from platform_monitoring.utils import KubeHelper
+from platform_monitoring.utils import JobsHelper, KubeHelper
 
 from .base import JobStats, Telemetry
 from .config import Config, ElasticsearchConfig, KubeConfig, PlatformApiConfig
@@ -125,6 +124,7 @@ class MonitoringApiHandler:
 
         # TODO (truskovskiyk 09/12/18) remove CancelledError
         # https://github.com/aio-libs/aiohttp/issues/3443
+        jobs_helper = JobsHelper()
 
         async with telemetry:
 
@@ -140,13 +140,13 @@ class MonitoringApiHandler:
                     #  retrieve this information directly form kubernetes
                     job = await self._get_job(job_id)
 
-                    if self._is_job_running(job):
+                    if jobs_helper.is_job_running(job):
                         job_stats = await telemetry.get_latest_stats()
                         if job_stats:
                             message = self._convert_job_stats_to_ws_message(job_stats)
                             await ws.send_json(message)
 
-                    if self._is_job_finished(job):
+                    if jobs_helper.is_job_finished(job):
                         await ws.close()
                         break
 
@@ -160,14 +160,8 @@ class MonitoringApiHandler:
     async def _get_job(self, job_id: str) -> Job:
         return await self._platform_client.jobs.status(job_id)
 
-    def _is_job_running(self, job: Job) -> bool:
-        return job.status == JobStatus.RUNNING
-
-    def _is_job_finished(self, job: Job) -> bool:
-        return job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED)
-
     async def _get_job_telemetry(self, job: Job) -> Telemetry:
-        pod_name = KubeHelper.get_job_pod_name(job)
+        pod_name = KubeHelper().get_job_pod_name(job)
         return KubeTelemetry(
             self._kube_client,
             namespace_name=self._kube_client.namespace,
