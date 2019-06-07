@@ -9,13 +9,21 @@ from aiohttp.abc import StreamResponse
 from aiohttp.web import Request, Response
 from aiohttp.web_middlewares import middleware
 from aiohttp.web_response import json_response
+from aiohttp_security import check_authorized
 from async_exit_stack import AsyncExitStack
 from async_generator import asynccontextmanager
+from neuro_auth_client import AuthClient
+from neuro_auth_client.security import AuthScheme, setup_security
 from neuromation.api import (
     Client as PlatformApiClient,
     Factory as PlatformClientFactory,
 )
-from platform_monitoring.config import Config, KubeConfig, PlatformApiConfig
+from platform_monitoring.config import (
+    Config,
+    KubeConfig,
+    PlatformApiConfig,
+    PlatformAuthConfig,
+)
 from platform_monitoring.config_factory import EnvironConfigFactory
 
 from .kube_client import KubeClient
@@ -34,10 +42,19 @@ def init_logging() -> None:
 
 class ApiHandler:
     def register(self, app: aiohttp.web.Application) -> None:
-        app.add_routes([aiohttp.web.get("/ping", self.handle_ping)])
+        app.add_routes(
+            [
+                aiohttp.web.get("/ping", self.handle_ping),
+                aiohttp.web.get("/secured-ping", self.handle_secured_ping),
+            ]
+        )
 
     async def handle_ping(self, request: Request) -> Response:
         return Response(text="Pong")
+
+    async def handle_secured_ping(self, request: Request) -> Response:
+        await check_authorized(request)
+        return aiohttp.web.Response(text=f"Secured Pong")
 
 
 class MonitoringApiHandler:
@@ -50,6 +67,10 @@ class MonitoringApiHandler:
     @property
     def platform_client(self) -> PlatformApiClient:
         return self._app["platform_client"]
+
+    @property
+    def auth_client(self) -> AuthClient:
+        return self._app["auth_client"]
 
     @property
     def kube_client(self) -> KubeClient:
@@ -109,6 +130,12 @@ async def create_platform_api_client(
 
 
 @asynccontextmanager
+async def create_auth_client(config: PlatformAuthConfig) -> AsyncIterator[AuthClient]:
+    async with AuthClient(config.url, config.token) as client:
+        yield client
+
+
+@asynccontextmanager
 async def create_kube_client(config: KubeConfig) -> AsyncIterator[KubeClient]:
     client = KubeClient(
         base_url=config.endpoint_url,
@@ -142,6 +169,16 @@ async def create_app(config: Config) -> aiohttp.web.Application:
                 create_platform_api_client(config.platform_api)
             )
             app["monitoring_app"]["platform_client"] = platform_client
+
+            logger.info("Initializing Auth client")
+            auth_client = await exit_stack.enter_async_context(
+                create_auth_client(config.platform_auth)
+            )
+            app["monitoring_app"]["auth_client"] = auth_client
+
+            await setup_security(
+                app=app, auth_client=auth_client, auth_scheme=AuthScheme.BEARER
+            )
 
             logger.info("Initializing Kubernetes client")
             kube_client = await exit_stack.enter_async_context(
