@@ -100,6 +100,10 @@ class KubeClient:
             connector=connector, timeout=timeout, headers=headers
         )
 
+    @property
+    def namespace(self) -> str:
+        return self._namespace
+
     async def close(self) -> None:
         if self._client:
             await self._client.close()
