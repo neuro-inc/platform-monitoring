@@ -66,10 +66,6 @@ class KubeClient:
         self._kubelet_port = 10255
 
     @property
-    def namespace(self) -> str:
-        return self._namespace
-
-    @property
     def _is_ssl(self) -> bool:
         return urlsplit(self._base_url).scheme == "https"
 
