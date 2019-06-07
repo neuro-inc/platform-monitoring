@@ -167,7 +167,6 @@ class TestApi:
             assert resp.status == HTTPOk.status_code
             text = await resp.text()
             assert text == "Pong"
-            await asyncio.sleep(10000)
 
     @pytest.mark.asyncio
     async def test_secured_ping(
