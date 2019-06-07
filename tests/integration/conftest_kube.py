@@ -1,5 +1,6 @@
 import asyncio
 import json
+import shlex
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, Optional
 
@@ -38,28 +39,28 @@ class MyKubeClient(KubeClient):
             return payload["status"]
         raise ValueError(f"Missing pod status: `{payload}`")
 
-    async def wait_pod_scheduled(
-        self,
-        pod_name: str,
-        node_name: str,
-        timeout_s: float = 5.0,
-        interval_s: float = 1.0,
+    async def is_container_terminated(self, pod_id: str) -> bool:
+        state = await self._get_raw_container_state(pod_id)
+        is_terminated = bool(state) and "terminated" in state
+        return is_terminated
+
+    async def wait_pod_is_terminated(
+        self, pod_name: str, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
     ) -> None:
         try:
             async with timeout(timeout_s):
                 while True:
-                    raw_pod = await self.get_raw_pod(pod_name)
-                    pod_has_node = raw_pod["spec"].get("nodeName") == node_name
-                    pod_is_scheduled = "PodScheduled" in [
-                        cond["type"]
-                        for cond in raw_pod["status"].get("conditions", [])
-                        if cond["status"]
-                    ]
-                    if pod_has_node and pod_is_scheduled:
+                    is_terminated = await self.is_container_terminated(pod_name)
+                    if is_terminated:
                         return
                     await asyncio.sleep(interval_s)
         except asyncio.TimeoutError:
-            pytest.fail("Pod unscheduled")
+            pytest.fail("Pod has not terminated yet")
+
+    async def get_pod_exit_code(self, pod_id: str) -> int:
+        assert await self.is_container_terminated(pod_id)
+        state = await self._get_raw_container_state(pod_id)
+        return state["terminated"]["exitCode"]
 
 
 class MyPodDescriptor:
@@ -92,6 +93,12 @@ class MyPodDescriptor:
             },
             **kwargs,
         }
+
+    def set_image(self, image: str) -> None:
+        self._payload["spec"]["containers"][0]["image"] = image
+
+    def set_command(self, command: str) -> None:
+        self._payload["spec"]["containers"][0]["args"] = shlex.split(command)
 
     @property
     def payload(self) -> Dict[str, Any]:

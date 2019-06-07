@@ -155,7 +155,7 @@ class KubeClient:
         self._assert_resource_kind(expected_kind="Pod", payload=payload)
         return payload
 
-    async def is_container_waiting(self, pod_id: str) -> bool:
+    async def _get_raw_container_state(self, pod_id: str) -> Dict[str, Any]:
         payload = await self.get_raw_pod(pod_id)
         pod_status = payload.get("status")
         if not pod_status:
@@ -163,8 +163,12 @@ class KubeClient:
         container_status: Dict[str, Any] = {}
         if "containerStatuses" in pod_status:
             container_status = pod_status["containerStatuses"][0]
-        status = container_status.get("state", {})
-        is_waiting = not status or "waiting" in status
+        state = container_status.get("state", {})
+        return state
+
+    async def is_container_waiting(self, pod_id: str) -> bool:
+        state = await self._get_raw_container_state(pod_id)
+        is_waiting = not state or "waiting" in state
         return is_waiting
 
     async def wait_pod_is_running(
