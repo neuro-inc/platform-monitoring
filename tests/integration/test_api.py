@@ -183,9 +183,7 @@ class TestApi:
 
     @pytest.mark.asyncio
     async def test_secured_ping_no_token_provided_unauthorized(
-        self,
-        monitoring_api: MonitoringApiEndpoints,
-        client: aiohttp.ClientSession,
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
     ) -> None:
         url = monitoring_api.secured_ping_url
         async with client.get(url) as resp:
