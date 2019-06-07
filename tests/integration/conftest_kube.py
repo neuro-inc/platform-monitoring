@@ -39,8 +39,8 @@ class MyKubeClient(KubeClient):
             return payload["status"]
         raise ValueError(f"Missing pod status: `{payload}`")
 
-    async def is_container_terminated(self, pod_id: str) -> bool:
-        state = await self._get_raw_container_state(pod_id)
+    async def is_container_terminated(self, pod_name: str) -> bool:
+        state = await self._get_raw_container_state(pod_name)
         is_terminated = bool(state) and "terminated" in state
         return is_terminated
 
@@ -57,9 +57,9 @@ class MyKubeClient(KubeClient):
         except asyncio.TimeoutError:
             pytest.fail("Pod has not terminated yet")
 
-    async def get_pod_exit_code(self, pod_id: str) -> int:
-        assert await self.is_container_terminated(pod_id)
-        state = await self._get_raw_container_state(pod_id)
+    async def get_pod_exit_code(self, pod_name: str) -> int:
+        assert await self.is_container_terminated(pod_name)
+        state = await self._get_raw_container_state(pod_name)
         return state["terminated"]["exitCode"]
 
 

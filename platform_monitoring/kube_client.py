@@ -131,8 +131,8 @@ class KubeClient:
     def _pods_url(self) -> str:
         return f"{self._namespace_url}/pods"
 
-    def _generate_pod_url(self, pod_id: str) -> str:
-        return f"{self._pods_url}/{pod_id}"
+    def _generate_pod_url(self, pod_name: str) -> str:
+        return f"{self._pods_url}/{pod_name}"
 
     def _generate_node_proxy_url(self, name: str, port: int) -> str:
         return f"{self._api_v1_url}/nodes/{name}:{port}/proxy"
@@ -149,14 +149,14 @@ class KubeClient:
             logger.debug("k8s response payload: %s", payload)
             return payload
 
-    async def get_raw_pod(self, pod_id: str) -> Dict[str, Any]:
-        url = self._generate_pod_url(pod_id)
+    async def get_raw_pod(self, pod_name: str) -> Dict[str, Any]:
+        url = self._generate_pod_url(pod_name)
         payload = await self._request(method="GET", url=url)
         self._assert_resource_kind(expected_kind="Pod", payload=payload)
         return payload
 
-    async def _get_raw_container_state(self, pod_id: str) -> Dict[str, Any]:
-        payload = await self.get_raw_pod(pod_id)
+    async def _get_raw_container_state(self, pod_name: str) -> Dict[str, Any]:
+        payload = await self.get_raw_pod(pod_name)
         pod_status = payload.get("status")
         if not pod_status:
             raise ValueError("Missing pod status")
@@ -166,8 +166,8 @@ class KubeClient:
         state = container_status.get("state", {})
         return state
 
-    async def is_container_waiting(self, pod_id: str) -> bool:
-        state = await self._get_raw_container_state(pod_id)
+    async def is_container_waiting(self, pod_name: str) -> bool:
+        state = await self._get_raw_container_state(pod_name)
         is_waiting = not state or "waiting" in state
         return is_waiting
 
@@ -190,12 +190,12 @@ class KubeClient:
         return payload["spec"].get("nodeName")
 
     async def get_pod_container_stats(
-        self, pod_id: str, container_name: str
+        self, pod_name: str, container_name: str
     ) -> Optional["PodContainerStats"]:
         """
         https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/apis/stats/v1alpha1/types.go
         """
-        raw_pod = await self.get_raw_pod(pod_id)
+        raw_pod = await self.get_raw_pod(pod_name)
         node_name = self._parse_node_name(raw_pod)
         if not node_name:
             return None
@@ -204,7 +204,7 @@ class KubeClient:
             payload = await self._request(method="GET", url=url)
             summary = StatsSummary(payload)
             return summary.get_pod_container_stats(
-                self._namespace, pod_id, container_name
+                self._namespace, pod_name, container_name
             )
         except ContentTypeError as e:
             logger.info("Failed to parse response", exc_info=True)
