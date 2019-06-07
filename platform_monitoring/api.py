@@ -65,15 +65,15 @@ class MonitoringApiHandler:
         pass
 
     @property
-    def platform_client(self) -> PlatformApiClient:
+    def _platform_client(self) -> PlatformApiClient:
         return self._app["platform_client"]
 
     @property
-    def auth_client(self) -> AuthClient:
+    def _auth_client(self) -> AuthClient:
         return self._app["auth_client"]
 
     @property
-    def kube_client(self) -> KubeClient:
+    def _kube_client(self) -> KubeClient:
         return self._app["kube_client"]
 
 
