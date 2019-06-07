@@ -11,9 +11,9 @@ from typing import (
 
 import pytest
 from aiohttp.hdrs import AUTHORIZATION
-from async_generator import asynccontextmanager
 from jose import jwt
 from neuro_auth_client import AuthClient, User as AuthClientUser
+from platform_monitoring.api import create_auth_client
 from platform_monitoring.config import PlatformAuthConfig
 from yarl import URL
 
@@ -43,14 +43,6 @@ async def auth_config(
         url=URL(platform_auth),
         token=token_factory("compute"),  # token is hard-coded in the yaml configuration
     )
-
-
-@asynccontextmanager
-async def create_auth_client(
-    cfg: PlatformAuthConfig
-) -> AsyncGenerator[AuthClient, None]:
-    async with AuthClient(url=cfg.url, token=cfg.token) as client:
-        yield client
 
 
 @pytest.fixture

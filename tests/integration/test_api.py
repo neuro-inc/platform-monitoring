@@ -6,7 +6,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator
 import aiohttp
 import pytest
 from aiohttp.web import HTTPOk
-from aiohttp.web_exceptions import HTTPAccepted, HTTPNoContent
+from aiohttp.web_exceptions import HTTPAccepted, HTTPNoContent, HTTPUnauthorized
 from platform_monitoring.api import create_app
 from platform_monitoring.config import Config, PlatformApiConfig
 from yarl import URL
@@ -26,6 +26,10 @@ class MonitoringApiEndpoints:
     @property
     def ping_url(self) -> str:
         return f"{self.api_v1_endpoint}/ping"
+
+    @property
+    def secured_ping_url(self) -> str:
+        return f"{self.api_v1_endpoint}/secured-ping"
 
     @property
     def endpoint(self) -> str:
@@ -126,8 +130,8 @@ def jobs_client_factory(
 
 @pytest.fixture
 async def jobs_client(
-    jobs_client_factory: Callable[[_User], JobsClient],
     regular_user_factory: Callable[..., Awaitable[_User]],
+    jobs_client_factory: Callable[[_User], JobsClient],
 ) -> JobsClient:
     regular_user = await regular_user_factory()
     return jobs_client_factory(regular_user)
@@ -163,6 +167,40 @@ class TestApi:
             assert resp.status == HTTPOk.status_code
             text = await resp.text()
             assert text == "Pong"
+
+    @pytest.mark.asyncio
+    async def test_secured_ping(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+    ) -> None:
+        headers = jobs_client.headers
+        async with client.get(monitoring_api.secured_ping_url, headers=headers) as resp:
+            assert resp.status == HTTPOk.status_code
+            text = await resp.text()
+            assert text == "Secured Pong"
+
+    @pytest.mark.asyncio
+    async def test_secured_ping_no_token_provided_unauthorized(
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
+    ) -> None:
+        url = monitoring_api.secured_ping_url
+        async with client.get(url) as resp:
+            assert resp.status == HTTPUnauthorized.status_code
+
+    @pytest.mark.asyncio
+    async def test_secured_ping_non_existing_token_unauthorized(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        token_factory: Callable[[str], str],
+    ) -> None:
+        url = monitoring_api.secured_ping_url
+        token = token_factory("non-existing-user")
+        headers = {"Authorization": f"Bearer {token}"}
+        async with client.get(url, headers=headers) as resp:
+            assert resp.status == HTTPUnauthorized.status_code
 
     @pytest.mark.asyncio
     async def test_platform_create_job(
