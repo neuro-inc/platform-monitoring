@@ -154,15 +154,3 @@ class TestKubeClient:
 
         stats = await kube_client.get_pod_container_stats(job_pod.name, job_pod.name)
         assert stats is None
-
-    @pytest.mark.asyncio
-    async def test_service_account_not_available(
-        self, kube_client: MyKubeClient, job_pod: MyPodDescriptor
-    ) -> None:
-        job_pod.set_image("lachlanevenson/k8s-kubectl:v1.10.3")
-        job_pod.set_command("get pods")
-        # todo: 129M
-        await kube_client.create_pod(job_pod.payload)
-        await kube_client.wait_pod_is_terminated(pod_name=job_pod.name, timeout_s=60.0)
-        exit_code = await kube_client.get_pod_exit_code(job_pod.name)
-        assert exit_code != 0

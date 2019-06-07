@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Dict, Optional
 
 import pytest
-from async_timeout import timeout
 from platform_monitoring.config import KubeConfig
 from platform_monitoring.kube_client import KubeClient
 
@@ -38,29 +37,6 @@ class MyKubeClient(KubeClient):
         if "status" in payload:
             return payload["status"]
         raise ValueError(f"Missing pod status: `{payload}`")
-
-    async def is_container_terminated(self, pod_name: str) -> bool:
-        state = await self._get_raw_container_state(pod_name)
-        is_terminated = bool(state) and "terminated" in state
-        return is_terminated
-
-    async def wait_pod_is_terminated(
-        self, pod_name: str, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
-    ) -> None:
-        try:
-            async with timeout(timeout_s):
-                while True:
-                    is_terminated = await self.is_container_terminated(pod_name)
-                    if is_terminated:
-                        return
-                    await asyncio.sleep(interval_s)
-        except asyncio.TimeoutError:
-            pytest.fail("Pod has not terminated yet")
-
-    async def get_pod_exit_code(self, pod_name: str) -> int:
-        assert await self.is_container_terminated(pod_name)
-        state = await self._get_raw_container_state(pod_name)
-        return state["terminated"]["exitCode"]
 
 
 class MyPodDescriptor:
