@@ -9,8 +9,10 @@ from uuid import uuid1
 import aiohttp
 import aiohttp.web
 import pytest
+from aioelasticsearch import Elasticsearch
 from async_generator import asynccontextmanager
 from async_timeout import timeout
+from platform_monitoring.api import create_elasticsearch_client
 from platform_monitoring.config import (
     Config,
     ElasticsearchConfig,
@@ -95,7 +97,7 @@ async def platform_api_config(
 @pytest.fixture
 # TODO (A Yushkovskiy, 05-May-2019) This fixture should have scope="session" in order
 #  to be faster, but it causes mysterious errors `RuntimeError: Event loop is closed`
-async def elasticsearch_config(
+async def es_config(
     token_factory: Callable[[str], str]
 ) -> AsyncIterator[ElasticsearchConfig]:
     es_host = get_service_url("elasticsearch-logging", namespace="kube-system")
@@ -103,17 +105,26 @@ async def elasticsearch_config(
 
 
 @pytest.fixture
+async def es_client(es_config: ElasticsearchConfig) -> AsyncIterator[Elasticsearch]:
+    """ Elasticsearch client that goes directly to elasticsearch-logging service
+    without any authentication.
+    """
+    async with create_elasticsearch_client(es_config) as es_client:
+        yield es_client
+
+
+@pytest.fixture
 def config(
     auth_config: PlatformAuthConfig,
     platform_api_config: PlatformApiConfig,
-    elasticsearch_config: ElasticsearchConfig,
+    es_config: ElasticsearchConfig,
     kube_config: KubeConfig,
 ) -> Config:
     return Config(
         server=ServerConfig(host="0.0.0.0", port=8080),
         platform_auth=auth_config,
         platform_api=platform_api_config,
-        elasticsearch=elasticsearch_config,
+        elasticsearch=es_config,
         kube=kube_config,
     )
 

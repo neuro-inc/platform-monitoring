@@ -3,11 +3,12 @@ import logging
 import ssl
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, NoReturn, Optional
+from typing import Any, AsyncIterator, Dict, NoReturn, Optional
 from urllib.parse import urlsplit
 
 import aiohttp
 from aiohttp import ContentTypeError
+from async_generator import asynccontextmanager
 from async_timeout import timeout
 
 from .base import JobStats, Telemetry
@@ -15,6 +16,10 @@ from .config import KubeClientAuthType
 
 
 logger = logging.getLogger(__name__)
+
+
+class KubeClientException(Exception):
+    pass
 
 
 class JobException(Exception):
@@ -141,6 +146,12 @@ class KubeClient:
         proxy_url = self._generate_node_proxy_url(name, self._kubelet_port)
         return f"{proxy_url}/stats/summary"
 
+    def _generate_pod_log_url(self, pod_name: str, container_name: str) -> str:
+        return (
+            f"{self._generate_pod_url(pod_name)}/log"
+            f"?container={pod_name}&follow=true"
+        )
+
     async def _request(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         assert self._client, "client is not initialized"
         async with self._client.request(*args, **kwargs) as response:
@@ -209,6 +220,36 @@ class KubeClient:
         except ContentTypeError as e:
             logger.info(f"Failed to parse response: {e}", exc_info=True)
             return None
+
+    async def check_pod_exists(self, pod_name: str) -> bool:
+        try:
+            await self.get_raw_pod(pod_name)
+            return True
+        except JobNotFoundException:
+            return False
+
+    @asynccontextmanager
+    async def create_pod_container_logs_stream(
+        self,
+        pod_name: str,
+        container_name: str,
+        conn_timeout_s: float = 60 * 5,
+        read_timeout_s: float = 60 * 30,
+    ) -> AsyncIterator[aiohttp.StreamReader]:
+        url = self._generate_pod_log_url(pod_name, container_name)
+        client_timeout = aiohttp.ClientTimeout(
+            connect=conn_timeout_s, sock_read=read_timeout_s
+        )
+        async with self._client.get(  # type: ignore
+            url, timeout=client_timeout
+        ) as response:
+            await self._check_response_status(response)
+            yield response.content
+
+    async def _check_response_status(self, response: aiohttp.ClientResponse) -> None:
+        if response.status != 200:
+            payload = await response.text()
+            raise KubeClientException(payload)
 
     def _assert_resource_kind(
         self, expected_kind: str, payload: Dict[str, Any]
