@@ -1,10 +1,10 @@
 import asyncio
 import json
+import shlex
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, Optional
 
 import pytest
-from async_timeout import timeout
 from platform_monitoring.config import KubeConfig
 from platform_monitoring.kube_client import KubeClient
 
@@ -38,29 +38,6 @@ class MyKubeClient(KubeClient):
             return payload["status"]
         raise ValueError(f"Missing pod status: `{payload}`")
 
-    async def wait_pod_scheduled(
-        self,
-        pod_name: str,
-        node_name: str,
-        timeout_s: float = 5.0,
-        interval_s: float = 1.0,
-    ) -> None:
-        try:
-            async with timeout(timeout_s):
-                while True:
-                    raw_pod = await self.get_raw_pod(pod_name)
-                    pod_has_node = raw_pod["spec"].get("nodeName") == node_name
-                    pod_is_scheduled = "PodScheduled" in [
-                        cond["type"]
-                        for cond in raw_pod["status"].get("conditions", [])
-                        if cond["status"]
-                    ]
-                    if pod_has_node and pod_is_scheduled:
-                        return
-                    await asyncio.sleep(interval_s)
-        except asyncio.TimeoutError:
-            pytest.fail("Pod unscheduled")
-
 
 class MyPodDescriptor:
     def __init__(self, job_id: str, **kwargs: Dict[str, Any]) -> None:
@@ -92,6 +69,12 @@ class MyPodDescriptor:
             },
             **kwargs,
         }
+
+    def set_image(self, image: str) -> None:
+        self._payload["spec"]["containers"][0]["image"] = image
+
+    def set_command(self, command: str) -> None:
+        self._payload["spec"]["containers"][0]["args"] = shlex.split(command)
 
     @property
     def payload(self) -> Dict[str, Any]:

@@ -1,12 +1,13 @@
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Callable, Dict, Iterator
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator
 
 import aiohttp
 import pytest
 from aiohttp.web import HTTPOk
 from aiohttp.web_exceptions import HTTPAccepted, HTTPNoContent
+from platform_monitoring.api import create_app
 from platform_monitoring.config import Config, PlatformApiConfig
 from yarl import URL
 
@@ -53,7 +54,8 @@ class PlatformApiEndpoints:
 
 @pytest.fixture
 async def monitoring_api(config: Config) -> AsyncIterator[MonitoringApiEndpoints]:
-    async with create_local_app_server(config, port=8080) as address:
+    app = await create_app(config)
+    async with create_local_app_server(app, port=8080) as address:
         yield MonitoringApiEndpoints(address=address)
 
 
@@ -69,15 +71,23 @@ class JobsClient:
         self,
         platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
-        headers: Dict[str, str],
+        user: _User,
     ) -> None:
         self._platform_api = platform_api
         self._client = client
-        self._headers = headers
+        self._user = user
+
+    @property
+    def user(self) -> _User:
+        return self._user
+
+    @property
+    def headers(self) -> Dict[str, str]:
+        return self._user.headers
 
     async def get_job_by_id(self, job_id: str) -> Dict[str, Any]:
         url = self._platform_api.generate_job_url(job_id)
-        async with self._client.get(url, headers=self._headers) as response:
+        async with self._client.get(url, headers=self.headers) as response:
             response_text = await response.text()
             assert response.status == HTTPOk.status_code, response_text
             result = await response.json()
@@ -99,7 +109,7 @@ class JobsClient:
 
     async def delete_job(self, job_id: str, assert_success: bool = True) -> None:
         url = self._platform_api.generate_job_url(job_id)
-        async with self._client.delete(url, headers=self._headers) as response:
+        async with self._client.delete(url, headers=self.headers) as response:
             if assert_success:
                 assert response.status == HTTPNoContent.status_code
 
@@ -109,15 +119,17 @@ def jobs_client_factory(
     platform_api: PlatformApiEndpoints, client: aiohttp.ClientSession
 ) -> Iterator[Callable[[_User], JobsClient]]:
     def impl(user: _User) -> JobsClient:
-        return JobsClient(platform_api, client, headers=user.headers)
+        return JobsClient(platform_api, client, user=user)
 
     yield impl
 
 
 @pytest.fixture
-def jobs_client(
-    jobs_client_factory: Callable[[_User], JobsClient], regular_user: _User
+async def jobs_client(
+    jobs_client_factory: Callable[[_User], JobsClient],
+    regular_user_factory: Callable[..., Awaitable[_User]],
 ) -> JobsClient:
+    regular_user = await regular_user_factory()
     return jobs_client_factory(regular_user)
 
 
@@ -159,11 +171,10 @@ class TestApi:
         client: aiohttp.ClientSession,
         job_submit: Dict[str, Any],
         jobs_client: JobsClient,
-        regular_user: _User,
     ) -> None:
         url = platform_api.jobs_base_url
         async with client.post(
-            url, headers=regular_user.headers, json=job_submit
+            url, headers=jobs_client.headers, json=job_submit
         ) as resp:
             assert resp.status == HTTPAccepted.status_code
             payload = await resp.json()
