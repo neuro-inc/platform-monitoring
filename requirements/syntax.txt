@@ -1,4 +1,4 @@
-mypy==0.701
+mypy==0.710
 flake8==3.5.0
 flake8-isort==2.5
 black==18.9b0
