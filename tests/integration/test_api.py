@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import aiohttp
 import pytest
+from aiohttp import WSServerHandshakeError
 from aiohttp.web import HTTPOk
 from aiohttp.web_exceptions import HTTPAccepted, HTTPNoContent, HTTPUnauthorized
 from platform_monitoring.api import create_app
@@ -249,58 +250,7 @@ class TestApi:
         await jobs_client.delete_job(job_id)
 
     @pytest.mark.asyncio
-    async def test_top_no_permissions_unauthorized(
-        self,
-        monitoring_api: MonitoringApiEndpoints,
-        platform_api: PlatformApiEndpoints,
-        client: aiohttp.ClientSession,
-        job_submit: Dict[str, Any],
-        regular_user_factory: Callable[..., Awaitable[_User]],
-    ) -> None:
-        user1 = await regular_user_factory()
-        user2 = await regular_user_factory()
-
-        url = platform_api.jobs_base_url
-        async with client.post(url, headers=user1.headers, json=job_submit) as resp:
-            assert resp.status == HTTPAccepted.status_code
-            payload = await resp.json()
-            job_id = payload["id"]
-
-        url = monitoring_api.generate_top_url(job_id)
-        async with client.ws_connect(url, headers=user2.headers) as ws:
-
-            msg = await ws.receive()
-            assert msg.type == aiohttp.WSMsgType.ERROR
-            # TODO (A Yushkovskiy, 07-Jun-2019) check the reason as well
-
-            msg = await ws.receive()
-            assert msg.type == aiohttp.WSMsgType.CLOSED
-            assert msg.data is None
-
-    @pytest.mark.asyncio
-    async def test_top_no_auth_token_provided_unauthorized(
-        self,
-        monitoring_api: MonitoringApiEndpoints,
-        platform_api: PlatformApiEndpoints,
-        client: aiohttp.ClientSession,
-        jobs_client: JobsClient,
-        infinite_job: str,
-    ) -> None:
-        await jobs_client.long_polling_by_job_id(job_id=infinite_job, status="running")
-
-        url = monitoring_api.generate_top_url(job_id=infinite_job)
-        async with client.ws_connect(url) as ws:
-
-            msg = await ws.receive()
-            assert msg.type == aiohttp.WSMsgType.ERROR
-            # TODO (A Yushkovskiy, 07-Jun-2019) check the reason as well
-
-            msg = await ws.receive()
-            assert msg.type == aiohttp.WSMsgType.CLOSED
-            assert msg.data is None
-
-    @pytest.mark.asyncio
-    async def test_job_top(
+    async def test_top_ok(
         self,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
@@ -338,7 +288,49 @@ class TestApi:
             }
 
     @pytest.mark.asyncio
-    async def test_job_top_non_running_job(
+    async def test_top_no_permissions_unauthorized(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        platform_api: PlatformApiEndpoints,
+        client: aiohttp.ClientSession,
+        job_submit: Dict[str, Any],
+        regular_user_factory: Callable[..., Awaitable[_User]],
+    ) -> None:
+        user1 = await regular_user_factory()
+        user2 = await regular_user_factory()
+
+        url = platform_api.jobs_base_url
+        async with client.post(url, headers=user1.headers, json=job_submit) as resp:
+            assert resp.status == HTTPAccepted.status_code
+            payload = await resp.json()
+            job_id = payload["id"]
+
+        url = monitoring_api.generate_top_url(job_id)
+
+        with pytest.raises(WSServerHandshakeError, match="Invalid response status"):
+            async with client.ws_connect(url, headers=user2.headers):
+                pass
+
+    @pytest.mark.asyncio
+    async def test_top_no_auth_token_provided_unauthorized(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        platform_api: PlatformApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        infinite_job: str,
+    ) -> None:
+        await jobs_client.long_polling_by_job_id(job_id=infinite_job, status="running")
+
+        url = monitoring_api.generate_top_url(job_id=infinite_job)
+
+        with pytest.raises(WSServerHandshakeError, match="Invalid response status"):
+
+            async with client.ws_connect(url):
+                pass
+
+    @pytest.mark.asyncio
+    async def test_top_non_running_job(
         self,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,

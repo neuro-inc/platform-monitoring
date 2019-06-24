@@ -8,7 +8,6 @@ import aiohttp
 import aiohttp.web
 from aiohttp.abc import StreamResponse
 from aiohttp.web import Request, Response
-from aiohttp.web_exceptions import HTTPError
 from aiohttp.web_middlewares import middleware
 from aiohttp.web_response import json_response
 from aiohttp_security import check_authorized, check_permission
@@ -22,7 +21,7 @@ from neuromation.api import (
     JobDescription as Job,
 )
 from platform_monitoring.config import PlatformAuthConfig
-from platform_monitoring.user import authorized_user
+from platform_monitoring.user import untrusted_user
 
 from .base import JobStats, Telemetry
 from .config import Config, KubeConfig, PlatformApiConfig
@@ -82,31 +81,26 @@ class MonitoringApiHandler:
 
     async def stream_top(self, request: Request) -> aiohttp.web.WebSocketResponse:
         job_id = request.match_info["job_id"]
+        job = await self._get_job(job_id)
+        permission = Permission(
+            uri=str(self._jobs_helper.job_to_uri(job)), action="read"
+        )
+        user = await untrusted_user(request)
+        logger.info("Checking whether %r has %r", user, permission)
+        await check_permission(request, permission.action, [permission])
 
         logger.info("Websocket connection starting")
         ws = aiohttp.web.WebSocketResponse()
         await ws.prepare(request)
         logger.info("Websocket connection ready")
 
-        try:
-            user = await authorized_user(request)
-            job = await self._get_job(job_id)
-
-            permission = Permission(self._jobs_helper.job_to_uri(job), action="read")
-            logger.info("Checking whether %r has %r", user, permission)
-            await check_permission(request, permission.action, [permission])
-        except HTTPError as e:
-            ws.set_status(e.status_code, reason=str(e))
-            await ws.close()
-            return ws
+        # TODO (truskovskiyk 09/12/18) remove CancelledError
+        # https://github.com/aio-libs/aiohttp/issues/3443
 
         # TODO expose configuration
         sleep_timeout = 1
 
         telemetry = await self._get_job_telemetry(job)
-
-        # TODO (truskovskiyk 09/12/18) remove CancelledError
-        # https://github.com/aio-libs/aiohttp/issues/3443
 
         async with telemetry:
 
