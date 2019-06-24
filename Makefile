@@ -45,19 +45,13 @@ gke_login:
 	gcloud auth configure-docker
 
 gke_docker_pull_test_images:
-    # Pull images versioned around June 5-11, 2019 and tag them as `latest`
-	#docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:77e24da639d6867abc3c4d8d513ac47eb71038b8
-	#docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:ead23ccf85c3c18e30977e65fa65c709c3feb025
-	#docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:9d7cea532a7ab0e45871cb48cf355427a274dbd9
-	#docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:77e24da639d6867abc3c4d8d513ac47eb71038b8 platformapi:latest
-	#docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:ead23ccf85c3c18e30977e65fa65c709c3feb025 platformauthapi:latest
-	#docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:9d7cea532a7ab0e45871cb48cf355427a274dbd9 platformconfig:latest
-    docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:latest
-	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:latest
-	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:latest
-	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:latest platformapi:latest
-	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:latest platformauthapi:latest
-	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:latest platformconfig:latest
+    # Pull images versioned around May 30 - June 11, 2019 and tag them as `latest`
+	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:3e475aa6a0665e2a88ec854f59ec092a6472cb91
+	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:ead23ccf85c3c18e30977e65fa65c709c3feb025
+	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:9d7cea532a7ab0e45871cb48cf355427a274dbd9
+	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:3e475aa6a0665e2a88ec854f59ec092a6472cb91 platformapi:latest
+	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:ead23ccf85c3c18e30977e65fa65c709c3feb025 platformauthapi:latest
+	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:9d7cea532a7ab0e45871cb48cf355427a274dbd9 platformconfig:latest
 
 gke_docker_push: build
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE):latest
