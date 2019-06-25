@@ -8,6 +8,12 @@ class JobsHelper:
     def is_job_finished(self, job: Job) -> bool:
         return job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED)
 
+    def job_to_uri(self, job: Job) -> str:
+        base_uri = "job:"
+        if job.owner:
+            base_uri += "//" + job.owner
+        return f"{base_uri}/{job.id}"
+
 
 class KubeHelper:
     def get_job_pod_name(self, job: Job) -> str:

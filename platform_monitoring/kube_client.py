@@ -100,6 +100,10 @@ class KubeClient:
             connector=connector, timeout=timeout, headers=headers
         )
 
+    @property
+    def namespace(self) -> str:
+        return self._namespace
+
     async def close(self) -> None:
         if self._client:
             await self._client.close()
@@ -203,7 +207,7 @@ class KubeClient:
                 self._namespace, pod_name, container_name
             )
         except ContentTypeError as e:
-            logger.info("Failed to parse response", exc_info=True)
+            logger.info(f"Failed to parse response: {e}", exc_info=True)
             return None
 
     def _assert_resource_kind(
