@@ -4,5 +4,5 @@ pytest==4.4.1
 pytest-cov==2.7.1
 pytest-asyncio==0.10.0
 codecov==2.0.15
-async-generator==1.9
+async-generator==1.10
 python-jose==3.0.1
