@@ -457,6 +457,3 @@ class TestLogReader:
                     await asyncio.sleep(interval_s)
         except asyncio.TimeoutError:
             pytest.fail(f"Pod logs did not match. Last payload: {payload}")
-
-
-# TODO (A Yushkovskiy, 07-Jun-2019) Add tests from `TestPodContainerDevShmSettings`
