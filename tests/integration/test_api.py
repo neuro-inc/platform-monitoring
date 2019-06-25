@@ -306,7 +306,6 @@ class TestApi:
             job_id = payload["id"]
 
         url = monitoring_api.generate_top_url(job_id)
-
         with pytest.raises(WSServerHandshakeError, match="Invalid response status"):
             async with client.ws_connect(url, headers=user2.headers):
                 pass
@@ -323,9 +322,7 @@ class TestApi:
         await jobs_client.long_polling_by_job_id(job_id=infinite_job, status="running")
 
         url = monitoring_api.generate_top_url(job_id=infinite_job)
-
         with pytest.raises(WSServerHandshakeError, match="Invalid response status"):
-
             async with client.ws_connect(url):
                 pass
 
@@ -365,7 +362,7 @@ class TestApi:
         assert not records
 
     @pytest.mark.asyncio
-    async def test_job_top_non_existing_job(
+    async def test_top_non_existing_job(
         self,
         platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
@@ -382,18 +379,12 @@ class TestApi:
             assert "no such job" in payload
 
         url = monitoring_api.generate_top_url(job_id=job_id)
-        async with client.ws_connect(url, headers=headers) as ws:
-            # TODO move this ws communication to JobClient
-            msg = await ws.receive()
-            assert msg.type == aiohttp.WSMsgType.ERROR
-            # TODO (A Yushkovskiy, 07-Jun-2019) check the reason as well
-
-            msg2 = await ws.receive()
-            assert msg2.type == aiohttp.WSMsgType.CLOSED
-            assert msg2.data is None
+        with pytest.raises(WSServerHandshakeError, match="Invalid response status"):
+            async with client.ws_connect(url, headers=headers):
+                pass
 
     @pytest.mark.asyncio
-    async def test_job_top_silently_wait_when_job_pending(
+    async def test_top_silently_wait_when_job_pending(
         self,
         monitoring_api: MonitoringApiEndpoints,
         platform_api: PlatformApiEndpoints,
@@ -452,7 +443,7 @@ class TestApi:
         await jobs_client.delete_job(job_id=job_id)
 
     @pytest.mark.asyncio
-    async def test_job_top_close_when_job_succeeded(
+    async def test_top_close_when_job_succeeded(
         self,
         monitoring_api: MonitoringApiEndpoints,
         platform_api: PlatformApiEndpoints,
