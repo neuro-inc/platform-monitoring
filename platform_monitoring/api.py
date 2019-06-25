@@ -1,7 +1,8 @@
+import asyncio
 import logging
 from pathlib import Path
 from tempfile import mktemp
-from typing import AsyncIterator, Awaitable, Callable
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict
 
 import aiohttp
 import aiohttp.web
@@ -9,24 +10,24 @@ from aiohttp.abc import StreamResponse
 from aiohttp.web import Request, Response
 from aiohttp.web_middlewares import middleware
 from aiohttp.web_response import json_response
-from aiohttp_security import check_authorized
+from aiohttp_security import check_authorized, check_permission
 from async_exit_stack import AsyncExitStack
 from async_generator import asynccontextmanager
-from neuro_auth_client import AuthClient
+from neuro_auth_client import AuthClient, Permission
 from neuro_auth_client.security import AuthScheme, setup_security
 from neuromation.api import (
     Client as PlatformApiClient,
     Factory as PlatformClientFactory,
+    JobDescription as Job,
 )
-from platform_monitoring.config import (
-    Config,
-    KubeConfig,
-    PlatformApiConfig,
-    PlatformAuthConfig,
-)
-from platform_monitoring.config_factory import EnvironConfigFactory
+from platform_monitoring.config import PlatformAuthConfig
+from platform_monitoring.user import untrusted_user
 
-from .kube_client import KubeClient
+from .base import JobStats, Telemetry
+from .config import Config, KubeConfig, PlatformApiConfig
+from .config_factory import EnvironConfigFactory
+from .kube_client import KubeClient, KubeTelemetry
+from .utils import JobsHelper, KubeHelper
 
 
 logger = logging.getLogger(__name__)
@@ -60,9 +61,11 @@ class ApiHandler:
 class MonitoringApiHandler:
     def __init__(self, app: aiohttp.web.Application) -> None:
         self._app = app
+        self._jobs_helper = JobsHelper()
+        self._kube_helper = KubeHelper()
 
     def register(self, app: aiohttp.web.Application) -> None:
-        pass
+        app.add_routes([aiohttp.web.get("/{job_id}/top", self.stream_top)])
 
     @property
     def _platform_client(self) -> PlatformApiClient:
@@ -75,6 +78,84 @@ class MonitoringApiHandler:
     @property
     def _kube_client(self) -> KubeClient:
         return self._app["kube_client"]
+
+    async def stream_top(self, request: Request) -> aiohttp.web.WebSocketResponse:
+        job_id = request.match_info["job_id"]
+        job = await self._get_job(job_id)
+        permission = Permission(
+            uri=str(self._jobs_helper.job_to_uri(job)), action="read"
+        )
+        user = await untrusted_user(request)
+        logger.info("Checking whether %r has %r", user, permission)
+        await check_permission(request, permission.action, [permission])
+
+        logger.info("Websocket connection starting")
+        ws = aiohttp.web.WebSocketResponse()
+        await ws.prepare(request)
+        logger.info("Websocket connection ready")
+
+        # TODO (truskovskiyk 09/12/18) remove CancelledError
+        # https://github.com/aio-libs/aiohttp/issues/3443
+
+        # TODO expose configuration
+        sleep_timeout = 1
+
+        telemetry = await self._get_job_telemetry(job)
+
+        async with telemetry:
+
+            try:
+                while True:
+                    # client closed connection
+                    assert request.transport is not None
+                    if request.transport.is_closing():
+                        break
+
+                    # TODO (A Yushkovskiy 06-Jun-2019) don't make slow HTTP requests to
+                    #  platform-api to check job's status every iteration: we better
+                    #  retrieve this information directly form kubernetes
+                    job = await self._get_job(job_id)
+
+                    if self._jobs_helper.is_job_running(job):
+                        job_stats = await telemetry.get_latest_stats()
+                        if job_stats:
+                            message = self._convert_job_stats_to_ws_message(job_stats)
+                            await ws.send_json(message)
+
+                    if self._jobs_helper.is_job_finished(job):
+                        await ws.close()
+                        break
+
+                    await asyncio.sleep(sleep_timeout)
+
+            except asyncio.CancelledError as ex:
+                logger.info(f"got cancelled error {ex}")
+
+        return ws
+
+    async def _get_job(self, job_id: str) -> Job:
+        return await self._platform_client.jobs.status(job_id)
+
+    async def _get_job_telemetry(self, job: Job) -> Telemetry:
+        pod_name = self._kube_helper.get_job_pod_name(job)
+        return KubeTelemetry(
+            self._kube_client,
+            namespace_name=self._kube_client.namespace,
+            pod_name=pod_name,
+            container_name=pod_name,
+        )
+
+    def _convert_job_stats_to_ws_message(self, job_stats: JobStats) -> Dict[str, Any]:
+        message = {
+            "cpu": job_stats.cpu,
+            "memory": job_stats.memory,
+            "timestamp": job_stats.timestamp,
+        }
+        if job_stats.gpu_duty_cycle is not None:
+            message["gpu_duty_cycle"] = job_stats.gpu_duty_cycle
+        if job_stats.gpu_memory is not None:
+            message["gpu_memory"] = job_stats.gpu_memory
+        return message
 
 
 @middleware
