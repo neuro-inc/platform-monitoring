@@ -67,8 +67,7 @@ jobs:
       - save_cache:
           paths:
             - venv
-          key:
-            - v1-dependencies-python_3.6.5-{{ checksum "setup.py" }}-{{ checksum requirements/syntax.txt }}-{{ checksum "requirements/test.txt" }}
+          key: v1-dependencies-python_3.6.5-{{ checksum "setup.py" }}-{{ checksum requirements/syntax.txt }}-{{ checksum "requirements/test.txt" }}
 
       - run:
           name: Running Static Code Analysis
