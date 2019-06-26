@@ -255,7 +255,7 @@ async def create_kube_client(config: KubeConfig) -> AsyncIterator[KubeClient]:
 async def create_elasticsearch_client(
     config: ElasticsearchConfig
 ) -> AsyncIterator[Elasticsearch]:
-    async with Elasticsearch(hosts=config.hosts, http_auth=None) as client:
+    async with Elasticsearch(hosts=config.hosts) as client:
         yield client
 
 
