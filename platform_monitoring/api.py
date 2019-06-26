@@ -6,6 +6,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Dict
 
 import aiohttp
 import aiohttp.web
+from aioelasticsearch import Elasticsearch
 from aiohttp.abc import StreamResponse
 from aiohttp.web import Request, Response
 from aiohttp.web_middlewares import middleware
@@ -20,14 +21,19 @@ from neuromation.api import (
     Factory as PlatformClientFactory,
     JobDescription as Job,
 )
-from platform_monitoring.config import PlatformAuthConfig
 from platform_monitoring.user import untrusted_user
 
 from .base import JobStats, Telemetry
-from .config import Config, KubeConfig, PlatformApiConfig
+from .config import (
+    Config,
+    ElasticsearchConfig,
+    KubeConfig,
+    PlatformApiConfig,
+    PlatformAuthConfig,
+)
 from .config_factory import EnvironConfigFactory
 from .kube_client import KubeClient, KubeTelemetry
-from .utils import JobsHelper, KubeHelper
+from .utils import JobsHelper, KubeHelper, LogReaderFactory
 
 
 logger = logging.getLogger(__name__)
@@ -67,6 +73,8 @@ class MonitoringApiHandler:
     def register(self, app: aiohttp.web.Application) -> None:
         app.add_routes([aiohttp.web.get("/{job_id}/top", self.stream_top)])
 
+    # TODO (A Yushkovskiy 07-Jun-2019) Add `MonitoringService` to hide internals there
+
     @property
     def _platform_client(self) -> PlatformApiClient:
         return self._app["platform_client"]
@@ -78,6 +86,10 @@ class MonitoringApiHandler:
     @property
     def _kube_client(self) -> KubeClient:
         return self._app["kube_client"]
+
+    @property
+    def _log_reader_factory(self) -> LogReaderFactory:
+        return self._app["log_reader_factory"]
 
     async def stream_top(self, request: Request) -> aiohttp.web.WebSocketResponse:
         job_id = request.match_info["job_id"]
@@ -239,6 +251,14 @@ async def create_kube_client(config: KubeConfig) -> AsyncIterator[KubeClient]:
         await client.close()
 
 
+@asynccontextmanager
+async def create_elasticsearch_client(
+    config: ElasticsearchConfig
+) -> AsyncIterator[Elasticsearch]:
+    async with Elasticsearch(hosts=config.hosts) as client:
+        yield client
+
+
 async def create_app(config: Config) -> aiohttp.web.Application:
     app = aiohttp.web.Application(middlewares=[handle_exceptions])
     app["config"] = config
@@ -261,11 +281,19 @@ async def create_app(config: Config) -> aiohttp.web.Application:
                 app=app, auth_client=auth_client, auth_scheme=AuthScheme.BEARER
             )
 
+            logger.info("Initializing Elasticsearc client")
+            es_client = await exit_stack.enter_async_context(
+                create_elasticsearch_client(config.elasticsearch)
+            )
+
             logger.info("Initializing Kubernetes client")
             kube_client = await exit_stack.enter_async_context(
                 create_kube_client(config.kube)
             )
             app["monitoring_app"]["kube_client"] = kube_client
+
+            log_reader_factory = LogReaderFactory(kube_client, es_client)
+            app["monitoring_app"]["log_reader_factory"] = log_reader_factory
 
             yield
 

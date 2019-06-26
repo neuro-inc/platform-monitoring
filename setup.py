@@ -8,6 +8,7 @@ install_requires = (
     "neuro_auth_client==1.0.6",
     "neuromation==19.6.12",
     "async-exit-stack==1.0.1",  # backport from 3.7 stdlib
+    "aioelasticsearch==0.5.2",
 )
 
 setup(
