@@ -58,13 +58,9 @@ gke_docker_push: build
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE):$(CIRCLE_SHA1)
 	docker push $(IMAGE)
 
-
-_helm:
-	curl https://raw.githubusercontent.com/kubernetes/helm/master/scripts/get | bash -s -- -v v2.11.0
-
-gke_deploy: _helm
+gke_deploy:
 	gcloud --quiet container clusters get-credentials $(GKE_CLUSTER_NAME) $(CLUSTER_ZONE_REGION)
 	#helm \
 	#	--set "global.env=$(HELM_ENV)" \
 	#	--set "IMAGE.$(HELM_ENV)=$(IMAGE):$(CIRCLE_SHA1)" \
-	#	upgrade --install platformmonitoringapi deploy/platformmonitoringapi/ --wait --timeout 600
+	#	upgrade --install platformmonitoring deploy/platformmonitoring/ --wait --timeout 600
