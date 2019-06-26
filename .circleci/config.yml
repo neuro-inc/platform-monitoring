@@ -128,24 +128,22 @@ workflows:
 
   main:
     jobs:
-#      - test:
-#          context: org-dev
       - test:
           context: org-dev
 
   dev:
     jobs:
-#      - test:
-#          context: org-dev
-#          filters:
-#            branches:
-#              only:
-#                - master
+      - test:
+          context: org-dev
+          filters:
+            branches:
+              only:
+                - master
       - gke_deploy:
           context: org-dev
-#          requires:
-#            - test
-#          filters:
-#            branches:
-#              only:
-#                - master
+          requires:
+            - test
+          filters:
+            branches:
+              only:
+                - master
