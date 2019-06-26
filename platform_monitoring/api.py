@@ -71,7 +71,12 @@ class MonitoringApiHandler:
         self._kube_helper = KubeHelper()
 
     def register(self, app: aiohttp.web.Application) -> None:
-        app.add_routes([aiohttp.web.get("/{job_id}/top", self.stream_top)])
+        app.add_routes(
+            [
+                aiohttp.web.get("/{job_id}/log", self.stream_log),
+                aiohttp.web.get("/{job_id}/top", self.stream_top),
+            ]
+        )
 
     # TODO (A Yushkovskiy 07-Jun-2019) Add `MonitoringService` to hide internals there
 
@@ -91,13 +96,43 @@ class MonitoringApiHandler:
     def _log_reader_factory(self) -> LogReaderFactory:
         return self._app["log_reader_factory"]
 
-    async def stream_top(self, request: Request) -> aiohttp.web.WebSocketResponse:
+    async def stream_log(
+        self, request: aiohttp.web.Request
+    ) -> aiohttp.web.StreamResponse:
+        user = await untrusted_user(request)
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
-        permission = Permission(
-            uri=str(self._jobs_helper.job_to_uri(job)), action="read"
-        )
+        permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="read")
+        logger.info("Checking whether %r has %r", user, permission)
+        await check_permission(request, permission.action, [permission])
+
+        pod_name = self._kube_helper.get_job_pod_name(job)
+        log_reader = await self._log_reader_factory.get_pod_log_reader(pod_name)
+
+        # TODO (A Danshyn, 05.07.2018): expose. make configurable
+        chunk_size = 1024
+        response = aiohttp.web.StreamResponse(status=200)
+        response.enable_chunked_encoding()
+        response.enable_compression(aiohttp.web.ContentCoding.identity)
+        response.content_type = "text/plain"
+        response.charset = "utf-8"
+        await response.prepare(request)
+
+        async with log_reader:
+            while True:
+                chunk = await log_reader.read(size=chunk_size)
+                if not chunk:
+                    break
+                await response.write(chunk)
+
+        await response.write_eof()
+        return response
+
+    async def stream_top(self, request: Request) -> aiohttp.web.WebSocketResponse:
         user = await untrusted_user(request)
+        job_id = request.match_info["job_id"]
+        job = await self._get_job(job_id)
+        permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="read")
         logger.info("Checking whether %r has %r", user, permission)
         await check_permission(request, permission.action, [permission])
 
