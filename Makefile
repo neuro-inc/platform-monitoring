@@ -60,7 +60,7 @@ gke_docker_push: build
 
 gke_deploy:
 	gcloud --quiet container clusters get-credentials $(GKE_CLUSTER_NAME) $(CLUSTER_ZONE_REGION)
-	helm \
-		--set "global.env=$(HELM_ENV)" \
-		--set "IMAGE.$(HELM_ENV)=$(IMAGE):$(CIRCLE_SHA1)" \
-		upgrade --install platformmonitoringapi deploy/platformmonitoringapi/ --wait --timeout 600
+	#helm \
+	#	--set "global.env=$(HELM_ENV)" \
+	#	--set "IMAGE.$(HELM_ENV)=$(IMAGE):$(CIRCLE_SHA1)" \
+	#	upgrade --install platformmonitoringapi deploy/platformmonitoringapi/ --wait --timeout 600
