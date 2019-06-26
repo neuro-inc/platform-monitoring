@@ -99,10 +99,10 @@ class MonitoringApiHandler:
     async def stream_log(
         self, request: aiohttp.web.Request
     ) -> aiohttp.web.StreamResponse:
+        user = await untrusted_user(request)
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
         permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="read")
-        user = await untrusted_user(request)
         logger.info("Checking whether %r has %r", user, permission)
         await check_permission(request, permission.action, [permission])
 
@@ -129,10 +129,10 @@ class MonitoringApiHandler:
         return response
 
     async def stream_top(self, request: Request) -> aiohttp.web.WebSocketResponse:
+        user = await untrusted_user(request)
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
         permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="read")
-        user = await untrusted_user(request)
         logger.info("Checking whether %r has %r", user, permission)
         await check_permission(request, permission.action, [permission])
 
