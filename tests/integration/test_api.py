@@ -10,7 +10,12 @@ import aiohttp
 import pytest
 from aiohttp import WSServerHandshakeError
 from aiohttp.web import HTTPOk
-from aiohttp.web_exceptions import HTTPAccepted, HTTPNoContent, HTTPUnauthorized
+from aiohttp.web_exceptions import (
+    HTTPAccepted,
+    HTTPForbidden,
+    HTTPNoContent,
+    HTTPUnauthorized,
+)
 from platform_monitoring.api import create_app
 from platform_monitoring.config import Config, PlatformApiConfig
 from yarl import URL
@@ -41,6 +46,9 @@ class MonitoringApiEndpoints:
 
     def generate_top_url(self, job_id: str) -> str:
         return f"{self.endpoint}/{job_id}/top"
+
+    def generate_log_url(self, job_id: str) -> str:
+        return f"{self.endpoint}/{job_id}/log"
 
 
 @dataclass(frozen=True)
@@ -230,25 +238,8 @@ class TestApi:
         async with client.get(url, headers=headers) as resp:
             assert resp.status == HTTPUnauthorized.status_code
 
-    @pytest.mark.asyncio
-    async def test_platform_create_job(
-        self,
-        platform_api: PlatformApiEndpoints,
-        client: aiohttp.ClientSession,
-        job_submit: Dict[str, Any],
-        jobs_client: JobsClient,
-    ) -> None:
-        url = platform_api.jobs_base_url
-        async with client.post(
-            url, headers=jobs_client.headers, json=job_submit
-        ) as resp:
-            assert resp.status == HTTPAccepted.status_code
-            payload = await resp.json()
-            job_id = payload["id"]
-            assert payload["status"] == "pending"
-            await jobs_client.long_polling_by_job_id(job_id, status="succeeded")
-        await jobs_client.delete_job(job_id)
 
+class TestTopApi:
     @pytest.mark.asyncio
     async def test_top_ok(
         self,
@@ -474,3 +465,74 @@ class TestApi:
             assert job["status"] == "succeeded"
 
         await jobs_client.delete_job(job_id=job_id)
+
+
+class TestLogApi:
+    @pytest.mark.asyncio
+    async def test_log_no_permissions_forbidden(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        platform_api: PlatformApiEndpoints,
+        client: aiohttp.ClientSession,
+        job_submit: Dict[str, Any],
+        regular_user_factory: Callable[..., Awaitable[_User]],
+    ) -> None:
+        user1 = await regular_user_factory()
+        user2 = await regular_user_factory()
+
+        url = platform_api.jobs_base_url
+        async with client.post(url, headers=user1.headers, json=job_submit) as resp:
+            assert resp.status == HTTPAccepted.status_code
+            payload = await resp.json()
+            job_id = payload["id"]
+
+        url = monitoring_api.generate_log_url(job_id)
+        async with client.get(url, headers=user2.headers) as resp:
+            assert resp.status == HTTPForbidden.status_code
+
+    @pytest.mark.asyncio
+    async def test_log_no_auth_token_provided_unauthorized(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        infinite_job: str,
+    ) -> None:
+        await jobs_client.long_polling_by_job_id(job_id=infinite_job, status="running")
+
+        url = monitoring_api.generate_top_url(job_id=infinite_job)
+        async with client.get(url) as resp:
+            assert resp.status == HTTPUnauthorized.status_code
+
+    @pytest.mark.asyncio
+    async def test_job_log(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        platform_api: PlatformApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        job_submit: Dict[str, Any],
+    ) -> None:
+        command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
+        request_payload = job_submit
+        request_payload["container"]["command"] = command
+        headers = jobs_client.headers
+
+        url = platform_api.jobs_base_url
+        async with client.post(url, headers=headers, json=request_payload) as response:
+            assert response.status == HTTPAccepted.status_code, await response.text()
+            result = await response.json()
+            job_id = result["id"]
+
+        url = monitoring_api.generate_log_url(job_id)
+        async with client.get(url, headers=headers) as response:
+            assert response.status == HTTPOk.status_code
+            assert response.content_type == "text/plain"
+            assert response.charset == "utf-8"
+            assert response.headers["Transfer-Encoding"] == "chunked"
+            assert "Content-Encoding" not in response.headers
+            actual_payload = await response.read()
+            expected_payload = "\n".join(str(i) for i in range(1, 6)) + "\n"
+            assert actual_payload == expected_payload.encode()
+
+        await jobs_client.delete_job(job_id)
