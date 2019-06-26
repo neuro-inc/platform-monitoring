@@ -5,7 +5,6 @@ from typing import Any, AsyncIterator, Dict
 from unittest import mock
 from uuid import uuid4
 
-import aiohttp
 import pytest
 from aioelasticsearch import Elasticsearch
 from aiohttp import web
@@ -18,11 +17,7 @@ from platform_monitoring.kube_client import (
     KubeClientException,
     PodContainerStats,
 )
-from platform_monitoring.logs import (
-    ElasticsearchLogReader,
-    FilteredStreamWrapper,
-    PodContainerLogReader,
-)
+from platform_monitoring.logs import ElasticsearchLogReader, PodContainerLogReader
 from platform_monitoring.utils import LogReaderFactory
 
 from tests.integration.conftest import ApiAddress, create_local_app_server
@@ -462,73 +457,3 @@ class TestLogReader:
                     await asyncio.sleep(interval_s)
         except asyncio.TimeoutError:
             pytest.fail(f"Pod logs did not match. Last payload: {payload}")
-
-
-class TestFilteredStreamWrapper:
-    @pytest.mark.asyncio
-    async def test_read_eof(self) -> None:
-        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False))
-        reader.feed_eof()
-        stream = FilteredStreamWrapper(reader)
-        chunk = await stream.read()
-        assert not chunk
-
-    @pytest.mark.asyncio
-    async def test_read_two_lines_eof(self) -> None:
-        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False))
-        reader.feed_data(b"line1\n")
-        reader.feed_data(b"line2")
-        reader.feed_eof()
-        stream = FilteredStreamWrapper(reader)
-        chunk = await stream.read()
-        assert chunk == b"line1\n"
-        chunk = await stream.read()
-        assert chunk == b"line2"
-
-    @pytest.mark.asyncio
-    async def test_half_line(self) -> None:
-        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False))
-        reader.feed_data(b"line1\n")
-        reader.feed_data(b"line2\n")
-        stream = FilteredStreamWrapper(reader)
-        chunk = await stream.read(size=2)
-        assert chunk == b"li"
-        chunk = await stream.read(size=2)
-        assert chunk == b"ne"
-
-        reader.feed_data(b"line3")
-        reader.feed_eof()
-
-        chunk = await stream.read(size=2)
-        assert chunk == b"1\n"
-        chunk = await stream.read()
-        assert chunk == b"line2\n"
-        chunk = await stream.read()
-        assert chunk == b"line3"
-
-    @pytest.mark.asyncio
-    async def test_filtered_single_rpc_error(self) -> None:
-        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False))
-        reader.feed_data(b"line1\n")
-        reader.feed_data(b"rpc error: code = whatever")
-        reader.feed_eof()
-        stream = FilteredStreamWrapper(reader)
-        chunk = await stream.read()
-        assert chunk == b"line1\n"
-        chunk = await stream.read()
-        assert not chunk
-
-    @pytest.mark.asyncio
-    async def test_filtered_two_rpc_errors(self) -> None:
-        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False))
-        reader.feed_data(b"line1\n")
-        reader.feed_data(b"rpc error: code = whatever\n")
-        reader.feed_data(b"rpc error: code = again\n")
-        reader.feed_eof()
-        stream = FilteredStreamWrapper(reader)
-        chunk = await stream.read()
-        assert chunk == b"line1\n"
-        chunk = await stream.read()
-        assert chunk == b"rpc error: code = whatever\n"
-        chunk = await stream.read()
-        assert not chunk
