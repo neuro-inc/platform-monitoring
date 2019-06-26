@@ -31,7 +31,7 @@ test_integration:
 	pytest -vv --maxfail=3 --cov=platform_monitoring --cov-report xml:.coverage-integration.xml tests/integration
 
 build:
-	@docker build -f Dockerfile.k8s -t $(IMAGE_NAME):$(IMAGE_TAG) .
+	@docker build -f Dockerfile.k8s -t $(IMAGE_NAME):$(IMAGE_TAG) --build-arg PIP_EXTRA_INDEX_URL="$(PIP_EXTRA_INDEX_URL)" .
 
 gke_login:
 	sudo chown circleci:circleci -R $$HOME
@@ -60,7 +60,7 @@ gke_docker_push: build
 
 gke_deploy:
 	gcloud --quiet container clusters get-credentials $(GKE_CLUSTER_NAME) $(CLUSTER_ZONE_REGION)
-	#helm \
-	#	--set "global.env=$(HELM_ENV)" \
-	#	--set "IMAGE.$(HELM_ENV)=$(IMAGE):$(CIRCLE_SHA1)" \
-	#	upgrade --install platformmonitoring deploy/platformmonitoring/ --wait --timeout 600
+	helm \
+		--set "global.env=$(HELM_ENV)" \
+		--set "IMAGE.$(HELM_ENV)=$(IMAGE):$(CIRCLE_SHA1)" \
+		upgrade --install platformmonitoringapi deploy/platformmonitoringapi/ --wait --timeout 600
