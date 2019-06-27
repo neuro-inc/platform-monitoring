@@ -70,21 +70,15 @@ class EnvironConfigFactory:
             token=self._environ.get("NP_MONITORING_K8S_TOKEN"),
             namespace=self._environ.get("NP_MONITORING_K8S_NS", KubeConfig.namespace),
             client_conn_timeout_s=int(
-                self._environ.get(
-                    "NP_MONITORING_K8S_CLIENT_CONN_TIMEOUT",
-                    KubeConfig.client_conn_timeout_s,
-                )
+                self._environ.get("NP_MONITORING_K8S_CLIENT_CONN_TIMEOUT")
+                or KubeConfig.client_conn_timeout_s
             ),
             client_read_timeout_s=int(
-                self._environ.get(
-                    "NP_MONITORING_K8S_CLIENT_READ_TIMEOUT",
-                    KubeConfig.client_read_timeout_s,
-                )
+                self._environ.get("NP_MONITORING_K8S_CLIENT_READ_TIMEOUT")
+                or KubeConfig.client_read_timeout_s
             ),
             client_conn_pool_size=int(
-                self._environ.get(
-                    "NP_MONITORING_K8S_CLIENT_CONN_POOL_SIZE",
-                    KubeConfig.client_conn_pool_size,
-                )
+                self._environ.get("NP_MONITORING_K8S_CLIENT_CONN_POOL_SIZE")
+                or KubeConfig.client_conn_pool_size,
             ),
         )
