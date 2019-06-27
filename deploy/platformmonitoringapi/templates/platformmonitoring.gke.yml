@@ -47,12 +47,20 @@ spec:
           value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
         - name: NP_MONITORING_K8S_TOKEN_PATH
           value: /var/run/secrets/kubernetes.io/serviceaccount/token
+        - name: NP_MONITORING_PLATFORM_API_URL
+        - value: {{ printf "%s" (pluck .Values.global.env .Values.NP_MONITORING_PLATFORM_API_URL | first | default .Values.NP_MONITORING_PLATFORM_API_URL._default) }}
+        - name: NP_MONITORING_PLATFORM_AUTH_URL
+        - value: {{ printf "%s" (pluck .Values.global.env .Values.NP_MONITORING_PLATFORM_AUTH_URL | first | default .Values.NP_MONITORING_PLATFORM_AUTH_URL._default) }}
+        - name: NP_MONITORING_ES_HOSTS
+        - value: {{ printf "%s" (pluck .Values.global.env .Values.NP_MONITORING_ES_HOSTS | first | default .Values.NP_MONITORING_ES_HOSTS._default) }}
+        - name: NP_MONITORING_K8S_NS
+        - value: {{ printf "%s" (pluck .Values.global.env .Values.NP_MONITORING_K8S_NS | first | default .Values.NP_MONITORING_K8S_NS._default) }}
         - name: NP_MONITORING_K8S_CLIENT_CONN_TIMEOUT
-          value: {{ .Values.NP_MONITORING_K8S_CLIENT_CONN_TIMEOUT }}
+          value: {{ printf "%s" (pluck .Values.global.env .Values.NP_MONITORING_K8S_CLIENT_CONN_TIMEOUT | first | default .Values.NP_MONITORING_K8S_CLIENT_CONN_TIMEOUT._default) }}
         - name: NP_MONITORING_K8S_CLIENT_READ_TIMEOUT
-          value: {{ .Values.NP_MONITORING_K8S_CLIENT_READ_TIMEOUT }}
+          value: {{ printf "%s" (pluck .Values.global.env .Values.NP_MONITORING_K8S_CLIENT_READ_TIMEOUT | first | default .Values.NP_MONITORING_K8S_CLIENT_READ_TIMEOUT._default) }}
         - name: NP_MONITORING_K8S_CLIENT_CONN_POOL_SIZE
-          value: {{ .Values.NP_MONITORING_K8S_CLIENT_CONN_POOL_SIZE }}
+          value: {{ printf "%s" (pluck .Values.global.env .Values.NP_MONITORING_K8S_CLIENT_CONN_POOL_SIZE | first | default .Values.NP_MONITORING_K8S_CLIENT_CONN_POOL_SIZE._default) }}
 ---
 apiVersion: v1
 kind: Service
