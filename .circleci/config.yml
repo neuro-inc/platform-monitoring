@@ -128,7 +128,9 @@ workflows:
 
   main:
     jobs:
-      - test:
+#      - test:
+#          context: org-dev
+      - gke_deploy:
           context: org-dev
 
   dev:
