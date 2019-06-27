@@ -25,6 +25,7 @@ def cert_authority_path(tmp_path: Path) -> str:
     ca_path.write_text(CA_DATA_PEM)
     return str(ca_path)
 
+
 @pytest.fixture()
 def token_path(tmp_path: Path) -> str:
     token_path = tmp_path / "token"
@@ -32,7 +33,7 @@ def token_path(tmp_path: Path) -> str:
     return str(token_path)
 
 
-def test_create(cert_authority_path: str,token_path:str) -> None:
+def test_create(cert_authority_path: str, token_path: str) -> None:
     environ: Dict[str, Any] = {
         "NP_MONITORING_API_HOST": "0.0.0.0",
         "NP_MONITORING_API_PORT": 8080,
