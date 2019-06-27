@@ -50,7 +50,7 @@ spec:
         - name: NP_MONITORING_K8S_NS
           value: default
         - name: NP_MONITORING_K8S_AUTH_TYPE
-          value: token
+          value: certificate
         - name: NP_MONITORING_K8S_CA_PATH
           value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
         - name: NP_MONITORING_K8S_TOKEN_PATH
