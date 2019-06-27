@@ -61,7 +61,7 @@ gke_docker_push: build
 _helm:
 	curl https://raw.githubusercontent.com/kubernetes/helm/master/scripts/get | bash -s -- -v v2.11.0
 
-gke_k8s_deploy: _helm
+gke_deploy: _helm
 	gcloud --quiet container clusters get-credentials $(GKE_CLUSTER_NAME) $(CLUSTER_ZONE_REGION)
 	helm \
 		--set "global.env=$(HELM_ENV)" \
