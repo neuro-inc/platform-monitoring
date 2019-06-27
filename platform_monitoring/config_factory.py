@@ -79,6 +79,6 @@ class EnvironConfigFactory:
             ),
             client_conn_pool_size=int(
                 self._environ.get("NP_MONITORING_K8S_CLIENT_CONN_POOL_SIZE")
-                or KubeConfig.client_conn_pool_size,
+                or KubeConfig.client_conn_pool_size
             ),
         )
