@@ -1,0 +1,78 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: platformmonitoringapi
+spec:
+  replicas: {{ printf "%s" (pluck .Values.global.env .Values.NP_MONITORING_REPLICAS | first | default .Values.NP_MONITORING_REPLICAS._default) }}
+  selector:
+    matchLabels:
+      service: platformmonitoringapi
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        service: platformmonitoringapi
+    spec:
+      containers:
+      - name: platformmonitoringapi
+        image: {{ printf "%s" (pluck .Values.global.env .Values.IMAGE | first | default .Values.IMAGE._default) }}
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: {{ printf "%s" (pluck .Values.global.env .Values.NP_MONITORING_REQUESTS_CPU | first | default .Values.NP_MONITORING_REQUESTS_CPU._default) }}
+            memory: {{ printf "%s" (pluck .Values.global.env .Values.NP_MONITORING_REQUESTS_MEMORY | first | default .Values.NP_MONITORING_REQUESTS_MEMORY._default) }}
+          limits:
+            cpu: {{ printf "%s" (pluck .Values.global.env .Values.NP_MONITORING_LIMITS_CPU | first | default .Values.NP_MONITORING_LIMITS_CPU._default) }}
+            memory: {{ printf "%s" (pluck .Values.global.env .Values.NP_MONITORING_LIMITS_MEMORY | first | default .Values.NP_MONITORING_LIMITS_MEMORY._default) }}
+        env:
+        - name: NP_MONITORING_PLATFORM_API_URL
+          value: http://platformapi:8080
+        - name: NP_MONITORING_PLATFORM_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: platformservices-secret
+              key: compute_token
+        - name: NP_MONITORING_PLATFORM_AUTH_URL
+          value: http://platformauthapi:8080
+        - name: NP_MONITORING_PLATFORM_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: platformservices-secret
+              key: compute_token
+        - name: NP_MONITORING_ES_HOSTS
+          value: http://logging-elasticsearch:9200
+        - name: NP_MONITORING_K8S_API_URL
+          value: http://localhost:8001
+        - name: NP_MONITORING_K8S_NS
+          value: default
+        - name: NP_MONITORING_K8S_AUTH_TYPE
+          value: token
+        - name: NP_MONITORING_K8S_CA_PATH
+          value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        - name: NP_MONITORING_K8S_TOKEN_PATH
+          value: /var/run/secrets/kubernetes.io/serviceaccount/token
+        - name: NP_MONITORING_K8S_CLIENT_CONN_TIMEOUT
+          value: {{ .Values.NP_MONITORING_K8S_CLIENT_CONN_TIMEOUT }}
+        - name: NP_MONITORING_K8S_CLIENT_READ_TIMEOUT
+          value: {{ .Values.NP_MONITORING_K8S_CLIENT_READ_TIMEOUT  }}
+        - name: NP_MONITORING_K8S_CLIENT_CONN_POOL_SIZE
+          value: {{ .Values.NP_MONITORING_K8S_CLIENT_CONN_POOL_SIZE  }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    traefik.ingress.kubernetes.io/affinity: "true"
+    traefik.ingress.kubernetes.io/session-cookie-name: NEURO_SESSION
+  name: platformmonitoringapi
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+  selector:
+    service: platformmonitoringapi

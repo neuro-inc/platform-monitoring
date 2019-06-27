@@ -1,0 +1,30 @@
+IMAGE:
+  _default: gcr.io/light-reality-205619/platformmonitoringapi:latest
+  dev: gcr.io/light-reality-205619/platformmonitoringapi:latest
+  staging: gcr.io/light-reality-205619/platformmonitoringapi:latest
+  prod: gcr.io/production-228907/platformmonitoringapi:latest
+NP_MONITORING_REQUESTS_CPU:
+  _default: "0.3"
+  dev: "0.1"
+  staging: "0.1"
+  prod: "0.1"
+NP_MONITORING_LIMITS_CPU:
+  _default: "0.5"
+  dev: "0.2"
+  staging: "0.3"
+  prod: "0.2"
+NP_MONITORING_REQUESTS_MEMORY:
+  _default: "100Mi"
+  dev: "50Mi"
+  staging: "50Mi"
+  prod: "50Mi"
+NP_MONITORING_LIMITS_MEMORY:
+  _default: "150Mi"
+  dev: "100Mi"
+  staging: "100Mi"
+  prod: "100Mi"
+NP_MONITORING_REPLICAS:
+  _default: "2"
+  dev: "2"
+  staging: "2"
+  prod: "2"
