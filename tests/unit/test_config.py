@@ -16,6 +16,7 @@ from yarl import URL
 
 
 CA_DATA_PEM = "this-is-certificate-authority-public-key"
+TOKEN = "this-is-token"
 
 
 @pytest.fixture()
@@ -24,8 +25,14 @@ def cert_authority_path(tmp_path: Path) -> str:
     ca_path.write_text(CA_DATA_PEM)
     return str(ca_path)
 
+@pytest.fixture()
+def token_path(tmp_path: Path) -> str:
+    token_path = tmp_path / "token"
+    token_path.write_text(TOKEN)
+    return str(token_path)
 
-def test_create(cert_authority_path: str) -> None:
+
+def test_create(cert_authority_path: str,token_path:str) -> None:
     environ: Dict[str, Any] = {
         "NP_MONITORING_API_HOST": "0.0.0.0",
         "NP_MONITORING_API_PORT": 8080,
@@ -39,7 +46,7 @@ def test_create(cert_authority_path: str) -> None:
         "NP_MONITORING_K8S_API_URL": "https://localhost:8443",
         "NP_MONITORING_K8S_AUTH_TYPE": "token",
         "NP_MONITORING_K8S_CA_PATH": cert_authority_path,
-        "NP_MONITORING_K8S_TOKEN": "kube-client-token",
+        "NP_MONITORING_K8S_TOKEN_PATH": token_path,
         "NP_MONITORING_K8S_AUTH_CERT_PATH": "/cert_path",
         "NP_MONITORING_K8S_AUTH_CERT_KEY_PATH": "/cert_key_path",
         "NP_MONITORING_K8S_NS": "other-namespace",
@@ -61,7 +68,7 @@ def test_create(cert_authority_path: str) -> None:
             endpoint_url="https://localhost:8443",
             cert_authority_data_pem=CA_DATA_PEM,
             auth_type=KubeClientAuthType.TOKEN,
-            token="kube-client-token",
+            token=TOKEN,
             auth_cert_path="/cert_path",
             auth_cert_key_path="/cert_key_path",
             namespace="other-namespace",

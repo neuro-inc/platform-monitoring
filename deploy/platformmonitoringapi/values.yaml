@@ -28,3 +28,23 @@ NP_MONITORING_REPLICAS:
   dev: "2"
   staging: "2"
   prod: "2"
+NP_MONITORING_PLATFORM_API_URL:
+  _default: http://platformapi:8080/api/v1
+  dev: http://platformapi:8080/api/v1
+  staging: http://platformapi:8080/api/v1
+  prod: http://platformapi:8080/api/v1
+NP_MONITORING_PLATFORM_AUTH_URL:
+  _default: http://platformauthapi:8080
+  dev: http://platformauthapi:8080
+  staging: http://platformauthapi:8080
+  prod: http://platformauthapi:8080
+NP_MONITORING_ES_HOSTS:
+  _default: http://logging-elasticsearch:9200
+  dev: http://logging-elasticsearch:9200
+  staging: http://logging-elasticsearch:9200
+  prod: http://logging-elasticsearch:9200
+NP_MONITORING_K8S_NS:
+  _default: default
+  dev: default
+  staging: default
+  prod: default

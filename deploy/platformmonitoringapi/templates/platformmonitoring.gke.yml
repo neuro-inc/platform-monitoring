@@ -29,28 +29,20 @@ spec:
             cpu: {{ printf "%s" (pluck .Values.global.env .Values.NP_MONITORING_LIMITS_CPU | first | default .Values.NP_MONITORING_LIMITS_CPU._default) }}
             memory: {{ printf "%s" (pluck .Values.global.env .Values.NP_MONITORING_LIMITS_MEMORY | first | default .Values.NP_MONITORING_LIMITS_MEMORY._default) }}
         env:
-        - name: NP_MONITORING_PLATFORM_API_URL
-          value: http://platformapi:8080/api/v1
         - name: NP_MONITORING_PLATFORM_API_TOKEN
           valueFrom:
             secretKeyRef:
               name: platformservices-secret
               key: compute_token
-        - name: NP_MONITORING_PLATFORM_AUTH_URL
-          value: http://platformauthapi:8080
         - name: NP_MONITORING_PLATFORM_AUTH_TOKEN
           valueFrom:
             secretKeyRef:
               name: platformservices-secret
               key: compute_token
-        - name: NP_MONITORING_ES_HOSTS
-          value: http://logging-elasticsearch:9200
         - name: NP_MONITORING_K8S_API_URL
-          value: http://localhost:8001
-        - name: NP_MONITORING_K8S_NS
-          value: default
+          value: https://kubernetes:443
         - name: NP_MONITORING_K8S_AUTH_TYPE
-          value: certificate
+          value: token
         - name: NP_MONITORING_K8S_CA_PATH
           value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
         - name: NP_MONITORING_K8S_TOKEN_PATH
