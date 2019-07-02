@@ -59,6 +59,9 @@ class EnvironConfigFactory:
         ca_path = self._environ.get("NP_MONITORING_K8S_CA_PATH")
         ca_data = Path(ca_path).read_text() if ca_path else None
 
+        token_path = self._environ.get("NP_MONITORING_K8S_TOKEN_PATH")
+        token = Path(token_path).read_text() if token_path else None
+
         return KubeConfig(
             endpoint_url=endpoint_url,
             cert_authority_data_pem=ca_data,
@@ -67,24 +70,18 @@ class EnvironConfigFactory:
             auth_cert_key_path=self._environ.get(
                 "NP_MONITORING_K8S_AUTH_CERT_KEY_PATH"
             ),
-            token=self._environ.get("NP_MONITORING_K8S_TOKEN"),
+            token=token,
             namespace=self._environ.get("NP_MONITORING_K8S_NS", KubeConfig.namespace),
             client_conn_timeout_s=int(
-                self._environ.get(
-                    "NP_MONITORING_K8S_CLIENT_CONN_TIMEOUT",
-                    KubeConfig.client_conn_timeout_s,
-                )
+                self._environ.get("NP_MONITORING_K8S_CLIENT_CONN_TIMEOUT")
+                or KubeConfig.client_conn_timeout_s
             ),
             client_read_timeout_s=int(
-                self._environ.get(
-                    "NP_MONITORING_K8S_CLIENT_READ_TIMEOUT",
-                    KubeConfig.client_read_timeout_s,
-                )
+                self._environ.get("NP_MONITORING_K8S_CLIENT_READ_TIMEOUT")
+                or KubeConfig.client_read_timeout_s
             ),
             client_conn_pool_size=int(
-                self._environ.get(
-                    "NP_MONITORING_K8S_CLIENT_CONN_POOL_SIZE",
-                    KubeConfig.client_conn_pool_size,
-                )
+                self._environ.get("NP_MONITORING_K8S_CLIENT_CONN_POOL_SIZE")
+                or KubeConfig.client_conn_pool_size
             ),
         )
