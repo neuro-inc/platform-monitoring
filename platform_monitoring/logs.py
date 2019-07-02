@@ -159,6 +159,7 @@ class ElasticsearchLogReader(LogReader):
             # words, our client code has up to 1 minute to process previous
             # results and fetch next ones.
             scroll="1m",
+            raise_on_error=False,
             query=query,
             preserve_order=True,
             size=100,
