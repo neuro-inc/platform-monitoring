@@ -168,7 +168,7 @@ workflows:
           filters:
             branches:
               only:
-                - deploy-artifactory
+                - /release.*/
       - gke_deploy:
           context: org-staging
           requires:
@@ -176,7 +176,7 @@ workflows:
           filters:
             branches:
               only:
-                - deploy-artifactory
+                - /release.*/
 
   artifactory:
     jobs:
