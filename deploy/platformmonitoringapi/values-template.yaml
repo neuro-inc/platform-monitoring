@@ -1,4 +1,4 @@
-IMAGE: ''
+IMAGE: neuro-docker-local-public.jfrog.io/platformmonitoringapi:IMAGE_TAG
 NP_MONITORING_REQUESTS_CPU: "0.1"
 NP_MONITORING_LIMITS_CPU: "0.3"
 NP_MONITORING_REQUESTS_MEMORY: "50Mi"
