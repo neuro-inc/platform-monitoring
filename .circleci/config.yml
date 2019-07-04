@@ -101,15 +101,10 @@ jobs:
             make clean_k8s
           when: always
 
-
   gke_deploy:
     <<: *defaults
     steps:
       - checkout
-      - run:
-          name: Build image
-          command: |
-            make build
       - run:
           name: GKE Auth
           command: |
@@ -121,7 +116,25 @@ jobs:
       - run:
           name: GKE Deploy
           command: |
-            make gke_deploy
+            make gke_k8s_deploy
+
+  artifactory_deploy:
+    <<: *defaults
+
+    steps:
+      - checkout
+
+      - run:
+          name: Artifactory Docker Push
+          command: |
+            make artifactory_docker_push
+
+      - run:
+          name: Artifactory Helm Push
+          command: |
+            make artifactory_helm_push
+
+
 
 workflows:
   version: 2
@@ -147,3 +160,41 @@ workflows:
             branches:
               only:
                 - master
+
+  staging:
+    jobs:
+      - test:
+          context: org-staging
+          filters:
+            branches:
+              only:
+                - /release.*/
+      - gke_deploy:
+          context: org-staging
+          requires:
+            - test
+          filters:
+            branches:
+              only:
+                - /release.*/
+
+  artifactory:
+    jobs:
+      - test:
+          context: org-global
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only:
+                - /artifactory.*/
+      - artifactory_deploy:
+          context: org-global
+          requires:
+            - test
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only:
+                - /artifactory.*/
