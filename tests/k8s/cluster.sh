@@ -37,6 +37,11 @@ function k8s::start {
     sudo -E minikube start --vm-driver=none --kubernetes-version=v1.10.0
 
     k8s::setup_dns
+
+    sudo -E minikube addons enable registry
+    # NOTE: registry-proxy is a part of the registry addon in newer versions of
+    # minikube
+    sudo kubectl apply -f tests/k8s/registry.yml
 }
 
 function k8s::setup_dns {

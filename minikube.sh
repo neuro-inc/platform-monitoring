@@ -12,7 +12,11 @@ function minikube::start {
     mkdir -p ~/.minikube/files/files
     cp tests/k8s/fluentd/kubernetes.conf ~/.minikube/files/files/fluentd-kubernetes.conf
     minikube start --kubernetes-version=v1.10.0
+    minikube addons enable registry
     kubectl config use-context minikube
+    # NOTE: registry-proxy is a part of the registry addon in newer versions of
+    # minikube
+    kubectl apply -f tests/k8s/registry.yml
 }
 
 function save_k8s_image {
