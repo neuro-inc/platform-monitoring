@@ -54,6 +54,7 @@ function k8s::setup_dns {
 function k8s::apply_all_configurations {
     echo "Applying configurations..."
     kubectl config use-context minikube
+    kubectl apply -f deploy/platformmonitoringapi/templates/dockerengineapi.yml 
     kubectl apply -f tests/k8s/rb.default.gke.yml
     kubectl apply -f tests/k8s/logging.yml
     kubectl apply -f tests/k8s/platformconfig.yml
