@@ -10,12 +10,16 @@ import aiohttp
 from aiohttp import ContentTypeError
 from async_generator import asynccontextmanager
 from async_timeout import timeout
+from yarl import URL
 
 from .base import JobStats, Telemetry
 from .config import KubeClientAuthType
 
 
 logger = logging.getLogger(__name__)
+
+
+KUBELET_NODE_PORT = 10255
 
 
 class KubeClientException(Exception):
@@ -34,6 +38,12 @@ class JobNotFoundException(JobException):
     pass
 
 
+@dataclass(frozen=True)
+class ProxyClient:
+    url: URL
+    session: aiohttp.ClientSession
+
+
 class Pod:
     def __init__(self, payload: Dict[str, Any]) -> None:
         self._payload = payload
@@ -50,7 +60,7 @@ class Pod:
         return payload
 
     def get_container_status(self, name: str) -> Dict[str, Any]:
-        for payload in self._status_payload["containerStatuses"]:
+        for payload in self._status_payload.get("containerStatuses", []):
             if payload["name"] == name:
                 return payload
         return {}
@@ -99,7 +109,7 @@ class KubeClient:
         self._conn_pool_size = conn_pool_size
         self._client: Optional[aiohttp.ClientSession] = None
 
-        self._kubelet_port = 10255
+        self._kubelet_port = KUBELET_NODE_PORT
 
     @property
     def _is_ssl(self) -> bool:
@@ -225,8 +235,17 @@ class KubeClient:
                     return
                 await asyncio.sleep(interval_s)
 
-    def _parse_node_name(self, payload: Dict[str, Any]) -> Optional[str]:
-        return payload["spec"].get("nodeName")
+    def _get_node_proxy_url(self, host: str, port: int) -> URL:
+        return URL(self._generate_node_proxy_url(host, port))
+
+    @asynccontextmanager
+    async def get_node_proxy_client(
+        self, host: str, port: int
+    ) -> AsyncIterator[ProxyClient]:
+        assert self._client
+        yield ProxyClient(
+            url=self._get_node_proxy_url(host, port), session=self._client
+        )
 
     async def get_pod_container_stats(
         self, pod_name: str, container_name: str
@@ -234,11 +253,10 @@ class KubeClient:
         """
         https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/apis/stats/v1alpha1/types.go
         """
-        raw_pod = await self.get_raw_pod(pod_name)
-        node_name = self._parse_node_name(raw_pod)
-        if not node_name:
+        pod = await self.get_pod(pod_name)
+        if not pod.node_name:
             return None
-        url = self._generate_node_stats_summary_url(node_name)
+        url = self._generate_node_stats_summary_url(pod.node_name)
         try:
             payload = await self._request(method="GET", url=url)
             summary = StatsSummary(payload)
