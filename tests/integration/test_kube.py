@@ -12,6 +12,7 @@ from async_timeout import timeout
 from platform_monitoring.base import LogReader
 from platform_monitoring.config import KubeConfig
 from platform_monitoring.kube_client import (
+    KUBELET_NODE_PORT,
     JobNotFoundException,
     KubeClient,
     KubeClientException,
@@ -19,6 +20,7 @@ from platform_monitoring.kube_client import (
 )
 from platform_monitoring.logs import ElasticsearchLogReader, PodContainerLogReader
 from platform_monitoring.utils import LogReaderFactory
+from yarl import URL
 
 from tests.integration.conftest import ApiAddress, create_local_app_server
 
@@ -225,6 +227,25 @@ class TestKubeClient:
         async with stream_cm as stream:
             payload = await stream.read()
             assert payload == b""
+
+    @pytest.mark.asyncio
+    async def test_get_node_proxy_client(
+        self, kube_config: KubeConfig, kube_client: MyKubeClient
+    ) -> None:
+        node_list = await kube_client.get_node_list()
+        node_name = node_list["items"][0]["metadata"]["name"]
+        async with kube_client.get_node_proxy_client(
+            node_name, KUBELET_NODE_PORT
+        ) as client:
+            assert client.url == URL(
+                kube_config.endpoint_url
+                + f"/api/v1/nodes/{node_name}:{KUBELET_NODE_PORT}/proxy"
+            )
+
+            async with client.session.get(URL(f"{client.url}/stats/summary")) as resp:
+                assert resp.status == 200, await resp.text()
+                payload = await resp.json()
+                assert "node" in payload
 
 
 class TestLogReader:

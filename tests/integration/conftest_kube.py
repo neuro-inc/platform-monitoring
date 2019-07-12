@@ -53,6 +53,10 @@ class MyKubeClient(KubeClient):
         except asyncio.TimeoutError:
             pytest.fail("Pod has not terminated yet")
 
+    async def get_node_list(self) -> Dict[str, Any]:
+        url = f"{self._api_v1_url}/nodes"
+        return await self._request(method="GET", url=url)
+
 
 class MyPodDescriptor:
     def __init__(self, job_id: str, **kwargs: Dict[str, Any]) -> None:
