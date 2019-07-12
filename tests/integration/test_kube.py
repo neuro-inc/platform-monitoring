@@ -232,16 +232,18 @@ class TestKubeClient:
     async def test_get_node_proxy_client(
         self, kube_config: KubeConfig, kube_client: MyKubeClient
     ) -> None:
+        node_list = await kube_client.get_node_list()
+        node_name = node_list["items"][0]["metadata"]["name"]
         async with kube_client.get_node_proxy_client(
-            "minikube", KUBELET_NODE_PORT
+            node_name, KUBELET_NODE_PORT
         ) as client:
             assert client.url == URL(
                 kube_config.endpoint_url
-                + f"/api/v1/nodes/minikube:{KUBELET_NODE_PORT}/proxy"
+                + f"/api/v1/nodes/{node_name}:{KUBELET_NODE_PORT}/proxy"
             )
 
             async with client.session.get(URL(f"{client.url}/stats/summary")) as resp:
-                assert resp.status == 200
+                assert resp.status == 200, await resp.text()
                 payload = await resp.json()
                 assert "node" in payload
 
