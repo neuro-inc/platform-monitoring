@@ -158,3 +158,34 @@ class TestJobsService:
         jobs_service = JobsService(jobs_client, kube_client)
         with pytest.raises(JobException, match="is not running"):
             await jobs_service.save(job, user, container)
+
+    @pytest.mark.asyncio
+    async def test_save_push_failure(
+        self,
+        job_factory: JobFactory,
+        jobs_client: JobsClient,
+        kube_client: MyKubeClient,
+        user: User,
+        image_tag: str,
+    ) -> None:
+        resources = Resources(
+            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+        )
+        job = await job_factory(
+            Image(
+                image="alpine:latest", command="sh -c 'sleep 300'"
+            ),
+            resources,
+        )
+        await self.wait_for_job_running(job, jobs_client)
+
+        registry_host = "unknown:5000"
+        container = Container(
+            image=ContainerImage(
+                repo=f"{registry_host}/{user.name}/alpine", tag=image_tag
+            )
+        )
+
+        jobs_service = JobsService(jobs_client, kube_client)
+        with pytest.raises(JobException, match="Failed to push image"):
+            await jobs_service.save(job, user, container)
