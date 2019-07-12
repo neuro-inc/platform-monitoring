@@ -3,8 +3,72 @@ from unittest import mock
 
 import aiohttp
 import pytest
-from platform_monitoring.kube_client import PodContainerStats, StatsSummary
+from platform_monitoring.kube_client import Pod, PodContainerStats, StatsSummary
 from platform_monitoring.logs import FilteredStreamWrapper
+
+
+class TestPod:
+    def test_no_node_name(self) -> None:
+        pod = Pod({"spec": {}})
+        assert pod.node_name is None
+
+    def test_node_name(self) -> None:
+        pod = Pod({"spec": {"nodeName": "testnode"}})
+        assert pod.node_name == "testnode"
+
+    def test_no_status(self) -> None:
+        pod = Pod({"spec": {}})
+        with pytest.raises(ValueError, match="Missing pod status"):
+            pod.get_container_status("testcontainer")
+
+    def test_no_container_status(self) -> None:
+        pod = Pod({"spec": {}, "status": {"containerStatuses": []}})
+        container_status = pod.get_container_status("testcontainer")
+        assert container_status == {}
+
+    def test_container_status(self) -> None:
+        pod = Pod(
+            {
+                "spec": {},
+                "status": {
+                    "containerStatuses": [{"name": ""}, {"name": "testcontainer"}]
+                },
+            }
+        )
+        container_status = pod.get_container_status("testcontainer")
+        assert container_status == {"name": "testcontainer"}
+
+    def test_no_container_id(self) -> None:
+        pod = Pod(
+            {"spec": {}, "status": {"containerStatuses": [{"name": "testcontainer"}]}}
+        )
+        container_id = pod.get_container_id("testcontainer")
+        assert container_id is None
+
+    def test_container_id(self) -> None:
+        pod = Pod(
+            {
+                "spec": {},
+                "status": {
+                    "containerStatuses": [
+                        {
+                            "name": "testcontainer",
+                            "containerID": "docker://testcontainerid",
+                        }
+                    ]
+                },
+            }
+        )
+        container_id = pod.get_container_id("testcontainer")
+        assert container_id == "testcontainerid"
+
+    def test_is_phase_running_false(self) -> None:
+        pod = Pod({"spec": {}, "status": {"phase": "Pending"}})
+        assert not pod.is_phase_running
+
+    def test_is_phase_running(self) -> None:
+        pod = Pod({"spec": {}, "status": {"phase": "Running"}})
+        assert pod.is_phase_running
 
 
 class TestPodContainerStats:

@@ -34,6 +34,37 @@ class JobNotFoundException(JobException):
     pass
 
 
+class Pod:
+    def __init__(self, payload: Dict[str, Any]) -> None:
+        self._payload = payload
+
+    @property
+    def node_name(self) -> Optional[str]:
+        return self._payload["spec"].get("nodeName")
+
+    @property
+    def _status_payload(self) -> Dict[str, Any]:
+        payload = self._payload.get("status")
+        if not payload:
+            raise ValueError("Missing pod status")
+        return payload
+
+    def get_container_status(self, name: str) -> Dict[str, Any]:
+        for payload in self._status_payload["containerStatuses"]:
+            if payload["name"] == name:
+                return payload
+        return {}
+
+    def get_container_id(self, name: str) -> Optional[str]:
+        id_ = self.get_container_status(name).get("containerID", "")
+        # NOTE: URL(id_).host is failing because the container id is too long
+        return id_.replace("docker://", "") or None
+
+    @property
+    def is_phase_running(self) -> bool:
+        return self._status_payload.get("phase") == "Running"
+
+
 class KubeClient:
     def __init__(
         self,
