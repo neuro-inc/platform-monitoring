@@ -12,7 +12,12 @@ from neuromation.api import (
     Resources,
 )
 from neuromation.api.jobs import Jobs as JobsClient
-from platform_monitoring.jobs_service import Container, ContainerImage, JobsService
+from platform_monitoring.jobs_service import (
+    Container,
+    ContainerImage,
+    JobException,
+    JobsService,
+)
 from platform_monitoring.user import User
 
 from .conftest_kube import MyKubeClient
@@ -128,3 +133,28 @@ class TestJobsService:
             resources,
         )
         await self.wait_for_job_succeeded(new_job, jobs_client)
+
+    @pytest.mark.asyncio
+    async def test_save_pending_job(
+        self,
+        job_factory: JobFactory,
+        jobs_client: JobsClient,
+        kube_client: MyKubeClient,
+        user: User,
+        registry_host: str,
+        image_tag: str,
+    ) -> None:
+        resources = Resources(
+            memory_mb=16 ** 10, cpu=0.1, gpu=None, shm=False, gpu_model=None
+        )
+        job = await job_factory(Image(image="alpine:latest", command=None), resources)
+
+        container = Container(
+            image=ContainerImage(
+                repo=f"{registry_host}/{user.name}/alpine", tag=image_tag
+            )
+        )
+
+        jobs_service = JobsService(jobs_client, kube_client)
+        with pytest.raises(JobException, match="is not running"):
+            await jobs_service.save(job, user, container)
