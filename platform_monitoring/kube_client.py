@@ -197,16 +197,13 @@ class KubeClient:
         self._assert_resource_kind(expected_kind="Pod", payload=payload)
         return payload
 
+    async def get_pod(self, pod_name: str) -> Pod:
+        return Pod(await self.get_raw_pod(pod_name))
+
     async def _get_raw_container_state(self, pod_name: str) -> Dict[str, Any]:
-        payload = await self.get_raw_pod(pod_name)
-        pod_status = payload.get("status")
-        if not pod_status:
-            raise ValueError("Missing pod status")
-        container_status: Dict[str, Any] = {}
-        if "containerStatuses" in pod_status:
-            container_status = pod_status["containerStatuses"][0]
-        state = container_status.get("state", {})
-        return state
+        pod = await self.get_pod(pod_name)
+        container_status = pod.get_container_status(pod_name)
+        return container_status.get("state", {})
 
     async def is_container_waiting(self, pod_name: str) -> bool:
         state = await self._get_raw_container_state(pod_name)
