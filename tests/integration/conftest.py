@@ -12,7 +12,11 @@ import pytest
 from aioelasticsearch import Elasticsearch
 from async_generator import asynccontextmanager
 from async_timeout import timeout
-from platform_monitoring.api import create_elasticsearch_client
+from neuromation.api import Client as PlatformApiClient
+from platform_monitoring.api import (
+    create_elasticsearch_client,
+    create_platform_api_client,
+)
 from platform_monitoring.config import (
     Config,
     ElasticsearchConfig,
@@ -92,6 +96,14 @@ async def platform_api_config(
         url=url,
         token=token_factory("compute"),  # token is hard-coded in the yaml configuration
     )
+
+
+@pytest.fixture
+async def platform_api_client(
+    platform_api_config: PlatformApiConfig
+) -> AsyncIterator[PlatformApiClient]:
+    async with create_platform_api_client(platform_api_config) as client:
+        yield client
 
 
 @pytest.fixture
