@@ -14,7 +14,7 @@ from neuromation.api import (
 from neuromation.api.jobs import Jobs as JobsClient
 from platform_monitoring.jobs_service import (
     Container,
-    ContainerImage,
+    ImageReference,
     JobException,
     JobsService,
 )
@@ -117,8 +117,8 @@ class TestJobsService:
         await self.wait_for_job_running(job, jobs_client)
 
         container = Container(
-            image=ContainerImage(
-                repo=f"{registry_host}/{user.name}/alpine", tag=image_tag
+            image=ImageReference(
+                domain=registry_host, path=f"{user.name}/alpine", tag=image_tag
             )
         )
 
@@ -129,6 +129,44 @@ class TestJobsService:
             Image(
                 image=str(container.image),
                 command='sh -c \'[ "$(cat /test)" = "123" ]\'',
+            ),
+            resources,
+        )
+        await self.wait_for_job_succeeded(new_job, jobs_client)
+
+    @pytest.mark.asyncio
+    async def test_save_no_tag(
+        self,
+        job_factory: JobFactory,
+        jobs_client: JobsClient,
+        kube_client: MyKubeClient,
+        user: User,
+        registry_host: str,
+        image_tag: str,
+    ) -> None:
+        resources = Resources(
+            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+        )
+        job = await job_factory(
+            Image(
+                image="alpine:latest",
+                command=f"sh -c 'echo -n {image_tag} > /test; sleep 300'",
+            ),
+            resources,
+        )
+        await self.wait_for_job_running(job, jobs_client)
+
+        container = Container(
+            image=ImageReference(domain=registry_host, path=f"{user.name}/alpine")
+        )
+
+        jobs_service = JobsService(jobs_client, kube_client)
+        await jobs_service.save(job, user, container)
+
+        new_job = await job_factory(
+            Image(
+                image=str(container.image),
+                command=f'sh -c \'[ "$(cat /test)" = "{image_tag}" ]\'',
             ),
             resources,
         )
@@ -150,8 +188,8 @@ class TestJobsService:
         job = await job_factory(Image(image="alpine:latest", command=None), resources)
 
         container = Container(
-            image=ContainerImage(
-                repo=f"{registry_host}/{user.name}/alpine", tag=image_tag
+            image=ImageReference(
+                domain=registry_host, path=f"{user.name}/alpine", tag=image_tag
             )
         )
 
@@ -178,8 +216,8 @@ class TestJobsService:
 
         registry_host = "unknown:5000"
         container = Container(
-            image=ContainerImage(
-                repo=f"{registry_host}/{user.name}/alpine", tag=image_tag
+            image=ImageReference(
+                domain=registry_host, path=f"{user.name}/alpine", tag=image_tag
             )
         )
 

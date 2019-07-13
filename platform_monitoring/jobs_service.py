@@ -3,32 +3,20 @@ from dataclasses import dataclass
 from neuromation.api import JobDescription as Job
 from neuromation.api.jobs import Jobs as JobsClient
 
-from .docker_client import Docker, DockerError, check_docker_push_suceeded
+from .docker_client import (
+    Docker,
+    DockerError,
+    ImageReference,
+    check_docker_push_suceeded,
+)
 from .kube_client import KubeClient
 from .user import User
 from .utils import KubeHelper
 
 
 @dataclass(frozen=True)
-class ContainerImage:
-    repo: str
-    tag: str = "latest"
-
-    # TODO: belongs
-
-    @classmethod
-    def create(cls, image: str) -> "ContainerImage":
-        repo, tag = image.rsplit(":", 1)
-        # TODO: validate
-        return ContainerImage(repo, tag or cls.tag)
-
-    def __str__(self) -> str:
-        return f"{self.repo}:{self.tag}"
-
-
-@dataclass(frozen=True)
 class Container:
-    image: ContainerImage
+    image: ImageReference
 
 
 class JobException(Exception):
@@ -64,7 +52,7 @@ class JobsService:
                 connector=proxy_client.session.connector,
             )
             try:
-                repo = container.image.repo
+                repo = container.image.repository
                 tag = container.image.tag
                 await docker.images.commit(container=container_id, repo=repo, tag=tag)
                 push_auth = dict(username=user.name, password=user.token)
