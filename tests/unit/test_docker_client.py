@@ -1,10 +1,10 @@
 from typing import Any, Dict, List
 
 import pytest
-from platform_monitoring.docker_client import DockerError, check_docker_push_result
+from platform_monitoring.docker_client import DockerError, check_docker_push_suceeded
 
 
-def test_check_docker_push_result() -> None:
+def test_check_docker_push_succeeded() -> None:
     payload: List[Dict[str, Any]] = [
         {"status": "The push refers to repository [registry:80/testuser/alpine]"},
         {
@@ -21,4 +21,4 @@ def test_check_docker_push_result() -> None:
         },
     ]
     with pytest.raises(DockerError, match="Failed to push image 'repo:tag'"):
-        check_docker_push_result("repo", "tag", payload)
+        check_docker_push_suceeded("repo", "tag", payload)

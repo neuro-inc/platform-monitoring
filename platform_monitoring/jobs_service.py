@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from neuromation.api import JobDescription as Job
 from neuromation.api.jobs import Jobs as JobsClient
 
-from .docker_client import Docker, DockerError, check_docker_push_result
+from .docker_client import Docker, DockerError, check_docker_push_suceeded
 from .kube_client import KubeClient
 from .user import User
 from .utils import KubeHelper
@@ -64,18 +64,13 @@ class JobsService:
                 connector=proxy_client.session.connector,
             )
             try:
-                await docker.images.commit(
-                    container=container_id,
-                    repo=container.image.repo,
-                    tag=container.image.tag,
-                )
+                repo = container.image.repo
+                tag = container.image.tag
+                await docker.images.commit(container=container_id, repo=repo, tag=tag)
+                push_auth = dict(username=user.name, password=user.token)
                 push_result = await docker.images.push(
-                    name=container.image.repo,
-                    tag=container.image.tag,
-                    auth=dict(username=user.name, password=user.token),
+                    name=repo, tag=tag, auth=push_auth
                 )
-                check_docker_push_result(
-                    container.image.repo, container.image.tag, push_result
-                )
+                check_docker_push_suceeded(repo, tag, push_result)
             except DockerError as error:
                 raise JobException(f"Failed to save job '{job.id}': {error}")
