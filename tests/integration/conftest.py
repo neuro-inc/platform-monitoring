@@ -23,6 +23,7 @@ from platform_monitoring.config import (
     KubeConfig,
     PlatformApiConfig,
     PlatformAuthConfig,
+    RegistryConfig,
     ServerConfig,
 )
 from yarl import URL
@@ -126,11 +127,17 @@ async def es_client(es_config: ElasticsearchConfig) -> AsyncIterator[Elasticsear
 
 
 @pytest.fixture
+def registry_config() -> RegistryConfig:
+    return RegistryConfig(url=URL("http://localhost:5000"))
+
+
+@pytest.fixture
 def config(
     auth_config: PlatformAuthConfig,
     platform_api_config: PlatformApiConfig,
     es_config: ElasticsearchConfig,
     kube_config: KubeConfig,
+    registry_config: RegistryConfig,
 ) -> Config:
     return Config(
         server=ServerConfig(host="0.0.0.0", port=8080),
@@ -138,6 +145,7 @@ def config(
         platform_api=platform_api_config,
         elasticsearch=es_config,
         kube=kube_config,
+        registry=registry_config,
     )
 
 

@@ -50,9 +50,21 @@ class KubeConfig:
 
 
 @dataclass(frozen=True)
+class RegistryConfig:
+    url: URL
+
+    @property
+    def host(self) -> str:
+        port = self.url.explicit_port  # type: ignore
+        suffix = f":{port}" if port else ""
+        return f"{self.url.host}{suffix}"
+
+
+@dataclass(frozen=True)
 class Config:
     server: ServerConfig
     platform_api: PlatformApiConfig
     platform_auth: PlatformAuthConfig
     elasticsearch: ElasticsearchConfig
     kube: KubeConfig
+    registry: RegistryConfig
