@@ -12,6 +12,7 @@ from .config import (
     KubeConfig,
     PlatformApiConfig,
     PlatformAuthConfig,
+    RegistryConfig,
     ServerConfig,
 )
 
@@ -30,6 +31,7 @@ class EnvironConfigFactory:
             platform_auth=self._create_platform_auth(),
             elasticsearch=self._create_elasticsearch(),
             kube=self._create_kube(),
+            registry=self._create_registry(),
         )
 
     def _create_server(self) -> ServerConfig:
@@ -85,3 +87,6 @@ class EnvironConfigFactory:
                 or KubeConfig.client_conn_pool_size
             ),
         )
+
+    def _create_registry(self) -> RegistryConfig:
+        return RegistryConfig(url=URL(self._environ["NP_MONITORING_REGISTRY_URL"]))
