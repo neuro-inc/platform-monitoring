@@ -163,7 +163,7 @@ def job_request_factory() -> Callable[[], Dict[str, Any]]:
     def _factory() -> Dict[str, Any]:
         return {
             "container": {
-                "image": "alpine",
+                "image": "ubuntu",
                 "command": "true",
                 "resources": {"cpu": 0.1, "memory_mb": 16},
             }
@@ -606,7 +606,7 @@ class TestSaveApi:
     ) -> None:
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
-        payload = {"container": {"image": "unknown:5000/alpine:latest"}}
+        payload = {"container": {"image": "unknown:5000/ubuntu:latest"}}
         async with client.post(url, headers=headers, json=payload) as resp:
             assert resp.status == HTTPBadRequest.status_code, await resp.text()
             resp_payload = await resp.json()
@@ -627,7 +627,7 @@ class TestSaveApi:
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
         payload = {
-            "container": {"image": f"{config.registry.host}/alpine:{infinite_job}"}
+            "container": {"image": f"{config.registry.host}/ubuntu:{infinite_job}"}
         }
         async with client.post(url, headers=headers, json=payload) as resp:
             assert resp.status == HTTPInternalServerError.status_code, await resp.text()
@@ -649,7 +649,7 @@ class TestSaveApi:
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
         payload = {
-            "container": {"image": f"{config.registry.host}/alpine:{infinite_job}"}
+            "container": {"image": f"{config.registry.host}/ubuntu:{infinite_job}"}
         }
         async with client.post(url, headers=headers, json=payload) as resp:
             assert resp.status == HTTPCreated.status_code, await resp.text()

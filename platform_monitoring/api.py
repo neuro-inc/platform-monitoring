@@ -100,10 +100,6 @@ class MonitoringApiHandler:
         return self._app["jobs_service"]
 
     @property
-    def _platform_client(self) -> PlatformApiClient:
-        return self._app["platform_client"]
-
-    @property
     def _auth_client(self) -> AuthClient:
         return self._app["auth_client"]
 
@@ -350,7 +346,6 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             platform_client = await exit_stack.enter_async_context(
                 create_platform_api_client(config.platform_api)
             )
-            app["monitoring_app"]["platform_client"] = platform_client
 
             logger.info("Initializing Auth client")
             auth_client = await exit_stack.enter_async_context(
