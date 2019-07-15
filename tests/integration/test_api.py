@@ -12,7 +12,10 @@ from aiohttp import WSServerHandshakeError
 from aiohttp.web import HTTPOk
 from aiohttp.web_exceptions import (
     HTTPAccepted,
+    HTTPBadRequest,
+    HTTPCreated,
     HTTPForbidden,
+    HTTPInternalServerError,
     HTTPNoContent,
     HTTPUnauthorized,
 )
@@ -49,6 +52,9 @@ class MonitoringApiEndpoints:
 
     def generate_log_url(self, job_id: str) -> str:
         return f"{self.endpoint}/{job_id}/log"
+
+    def generate_save_url(self, job_id: str) -> str:
+        return f"{self.endpoint}/{job_id}/save"
 
 
 @dataclass(frozen=True)
@@ -157,7 +163,7 @@ def job_request_factory() -> Callable[[], Dict[str, Any]]:
     def _factory() -> Dict[str, Any]:
         return {
             "container": {
-                "image": "ubuntu",
+                "image": "alpine",
                 "command": "true",
                 "resources": {"cpu": 0.1, "memory_mb": 16},
             }
@@ -536,3 +542,114 @@ class TestLogApi:
             assert actual_payload == expected_payload.encode()
 
         await jobs_client.delete_job(job_id)
+
+
+class TestSaveApi:
+    @pytest.mark.asyncio
+    async def test_save_no_permissions_forbidden(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        platform_api: PlatformApiEndpoints,
+        client: aiohttp.ClientSession,
+        job_submit: Dict[str, Any],
+        regular_user_factory: Callable[..., Awaitable[_User]],
+    ) -> None:
+        user1 = await regular_user_factory()
+        user2 = await regular_user_factory()
+
+        url = platform_api.jobs_base_url
+        async with client.post(url, headers=user1.headers, json=job_submit) as resp:
+            assert resp.status == HTTPAccepted.status_code
+            payload = await resp.json()
+            job_id = payload["id"]
+
+        url = monitoring_api.generate_save_url(job_id)
+        async with client.post(url, headers=user2.headers) as resp:
+            assert resp.status == HTTPForbidden.status_code
+
+    @pytest.mark.asyncio
+    async def test_save_no_auth_token_provided_unauthorized(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        infinite_job: str,
+    ) -> None:
+        url = monitoring_api.generate_save_url(job_id=infinite_job)
+        async with client.post(url) as resp:
+            assert resp.status == HTTPUnauthorized.status_code
+
+    @pytest.mark.asyncio
+    async def test_save_non_existing_job(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+    ) -> None:
+        headers = jobs_client.headers
+        job_id = f"job-{uuid4()}"
+
+        url = monitoring_api.generate_save_url(job_id=job_id)
+        async with client.post(url, headers=headers) as resp:
+            assert resp.status == HTTPBadRequest.status_code, await resp.text()
+            assert "no such job" in await resp.text()
+
+    @pytest.mark.asyncio
+    async def test_save_unknown_registry_host(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        infinite_job: str,
+    ) -> None:
+        url = monitoring_api.generate_save_url(job_id=infinite_job)
+        headers = jobs_client.headers
+        payload = {"container": {"image": "unknown:5000/alpine:latest"}}
+        async with client.post(url, headers=headers, json=payload) as resp:
+            assert resp.status == HTTPBadRequest.status_code, await resp.text()
+            resp_payload = await resp.json()
+            assert "Unknown registry host" in resp_payload["error"]
+
+    @pytest.mark.asyncio
+    async def test_save_not_running_job(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        infinite_job: str,
+        config: Config,
+    ) -> None:
+        await jobs_client.delete_job(infinite_job)
+
+        url = monitoring_api.generate_save_url(job_id=infinite_job)
+        headers = jobs_client.headers
+        payload = {
+            "container": {"image": f"{config.registry.host}/alpine:{infinite_job}"}
+        }
+        async with client.post(url, headers=headers, json=payload) as resp:
+            assert resp.status == HTTPInternalServerError.status_code, await resp.text()
+            resp_payload = await resp.json()
+            assert "not running" in resp_payload["error"]
+
+    @pytest.mark.asyncio
+    async def test_save(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        infinite_job: str,
+        config: Config,
+    ) -> None:
+        await jobs_client.long_polling_by_job_id(job_id=infinite_job, status="running")
+
+        url = monitoring_api.generate_save_url(job_id=infinite_job)
+        headers = jobs_client.headers
+        payload = {
+            "container": {"image": f"{config.registry.host}/alpine:{infinite_job}"}
+        }
+        async with client.post(url, headers=headers, json=payload) as resp:
+            assert resp.status == HTTPCreated.status_code, await resp.text()

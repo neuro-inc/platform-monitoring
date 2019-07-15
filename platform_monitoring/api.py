@@ -6,9 +6,16 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Dict
 
 import aiohttp
 import aiohttp.web
+import trafaret as t
 from aioelasticsearch import Elasticsearch
-from aiohttp.abc import StreamResponse
-from aiohttp.web import Request, Response
+from aiohttp.web import (
+    HTTPBadRequest,
+    HTTPCreated,
+    HTTPInternalServerError,
+    Request,
+    Response,
+    StreamResponse,
+)
 from aiohttp.web_middlewares import middleware
 from aiohttp.web_response import json_response
 from aiohttp_security import check_authorized, check_permission
@@ -32,6 +39,7 @@ from .config import (
     PlatformAuthConfig,
 )
 from .config_factory import EnvironConfigFactory
+from .jobs_service import Container, ImageReference, JobException, JobsService
 from .kube_client import KubeClient, KubeTelemetry
 from .utils import JobsHelper, KubeHelper, LogReaderFactory
 
@@ -70,15 +78,26 @@ class MonitoringApiHandler:
         self._jobs_helper = JobsHelper()
         self._kube_helper = KubeHelper()
 
+        self._save_request_payload_validator = t.Dict(
+            {"container": t.Dict({"image": t.String >> ImageReference.parse})}
+        )
+
     def register(self, app: aiohttp.web.Application) -> None:
         app.add_routes(
             [
                 aiohttp.web.get("/{job_id}/log", self.stream_log),
                 aiohttp.web.get("/{job_id}/top", self.stream_top),
+                aiohttp.web.post("/{job_id}/save", self.save),
             ]
         )
 
-    # TODO (A Yushkovskiy 07-Jun-2019) Add `MonitoringService` to hide internals there
+    @property
+    def _config(self) -> Config:
+        return self._app["config"]
+
+    @property
+    def _jobs_service(self) -> JobsService:
+        return self._app["jobs_service"]
 
     @property
     def _platform_client(self) -> PlatformApiClient:
@@ -181,7 +200,7 @@ class MonitoringApiHandler:
         return ws
 
     async def _get_job(self, job_id: str) -> Job:
-        return await self._platform_client.jobs.status(job_id)
+        return await self._jobs_service.get(job_id)
 
     async def _get_job_telemetry(self, job: Job) -> Telemetry:
         pod_name = self._kube_helper.get_job_pod_name(job)
@@ -204,6 +223,33 @@ class MonitoringApiHandler:
             message["gpu_memory"] = job_stats.gpu_memory
         return message
 
+    async def save(self, request: Request) -> StreamResponse:
+        user = await untrusted_user(request)
+        job_id = request.match_info["job_id"]
+        job = await self._get_job(job_id)
+        permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="write")
+        logger.info("Checking whether %r has %r", user, permission)
+        await check_permission(request, permission.action, [permission])
+
+        container = await self._parse_save_container(request)
+        try:
+            await self._jobs_service.save(job, user, container)
+        except JobException as exc:
+            return json_response(
+                {"error": str(exc)}, status=HTTPInternalServerError.status_code
+            )
+        return Response(status=HTTPCreated.status_code)
+
+    async def _parse_save_container(self, request: Request) -> Container:
+        payload = await request.json()
+        payload = self._save_request_payload_validator.check(payload)
+
+        image = payload["container"]["image"]
+        if image.domain != self._config.registry.host:
+            raise ValueError("Unknown registry host")
+
+        return Container(image=image)
+
 
 @middleware
 async def handle_exceptions(
@@ -213,7 +259,7 @@ async def handle_exceptions(
         return await handler(request)
     except ValueError as e:
         payload = {"error": str(e)}
-        return json_response(payload, status=aiohttp.web.HTTPBadRequest.status_code)
+        return json_response(payload, status=HTTPBadRequest.status_code)
     except aiohttp.web.HTTPException:
         raise
     except Exception as e:
@@ -222,9 +268,7 @@ async def handle_exceptions(
         )
         logging.exception(msg_str)
         payload = {"error": msg_str}
-        return json_response(
-            payload, status=aiohttp.web.HTTPInternalServerError.status_code
-        )
+        return json_response(payload, status=HTTPInternalServerError.status_code)
 
 
 async def create_api_v1_app() -> aiohttp.web.Application:  # pragma: no coverage
@@ -300,6 +344,8 @@ async def create_app(config: Config) -> aiohttp.web.Application:
 
     async def _init_app(app: aiohttp.web.Application) -> AsyncIterator[None]:
         async with AsyncExitStack() as exit_stack:
+            app["monitoring_app"]["config"] = config
+
             logger.info("Initializing Platform API client")
             platform_client = await exit_stack.enter_async_context(
                 create_platform_api_client(config.platform_api)
@@ -329,6 +375,10 @@ async def create_app(config: Config) -> aiohttp.web.Application:
 
             log_reader_factory = LogReaderFactory(kube_client, es_client)
             app["monitoring_app"]["log_reader_factory"] = log_reader_factory
+
+            app["monitoring_app"]["jobs_service"] = JobsService(
+                jobs_client=platform_client.jobs, kube_client=kube_client
+            )
 
             yield
 
