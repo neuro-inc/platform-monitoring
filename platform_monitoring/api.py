@@ -100,10 +100,6 @@ class MonitoringApiHandler:
         return self._app["jobs_service"]
 
     @property
-    def _auth_client(self) -> AuthClient:
-        return self._app["auth_client"]
-
-    @property
     def _kube_client(self) -> KubeClient:
         return self._app["kube_client"]
 
@@ -351,7 +347,6 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             auth_client = await exit_stack.enter_async_context(
                 create_auth_client(config.platform_auth)
             )
-            app["monitoring_app"]["auth_client"] = auth_client
 
             await setup_security(
                 app=app, auth_client=auth_client, auth_scheme=AuthScheme.BEARER
