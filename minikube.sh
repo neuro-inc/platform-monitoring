@@ -12,7 +12,11 @@ function minikube::start {
     mkdir -p ~/.minikube/files/files
     cp tests/k8s/fluentd/kubernetes.conf ~/.minikube/files/files/fluentd-kubernetes.conf
     minikube start --kubernetes-version=v1.10.0
+    minikube addons enable registry
     kubectl config use-context minikube
+    # NOTE: registry-proxy is a part of the registry addon in newer versions of
+    # minikube
+    kubectl apply -f tests/k8s/registry.yml
 }
 
 function save_k8s_image {
@@ -41,6 +45,7 @@ function minikube::load_images {
 function minikube::apply_all_configurations {
     echo "Applying configurations..."
     kubectl config use-context minikube
+    kubectl apply -f deploy/platformmonitoringapi/templates/dockerengineapi.yml 
     kubectl apply -f tests/k8s/rb.default.gke.yml
     kubectl apply -f tests/k8s/logging.yml
     kubectl apply -f tests/k8s/platformconfig.yml
@@ -50,6 +55,7 @@ function minikube::apply_all_configurations {
 function minikube::delete_all_configurations {
     echo "Cleaning up..."
     kubectl config use-context minikube
+    kubectl delete -f deploy/platformmonitoringapi/templates/dockerengineapi.yml 
     kubectl delete -f tests/k8s/rb.default.gke.yml
     kubectl delete -f tests/k8s/logging.yml
     kubectl delete -f tests/k8s/platformconfig.yml
