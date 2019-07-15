@@ -6,7 +6,6 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Dict
 
 import aiohttp
 import aiohttp.web
-import trafaret as t
 from aioelasticsearch import Elasticsearch
 from aiohttp.web import (
     HTTPBadRequest,
@@ -39,9 +38,10 @@ from .config import (
     PlatformAuthConfig,
 )
 from .config_factory import EnvironConfigFactory
-from .jobs_service import Container, ImageReference, JobException, JobsService
+from .jobs_service import Container, JobException, JobsService
 from .kube_client import KubeClient, KubeTelemetry
 from .utils import JobsHelper, KubeHelper, LogReaderFactory
+from .validators import create_save_request_payload_validator
 
 
 logger = logging.getLogger(__name__)
@@ -73,13 +73,14 @@ class ApiHandler:
 
 
 class MonitoringApiHandler:
-    def __init__(self, app: aiohttp.web.Application) -> None:
+    def __init__(self, app: aiohttp.web.Application, config: Config) -> None:
         self._app = app
+        self._config = config
         self._jobs_helper = JobsHelper()
         self._kube_helper = KubeHelper()
 
-        self._save_request_payload_validator = t.Dict(
-            {"container": t.Dict({"image": t.String >> ImageReference.parse})}
+        self._save_request_payload_validator = create_save_request_payload_validator(
+            config.registry.host
         )
 
     def register(self, app: aiohttp.web.Application) -> None:
@@ -90,10 +91,6 @@ class MonitoringApiHandler:
                 aiohttp.web.post("/{job_id}/save", self.save),
             ]
         )
-
-    @property
-    def _config(self) -> Config:
-        return self._app["config"]
 
     @property
     def _jobs_service(self) -> JobsService:
@@ -263,16 +260,16 @@ async def handle_exceptions(
         return json_response(payload, status=HTTPInternalServerError.status_code)
 
 
-async def create_api_v1_app() -> aiohttp.web.Application:  # pragma: no coverage
+async def create_api_v1_app() -> aiohttp.web.Application:
     api_v1_app = aiohttp.web.Application()
     api_v1_handler = ApiHandler()
     api_v1_handler.register(api_v1_app)
     return api_v1_app
 
 
-async def create_monitoring_app() -> aiohttp.web.Application:  # pragma: no coverage
+async def create_monitoring_app(config: Config) -> aiohttp.web.Application:
     monitoring_app = aiohttp.web.Application()
-    notifications_handler = MonitoringApiHandler(monitoring_app)
+    notifications_handler = MonitoringApiHandler(monitoring_app, config)
     notifications_handler.register(monitoring_app)
     return monitoring_app
 
@@ -336,8 +333,6 @@ async def create_app(config: Config) -> aiohttp.web.Application:
 
     async def _init_app(app: aiohttp.web.Application) -> AsyncIterator[None]:
         async with AsyncExitStack() as exit_stack:
-            app["monitoring_app"]["config"] = config
-
             logger.info("Initializing Platform API client")
             platform_client = await exit_stack.enter_async_context(
                 create_platform_api_client(config.platform_api)
@@ -377,7 +372,7 @@ async def create_app(config: Config) -> aiohttp.web.Application:
     api_v1_app = await create_api_v1_app()
     app["api_v1_app"] = api_v1_app
 
-    monitoring_app = await create_monitoring_app()
+    monitoring_app = await create_monitoring_app(config)
     app["monitoring_app"] = monitoring_app
     api_v1_app.add_subapp("/jobs", monitoring_app)
 
