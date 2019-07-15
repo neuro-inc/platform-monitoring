@@ -9,6 +9,7 @@ from platform_monitoring.config import (
     KubeConfig,
     PlatformApiConfig,
     PlatformAuthConfig,
+    RegistryConfig,
     ServerConfig,
 )
 from platform_monitoring.config_factory import EnvironConfigFactory
@@ -54,6 +55,7 @@ def test_create(cert_authority_path: str, token_path: str) -> None:
         "NP_MONITORING_K8S_CLIENT_CONN_TIMEOUT": "111",
         "NP_MONITORING_K8S_CLIENT_READ_TIMEOUT": "222",
         "NP_MONITORING_K8S_CLIENT_CONN_POOL_SIZE": "333",
+        "NP_MONITORING_REGISTRY_URL": "http://testhost:5000",
     }
     config = EnvironConfigFactory(environ).create()
     assert config == Config(
@@ -77,4 +79,18 @@ def test_create(cert_authority_path: str, token_path: str) -> None:
             client_read_timeout_s=222,
             client_conn_pool_size=333,
         ),
+        registry=RegistryConfig(url=URL("http://testhost:5000")),
     )
+
+
+@pytest.mark.parametrize(
+    "url, expected_host",
+    (
+        (URL("https://testdomain.com"), "testdomain.com"),
+        (URL("https://testdomain.com:443"), "testdomain.com:443"),
+        (URL("http://localhost:5000"), "localhost:5000"),
+    ),
+)
+def test_registry_config_host(url: URL, expected_host: str) -> None:
+    config = RegistryConfig(url)
+    assert config.host == expected_host
