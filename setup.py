@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 install_requires = (
     "aiohttp==3.5.4",
     'dataclasses==0.6; python_version<"3.7"',
-    "yarl>=1.3.0",
+    "yarl==1.3.0",
     "neuro_auth_client==1.0.6",
     "neuromation==19.7.4",
     "async-exit-stack==1.0.1",  # backport from 3.7 stdlib
