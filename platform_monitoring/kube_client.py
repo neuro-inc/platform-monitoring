@@ -352,7 +352,7 @@ class StatsSummary:
     def _find_pod_in_stats_summary(
         self, stats_summary: Dict[str, Any], namespace_name: str, name: str
     ) -> Dict[str, Any]:
-        for pod_stats in stats_summary["pods"]:
+        for pod_stats in stats_summary.get("pods", []):
             ref = pod_stats["podRef"]
             if ref["namespace"] == namespace_name and ref["name"] == name:
                 return pod_stats

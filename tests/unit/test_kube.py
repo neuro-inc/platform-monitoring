@@ -105,6 +105,22 @@ class TestPodContainerStats:
 
 
 class TestStatsSummary:
+    def test_get_pod_container_stats_error_response(self) -> None:
+        payload: Dict[str, Any] = {
+            "kind": "Status",
+            "apiVersion": "v1",
+            "metadata": {},
+            "status": "Failure",
+            "message": "message",
+            "reason": "Forbidden",
+            "details": {"name": "default-pool", "kind": "nodes"},
+            "code": 403,
+        }
+        stats = StatsSummary(payload).get_pod_container_stats(
+            "namespace", "pod", "container"
+        )
+        assert stats is None
+
     def test_get_pod_container_stats_no_pod(self) -> None:
         payload: Dict[str, Any] = {"pods": []}
         stats = StatsSummary(payload).get_pod_container_stats(
