@@ -3,7 +3,12 @@ from unittest import mock
 
 import aiohttp
 import pytest
-from platform_monitoring.kube_client import Pod, PodContainerStats, StatsSummary
+from platform_monitoring.kube_client import (
+    JobError,
+    Pod,
+    PodContainerStats,
+    StatsSummary,
+)
 from platform_monitoring.logs import FilteredStreamWrapper
 
 
@@ -116,10 +121,8 @@ class TestStatsSummary:
             "details": {"name": "default-pool", "kind": "nodes"},
             "code": 403,
         }
-        stats = StatsSummary(payload).get_pod_container_stats(
-            "namespace", "pod", "container"
-        )
-        assert stats is None
+        with pytest.raises(JobError, match="Invalid stats summary response"):
+            StatsSummary(payload)
 
     def test_get_pod_container_stats_no_pod(self) -> None:
         payload: Dict[str, Any] = {"pods": []}

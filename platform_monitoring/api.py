@@ -2,7 +2,7 @@ import asyncio
 import logging
 from pathlib import Path
 from tempfile import mktemp
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Union
 
 import aiohttp
 import aiohttp.web
@@ -17,6 +17,7 @@ from aiohttp.web import (
 )
 from aiohttp.web_middlewares import middleware
 from aiohttp.web_response import json_response
+from aiohttp.web_ws import WebSocketResponse
 from aiohttp_security import check_authorized, check_permission
 from async_exit_stack import AsyncExitStack
 from async_generator import asynccontextmanager
@@ -39,7 +40,7 @@ from .config import (
 )
 from .config_factory import EnvironConfigFactory
 from .jobs_service import Container, JobException, JobsService
-from .kube_client import KubeClient, KubeTelemetry
+from .kube_client import JobError, KubeClient, KubeTelemetry
 from .utils import JobsHelper, KubeHelper, LogReaderFactory
 from .validators import create_save_request_payload_validator
 
@@ -136,7 +137,7 @@ class MonitoringApiHandler:
         await response.write_eof()
         return response
 
-    async def stream_top(self, request: Request) -> aiohttp.web.WebSocketResponse:
+    async def stream_top(self, request: Request) -> Union[WebSocketResponse, Response]:
         user = await untrusted_user(request)
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
@@ -145,7 +146,7 @@ class MonitoringApiHandler:
         await check_permission(request, permission.action, [permission])
 
         logger.info("Websocket connection starting")
-        ws = aiohttp.web.WebSocketResponse()
+        ws = WebSocketResponse()
         await ws.prepare(request)
         logger.info("Websocket connection ready")
 
@@ -178,13 +179,22 @@ class MonitoringApiHandler:
                             await ws.send_json(message)
 
                     if self._jobs_helper.is_job_finished(job):
-                        await ws.close()
                         break
 
                     await asyncio.sleep(sleep_timeout)
 
+            except JobError as exc:
+                return json_response(
+                    {"error": f"Failed to get telemetry for job {job.id}: {exc}"},
+                    status=HTTPInternalServerError.status_code,
+                )
+
             except asyncio.CancelledError as ex:
                 logger.info(f"got cancelled error {ex}")
+
+            finally:
+                if not ws.closed:
+                    await ws.close()
 
         return ws
 
