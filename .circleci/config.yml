@@ -143,7 +143,12 @@ workflows:
     jobs:
       - test:
           context: org-dev
-
+          filters:
+            branches:
+              ignore:
+                - master
+                - /release.*/
+                 
   dev:
     jobs:
       - test:
