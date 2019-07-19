@@ -259,6 +259,7 @@ class KubeClient:
         url = self._generate_node_stats_summary_url(pod.node_name)
         try:
             payload = await self._request(method="GET", url=url)
+            self._assert_stats_summary_is_valid(payload)
             summary = StatsSummary(payload)
             return summary.get_pod_container_stats(
                 self._namespace, pod_name, container_name
@@ -352,7 +353,7 @@ class StatsSummary:
     def _find_pod_in_stats_summary(
         self, stats_summary: Dict[str, Any], namespace_name: str, name: str
     ) -> Dict[str, Any]:
-        for pod_stats in stats_summary.get("pods", []):
+        for pod_stats in stats_summary["pods"]:
             ref = pod_stats["podRef"]
             if ref["namespace"] == namespace_name and ref["name"] == name:
                 return pod_stats
