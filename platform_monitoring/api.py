@@ -2,7 +2,7 @@ import asyncio
 import logging
 from pathlib import Path
 from tempfile import mktemp
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Union
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict
 
 import aiohttp
 import aiohttp.web
@@ -17,7 +17,6 @@ from aiohttp.web import (
 )
 from aiohttp.web_middlewares import middleware
 from aiohttp.web_response import json_response
-from aiohttp.web_ws import WebSocketResponse
 from aiohttp_security import check_authorized, check_permission
 from async_exit_stack import AsyncExitStack
 from async_generator import asynccontextmanager
@@ -137,7 +136,7 @@ class MonitoringApiHandler:
         await response.write_eof()
         return response
 
-    async def stream_top(self, request: Request) -> Union[WebSocketResponse, Response]:
+    async def stream_top(self, request: Request) -> aiohttp.web.WebSocketResponse:
         user = await untrusted_user(request)
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
@@ -146,7 +145,7 @@ class MonitoringApiHandler:
         await check_permission(request, permission.action, [permission])
 
         logger.info("Websocket connection starting")
-        ws = WebSocketResponse()
+        ws = aiohttp.web.WebSocketResponse()
         await ws.prepare(request)
         logger.info("Websocket connection ready")
 
