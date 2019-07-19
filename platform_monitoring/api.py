@@ -183,11 +183,8 @@ class MonitoringApiHandler:
 
                     await asyncio.sleep(sleep_timeout)
 
-            except JobError as exc:
-                return json_response(
-                    {"error": f"Failed to get telemetry for job {job.id}: {exc}"},
-                    status=HTTPInternalServerError.status_code,
-                )
+            except JobError as e:
+                raise JobError(f"Failed to get telemetry for job {job.id}: {e}") from e
 
             except asyncio.CancelledError as ex:
                 logger.info(f"got cancelled error {ex}")
