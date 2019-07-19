@@ -148,6 +148,7 @@ workflows:
               ignore:
                 - master
                 - /release.*/
+                - /artifactory.*/
                  
   dev:
     jobs:
