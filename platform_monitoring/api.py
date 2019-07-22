@@ -39,7 +39,7 @@ from .config import (
 )
 from .config_factory import EnvironConfigFactory
 from .jobs_service import Container, JobException, JobsService
-from .kube_client import KubeClient, KubeTelemetry
+from .kube_client import JobError, KubeClient, KubeTelemetry
 from .utils import JobsHelper, KubeHelper, LogReaderFactory
 from .validators import create_save_request_payload_validator
 
@@ -178,13 +178,19 @@ class MonitoringApiHandler:
                             await ws.send_json(message)
 
                     if self._jobs_helper.is_job_finished(job):
-                        await ws.close()
                         break
 
                     await asyncio.sleep(sleep_timeout)
 
+            except JobError as e:
+                raise JobError(f"Failed to get telemetry for job {job.id}: {e}") from e
+
             except asyncio.CancelledError as ex:
                 logger.info(f"got cancelled error {ex}")
+
+            finally:
+                if not ws.closed:
+                    await ws.close()
 
         return ws
 

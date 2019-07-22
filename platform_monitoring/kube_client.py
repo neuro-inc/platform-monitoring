@@ -347,7 +347,14 @@ class PodContainerStats:
 
 class StatsSummary:
     def __init__(self, payload: Dict[str, Any]) -> None:
+        self._validate_payload(payload)
         self._payload = payload
+
+    def _validate_payload(self, payload: Dict[str, Any]) -> None:
+        if "pods" not in payload:
+            err_msg = "Invalid stats summary response"
+            logging.error(err_msg + f": `{payload}`")
+            raise JobError(err_msg)
 
     def _find_pod_in_stats_summary(
         self, stats_summary: Dict[str, Any], namespace_name: str, name: str
