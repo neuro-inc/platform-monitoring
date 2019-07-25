@@ -228,7 +228,8 @@ class MonitoringApiHandler:
 
         container = await self._parse_save_container(request)
         try:
-            await self._jobs_service.save(job, user, container)
+            async for chunk in self._jobs_service.save(job, user, container):
+                pass
         except JobException as exc:
             return json_response(
                 {"error": str(exc)}, status=HTTPInternalServerError.status_code
@@ -368,7 +369,9 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             app["monitoring_app"]["log_reader_factory"] = log_reader_factory
 
             app["monitoring_app"]["jobs_service"] = JobsService(
-                jobs_client=platform_client.jobs, kube_client=kube_client
+                jobs_client=platform_client.jobs,
+                kube_client=kube_client,
+                docker_config=config.docker,
             )
 
             yield

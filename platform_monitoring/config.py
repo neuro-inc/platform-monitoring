@@ -61,10 +61,16 @@ class RegistryConfig:
 
 
 @dataclass(frozen=True)
+class DockerConfig:
+    docker_engine_api_port: int = 2375
+
+
+@dataclass(frozen=True)
 class Config:
     server: ServerConfig
     platform_api: PlatformApiConfig
     platform_auth: PlatformAuthConfig
     elasticsearch: ElasticsearchConfig
     kube: KubeConfig
+    docker: DockerConfig
     registry: RegistryConfig

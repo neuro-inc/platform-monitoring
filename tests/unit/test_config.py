@@ -4,6 +4,7 @@ from typing import Any, Dict
 import pytest
 from platform_monitoring.config import (
     Config,
+    DockerConfig,
     ElasticsearchConfig,
     KubeClientAuthType,
     KubeConfig,
@@ -80,6 +81,7 @@ def test_create(cert_authority_path: str, token_path: str) -> None:
             client_conn_pool_size=333,
         ),
         registry=RegistryConfig(url=URL("http://testhost:5000")),
+        docker=DockerConfig(),
     )
 
 

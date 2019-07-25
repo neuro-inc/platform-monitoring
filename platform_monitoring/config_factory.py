@@ -7,6 +7,7 @@ from yarl import URL
 
 from .config import (
     Config,
+    DockerConfig,
     ElasticsearchConfig,
     KubeClientAuthType,
     KubeConfig,
@@ -32,6 +33,7 @@ class EnvironConfigFactory:
             elasticsearch=self._create_elasticsearch(),
             kube=self._create_kube(),
             registry=self._create_registry(),
+            docker=self._create_docker(),
         )
 
     def _create_server(self) -> ServerConfig:
@@ -90,3 +92,6 @@ class EnvironConfigFactory:
 
     def _create_registry(self) -> RegistryConfig:
         return RegistryConfig(url=URL(self._environ["NP_MONITORING_REGISTRY_URL"]))
+
+    def _create_docker(self) -> DockerConfig:
+        return DockerConfig()

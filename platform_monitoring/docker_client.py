@@ -1,8 +1,7 @@
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any
 
 from aiodocker import Docker as AioDocker
-from aiodocker.exceptions import DockerError
 from aiodocker.images import DockerImages as AioDockerImages
 from docker_image.reference import (
     InvalidReference as _InvalidImageReference,
@@ -28,17 +27,6 @@ class Docker(AioDocker):
         super().__init__(*args, **kwargs)
 
         self.images = DockerImages(self)
-
-
-def check_docker_push_suceeded(
-    repo: str, tag: str, payload: List[Dict[str, Any]]
-) -> None:
-    for item in payload:
-        error = item.get("error")
-        if error:
-            raise DockerError(
-                500, dict(message=f"Failed to push image '{repo}:{tag}': {error}")
-            )
 
 
 class ImageReferenceError(ValueError):

@@ -20,7 +20,7 @@ from aiohttp.web_exceptions import (
     HTTPUnauthorized,
 )
 from platform_monitoring.api import create_app
-from platform_monitoring.config import Config, PlatformApiConfig
+from platform_monitoring.config import Config, DockerConfig, PlatformApiConfig
 from yarl import URL
 
 from .conftest import ApiAddress, create_local_app_server
@@ -592,7 +592,7 @@ class TestSaveApi:
 
         url = monitoring_api.generate_save_url(job_id=job_id)
         async with client.post(url, headers=headers) as resp:
-            assert resp.status == HTTPBadRequest.status_code, await resp.text()
+            assert resp.status == HTTPBadRequest.status_code, str(resp)
             assert "no such job" in await resp.text()
 
     @pytest.mark.asyncio
@@ -608,7 +608,7 @@ class TestSaveApi:
         headers = jobs_client.headers
         payload = {"container": {"image": "unknown:5000/ubuntu:latest"}}
         async with client.post(url, headers=headers, json=payload) as resp:
-            assert resp.status == HTTPBadRequest.status_code, await resp.text()
+            assert resp.status == HTTPBadRequest.status_code, str(resp)
             resp_payload = await resp.json()
             assert "Unknown registry host" in resp_payload["error"]
 
@@ -630,12 +630,39 @@ class TestSaveApi:
             "container": {"image": f"{config.registry.host}/ubuntu:{infinite_job}"}
         }
         async with client.post(url, headers=headers, json=payload) as resp:
-            assert resp.status == HTTPInternalServerError.status_code, await resp.text()
+            assert resp.status == HTTPInternalServerError.status_code, str(resp)
             resp_payload = await resp.json()
             assert "not running" in resp_payload["error"]
 
     @pytest.mark.asyncio
-    async def test_save(
+    async def test_save_push_failed_job_exception_raised(
+        self,
+        config_factory: Callable[..., Config],
+        platform_api: PlatformApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        infinite_job: str,
+    ) -> None:
+        invalid_docker_config = DockerConfig(docker_engine_api_port=1)
+        config = config_factory(docker=invalid_docker_config)
+
+        app = await create_app(config)
+        async with create_local_app_server(app, port=8080) as address:
+            monitoring_api = MonitoringApiEndpoints(address=address)
+            url = monitoring_api.generate_save_url(job_id=infinite_job)
+
+            await jobs_client.long_polling_by_job_id(infinite_job, status="running")
+
+            headers = jobs_client.headers
+            image = f"{config.registry.host}/ubuntu:{infinite_job}"
+            payload = {"container": {"image": image}}
+            async with client.post(url, headers=headers, json=payload) as resp:
+                assert resp.status == HTTPInternalServerError.status_code, str(resp)
+                body = await resp.json()
+                assert "getsockopt: connection refused" in body["error"]
+
+    @pytest.mark.asyncio
+    async def test_save_ok(
         self,
         platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
@@ -652,4 +679,4 @@ class TestSaveApi:
             "container": {"image": f"{config.registry.host}/ubuntu:{infinite_job}"}
         }
         async with client.post(url, headers=headers, json=payload) as resp:
-            assert resp.status == HTTPCreated.status_code, await resp.text()
+            assert resp.status == HTTPCreated.status_code, str(resp)
