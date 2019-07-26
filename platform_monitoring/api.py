@@ -227,35 +227,35 @@ class MonitoringApiHandler:
         await check_permission(request, permission.action, [permission])
 
         container = await self._parse_save_container(request)
+
+        # Following docker engine API, the response should conform ndjson
+        # see https://github.com/ndjson/ndjson-spec
         encoding = "utf-8"
-        response = await self._create_stream_response(
-            request, content_type="application/x-ndjson", encoding=encoding
-        )
+        response = StreamResponse(status=200)
+        response.enable_compression(aiohttp.web.ContentCoding.identity)
+        response.content_type = "application/x-ndjson"
+        response.charset = encoding
+        await response.prepare(request)
+
         try:
             async for chunk in self._jobs_service.save(job, user, container):
                 await response.write(self._serialize_chunk(chunk, encoding))
         except JobException as e:
             chunk = {"error": str(e)}
             await response.write(self._serialize_chunk(chunk, encoding))
+        except Exception as e:
+            # middleware don't work for prepared StreamResponse, so we need to
+            # catch a general exception and send it as a chunk
+            msg_str = f"Unexpected error: {e}"
+            logging.exception(msg_str)
+            chunk = {"error": msg_str}
+            await response.write(self._serialize_chunk(chunk, encoding))
         finally:
-            await response.write_eof()
             return response
 
     def _serialize_chunk(self, chunk: Dict[str, Any], encoding: str = "utf-8") -> bytes:
         chunk_str = json.dumps(chunk) + "\r\n"
         return chunk_str.encode(encoding)
-
-    async def _create_stream_response(
-        self, request: Request, content_type: str, encoding: str = "utf-8"
-    ):
-        # Following docker engine API, the response should conform ndjson
-        # see https://github.com/ndjson/ndjson-spec
-        response = StreamResponse(status=200)
-        response.enable_compression(aiohttp.web.ContentCoding.identity)
-        response.content_type = content_type
-        response.charset = encoding
-        await response.prepare(request)
-        return response
 
     async def _parse_save_container(self, request: Request) -> Container:
         payload = await request.json()

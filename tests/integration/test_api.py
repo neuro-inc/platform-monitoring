@@ -604,7 +604,7 @@ class TestSaveApi:
     ) -> None:
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
-        payload = {"container": {"image": "unknown:5000/ubuntu:latest"}}
+        payload = {"container": {"image": "unknown:5000/alpine:latest"}}
         async with client.post(url, headers=headers, json=payload) as resp:
             assert resp.status == HTTPBadRequest.status_code, str(resp)
             resp_payload = await resp.json()
@@ -625,7 +625,7 @@ class TestSaveApi:
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
         payload = {
-            "container": {"image": f"{config.registry.host}/ubuntu:{infinite_job}"}
+            "container": {"image": f"{config.registry.host}/alpine:{infinite_job}"}
         }
         async with client.post(url, headers=headers, json=payload) as resp:
             assert resp.status == HTTPOk.status_code, str(resp)
@@ -657,7 +657,7 @@ class TestSaveApi:
             await jobs_client.long_polling_by_job_id(infinite_job, status="running")
 
             headers = jobs_client.headers
-            image = f"{config.registry.host}/ubuntu:{infinite_job}"
+            image = f"{config.registry.host}/alpine:{infinite_job}"
             payload = {"container": {"image": image}}
             async with client.post(url, headers=headers, json=payload) as resp:
                 assert resp.status == HTTPOk.status_code, str(resp)
@@ -690,24 +690,33 @@ class TestSaveApi:
 
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
-        image = f"{config.registry.host}/ubuntu:{infinite_job}"
+        image = f"{config.registry.host}/alpine:{infinite_job}"
         payload = {"container": {"image": image}}
-        async with client.post(url, headers=headers, json=payload) as resp:
-            assert resp.status == HTTPOk.status_code, str(resp)
-            chunks = [
-                json.loads(chunk, encoding="utf-8")
-                async for chunk in resp.content
-                if chunk
-            ]
 
-            assert isinstance(chunks, list), type(chunks)
-            assert all(isinstance(s, dict) for s in chunks)
-            assert len(chunks) >= 4  # 2 for commit(), >=2 for push()
+        NUM_RETRIES = 3
+        error_msg = f"Could do docker-commit and docker-push in {NUM_RETRIES} attempts"
+        for retry in range(NUM_RETRIES):
+            try:
+                async with client.post(url, headers=headers, json=payload) as resp:
+                    assert resp.status == HTTPOk.status_code, str(resp)
+                    chunks = [
+                        json.loads(chunk, encoding="utf-8")
+                        async for chunk in resp.content
+                        if chunk
+                    ]
+                    msg = f"Received chunks: `{chunks}`"
+                    assert isinstance(chunks, list), msg
+                    assert all(isinstance(s, dict) for s in chunks), msg
+                    assert len(chunks) >= 4, msg  # 2 for commit(), >=2 for push()
 
-            # here we rely on chunks to be received in correct order:
-            assert f"Committing image {image}" in chunks[0]["status"], str(chunks)
-            assert chunks[1]["status"] == "Committed", str(chunks)
-            assert chunks[2]["status"] == (
-                f"The push refers to repository [{config.registry.host}/ubuntu]"
-            ), str(chunks)
-            assert chunks[-1]["aux"]["Tag"] == infinite_job, str(chunks)
+                    # here we rely on chunks to be received in correct order:
+                    assert f"Committing image {image}" in chunks[0].get("status"), msg
+                    assert chunks[1].get("status") == "Committed", msg
+                    assert chunks[2].get("status") == (
+                        f"The push refers to repository [{config.registry.host}/alpine]"
+                    ), msg
+                    assert chunks[-1].get("aux", {}).get("Tag") == infinite_job, msg
+                    return
+            except AssertionError:
+                print(f"{error_msg}. Retrying...")
+        pytest.fail(error_msg)
