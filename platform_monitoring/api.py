@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from pathlib import Path
 from tempfile import mktemp
@@ -9,7 +10,6 @@ import aiohttp.web
 from aioelasticsearch import Elasticsearch
 from aiohttp.web import (
     HTTPBadRequest,
-    HTTPCreated,
     HTTPInternalServerError,
     Request,
     Response,
@@ -88,7 +88,7 @@ class MonitoringApiHandler:
             [
                 aiohttp.web.get("/{job_id}/log", self.stream_log),
                 aiohttp.web.get("/{job_id}/top", self.stream_top),
-                aiohttp.web.post("/{job_id}/save", self.save),
+                aiohttp.web.post("/{job_id}/save", self.stream_save),
             ]
         )
 
@@ -218,7 +218,7 @@ class MonitoringApiHandler:
             message["gpu_memory"] = job_stats.gpu_memory
         return message
 
-    async def save(self, request: Request) -> StreamResponse:
+    async def stream_save(self, request: Request) -> StreamResponse:
         user = await untrusted_user(request)
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
@@ -227,14 +227,35 @@ class MonitoringApiHandler:
         await check_permission(request, permission.action, [permission])
 
         container = await self._parse_save_container(request)
+        encoding = "utf-8"
+        response = await self._create_stream_response(
+            request, content_type="application/x-ndjson", encoding=encoding
+        )
         try:
             async for chunk in self._jobs_service.save(job, user, container):
-                pass
-        except JobException as exc:
-            return json_response(
-                {"error": str(exc)}, status=HTTPInternalServerError.status_code
-            )
-        return Response(status=HTTPCreated.status_code)
+                await response.write(self._serialize_chunk(chunk, encoding))
+        except JobException as e:
+            chunk = {"error": str(e)}
+            await response.write(self._serialize_chunk(chunk, encoding))
+        finally:
+            await response.write_eof()
+            return response
+
+    def _serialize_chunk(self, chunk: Dict[str, Any], encoding: str = "utf-8") -> bytes:
+        chunk_str = json.dumps(chunk) + "\r\n"
+        return chunk_str.encode(encoding)
+
+    async def _create_stream_response(
+        self, request: Request, content_type: str, encoding: str = "utf-8"
+    ):
+        # Following docker engine API, the response should conform ndjson
+        # see https://github.com/ndjson/ndjson-spec
+        response = StreamResponse(status=200)
+        response.enable_compression(aiohttp.web.ContentCoding.identity)
+        response.content_type = content_type
+        response.charset = encoding
+        await response.prepare(request)
+        return response
 
     async def _parse_save_container(self, request: Request) -> Container:
         payload = await request.json()

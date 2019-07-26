@@ -13,9 +13,7 @@ from aiohttp.web import HTTPOk
 from aiohttp.web_exceptions import (
     HTTPAccepted,
     HTTPBadRequest,
-    HTTPCreated,
     HTTPForbidden,
-    HTTPInternalServerError,
     HTTPNoContent,
     HTTPUnauthorized,
 )
@@ -630,9 +628,14 @@ class TestSaveApi:
             "container": {"image": f"{config.registry.host}/ubuntu:{infinite_job}"}
         }
         async with client.post(url, headers=headers, json=payload) as resp:
-            assert resp.status == HTTPInternalServerError.status_code, str(resp)
-            resp_payload = await resp.json()
-            assert "not running" in resp_payload["error"]
+            assert resp.status == HTTPOk.status_code, str(resp)
+            chunks = [
+                json.loads(chunk, encoding="utf-8")
+                async for chunk in resp.content
+                if chunk
+            ]
+            assert len(chunks) == 1
+            assert "not running" in chunks[0]["error"]
 
     @pytest.mark.asyncio
     async def test_save_push_failed_job_exception_raised(
@@ -657,9 +660,21 @@ class TestSaveApi:
             image = f"{config.registry.host}/ubuntu:{infinite_job}"
             payload = {"container": {"image": image}}
             async with client.post(url, headers=headers, json=payload) as resp:
-                assert resp.status == HTTPInternalServerError.status_code, str(resp)
-                body = await resp.json()
-                assert "getsockopt: connection refused" in body["error"]
+                assert resp.status == HTTPOk.status_code, str(resp)
+                chunks = [
+                    json.loads(chunk, encoding="utf-8")
+                    async for chunk in resp.content
+                    if chunk
+                ]
+
+                assert len(chunks) == 2
+
+                chunk1 = chunks[0]["status"]
+                assert f"Committing image {image}" in chunk1
+
+                chunk2 = chunks[1]["error"]
+                assert f"Failed to save job '{infinite_job}': DockerError(503" in chunk2
+                assert "getsockopt: connection refused" in chunk2
 
     @pytest.mark.asyncio
     async def test_save_ok(
@@ -675,8 +690,24 @@ class TestSaveApi:
 
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
-        payload = {
-            "container": {"image": f"{config.registry.host}/ubuntu:{infinite_job}"}
-        }
+        image = f"{config.registry.host}/ubuntu:{infinite_job}"
+        payload = {"container": {"image": image}}
         async with client.post(url, headers=headers, json=payload) as resp:
-            assert resp.status == HTTPCreated.status_code, str(resp)
+            assert resp.status == HTTPOk.status_code, str(resp)
+            chunks = [
+                json.loads(chunk, encoding="utf-8")
+                async for chunk in resp.content
+                if chunk
+            ]
+
+            assert isinstance(chunks, list), type(chunks)
+            assert all(isinstance(s, dict) for s in chunks)
+            assert len(chunks) >= 4  # 2 for commit(), >=2 for push()
+
+            # here we rely on chunks to be received in correct order:
+            assert f"Committing image {image}" in chunks[0]["status"], str(chunks)
+            assert chunks[1]["status"] == "Committed", str(chunks)
+            assert chunks[2]["status"] == (
+                f"The push refers to repository [{config.registry.host}/ubuntu]"
+            ), str(chunks)
+            assert chunks[-1]["aux"]["Tag"] == infinite_job, str(chunks)
