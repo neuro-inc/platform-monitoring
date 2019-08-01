@@ -12,6 +12,7 @@ from neuromation.api import (
     Resources,
 )
 from neuromation.api.jobs import Jobs as JobsClient
+from platform_monitoring.config import DockerConfig
 from platform_monitoring.jobs_service import (
     Container,
     ImageReference,
@@ -30,6 +31,15 @@ class TestJobsService:
     @pytest.fixture
     async def jobs_client(self, platform_api_client: PlatformApiClient) -> JobsClient:
         return platform_api_client.jobs
+
+    @pytest.fixture
+    async def jobs_service(
+        self,
+        jobs_client: JobsClient,
+        kube_client: MyKubeClient,
+        docker_config: DockerConfig,
+    ) -> JobsService:
+        return JobsService(jobs_client, kube_client, docker_config)
 
     @pytest.fixture
     async def job_factory(self, jobs_client: JobsClient) -> AsyncIterator[JobFactory]:
@@ -96,11 +106,11 @@ class TestJobsService:
         return str(uuid.uuid4())[:8]
 
     @pytest.mark.asyncio
-    async def test_save(
+    async def test_save_ok(
         self,
         job_factory: JobFactory,
         jobs_client: JobsClient,
-        kube_client: MyKubeClient,
+        jobs_service: JobsService,
         user: User,
         registry_host: str,
         image_tag: str,
@@ -122,8 +132,8 @@ class TestJobsService:
             )
         )
 
-        jobs_service = JobsService(jobs_client, kube_client)
-        await jobs_service.save(job, user, container)
+        async for chunk in jobs_service.save(job, user, container):
+            pass
 
         new_job = await job_factory(
             Image(
@@ -139,7 +149,7 @@ class TestJobsService:
         self,
         job_factory: JobFactory,
         jobs_client: JobsClient,
-        kube_client: MyKubeClient,
+        jobs_service: JobsService,
         user: User,
         registry_host: str,
         image_tag: str,
@@ -160,8 +170,8 @@ class TestJobsService:
             image=ImageReference(domain=registry_host, path=f"{user.name}/alpine")
         )
 
-        jobs_service = JobsService(jobs_client, kube_client)
-        await jobs_service.save(job, user, container)
+        async for chunk in jobs_service.save(job, user, container):
+            pass
 
         new_job = await job_factory(
             Image(
@@ -177,7 +187,7 @@ class TestJobsService:
         self,
         job_factory: JobFactory,
         jobs_client: JobsClient,
-        kube_client: MyKubeClient,
+        jobs_service: JobsService,
         user: User,
         registry_host: str,
         image_tag: str,
@@ -193,16 +203,16 @@ class TestJobsService:
             )
         )
 
-        jobs_service = JobsService(jobs_client, kube_client)
         with pytest.raises(JobException, match="is not running"):
-            await jobs_service.save(job, user, container)
+            async for chunk in jobs_service.save(job, user, container):
+                pass
 
     @pytest.mark.asyncio
     async def test_save_push_failure(
         self,
         job_factory: JobFactory,
         jobs_client: JobsClient,
-        kube_client: MyKubeClient,
+        jobs_service: JobsService,
         user: User,
         image_tag: str,
     ) -> None:
@@ -221,6 +231,48 @@ class TestJobsService:
             )
         )
 
-        jobs_service = JobsService(jobs_client, kube_client)
-        with pytest.raises(JobException, match="Failed to push image"):
-            await jobs_service.save(job, user, container)
+        data = [chunk async for chunk in jobs_service.save(job, user, container)]
+        assert len(data) == 4, str(data)
+
+        msg = f"Committing image {registry_host}/{user.name}/alpine"
+        assert msg in data[0]["status"]
+
+        assert data[1]["status"] == "Committed"
+
+        msg = f"The push refers to repository [{registry_host}/{user.name}/alpine]"
+        assert data[2]["status"] == msg
+
+        assert "status" not in data[3]
+        msg = f"Get https://{registry_host}/v2/: dial tcp: lookup unknown"
+        assert msg in data[3]["error"]
+
+    @pytest.mark.asyncio
+    async def test_save_commit_fails_with_exception(
+        self,
+        job_factory: JobFactory,
+        jobs_client: JobsClient,
+        jobs_service: JobsService,
+        user: User,
+        image_tag: str,
+    ) -> None:
+        resources = Resources(
+            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+        )
+        job = await job_factory(
+            Image(image="alpine:latest", command="sh -c 'sleep 300'"), resources
+        )
+        await self.wait_for_job_running(job, jobs_client)
+
+        registry_host = "localhost:5000"
+        container = Container(
+            image=ImageReference(
+                domain=registry_host, path="InvalidImageName", tag=image_tag
+            )
+        )
+
+        with pytest.raises(
+            JobException,
+            match="invalid reference format: repository name must be lowercase",
+        ):
+            async for chunk in jobs_service.save(job, user, container):
+                pass

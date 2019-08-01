@@ -3,7 +3,7 @@ import logging
 import subprocess
 import time
 from dataclasses import dataclass
-from typing import AsyncIterator, Callable, Iterator
+from typing import Any, AsyncIterator, Callable, Iterator
 from uuid import uuid1
 
 import aiohttp
@@ -19,6 +19,7 @@ from platform_monitoring.api import (
 )
 from platform_monitoring.config import (
     Config,
+    DockerConfig,
     ElasticsearchConfig,
     KubeConfig,
     PlatformApiConfig,
@@ -132,21 +133,38 @@ def registry_config() -> RegistryConfig:
 
 
 @pytest.fixture
-def config(
+def docker_config() -> DockerConfig:
+    return DockerConfig()
+
+
+@pytest.fixture
+def config_factory(
     auth_config: PlatformAuthConfig,
     platform_api_config: PlatformApiConfig,
     es_config: ElasticsearchConfig,
     kube_config: KubeConfig,
     registry_config: RegistryConfig,
-) -> Config:
-    return Config(
-        server=ServerConfig(host="0.0.0.0", port=8080),
-        platform_auth=auth_config,
-        platform_api=platform_api_config,
-        elasticsearch=es_config,
-        kube=kube_config,
-        registry=registry_config,
-    )
+    docker_config: DockerConfig,
+) -> Callable[..., Config]:
+    def _f(**kwargs: Any) -> Config:
+        defaults = dict(
+            server=ServerConfig(host="0.0.0.0", port=8080),
+            platform_auth=auth_config,
+            platform_api=platform_api_config,
+            elasticsearch=es_config,
+            kube=kube_config,
+            registry=registry_config,
+            docker=docker_config,
+        )
+        kwargs = {**defaults, **kwargs}
+        return Config(**kwargs)
+
+    return _f
+
+
+@pytest.fixture
+def config(config_factory: Callable[..., Config],) -> Config:
+    return config_factory()
 
 
 @dataclass(frozen=True)

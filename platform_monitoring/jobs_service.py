@@ -1,14 +1,12 @@
 from dataclasses import dataclass
+from typing import Any, AsyncIterator, Dict
 
+from aiodocker.exceptions import DockerError
 from neuromation.api import JobDescription as Job
 from neuromation.api.jobs import Jobs as JobsClient
+from platform_monitoring.config import DockerConfig
 
-from .docker_client import (
-    Docker,
-    DockerError,
-    ImageReference,
-    check_docker_push_suceeded,
-)
+from .docker_client import Docker, ImageReference
 from .kube_client import KubeClient
 from .user import User
 from .utils import KubeHelper
@@ -24,18 +22,23 @@ class JobException(Exception):
 
 
 class JobsService:
-    def __init__(self, jobs_client: JobsClient, kube_client: KubeClient) -> None:
+    def __init__(
+        self,
+        jobs_client: JobsClient,
+        kube_client: KubeClient,
+        docker_config: DockerConfig,
+    ) -> None:
         self._jobs_client = jobs_client
         self._kube_client = kube_client
-
         self._kube_helper = KubeHelper()
-
-        self._docker_engine_api_port = 2375
+        self._docker_config = docker_config
 
     async def get(self, job_id: str) -> Job:
         return await self._jobs_client.status(job_id)
 
-    async def save(self, job: Job, user: User, container: Container) -> None:
+    async def save(
+        self, job: Job, user: User, container: Container
+    ) -> AsyncIterator[Dict[str, Any]]:
         pod_name = self._kube_helper.get_job_pod_name(job)
         pod = await self._kube_client.get_pod(pod_name)
         if not pod.is_phase_running:
@@ -44,7 +47,7 @@ class JobsService:
         container_id = pod.get_container_id(pod_name)
         assert container_id
         async with self._kube_client.get_node_proxy_client(
-            pod.node_name, self._docker_engine_api_port
+            pod.node_name, self._docker_config.docker_engine_api_port
         ) as proxy_client:
             docker = Docker(
                 url=str(proxy_client.url),
@@ -54,11 +57,20 @@ class JobsService:
             try:
                 repo = container.image.repository
                 tag = container.image.tag
+
+                yield self._chunk(f"Committing image {repo}:{tag} from {container_id}")
                 await docker.images.commit(container=container_id, repo=repo, tag=tag)
+                # TODO (A.Yushkovskiy) check result of commit() and break if failed
+                yield self._chunk("Committed")
+
                 push_auth = dict(username=user.name, password=user.token)
-                push_result = await docker.images.push(
-                    name=repo, tag=tag, auth=push_auth
-                )
-                check_docker_push_suceeded(repo, tag, push_result)
+                async for chunk in await docker.images.push(
+                    name=repo, tag=tag, auth=push_auth, stream=True
+                ):
+                    yield chunk
+
             except DockerError as error:
                 raise JobException(f"Failed to save job '{job.id}': {error}")
+
+    def _chunk(self, message: str) -> Dict[str, str]:
+        return {"status": message}

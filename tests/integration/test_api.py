@@ -13,14 +13,12 @@ from aiohttp.web import HTTPOk
 from aiohttp.web_exceptions import (
     HTTPAccepted,
     HTTPBadRequest,
-    HTTPCreated,
     HTTPForbidden,
-    HTTPInternalServerError,
     HTTPNoContent,
     HTTPUnauthorized,
 )
 from platform_monitoring.api import create_app
-from platform_monitoring.config import Config, PlatformApiConfig
+from platform_monitoring.config import Config, DockerConfig, PlatformApiConfig
 from yarl import URL
 
 from .conftest import ApiAddress, create_local_app_server
@@ -592,7 +590,7 @@ class TestSaveApi:
 
         url = monitoring_api.generate_save_url(job_id=job_id)
         async with client.post(url, headers=headers) as resp:
-            assert resp.status == HTTPBadRequest.status_code, await resp.text()
+            assert resp.status == HTTPBadRequest.status_code, str(resp)
             assert "no such job" in await resp.text()
 
     @pytest.mark.asyncio
@@ -606,9 +604,9 @@ class TestSaveApi:
     ) -> None:
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
-        payload = {"container": {"image": "unknown:5000/ubuntu:latest"}}
+        payload = {"container": {"image": "unknown:5000/alpine:latest"}}
         async with client.post(url, headers=headers, json=payload) as resp:
-            assert resp.status == HTTPBadRequest.status_code, await resp.text()
+            assert resp.status == HTTPBadRequest.status_code, str(resp)
             resp_payload = await resp.json()
             assert "Unknown registry host" in resp_payload["error"]
 
@@ -627,15 +625,59 @@ class TestSaveApi:
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
         payload = {
-            "container": {"image": f"{config.registry.host}/ubuntu:{infinite_job}"}
+            "container": {"image": f"{config.registry.host}/alpine:{infinite_job}"}
         }
         async with client.post(url, headers=headers, json=payload) as resp:
-            assert resp.status == HTTPInternalServerError.status_code, await resp.text()
-            resp_payload = await resp.json()
-            assert "not running" in resp_payload["error"]
+            assert resp.status == HTTPOk.status_code, str(resp)
+            chunks = [
+                json.loads(chunk, encoding="utf-8")
+                async for chunk in resp.content
+                if chunk
+            ]
+            assert len(chunks) == 1
+            assert "not running" in chunks[0]["error"]
 
     @pytest.mark.asyncio
-    async def test_save(
+    async def test_save_push_failed_job_exception_raised(
+        self,
+        config_factory: Callable[..., Config],
+        platform_api: PlatformApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        infinite_job: str,
+    ) -> None:
+        invalid_docker_config = DockerConfig(docker_engine_api_port=1)
+        config = config_factory(docker=invalid_docker_config)
+
+        app = await create_app(config)
+        async with create_local_app_server(app, port=8080) as address:
+            monitoring_api = MonitoringApiEndpoints(address=address)
+            url = monitoring_api.generate_save_url(job_id=infinite_job)
+
+            await jobs_client.long_polling_by_job_id(infinite_job, status="running")
+
+            headers = jobs_client.headers
+            image = f"{config.registry.host}/alpine:{infinite_job}"
+            payload = {"container": {"image": image}}
+            async with client.post(url, headers=headers, json=payload) as resp:
+                assert resp.status == HTTPOk.status_code, str(resp)
+                chunks = [
+                    json.loads(chunk, encoding="utf-8")
+                    async for chunk in resp.content
+                    if chunk
+                ]
+
+                assert len(chunks) == 2
+
+                chunk1 = chunks[0]["status"]
+                assert f"Committing image {image}" in chunk1
+
+                chunk2 = chunks[1]["error"]
+                assert f"Failed to save job '{infinite_job}': DockerError(503" in chunk2
+                assert "getsockopt: connection refused" in chunk2
+
+    @pytest.mark.asyncio
+    async def test_save_ok(
         self,
         platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
@@ -648,8 +690,33 @@ class TestSaveApi:
 
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
-        payload = {
-            "container": {"image": f"{config.registry.host}/ubuntu:{infinite_job}"}
-        }
-        async with client.post(url, headers=headers, json=payload) as resp:
-            assert resp.status == HTTPCreated.status_code, await resp.text()
+        image = f"{config.registry.host}/alpine:{infinite_job}"
+        payload = {"container": {"image": image}}
+
+        NUM_RETRIES = 3
+        error_msg = f"Could do docker-commit and docker-push in {NUM_RETRIES} attempts"
+        for retry in range(NUM_RETRIES):
+            try:
+                async with client.post(url, headers=headers, json=payload) as resp:
+                    assert resp.status == HTTPOk.status_code, str(resp)
+                    chunks = [
+                        json.loads(chunk, encoding="utf-8")
+                        async for chunk in resp.content
+                        if chunk
+                    ]
+                    msg = f"Received chunks: `{chunks}`"
+                    assert isinstance(chunks, list), msg
+                    assert all(isinstance(s, dict) for s in chunks), msg
+                    assert len(chunks) >= 4, msg  # 2 for commit(), >=2 for push()
+
+                    # here we rely on chunks to be received in correct order:
+                    assert f"Committing image {image}" in chunks[0].get("status"), msg
+                    assert chunks[1].get("status") == "Committed", msg
+                    assert chunks[2].get("status") == (
+                        f"The push refers to repository [{config.registry.host}/alpine]"
+                    ), msg
+                    assert chunks[-1].get("aux", {}).get("Tag") == infinite_job, msg
+                    return
+            except AssertionError:
+                print(f"{error_msg}. Retrying...")
+        pytest.fail(error_msg)

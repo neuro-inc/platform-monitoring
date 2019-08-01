@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from pathlib import Path
 from tempfile import mktemp
@@ -9,7 +10,6 @@ import aiohttp.web
 from aioelasticsearch import Elasticsearch
 from aiohttp.web import (
     HTTPBadRequest,
-    HTTPCreated,
     HTTPInternalServerError,
     Request,
     Response,
@@ -88,7 +88,7 @@ class MonitoringApiHandler:
             [
                 aiohttp.web.get("/{job_id}/log", self.stream_log),
                 aiohttp.web.get("/{job_id}/top", self.stream_top),
-                aiohttp.web.post("/{job_id}/save", self.save),
+                aiohttp.web.post("/{job_id}/save", self.stream_save),
             ]
         )
 
@@ -218,7 +218,7 @@ class MonitoringApiHandler:
             message["gpu_memory"] = job_stats.gpu_memory
         return message
 
-    async def save(self, request: Request) -> StreamResponse:
+    async def stream_save(self, request: Request) -> StreamResponse:
         user = await untrusted_user(request)
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
@@ -227,13 +227,35 @@ class MonitoringApiHandler:
         await check_permission(request, permission.action, [permission])
 
         container = await self._parse_save_container(request)
+
+        # Following docker engine API, the response should conform ndjson
+        # see https://github.com/ndjson/ndjson-spec
+        encoding = "utf-8"
+        response = StreamResponse(status=200)
+        response.enable_compression(aiohttp.web.ContentCoding.identity)
+        response.content_type = "application/x-ndjson"
+        response.charset = encoding
+        await response.prepare(request)
+
         try:
-            await self._jobs_service.save(job, user, container)
-        except JobException as exc:
-            return json_response(
-                {"error": str(exc)}, status=HTTPInternalServerError.status_code
-            )
-        return Response(status=HTTPCreated.status_code)
+            async for chunk in self._jobs_service.save(job, user, container):
+                await response.write(self._serialize_chunk(chunk, encoding))
+        except JobException as e:
+            chunk = {"error": str(e)}
+            await response.write(self._serialize_chunk(chunk, encoding))
+        except Exception as e:
+            # middleware don't work for prepared StreamResponse, so we need to
+            # catch a general exception and send it as a chunk
+            msg_str = f"Unexpected error: {e}"
+            logging.exception(msg_str)
+            chunk = {"error": msg_str}
+            await response.write(self._serialize_chunk(chunk, encoding))
+        finally:
+            return response
+
+    def _serialize_chunk(self, chunk: Dict[str, Any], encoding: str = "utf-8") -> bytes:
+        chunk_str = json.dumps(chunk) + "\r\n"
+        return chunk_str.encode(encoding)
 
     async def _parse_save_container(self, request: Request) -> Container:
         payload = await request.json()
@@ -368,7 +390,9 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             app["monitoring_app"]["log_reader_factory"] = log_reader_factory
 
             app["monitoring_app"]["jobs_service"] = JobsService(
-                jobs_client=platform_client.jobs, kube_client=kube_client
+                jobs_client=platform_client.jobs,
+                kube_client=kube_client,
+                docker_config=config.docker,
             )
 
             yield
