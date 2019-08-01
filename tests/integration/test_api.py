@@ -694,7 +694,7 @@ class TestSaveApi:
         payload = {"container": {"image": image}}
 
         NUM_RETRIES = 3
-        error_msg = f"Could do docker-commit and docker-push in {NUM_RETRIES} attempts"
+        error_msg = f"Couldn't commit and push image in {NUM_RETRIES} attempts"
         for retry in range(NUM_RETRIES):
             try:
                 async with client.post(url, headers=headers, json=payload) as resp:

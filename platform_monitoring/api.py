@@ -243,6 +243,8 @@ class MonitoringApiHandler:
         except JobException as e:
             chunk = {"error": str(e)}
             await response.write(self._serialize_chunk(chunk, encoding))
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             # middleware don't work for prepared StreamResponse, so we need to
             # catch a general exception and send it as a chunk
