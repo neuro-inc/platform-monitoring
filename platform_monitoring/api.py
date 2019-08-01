@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-from asyncio import CancelledError
 from pathlib import Path
 from tempfile import mktemp
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict
