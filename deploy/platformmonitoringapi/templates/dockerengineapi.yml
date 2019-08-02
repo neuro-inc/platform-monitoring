@@ -3,7 +3,8 @@ kind: ConfigMap
 metadata:
   name: dockerengineapi
   annotations:
-    "helm.sh/hook": "pre-install,pre-upgrade,replace"
+    "helm.sh/hook": "pre-install,pre-upgrade"
+    "helm.sh/hook-delete-policy": "before-hook-creation"
 data:
   nginx.conf: |-
     user root root;
