@@ -241,7 +241,8 @@ class MonitoringApiHandler:
             async for chunk in self._jobs_service.save(job, user, container):
                 await response.write(self._serialize_chunk(chunk, encoding))
         except JobException as e:
-            chunk = {"error": str(e)}
+            # Serialize an exception in a similar way as docker does:
+            chunk = {"error": str(e), "errorDetail": {"message": str(e)}}
             await response.write(self._serialize_chunk(chunk, encoding))
         except asyncio.CancelledError:
             raise

@@ -58,7 +58,9 @@ class JobsService:
                 repo = container.image.repository
                 tag = container.image.tag
 
-                yield self._chunk(f"Committing image {repo}:{tag} from {container_id}")
+                yield self._chunk(
+                    f"Committing container {container_id} as image {repo}:{tag}"
+                )
                 await docker.images.commit(container=container_id, repo=repo, tag=tag)
                 # TODO (A.Yushkovskiy) check result of commit() and break if failed
                 yield self._chunk("Committed")
