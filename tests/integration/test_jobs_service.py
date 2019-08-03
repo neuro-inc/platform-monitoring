@@ -1,4 +1,5 @@
 import asyncio
+import re
 import uuid
 from typing import Any, AsyncIterator, Awaitable, Callable
 
@@ -234,8 +235,8 @@ class TestJobsService:
         data = [chunk async for chunk in jobs_service.save(job, user, container)]
         assert len(data) == 4, str(data)
 
-        msg = f"Committing image {registry_host}/{user.name}/alpine"
-        assert msg in data[0]["status"]
+        pattern_0 = r"Committing container \w{64} as image " + f"{user.name}/alpine"
+        assert re.match(pattern_0, data[0]["status"])
 
         assert data[1] == {"status": "Committed", "finished": "true"}
 

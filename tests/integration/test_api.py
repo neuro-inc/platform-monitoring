@@ -714,7 +714,7 @@ class TestSaveApi:
                     assert len(chunks) >= 4, msg  # 2 for commit(), >=2 for push()
 
                     # here we rely on chunks to be received in correct order:
-                    pattern_0 = r"Committing container \w{64} as image" + image_short
+                    pattern_0 = r"Committing container \w{64} as image " + image_short
                     assert re.match(pattern_0, chunks[0].get("status")), msg
                     assert chunks[1] == {"status": "Committed", "finished": "true"}, msg
                     assert chunks[2].get("status") == (
