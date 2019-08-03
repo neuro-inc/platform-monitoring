@@ -237,7 +237,7 @@ class TestJobsService:
         msg = f"Committing image {registry_host}/{user.name}/alpine"
         assert msg in data[0]["status"]
 
-        assert data[1]["status"] == "Committed"
+        assert data[1] == {"status": "Committed", "finished": "true"}
 
         msg = f"The push refers to repository [{registry_host}/{user.name}/alpine]"
         assert data[2]["status"] == msg

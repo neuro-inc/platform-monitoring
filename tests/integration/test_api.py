@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import time
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator
@@ -657,7 +658,8 @@ class TestSaveApi:
             await jobs_client.long_polling_by_job_id(infinite_job, status="running")
 
             headers = jobs_client.headers
-            image = f"{config.registry.host}/alpine:{infinite_job}"
+            image_short = f"alpine:{infinite_job}"
+            image = f"{config.registry.host}/{image_short}"
             payload = {"container": {"image": image}}
             async with client.post(url, headers=headers, json=payload) as resp:
                 assert resp.status == HTTPOk.status_code, str(resp)
@@ -669,8 +671,9 @@ class TestSaveApi:
 
                 assert len(chunks) == 2
 
+                pattern_0 = r"Committing container \w{64} as image " + image_short
                 chunk1 = chunks[0]["status"]
-                assert f"Committing image {image}" in chunk1
+                assert re.match(pattern_0, chunk1)
 
                 chunk2 = chunks[1]["error"]
                 assert f"Failed to save job '{infinite_job}': DockerError(503" in chunk2
@@ -690,7 +693,8 @@ class TestSaveApi:
 
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
-        image = f"{config.registry.host}/alpine:{infinite_job}"
+        image_short = f"alpine:{infinite_job}"
+        image = f"{config.registry.host}/{image_short}"
         payload = {"container": {"image": image}}
 
         NUM_RETRIES = 3
@@ -710,8 +714,9 @@ class TestSaveApi:
                     assert len(chunks) >= 4, msg  # 2 for commit(), >=2 for push()
 
                     # here we rely on chunks to be received in correct order:
-                    assert f"Committing image {image}" in chunks[0].get("status"), msg
-                    assert chunks[1].get("status") == "Committed", msg
+                    pattern_0 = r"Committing container \w{64} as image" + image_short
+                    assert re.match(pattern_0, chunks[0].get("status")), msg
+                    assert chunks[1] == {"status": "Committed", "finished": "true"}, msg
                     assert chunks[2].get("status") == (
                         f"The push refers to repository [{config.registry.host}/alpine]"
                     ), msg
