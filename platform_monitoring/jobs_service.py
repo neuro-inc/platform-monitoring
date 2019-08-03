@@ -64,7 +64,7 @@ class JobsService:
                 }
                 await docker.images.commit(container=cont_id, repo=repo, tag=tag)
                 # TODO (A.Yushkovskiy) check result of commit() and break if failed
-                yield {"status": "Committed", "finished": "true"}
+                yield {"status": "Committed"}
 
                 push_auth = dict(username=user.name, password=user.token)
                 async for chunk in await docker.images.push(

@@ -238,7 +238,7 @@ class TestJobsService:
         pattern_0 = r"Committing container \w{64} as image " + f"{user.name}/alpine"
         assert re.match(pattern_0, data[0]["status"])
 
-        assert data[1] == {"status": "Committed", "finished": "true"}
+        assert data[1] == {"status": "Committed"}
 
         msg = f"The push refers to repository [{registry_host}/{user.name}/alpine]"
         assert data[2]["status"] == msg
