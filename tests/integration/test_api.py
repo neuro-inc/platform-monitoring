@@ -716,7 +716,7 @@ class TestSaveApi:
                     msg = f"Creating image {image} from container "
                     assert msg in chunks[0]["message"], debug
 
-                    assert chunks[1] == {"status": "Committed"}, debug
+                    assert chunks[1] == {"status": "CommitFinished"}, debug
 
                     msg = f"The push refers to repository [{repository}]"
                     assert chunks[2].get("status") == msg, debug
@@ -725,6 +725,6 @@ class TestSaveApi:
 
                     return
             except AssertionError:
-                raise
-                # print(f"{error_msg}. Retrying...")
+                print(f"{error_msg}. Retrying...")
+
         pytest.fail(error_msg)
