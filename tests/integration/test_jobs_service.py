@@ -1,5 +1,4 @@
 import asyncio
-import re
 import uuid
 from typing import Any, AsyncIterator, Awaitable, Callable
 
@@ -231,16 +230,18 @@ class TestJobsService:
                 domain=registry_host, path=f"{user.name}/alpine", tag=image_tag
             )
         )
+        repository = f"{registry_host}/{user.name}/alpine"
 
         data = [chunk async for chunk in jobs_service.save(job, user, container)]
         assert len(data) == 4, str(data)
 
-        pattern_0 = r"Committing container \w{64} as image " + f"{user.name}/alpine"
-        assert re.match(pattern_0, data[0]["status"])
+        assert data[0]["status"] == "CommitStarted"
+        msg = f"Creating image {repository}:{image_tag} from container "
+        assert msg in data[0]["message"]
 
-        assert data[1] == {"status": "Committed"}
+        assert data[1] == {"status": "CommitFinished"}
 
-        msg = f"The push refers to repository [{registry_host}/{user.name}/alpine]"
+        msg = f"The push refers to repository [{repository}]"
         assert data[2]["status"] == msg
 
         assert "status" not in data[3]

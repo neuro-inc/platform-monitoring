@@ -1,6 +1,5 @@
 import asyncio
 import json
-import re
 import time
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator
@@ -658,8 +657,7 @@ class TestSaveApi:
             await jobs_client.long_polling_by_job_id(infinite_job, status="running")
 
             headers = jobs_client.headers
-            image_short = f"alpine:{infinite_job}"
-            image = f"{config.registry.host}/{image_short}"
+            image = f"{config.registry.host}/alpine:{infinite_job}"
             payload = {"container": {"image": image}}
             async with client.post(url, headers=headers, json=payload) as resp:
                 assert resp.status == HTTPOk.status_code, str(resp)
@@ -671,13 +669,12 @@ class TestSaveApi:
 
                 assert len(chunks) == 2
 
-                pattern_0 = r"Committing container \w{64} as image " + image_short
-                chunk1 = chunks[0]["status"]
-                assert re.match(pattern_0, chunk1)
+                assert chunks[0]["status"] == "CommitStarted"
+                assert f"Creating image {image} from container " in chunks[0]["message"]
 
-                chunk2 = chunks[1]["error"]
-                assert f"Failed to save job '{infinite_job}': DockerError(503" in chunk2
-                assert "getsockopt: connection refused" in chunk2
+                error = chunks[1]["error"]
+                assert f"Failed to save job '{infinite_job}': DockerError(503" in error
+                assert "getsockopt: connection refused" in error
 
     @pytest.mark.asyncio
     async def test_save_ok(
@@ -693,8 +690,8 @@ class TestSaveApi:
 
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
-        image_short = f"alpine:{infinite_job}"
-        image = f"{config.registry.host}/{image_short}"
+        repository = f"{config.registry.host}/alpine"
+        image = f"{repository}:{infinite_job}"
         payload = {"container": {"image": image}}
 
         NUM_RETRIES = 3
@@ -708,20 +705,26 @@ class TestSaveApi:
                         async for chunk in resp.content
                         if chunk
                     ]
-                    msg = f"Received chunks: `{chunks}`"
-                    assert isinstance(chunks, list), msg
-                    assert all(isinstance(s, dict) for s in chunks), msg
-                    assert len(chunks) >= 4, msg  # 2 for commit(), >=2 for push()
+                    debug = f"Received chunks: `{chunks}`"
+                    assert isinstance(chunks, list), debug
+                    assert all(isinstance(s, dict) for s in chunks), debug
+                    assert len(chunks) >= 4, debug  # 2 for commit(), >=2 for push()
 
-                    # here we rely on chunks to be received in correct order:
-                    pattern_0 = r"Committing container \w{64} as image " + image_short
-                    assert re.match(pattern_0, chunks[0].get("status")), msg
-                    assert chunks[1] == {"status": "Committed"}, msg
-                    assert chunks[2].get("status") == (
-                        f"The push refers to repository [{config.registry.host}/alpine]"
-                    ), msg
-                    assert chunks[-1].get("aux", {}).get("Tag") == infinite_job, msg
+                    # here we rely on chunks to be received in correct order
+
+                    assert chunks[0]["status"] == "CommitStarted"
+                    msg = f"Creating image {image} from container "
+                    assert msg in chunks[0]["message"], debug
+
+                    assert chunks[1] == {"status": "Committed"}, debug
+
+                    msg = f"The push refers to repository [{repository}]"
+                    assert chunks[2].get("status") == msg, debug
+
+                    assert chunks[-1].get("aux", {}).get("Tag") == infinite_job, debug
+
                     return
             except AssertionError:
-                print(f"{error_msg}. Retrying...")
+                raise
+                # print(f"{error_msg}. Retrying...")
         pytest.fail(error_msg)
