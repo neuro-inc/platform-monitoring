@@ -115,7 +115,7 @@ class TestJobsService:
         return str(uuid.uuid4())[:8]
 
     @pytest.mark.asyncio
-    async def test_save_runningok(
+    async def test_save_running_ok(
         self,
         job_factory: JobFactory,
         jobs_client: JobsClient,
