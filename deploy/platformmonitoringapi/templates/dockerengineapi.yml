@@ -18,6 +18,7 @@ data:
             listen 2375;
             location / {
                 proxy_pass http://unix:/var/run/docker.sock:/;
+                proxy_buffering off;
             }
         }
     }
