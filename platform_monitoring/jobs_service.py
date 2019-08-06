@@ -74,6 +74,3 @@ class JobsService:
 
             except DockerError as error:
                 raise JobException(f"Failed to save job '{job.id}': {error}")
-
-    def _chunk(self, message: str) -> Dict[str, str]:
-        return {"status": message}
