@@ -75,6 +75,14 @@ class TestPod:
         pod = Pod({"spec": {}, "status": {"phase": "Running"}})
         assert pod.is_phase_running
 
+    def test_is_phase_pending(self) -> None:
+        pod = Pod({"spec": {}, "status": {"phase": "Pending"}})
+        assert pod.is_phase_pending
+
+    def test_is_phase_pending_false(self) -> None:
+        pod = Pod({"spec": {}, "status": {"phase": "Running"}})
+        assert not pod.is_phase_pending
+
 
 class TestPodContainerStats:
     def test_from_primitive_no_keys(self) -> None:

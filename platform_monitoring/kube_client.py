@@ -74,6 +74,10 @@ class Pod:
     def is_phase_running(self) -> bool:
         return self._status_payload.get("phase") == "Running"
 
+    @property
+    def is_phase_pending(self) -> bool:
+        return self._status_payload.get("phase") == "Pending"
+
 
 class KubeClient:
     def __init__(

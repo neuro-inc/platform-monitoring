@@ -3,7 +3,7 @@ import json
 import re
 import time
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator, Optional
 from unittest import mock
 from uuid import uuid4
 
@@ -179,24 +179,36 @@ async def job_submit(
 
 
 @pytest.fixture
-async def infinite_job(
+async def job_factory(
     platform_api: PlatformApiEndpoints,
     client: aiohttp.ClientSession,
     jobs_client: JobsClient,
     job_request_factory: Callable[[], Dict[str, Any]],
-) -> AsyncIterator[str]:
-    request_payload = job_request_factory()
-    request_payload["container"]["command"] = "tail -f /dev/null"
-    async with client.post(
-        platform_api.jobs_base_url, headers=jobs_client.headers, json=request_payload
-    ) as response:
-        assert response.status == HTTPAccepted.status_code, await response.text()
-        result = await response.json()
-        job_id = result["id"]
+) -> AsyncIterator[Callable[..., Awaitable[str]]]:
+    job_id: Optional[str] = None
 
-    yield job_id
+    async def _f(command: str = "true", memory_mb: int = 16) -> str:
+        payload = job_request_factory()
+        payload["container"]["command"] = command
+        payload["container"]["resources"]["memory_mb"] = memory_mb
+        async with client.post(
+            platform_api.jobs_base_url, headers=jobs_client.headers, json=payload
+        ) as response:
+            assert response.status == HTTPAccepted.status_code, await response.text()
+            result = await response.json()
+            job_id = result["id"]
 
-    await jobs_client.delete_job(job_id)
+        return job_id
+
+    yield _f
+
+    if job_id:
+        await jobs_client.delete_job(job_id)
+
+
+@pytest.fixture
+async def infinite_job(job_factory: Callable[..., Awaitable[str]],) -> str:
+    return await job_factory(command="tail -f /dev/null")
 
 
 class TestApi:
@@ -612,33 +624,6 @@ class TestSaveApi:
             assert "Unknown registry host" in resp_payload["error"]
 
     @pytest.mark.asyncio
-    async def test_save_not_running_job(
-        self,
-        platform_api: PlatformApiEndpoints,
-        monitoring_api: MonitoringApiEndpoints,
-        client: aiohttp.ClientSession,
-        jobs_client: JobsClient,
-        infinite_job: str,
-        config: Config,
-    ) -> None:
-        await jobs_client.delete_job(infinite_job)
-
-        url = monitoring_api.generate_save_url(job_id=infinite_job)
-        headers = jobs_client.headers
-        payload = {
-            "container": {"image": f"{config.registry.host}/alpine:{infinite_job}"}
-        }
-        async with client.post(url, headers=headers, json=payload) as resp:
-            assert resp.status == HTTPOk.status_code, str(resp)
-            chunks = [
-                json.loads(chunk, encoding="utf-8")
-                async for chunk in resp.content
-                if chunk
-            ]
-            assert len(chunks) == 1
-            assert "not running" in chunks[0]["error"]
-
-    @pytest.mark.asyncio
     async def test_save_push_failed_job_exception_raised(
         self,
         config_factory: Callable[..., Config],
@@ -679,18 +664,51 @@ class TestSaveApi:
                 assert "getsockopt: connection refused" in error
 
     @pytest.mark.asyncio
+    async def test_save_ok_pending(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        job_factory: Callable[..., Awaitable[str]],
+        config: Config,
+    ) -> None:
+        job_id = await job_factory(memory_mb=100_500)
+        await jobs_client.long_polling_by_job_id(job_id, status="pending")
+
+        url = monitoring_api.generate_save_url(job_id)
+        headers = jobs_client.headers
+        payload = {"container": {"image": f"{config.registry.host}/alpine:{job_id}"}}
+        async with client.post(url, headers=headers, json=payload) as resp:
+            assert resp.status == HTTPOk.status_code, str(resp)
+            chunks = [
+                json.loads(chunk, encoding="utf-8")
+                async for chunk in resp.content
+                if chunk
+            ]
+            assert len(chunks) == 1
+            assert f"Job '{job_id}' is yet pending" in chunks[0]["error"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "status,command",
+        [("running", "tail -f /dev/null"), ("succeeded", "true"), ("failed", "false")],
+    )
     async def test_save_ok(
         self,
         platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        infinite_job: str,
         config: Config,
+        job_factory: Callable[..., Awaitable[str]],
+        status: str,
+        command: str,
     ) -> None:
-        await jobs_client.long_polling_by_job_id(job_id=infinite_job, status="running")
+        job_id = await job_factory(command=command)
+        await jobs_client.long_polling_by_job_id(job_id, status=status)
 
-        url = monitoring_api.generate_save_url(job_id=infinite_job)
+        url = monitoring_api.generate_save_url(job_id=job_id)
         headers = jobs_client.headers
         repository = f"{config.registry.host}/alpine"
         image = f"{repository}:{infinite_job}"

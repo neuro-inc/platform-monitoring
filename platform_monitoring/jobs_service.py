@@ -41,8 +41,8 @@ class JobsService:
     ) -> AsyncIterator[Dict[str, Any]]:
         pod_name = self._kube_helper.get_job_pod_name(job)
         pod = await self._kube_client.get_pod(pod_name)
-        if not pod.is_phase_running:
-            raise JobException(f"Job '{job.id}' is not running.")
+        if pod.is_phase_pending:
+            raise JobException(f"Job '{job.id}' is yet pending")
 
         cont_id = pod.get_container_id(pod_name)
         assert cont_id

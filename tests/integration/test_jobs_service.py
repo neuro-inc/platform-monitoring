@@ -94,6 +94,14 @@ class TestJobsService:
 
         await self.wait_for_job(job, jobs_client, _condition, *args, **kwargs)
 
+    async def wait_for_job_failed(
+        self, job: Job, jobs_client: JobsClient, *args: Any, **kwargs: Any
+    ) -> None:
+        def _condition(job: Job) -> bool:
+            return job.status == JobStatus.FAILED
+
+        await self.wait_for_job(job, jobs_client, _condition, *args, **kwargs)
+
     @pytest.fixture
     def user(self) -> User:
         return User(name="compute", token="testtoken")
@@ -107,7 +115,7 @@ class TestJobsService:
         return str(uuid.uuid4())[:8]
 
     @pytest.mark.asyncio
-    async def test_save_ok(
+    async def test_save_runningok(
         self,
         job_factory: JobFactory,
         jobs_client: JobsClient,
@@ -146,7 +154,81 @@ class TestJobsService:
         await self.wait_for_job_succeeded(new_job, jobs_client)
 
     @pytest.mark.asyncio
-    async def test_save_no_tag(
+    async def test_save_succeeded_ok(
+        self,
+        job_factory: JobFactory,
+        jobs_client: JobsClient,
+        jobs_service: JobsService,
+        user: User,
+        registry_host: str,
+        image_tag: str,
+    ) -> None:
+        resources = Resources(
+            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+        )
+        job = await job_factory(
+            Image(image="alpine:latest", command="sh -c 'echo -n 123 > /test'"),
+            resources,
+        )
+        await self.wait_for_job_succeeded(job, jobs_client)
+
+        container = Container(
+            image=ImageReference(
+                domain=registry_host, path=f"{user.name}/alpine", tag=image_tag
+            )
+        )
+
+        async for chunk in jobs_service.save(job, user, container):
+            pass
+
+        new_job = await job_factory(
+            Image(
+                image=str(container.image),
+                command='sh -c \'[ "$(cat /test)" = "123" ]\'',
+            ),
+            resources,
+        )
+        await self.wait_for_job_succeeded(new_job, jobs_client)
+
+    @pytest.mark.asyncio
+    async def test_save_failed_ok(
+        self,
+        job_factory: JobFactory,
+        jobs_client: JobsClient,
+        jobs_service: JobsService,
+        user: User,
+        registry_host: str,
+        image_tag: str,
+    ) -> None:
+        resources = Resources(
+            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+        )
+        job = await job_factory(
+            Image(image="alpine:latest", command="sh -c 'echo -n 123 > /test; false'"),
+            resources,
+        )
+        await self.wait_for_job_failed(job, jobs_client)
+
+        container = Container(
+            image=ImageReference(
+                domain=registry_host, path=f"{user.name}/alpine", tag=image_tag
+            )
+        )
+
+        async for chunk in jobs_service.save(job, user, container):
+            pass
+
+        new_job = await job_factory(
+            Image(
+                image=str(container.image),
+                command='sh -c \'[ "$(cat /test)" = "123" ]\'',
+            ),
+            resources,
+        )
+        await self.wait_for_job_succeeded(new_job, jobs_client)
+
+    @pytest.mark.asyncio
+    async def test_save_running_no_tag_ok(
         self,
         job_factory: JobFactory,
         jobs_client: JobsClient,
@@ -184,7 +266,7 @@ class TestJobsService:
         await self.wait_for_job_succeeded(new_job, jobs_client)
 
     @pytest.mark.asyncio
-    async def test_save_pending_job(
+    async def test_save_pending_job_fails(
         self,
         job_factory: JobFactory,
         jobs_client: JobsClient,
@@ -204,7 +286,7 @@ class TestJobsService:
             )
         )
 
-        with pytest.raises(JobException, match="is not running"):
+        with pytest.raises(JobException, match=f"Job '{job.id}' is yet pending"):
             async for chunk in jobs_service.save(job, user, container):
                 pass
 
