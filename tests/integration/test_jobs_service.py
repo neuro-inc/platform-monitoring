@@ -1,4 +1,5 @@
 import asyncio
+import re
 import uuid
 from typing import Any, AsyncIterator, Awaitable, Callable
 
@@ -236,8 +237,8 @@ class TestJobsService:
         assert len(data) == 4, str(data)
 
         assert data[0]["status"] == "CommitStarted"
-        msg = f"Creating image {repository}:{image_tag} from container "
-        assert msg in data[0]["message"]
+        assert data[0]["details"]["image"] == f"{repository}:{image_tag}"
+        assert re.match(r"\w{64}", data[0]["details"]["container"])
 
         assert data[1] == {"status": "CommitFinished"}
 

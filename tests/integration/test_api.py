@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import time
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator
@@ -670,7 +671,8 @@ class TestSaveApi:
                 assert len(chunks) == 2
 
                 assert chunks[0]["status"] == "CommitStarted"
-                assert f"Creating image {image} from container " in chunks[0]["message"]
+                assert chunks[0]["details"]["image"] == image
+                assert re.match(r"\w{64}", chunks[0]["details"]["container"])
 
                 error = chunks[1]["error"]
                 assert f"Failed to save job '{infinite_job}': DockerError(503" in error
@@ -712,9 +714,9 @@ class TestSaveApi:
 
                     # here we rely on chunks to be received in correct order
 
-                    assert chunks[0]["status"] == "CommitStarted"
-                    msg = f"Creating image {image} from container "
-                    assert msg in chunks[0]["message"], debug
+                    assert chunks[0]["status"] == "CommitStarted", debug
+                    assert chunks[0]["details"]["image"] == image, debug
+                    assert re.match(r"\w{64}", chunks[0]["details"]["container"]), debug
 
                     assert chunks[1] == {"status": "CommitFinished"}, debug
 

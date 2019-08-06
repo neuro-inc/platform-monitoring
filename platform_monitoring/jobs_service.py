@@ -60,7 +60,7 @@ class JobsService:
 
                 yield {
                     "status": "CommitStarted",
-                    "message": f"Creating image {repo}:{tag} from container {cont_id}",
+                    "details": {"container": cont_id, "image": f"{repo}:{tag}"},
                 }
                 await docker.images.commit(container=cont_id, repo=repo, tag=tag)
                 # TODO (A.Yushkovskiy) check result of commit() and break if failed
