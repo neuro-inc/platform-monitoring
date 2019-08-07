@@ -1,14 +1,15 @@
 import asyncio
 import uuid
-from typing import Any, AsyncIterator, Awaitable, Callable
+from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
 import pytest
 from async_timeout import timeout
 from neuromation.api import (
     Client as PlatformApiClient,
-    Image,
+    Container as ApiClientContainer,
     JobDescription as Job,
     JobStatus,
+    RemoteImage as ApiClientImage,
     Resources,
 )
 from neuromation.api.jobs import Jobs as JobsClient
@@ -24,7 +25,10 @@ from platform_monitoring.user import User
 from .conftest_kube import MyKubeClient
 
 
-JobFactory = Callable[[Image, Resources], Awaitable[Job]]
+DEFAULT_RESOURCES = Resources(
+    memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+)
+DEFAULT_IMAGE = ApiClientImage(name="alpine", tag="latest")
 
 
 class TestJobsService:
@@ -42,11 +46,21 @@ class TestJobsService:
         return JobsService(jobs_client, kube_client, docker_config)
 
     @pytest.fixture
-    async def job_factory(self, jobs_client: JobsClient) -> AsyncIterator[JobFactory]:
+    async def job_factory(
+        self, jobs_client: JobsClient
+    ) -> AsyncIterator[Callable[..., Awaitable[Job]]]:
         jobs = []
 
-        async def _factory(image: Image, resources: Resources) -> Job:
-            job = await jobs_client.submit(image=image, resources=resources)
+        async def _factory(
+            *,
+            command: Optional[str],
+            image: ApiClientImage = DEFAULT_IMAGE,
+            resources: Resources = DEFAULT_RESOURCES,
+        ) -> Job:
+            container = ApiClientContainer(
+                image=image, resources=resources, command=command
+            )
+            job = await jobs_client.run(container)
             jobs.append(job)
             return job
 
@@ -108,22 +122,14 @@ class TestJobsService:
     @pytest.mark.asyncio
     async def test_save_ok(
         self,
-        job_factory: JobFactory,
+        job_factory: Callable[..., Awaitable[Job]],
         jobs_client: JobsClient,
         jobs_service: JobsService,
         user: User,
         registry_host: str,
         image_tag: str,
     ) -> None:
-        resources = Resources(
-            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
-        )
-        job = await job_factory(
-            Image(
-                image="alpine:latest", command="sh -c 'echo -n 123 > /test; sleep 300'"
-            ),
-            resources,
-        )
+        job = await job_factory(command="sh -c 'echo -n 123 > /test; sleep 300'")
         await self.wait_for_job_running(job, jobs_client)
 
         container = Container(
@@ -135,34 +141,26 @@ class TestJobsService:
         async for chunk in jobs_service.save(job, user, container):
             pass
 
+        image = ApiClientImage(
+            name="alpine", tag=image_tag, owner=user.name, registry=registry_host
+        )
         new_job = await job_factory(
-            Image(
-                image=str(container.image),
-                command='sh -c \'[ "$(cat /test)" = "123" ]\'',
-            ),
-            resources,
+            image=image, command='sh -c \'[ "$(cat /test)" = "123" ]\''
         )
         await self.wait_for_job_succeeded(new_job, jobs_client)
 
     @pytest.mark.asyncio
     async def test_save_no_tag(
         self,
-        job_factory: JobFactory,
+        job_factory: Callable[..., Awaitable[Job]],
         jobs_client: JobsClient,
         jobs_service: JobsService,
         user: User,
         registry_host: str,
         image_tag: str,
     ) -> None:
-        resources = Resources(
-            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
-        )
         job = await job_factory(
-            Image(
-                image="alpine:latest",
-                command=f"sh -c 'echo -n {image_tag} > /test; sleep 300'",
-            ),
-            resources,
+            command=f"sh -c 'echo -n {image_tag} > /test; sleep 300'"
         )
         await self.wait_for_job_running(job, jobs_client)
 
@@ -174,18 +172,15 @@ class TestJobsService:
             pass
 
         new_job = await job_factory(
-            Image(
-                image=str(container.image),
-                command=f'sh -c \'[ "$(cat /test)" = "{image_tag}" ]\'',
-            ),
-            resources,
+            image=str(container.image),
+            command=f'sh -c \'[ "$(cat /test)" = "{image_tag}" ]\'',
         )
         await self.wait_for_job_succeeded(new_job, jobs_client)
 
     @pytest.mark.asyncio
     async def test_save_pending_job(
         self,
-        job_factory: JobFactory,
+        job_factory: Callable[..., Awaitable[Job]],
         jobs_client: JobsClient,
         jobs_service: JobsService,
         user: User,
@@ -195,7 +190,7 @@ class TestJobsService:
         resources = Resources(
             memory_mb=16 ** 10, cpu=0.1, gpu=None, shm=False, gpu_model=None
         )
-        job = await job_factory(Image(image="alpine:latest", command=None), resources)
+        job = await job_factory(command=None, resources=resources)
 
         container = Container(
             image=ImageReference(
@@ -210,18 +205,13 @@ class TestJobsService:
     @pytest.mark.asyncio
     async def test_save_push_failure(
         self,
-        job_factory: JobFactory,
+        job_factory: Callable[..., Awaitable[Job]],
         jobs_client: JobsClient,
         jobs_service: JobsService,
         user: User,
         image_tag: str,
     ) -> None:
-        resources = Resources(
-            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
-        )
-        job = await job_factory(
-            Image(image="alpine:latest", command="sh -c 'sleep 300'"), resources
-        )
+        job = await job_factory(command="sh -c 'sleep 300'")
         await self.wait_for_job_running(job, jobs_client)
 
         registry_host = "unknown:5000"
@@ -249,18 +239,13 @@ class TestJobsService:
     @pytest.mark.asyncio
     async def test_save_commit_fails_with_exception(
         self,
-        job_factory: JobFactory,
+        job_factory: Callable[..., Awaitable[Job]],
         jobs_client: JobsClient,
         jobs_service: JobsService,
         user: User,
         image_tag: str,
     ) -> None:
-        resources = Resources(
-            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
-        )
-        job = await job_factory(
-            Image(image="alpine:latest", command="sh -c 'sleep 300'"), resources
-        )
+        job = await job_factory(command="sh -c 'sleep 300'")
         await self.wait_for_job_running(job, jobs_client)
 
         registry_host = "localhost:5000"
