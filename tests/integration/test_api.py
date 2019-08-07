@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import time
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator
@@ -669,12 +670,13 @@ class TestSaveApi:
 
                 assert len(chunks) == 2
 
-                chunk1 = chunks[0]["status"]
-                assert f"Committing image {image}" in chunk1
+                assert chunks[0]["status"] == "CommitStarted"
+                assert chunks[0]["details"]["image"] == image
+                assert re.match(r"\w{64}", chunks[0]["details"]["container"])
 
-                chunk2 = chunks[1]["error"]
-                assert f"Failed to save job '{infinite_job}': DockerError(503" in chunk2
-                assert "getsockopt: connection refused" in chunk2
+                error = chunks[1]["error"]
+                assert f"Failed to save job '{infinite_job}': DockerError(503" in error
+                assert "getsockopt: connection refused" in error
 
     @pytest.mark.asyncio
     async def test_save_ok(
@@ -690,7 +692,8 @@ class TestSaveApi:
 
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
-        image = f"{config.registry.host}/alpine:{infinite_job}"
+        repository = f"{config.registry.host}/alpine"
+        image = f"{repository}:{infinite_job}"
         payload = {"container": {"image": image}}
 
         NUM_RETRIES = 3
@@ -704,19 +707,26 @@ class TestSaveApi:
                         async for chunk in resp.content
                         if chunk
                     ]
-                    msg = f"Received chunks: `{chunks}`"
-                    assert isinstance(chunks, list), msg
-                    assert all(isinstance(s, dict) for s in chunks), msg
-                    assert len(chunks) >= 4, msg  # 2 for commit(), >=2 for push()
+                    debug = f"Received chunks: `{chunks}`"
+                    assert isinstance(chunks, list), debug
+                    assert all(isinstance(s, dict) for s in chunks), debug
+                    assert len(chunks) >= 4, debug  # 2 for commit(), >=2 for push()
 
-                    # here we rely on chunks to be received in correct order:
-                    assert f"Committing image {image}" in chunks[0].get("status"), msg
-                    assert chunks[1].get("status") == "Committed", msg
-                    assert chunks[2].get("status") == (
-                        f"The push refers to repository [{config.registry.host}/alpine]"
-                    ), msg
-                    assert chunks[-1].get("aux", {}).get("Tag") == infinite_job, msg
+                    # here we rely on chunks to be received in correct order
+
+                    assert chunks[0]["status"] == "CommitStarted", debug
+                    assert chunks[0]["details"]["image"] == image, debug
+                    assert re.match(r"\w{64}", chunks[0]["details"]["container"]), debug
+
+                    assert chunks[1] == {"status": "CommitFinished"}, debug
+
+                    msg = f"The push refers to repository [{repository}]"
+                    assert chunks[2].get("status") == msg, debug
+
+                    assert chunks[-1].get("aux", {}).get("Tag") == infinite_job, debug
+
                     return
             except AssertionError:
                 print(f"{error_msg}. Retrying...")
+
         pytest.fail(error_msg)

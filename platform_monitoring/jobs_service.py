@@ -44,8 +44,8 @@ class JobsService:
         if not pod.is_phase_running:
             raise JobException(f"Job '{job.id}' is not running.")
 
-        container_id = pod.get_container_id(pod_name)
-        assert container_id
+        cont_id = pod.get_container_id(pod_name)
+        assert cont_id
         async with self._kube_client.get_node_proxy_client(
             pod.node_name, self._docker_config.docker_engine_api_port
         ) as proxy_client:
@@ -58,10 +58,13 @@ class JobsService:
                 repo = container.image.repository
                 tag = container.image.tag
 
-                yield self._chunk(f"Committing image {repo}:{tag} from {container_id}")
-                await docker.images.commit(container=container_id, repo=repo, tag=tag)
+                yield {
+                    "status": "CommitStarted",
+                    "details": {"container": cont_id, "image": f"{repo}:{tag}"},
+                }
+                await docker.images.commit(container=cont_id, repo=repo, tag=tag)
                 # TODO (A.Yushkovskiy) check result of commit() and break if failed
-                yield self._chunk("Committed")
+                yield {"status": "CommitFinished"}
 
                 push_auth = dict(username=user.name, password=user.token)
                 async for chunk in await docker.images.push(
@@ -71,6 +74,3 @@ class JobsService:
 
             except DockerError as error:
                 raise JobException(f"Failed to save job '{job.id}': {error}")
-
-    def _chunk(self, message: str) -> Dict[str, str]:
-        return {"status": message}
