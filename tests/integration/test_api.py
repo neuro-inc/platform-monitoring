@@ -672,6 +672,7 @@ class TestSaveApi:
         jobs_client: JobsClient,
         job_factory: Callable[..., Awaitable[str]],
         config: Config,
+        infinite_job: str,
     ) -> None:
         job_id = await job_factory(memory_mb=100_500)
         await jobs_client.long_polling_by_job_id(job_id, status="pending")
@@ -704,6 +705,7 @@ class TestSaveApi:
         job_factory: Callable[..., Awaitable[str]],
         status: str,
         command: str,
+        infinite_job: str,
     ) -> None:
         job_id = await job_factory(command=command)
         await jobs_client.long_polling_by_job_id(job_id, status=status)
@@ -715,11 +717,10 @@ class TestSaveApi:
         payload = {"container": {"image": image}}
 
         NUM_RETRIES = 3
-        error_msg = f"Couldn't commit and push image in {NUM_RETRIES} attempts"
         for retry in range(NUM_RETRIES):
             try:
                 async with client.post(url, headers=headers, json=payload) as resp:
-                    assert resp.status == HTTPOk.status_code, str(resp)
+                    assert resp.status == HTTPOk.status_code, await resp.text()
                     chunks = [
                         json.loads(chunk, encoding="utf-8")
                         async for chunk in resp.content
@@ -744,7 +745,6 @@ class TestSaveApi:
                     assert chunks[-1].get("aux", {}).get("Tag") == infinite_job, debug
 
                     return
-            except AssertionError:
-                print(f"{error_msg}. Retrying...")
-
-        pytest.fail(error_msg)
+            except AssertionError as e:
+                print(f"Error: {e}. Retrying...")
+        pytest.fail(f"Couldn't commit and push image in {NUM_RETRIES} attempts")
