@@ -36,7 +36,7 @@ spec:
       labels:
         service: dockerengineapi
       annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/dockerengineapi.yml") . | sha256sum }}
+        checksum/config: "{{ include (print $.Template.BasePath \"/dockerengineapi.yml\") . | sha256sum }}"
     spec:
       tolerations:
       - effect: NoExecute
