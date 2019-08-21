@@ -67,6 +67,7 @@ function k8s::apply_all_configurations {
     kubectl apply -f tests/k8s/logging.yml
     kubectl apply -f tests/k8s/platformconfig.yml
     kubectl apply -f tests/k8s/platformapi.yml
+    kubectl apply -f tests/k8s/dockerengineapi.yml
 }
 
 function k8s::wait {

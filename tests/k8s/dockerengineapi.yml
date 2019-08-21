@@ -1,3 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dockerengineapi
+data:
+  nginx.conf: |-
+    user root root;
+    error_log /dev/stderr;
+    
+    events {}
+    
+    http {
+        access_log /dev/stdout;
+        server {
+            listen 2375;
+            location / {
+                proxy_pass http://unix:/var/run/docker.sock:/;
+                proxy_buffering off;
+            }
+        }
+    }
+---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -10,8 +32,6 @@ spec:
     metadata:
       labels:
         service: dockerengineapi
-      annotations:
-        checksum/config: '{{ include (print $.Template.BasePath "/dockerengineapi_configmap.yml") . | sha256sum }}'
     spec:
       tolerations:
       - effect: NoExecute
