@@ -4,7 +4,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator, Optional
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator, List
 from unittest import mock
 from uuid import uuid4
 
@@ -190,7 +190,7 @@ async def job_factory(
     jobs_client: JobsClient,
     job_request_factory: Callable[[], Dict[str, Any]],
 ) -> AsyncIterator[Callable[[str], Awaitable[str]]]:
-    job_id: Optional[str] = None
+    jobs: List[str] = []
 
     async def _f(command: str) -> str:
         request_payload = job_request_factory()
@@ -203,13 +203,14 @@ async def job_factory(
             assert response.status == HTTPAccepted.status_code, await response.text()
             result = await response.json()
             job_id = result["id"]
+            jobs.append(job_id)
             await jobs_client.long_polling_by_job_id(job_id, status="running")
 
         return job_id
 
     yield _f
 
-    if job_id:
+    for job_id in jobs:
         await jobs_client.delete_job(job_id)
 
 
