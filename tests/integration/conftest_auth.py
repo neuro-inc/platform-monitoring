@@ -45,7 +45,7 @@ async def auth_config(
     )
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 async def auth_client(
     auth_config: PlatformAuthConfig
 ) -> AsyncGenerator[AuthClient, None]:
@@ -63,7 +63,7 @@ class _User(AuthClientUser):
         return {AUTHORIZATION: f"Bearer {self.token}"}
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 async def regular_user_factory(
     auth_client: AuthClient, token_factory: Callable[[str], str], admin_token: str
 ) -> AsyncIterator[Callable[[Optional[str]], Awaitable[_User]]]:

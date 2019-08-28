@@ -27,8 +27,6 @@ from platform_monitoring.config import (
     RegistryConfig,
     ServerConfig,
 )
-from platform_monitoring.docker_client import Docker
-from platform_monitoring.kube_client import KubeClient
 from yarl import URL
 
 
@@ -59,7 +57,7 @@ def random_str(length: int = 8) -> str:
     return str(uuid1())[:length]
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 async def client() -> AsyncIterator[aiohttp.ClientSession]:
     async with aiohttp.ClientSession() as session:
         yield session
@@ -87,9 +85,7 @@ async def wait_for_service(
             await asyncio.sleep(interval_s)
 
 
-@pytest.fixture
-# TODO (A Yushkovskiy, 05-May-2019) This fixture should have scope="session" in order
-#  to be faster, but it causes mysterious errors `RuntimeError: Event loop is closed`
+@pytest.fixture(scope="session")
 async def platform_api_config(
     token_factory: Callable[[str], str],
 ) -> AsyncIterator[PlatformApiConfig]:
@@ -110,9 +106,7 @@ async def platform_api_client(
         yield client
 
 
-@pytest.fixture
-# TODO (A Yushkovskiy, 05-May-2019) This fixture should have scope="session" in order
-#  to be faster, but it causes mysterious errors `RuntimeError: Event loop is closed`
+@pytest.fixture(scope="session")
 async def es_config(
     token_factory: Callable[[str], str]
 ) -> AsyncIterator[ElasticsearchConfig]:
@@ -134,7 +128,7 @@ def registry_config() -> RegistryConfig:
     return RegistryConfig(url=URL("http://localhost:5000"))
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def docker_config() -> DockerConfig:
     return DockerConfig()
 
@@ -212,40 +206,3 @@ def get_service_url(  # type: ignore
         timeout_s -= interval_s
 
     pytest.fail(f"Service {service_name} is unavailable.")
-
-
-async def wait_for_job_docker_client(
-    job_id: str,
-    kube_client: KubeClient,
-    docker_config: DockerConfig,
-    timeout_s: float = 60,
-    interval_s: float = 1,
-) -> None:
-    async with timeout(timeout_s):
-        pod_name = job_id
-        pod = await kube_client.get_pod(pod_name)
-        while pod.is_phase_pending:
-            await asyncio.sleep(interval_s)
-
-        cont_id = pod.get_container_id(pod_name)
-        assert cont_id
-        async with kube_client.get_node_proxy_client(
-            pod.node_name, docker_config.docker_engine_api_port
-        ) as proxy_client:
-            docker = Docker(
-                url=str(proxy_client.url),
-                session=proxy_client.session,
-                connector=proxy_client.session.connector,
-            )
-            while True:
-                try:
-                    if not pod.is_phase_running:
-                        pytest.fail(f"Job '{job_id}' is not running.")
-                    async with docker.ping() as resp:
-                        assert resp.status == 200, await resp.text()
-                        return
-                except aiohttp.ClientError as e:
-                    logging.info(
-                        f"Failed to ping docker client: {proxy_client.url}: {e}"
-                    )
-                    await asyncio.sleep(interval_s)

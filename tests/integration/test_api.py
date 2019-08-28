@@ -1,9 +1,10 @@
 import asyncio
 import json
+import logging
 import re
 import time
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator, Optional
 from unittest import mock
 from uuid import uuid4
 
@@ -18,13 +19,15 @@ from aiohttp.web_exceptions import (
     HTTPNoContent,
     HTTPUnauthorized,
 )
+from async_timeout import timeout
 from platform_monitoring.api import create_app
 from platform_monitoring.config import Config, DockerConfig, PlatformApiConfig
+from platform_monitoring.docker_client import Docker
 from yarl import URL
 
 from tests.integration.conftest_kube import MyKubeClient
 
-from .conftest import ApiAddress, create_local_app_server, wait_for_job_docker_client
+from .conftest import ApiAddress, create_local_app_server
 from .conftest_auth import _User
 
 
@@ -85,7 +88,7 @@ async def monitoring_api(config: Config) -> AsyncIterator[MonitoringApiEndpoints
         yield MonitoringApiEndpoints(address=address)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 async def platform_api(
     platform_api_config: PlatformApiConfig
 ) -> AsyncIterator[PlatformApiEndpoints]:
@@ -140,7 +143,7 @@ class JobsClient:
                 assert response.status == HTTPNoContent.status_code
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def jobs_client_factory(
     platform_api: PlatformApiEndpoints, client: aiohttp.ClientSession
 ) -> Iterator[Callable[[_User], JobsClient]]:
@@ -150,7 +153,7 @@ def jobs_client_factory(
     yield impl
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 async def jobs_client(
     regular_user_factory: Callable[..., Awaitable[_User]],
     jobs_client_factory: Callable[[_User], JobsClient],
@@ -159,7 +162,7 @@ async def jobs_client(
     return jobs_client_factory(regular_user)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def job_request_factory() -> Callable[[], Dict[str, Any]]:
     def _factory() -> Dict[str, Any]:
         return {
@@ -180,25 +183,70 @@ async def job_submit(
     return job_request_factory()
 
 
-@pytest.fixture
-async def infinite_job(
+@pytest.fixture(scope="session")
+async def job_factory(
     platform_api: PlatformApiEndpoints,
     client: aiohttp.ClientSession,
     jobs_client: JobsClient,
     job_request_factory: Callable[[], Dict[str, Any]],
-) -> AsyncIterator[str]:
-    request_payload = job_request_factory()
-    request_payload["container"]["command"] = "tail -f /dev/null"
-    async with client.post(
-        platform_api.jobs_base_url, headers=jobs_client.headers, json=request_payload
-    ) as response:
-        assert response.status == HTTPAccepted.status_code, await response.text()
-        result = await response.json()
-        job_id = result["id"]
+) -> AsyncIterator[Callable[[str], Awaitable[str]]]:
+    job_id: Optional[str] = None
 
-    yield job_id
+    async def _f(command: str) -> str:
+        request_payload = job_request_factory()
+        request_payload["container"]["command"] = command
+        async with client.post(
+            platform_api.jobs_base_url,
+            headers=jobs_client.headers,
+            json=request_payload,
+        ) as response:
+            assert response.status == HTTPAccepted.status_code, await response.text()
+            result = await response.json()
+            job_id = result["id"]
+        return job_id
 
-    await jobs_client.delete_job(job_id)
+    yield _f
+
+    if job_id:
+        await jobs_client.delete_job(job_id)
+
+
+@pytest.fixture
+async def infinite_job(job_factory: Callable[[str], Awaitable[str]]) -> str:
+    return await job_factory("tail -f /dev/null")
+
+
+@pytest.fixture
+async def wait_for_job_docker_client(
+    kube_client: MyKubeClient,
+    docker_config: DockerConfig,
+    job_factory: Callable[[str], Awaitable[str]],
+) -> None:
+    timeout_s: float = 60
+    interval_s: float = 1
+
+    job_id = await job_factory("sleep 5m")
+    pod_name = job_id
+    async with timeout(timeout_s):
+        pod = await kube_client.get_pod(pod_name)
+        async with kube_client.get_node_proxy_client(
+            pod.node_name, docker_config.docker_engine_api_port
+        ) as proxy_client:
+            docker = Docker(
+                url=str(proxy_client.url),
+                session=proxy_client.session,
+                connector=proxy_client.session.connector,
+            )
+            while True:
+                try:
+                    async with docker.ping() as resp:
+                        assert resp.status == 200, await resp.text()
+                        return
+                except aiohttp.ClientError as e:
+                    logging.info(
+                        f"Failed to ping docker client: {proxy_client.url}: {e}"
+                    )
+                    await asyncio.sleep(interval_s)
 
 
 class TestApi:
@@ -691,9 +739,9 @@ class TestSaveApi:
         kube_client: MyKubeClient,
         docker_config: DockerConfig,
         config: Config,
+        wait_for_job_docker_client: None,
     ) -> None:
         await jobs_client.long_polling_by_job_id(job_id=infinite_job, status="running")
-        await wait_for_job_docker_client(infinite_job, kube_client, docker_config)
 
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
