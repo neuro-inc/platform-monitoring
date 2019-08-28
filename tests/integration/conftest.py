@@ -27,6 +27,8 @@ from platform_monitoring.config import (
     RegistryConfig,
     ServerConfig,
 )
+from platform_monitoring.docker_client import Docker
+from platform_monitoring.kube_client import KubeClient
 from yarl import URL
 
 
@@ -210,3 +212,40 @@ def get_service_url(  # type: ignore
         timeout_s -= interval_s
 
     pytest.fail(f"Service {service_name} is unavailable.")
+
+
+async def wait_for_job_docker_client(
+    job_id: str,
+    kube_client: KubeClient,
+    docker_config: DockerConfig,
+    timeout_s: float = 60,
+    interval_s: float = 1,
+) -> None:
+    async with timeout(timeout_s):
+        pod_name = job_id
+        pod = await kube_client.get_pod(pod_name)
+        while pod.is_phase_pending:
+            await asyncio.sleep(interval_s)
+
+        cont_id = pod.get_container_id(pod_name)
+        assert cont_id
+        async with kube_client.get_node_proxy_client(
+            pod.node_name, docker_config.docker_engine_api_port
+        ) as proxy_client:
+            docker = Docker(
+                url=str(proxy_client.url),
+                session=proxy_client.session,
+                connector=proxy_client.session.connector,
+            )
+            while True:
+                try:
+                    if not pod.is_phase_running:
+                        pytest.fail(f"Job '{job_id}' is not running.")
+                    async with docker.ping() as resp:
+                        assert resp.status == 200, await resp.text()
+                        return
+                except aiohttp.ClientError as e:
+                    logging.info(
+                        f"Failed to ping docker client: {proxy_client.url}: {e}"
+                    )
+                    await asyncio.sleep(interval_s)

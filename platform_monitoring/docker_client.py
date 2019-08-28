@@ -1,8 +1,10 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, AsyncIterator
 
 from aiodocker import Docker as AioDocker
 from aiodocker.images import DockerImages as AioDockerImages
+from aiohttp.web import Response
+from async_generator import asynccontextmanager
 from docker_image.reference import (
     InvalidReference as _InvalidImageReference,
     Reference as _ImageReference,
@@ -27,6 +29,10 @@ class Docker(AioDocker):
         super().__init__(*args, **kwargs)
 
         self.images = DockerImages(self)
+
+    @asynccontextmanager
+    async def ping(self) -> AsyncIterator[Response]:
+        yield await self._query("_ping", method="GET")
 
 
 class ImageReferenceError(ValueError):

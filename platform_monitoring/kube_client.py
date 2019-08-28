@@ -71,6 +71,10 @@ class Pod:
         return id_.replace("docker://", "") or None
 
     @property
+    def is_phase_pending(self) -> bool:
+        return self._status_payload.get("phase") == "Pending"
+
+    @property
     def is_phase_running(self) -> bool:
         return self._status_payload.get("phase") == "Running"
 

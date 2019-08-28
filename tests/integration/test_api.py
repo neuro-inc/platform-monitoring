@@ -22,7 +22,9 @@ from platform_monitoring.api import create_app
 from platform_monitoring.config import Config, DockerConfig, PlatformApiConfig
 from yarl import URL
 
-from .conftest import ApiAddress, create_local_app_server
+from tests.integration.conftest_kube import MyKubeClient
+
+from .conftest import ApiAddress, create_local_app_server, wait_for_job_docker_client
 from .conftest_auth import _User
 
 
@@ -686,9 +688,12 @@ class TestSaveApi:
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
         infinite_job: str,
+        kube_client: MyKubeClient,
+        docker_config: DockerConfig,
         config: Config,
     ) -> None:
         await jobs_client.long_polling_by_job_id(job_id=infinite_job, status="running")
+        await wait_for_job_docker_client(infinite_job, kube_client, docker_config)
 
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
@@ -696,37 +701,27 @@ class TestSaveApi:
         image = f"{repository}:{infinite_job}"
         payload = {"container": {"image": image}}
 
-        NUM_RETRIES = 3
-        error_msg = f"Couldn't commit and push image in {NUM_RETRIES} attempts"
-        for retry in range(NUM_RETRIES):
-            try:
-                async with client.post(url, headers=headers, json=payload) as resp:
-                    assert resp.status == HTTPOk.status_code, str(resp)
-                    chunks = [
-                        json.loads(chunk, encoding="utf-8")
-                        async for chunk in resp.content
-                        if chunk
-                    ]
-                    debug = f"Received chunks: `{chunks}`"
-                    assert isinstance(chunks, list), debug
-                    assert all(isinstance(s, dict) for s in chunks), debug
-                    assert len(chunks) >= 4, debug  # 2 for commit(), >=2 for push()
+        async with client.post(url, headers=headers, json=payload) as resp:
+            assert resp.status == HTTPOk.status_code, str(resp)
+            chunks = [
+                json.loads(chunk, encoding="utf-8")
+                async for chunk in resp.content
+                if chunk
+            ]
+            debug = f"Received chunks: `{chunks}`"
+            assert isinstance(chunks, list), debug
+            assert all(isinstance(s, dict) for s in chunks), debug
+            assert len(chunks) >= 4, debug  # 2 for commit(), >=2 for push()
 
-                    # here we rely on chunks to be received in correct order
+            # here we rely on chunks to be received in correct order
 
-                    assert chunks[0]["status"] == "CommitStarted", debug
-                    assert chunks[0]["details"]["image"] == image, debug
-                    assert re.match(r"\w{64}", chunks[0]["details"]["container"]), debug
+            assert chunks[0]["status"] == "CommitStarted", debug
+            assert chunks[0]["details"]["image"] == image, debug
+            assert re.match(r"\w{64}", chunks[0]["details"]["container"]), debug
 
-                    assert chunks[1] == {"status": "CommitFinished"}, debug
+            assert chunks[1] == {"status": "CommitFinished"}, debug
 
-                    msg = f"The push refers to repository [{repository}]"
-                    assert chunks[2].get("status") == msg, debug
+            msg = f"The push refers to repository [{repository}]"
+            assert chunks[2].get("status") == msg, debug
 
-                    assert chunks[-1].get("aux", {}).get("Tag") == infinite_job, debug
-
-                    return
-            except AssertionError:
-                print(f"{error_msg}. Retrying...")
-
-        pytest.fail(error_msg)
+            assert chunks[-1].get("aux", {}).get("Tag") == infinite_job, debug
