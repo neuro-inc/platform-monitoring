@@ -199,7 +199,7 @@ async def infinite_job(
     await jobs_client.long_polling_by_job_id(job_id, status="running")
     yield job_id
 
-    await jobs_client.delete_job(job_id, assert_success=False)
+    await jobs_client.delete_job(job_id)
 
 
 class TestApi:
