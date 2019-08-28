@@ -57,7 +57,7 @@ def random_str(length: int = 8) -> str:
     return str(uuid1())[:length]
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def client() -> AsyncIterator[aiohttp.ClientSession]:
     async with aiohttp.ClientSession() as session:
         yield session
@@ -85,7 +85,9 @@ async def wait_for_service(
             await asyncio.sleep(interval_s)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
+# TODO (A Yushkovskiy, 05-May-2019) This fixture should have scope="session" in order
+#  to be faster, but it causes mysterious errors `RuntimeError: Event loop is closed`
 async def platform_api_config(
     token_factory: Callable[[str], str],
 ) -> AsyncIterator[PlatformApiConfig]:
@@ -106,7 +108,9 @@ async def platform_api_client(
         yield client
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
+# TODO (A Yushkovskiy, 05-May-2019) This fixture should have scope="session" in order
+#  to be faster, but it causes mysterious errors `RuntimeError: Event loop is closed`
 async def es_config(
     token_factory: Callable[[str], str]
 ) -> AsyncIterator[ElasticsearchConfig]:
@@ -128,7 +132,7 @@ def registry_config() -> RegistryConfig:
     return RegistryConfig(url=URL("http://localhost:5000"))
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def docker_config() -> DockerConfig:
     return DockerConfig()
 

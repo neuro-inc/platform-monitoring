@@ -88,7 +88,7 @@ async def monitoring_api(config: Config) -> AsyncIterator[MonitoringApiEndpoints
         yield MonitoringApiEndpoints(address=address)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def platform_api(
     platform_api_config: PlatformApiConfig
 ) -> AsyncIterator[PlatformApiEndpoints]:
@@ -143,7 +143,7 @@ class JobsClient:
                 assert response.status == HTTPNoContent.status_code
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def jobs_client_factory(
     platform_api: PlatformApiEndpoints, client: aiohttp.ClientSession
 ) -> Iterator[Callable[[_User], JobsClient]]:
@@ -153,7 +153,7 @@ def jobs_client_factory(
     yield impl
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def jobs_client(
     regular_user_factory: Callable[..., Awaitable[_User]],
     jobs_client_factory: Callable[[_User], JobsClient],
@@ -162,7 +162,7 @@ async def jobs_client(
     return jobs_client_factory(regular_user)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def job_request_factory() -> Callable[[], Dict[str, Any]]:
     def _factory() -> Dict[str, Any]:
         return {
@@ -183,7 +183,7 @@ async def job_submit(
     return job_request_factory()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def job_factory(
     platform_api: PlatformApiEndpoints,
     client: aiohttp.ClientSession,

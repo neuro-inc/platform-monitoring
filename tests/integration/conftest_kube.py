@@ -141,7 +141,7 @@ def cert_authority_data_pem(
     return None
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def kube_config(
     kube_config_cluster_payload: Dict[str, Any],
     kube_config_user_payload: Dict[str, Any],
@@ -159,7 +159,7 @@ async def kube_config(
     return kube_config
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def kube_client(kube_config: KubeConfig) -> AsyncIterator[MyKubeClient]:
     # TODO (A Danshyn 06/06/18): create a factory method
     client = MyKubeClient(
