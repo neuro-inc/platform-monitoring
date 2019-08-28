@@ -22,6 +22,8 @@ from platform_monitoring.api import create_app
 from platform_monitoring.config import Config, DockerConfig, PlatformApiConfig
 from yarl import URL
 
+from tests.integration.conftest_kube import MyKubeClient
+
 from .conftest import ApiAddress, create_local_app_server
 from .conftest_auth import _User
 
@@ -194,6 +196,7 @@ async def infinite_job(
         result = await response.json()
         job_id = result["id"]
 
+    await jobs_client.long_polling_by_job_id(job_id, status="running")
     yield job_id
 
     await jobs_client.delete_job(job_id)
@@ -253,7 +256,6 @@ class TestTopApi:
         jobs_client: JobsClient,
         infinite_job: str,
     ) -> None:
-        await jobs_client.long_polling_by_job_id(job_id=infinite_job, status="running")
         num_request = 2
         records = []
 
@@ -315,7 +317,6 @@ class TestTopApi:
         jobs_client: JobsClient,
         infinite_job: str,
     ) -> None:
-        await jobs_client.long_polling_by_job_id(job_id=infinite_job, status="running")
 
         url = monitoring_api.generate_top_url(job_id=infinite_job)
         with pytest.raises(WSServerHandshakeError, match="Invalid response status"):
@@ -503,8 +504,6 @@ class TestLogApi:
         jobs_client: JobsClient,
         infinite_job: str,
     ) -> None:
-        await jobs_client.long_polling_by_job_id(job_id=infinite_job, status="running")
-
         url = monitoring_api.generate_top_url(job_id=infinite_job)
         async with client.get(url) as resp:
             assert resp.status == HTTPUnauthorized.status_code
@@ -620,8 +619,10 @@ class TestSaveApi:
         jobs_client: JobsClient,
         infinite_job: str,
         config: Config,
+        kube_client: MyKubeClient,
     ) -> None:
         await jobs_client.delete_job(infinite_job)
+        await kube_client.wait_pod_is_terminated(pod_name=infinite_job)
 
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
@@ -635,8 +636,10 @@ class TestSaveApi:
                 async for chunk in resp.content
                 if chunk
             ]
-            assert len(chunks) == 1
-            assert "not running" in chunks[0]["error"]
+            debug = f"Received chunks: `{chunks}`"
+
+            assert len(chunks) == 1, debug
+            assert "not running" in chunks[0]["error"], debug
 
     @pytest.mark.asyncio
     async def test_save_push_failed_job_exception_raised(
@@ -655,8 +658,6 @@ class TestSaveApi:
             monitoring_api = MonitoringApiEndpoints(address=address)
             url = monitoring_api.generate_save_url(job_id=infinite_job)
 
-            await jobs_client.long_polling_by_job_id(infinite_job, status="running")
-
             headers = jobs_client.headers
             image = f"{config.registry.host}/alpine:{infinite_job}"
             payload = {"container": {"image": image}}
@@ -667,16 +668,19 @@ class TestSaveApi:
                     async for chunk in resp.content
                     if chunk
                 ]
+                debug = f"Received chunks: `{chunks}`"
 
-                assert len(chunks) == 2
+                assert len(chunks) == 2, debug
 
-                assert chunks[0]["status"] == "CommitStarted"
-                assert chunks[0]["details"]["image"] == image
-                assert re.match(r"\w{64}", chunks[0]["details"]["container"])
+                assert chunks[0]["status"] == "CommitStarted", debug
+                assert chunks[0]["details"]["image"] == image, debug
+                assert re.match(r"\w{64}", chunks[0]["details"]["container"]), debug
 
                 error = chunks[1]["error"]
-                assert f"Failed to save job '{infinite_job}': DockerError(503" in error
-                assert "getsockopt: connection refused" in error
+                assert (
+                    f"Failed to save job '{infinite_job}': DockerError(503" in error
+                ), debug
+                assert "getsockopt: connection refused" in error, debug
 
     @pytest.mark.asyncio
     async def test_save_ok(
@@ -688,8 +692,6 @@ class TestSaveApi:
         infinite_job: str,
         config: Config,
     ) -> None:
-        await jobs_client.long_polling_by_job_id(job_id=infinite_job, status="running")
-
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
         repository = f"{config.registry.host}/alpine"
