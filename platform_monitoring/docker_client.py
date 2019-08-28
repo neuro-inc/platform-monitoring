@@ -28,6 +28,10 @@ class Docker(AioDocker):
 
         self.images = DockerImages(self)
 
+    async def ping(self) -> None:
+        resp = await self._query("_ping", method="GET")
+        resp.raise_for_status()
+
 
 class ImageReferenceError(ValueError):
     pass
