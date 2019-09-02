@@ -50,12 +50,12 @@ gke_docker_pull_test_images:
 	platformapi=$(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:3e475aa6a0665e2a88ec854f59ec092a6472cb91
 	platformauthapi=$(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:33318ecfd6ca5b0974f050f16b780d57e4a43e4f
 	platformconfig=$(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:9d7cea532a7ab0e45871cb48cf355427a274dbd9
-	docker pull platformapi
-	docker pull platformauthapi
-	docker pull platformconfig
-	docker tag platformapi:latest
-	docker tag platformauthapi:latest
-	docker tag platformconfig:latest
+	docker pull $(platformapi)
+	docker pull $(platformauthapi)
+	docker pull $(platformconfig)
+	docker tag $(platformapi) platformapi:latest
+	docker tag $(platformauthapi) platformauthapi:latest
+	docker tag $(platformconfig) platformconfig:latest
 
 gke_docker_push: build
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE):latest
