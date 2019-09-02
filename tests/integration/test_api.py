@@ -544,6 +544,10 @@ class TestLogApi:
         url = monitoring_api.generate_log_url(job_id)
         async with client.get(url, headers=user2.headers) as resp:
             assert resp.status == HTTPForbidden.status_code
+            result = await resp.json()
+            assert result == {
+                "missing": [{"uri": f"job://{user1.name}/{job_id}", "action": "read"}]
+            }
 
     @pytest.mark.asyncio
     async def test_log_no_auth_token_provided_unauthorized(
@@ -613,6 +617,10 @@ class TestSaveApi:
         url = monitoring_api.generate_save_url(job_id)
         async with client.post(url, headers=user2.headers) as resp:
             assert resp.status == HTTPForbidden.status_code
+            result = await resp.json()
+            assert result == {
+                "missing": [{"uri": f"job://{user1.name}/{job_id}", "action": "write"}]
+            }
 
     @pytest.mark.asyncio
     async def test_save_no_auth_token_provided_unauthorized(
