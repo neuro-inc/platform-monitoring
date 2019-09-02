@@ -3,6 +3,10 @@ IMAGE_TAG ?= latest
 ARTIFACTORY_TAG ?=$(shell echo "$(CIRCLE_TAG)" | awk -F/ '{print $$2}')
 IMAGE ?= $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/$(IMAGE_NAME)
 
+IMAGE_PLATFORM_API = $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:3e475aa6a0665e2a88ec854f59ec092a6472cb91
+IMAGE_PLATFORM_AUTH_API = $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:33318ecfd6ca5b0974f050f16b780d57e4a43e4f
+IMAGE_PLATFORM_CONFIG = $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:9d7cea532a7ab0e45871cb48cf355427a274dbd9
+
 ifdef CIRCLECI
     PIP_EXTRA_INDEX_URL ?= https://$(DEVPI_USER):$(DEVPI_PASS)@$(DEVPI_HOST)/$(DEVPI_USER)/$(DEVPI_INDEX)
 else
@@ -47,15 +51,12 @@ gke_login:
 
 gke_docker_pull_test_images:
     # Pull images versioned around May 30 - June 11, 2019 and tag them as `latest`
-	platformapi=$(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:3e475aa6a0665e2a88ec854f59ec092a6472cb91
-	platformauthapi=$(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:33318ecfd6ca5b0974f050f16b780d57e4a43e4f
-	platformconfig=$(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:9d7cea532a7ab0e45871cb48cf355427a274dbd9
-	docker pull $(platformapi)
-	docker pull $(platformauthapi)
-	docker pull $(platformconfig)
-	docker tag $(platformapi) platformapi:latest
-	docker tag $(platformauthapi) platformauthapi:latest
-	docker tag $(platformconfig) platformconfig:latest
+	docker pull $(IMAGE_PLATFORM_API)
+	docker pull $(IMAGE_PLATFORM_AUTH_API)
+	docker pull $(IMAGE_PLATFORM_CONFIG)
+	docker tag $(IMAGE_PLATFORM_API) platformapi:latest
+	docker tag $(IMAGE_PLATFORM_AUTH_API) platformauthapi:latest
+	docker tag $(IMAGE_PLATFORM_CONFIG) platformconfig:latest
 
 gke_docker_push: build
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE):latest
