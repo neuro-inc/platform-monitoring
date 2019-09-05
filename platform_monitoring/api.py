@@ -17,10 +17,10 @@ from aiohttp.web import (
 )
 from aiohttp.web_middlewares import middleware
 from aiohttp.web_response import json_response
-from aiohttp_security import check_authorized, check_permission
+from aiohttp_security import check_authorized
 from async_exit_stack import AsyncExitStack
 from async_generator import asynccontextmanager
-from neuro_auth_client import AuthClient, Permission
+from neuro_auth_client import AuthClient, Permission, check_permissions
 from neuro_auth_client.security import AuthScheme, setup_security
 from neuromation.api import (
     Client as PlatformApiClient,
@@ -110,9 +110,10 @@ class MonitoringApiHandler:
         user = await untrusted_user(request)
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
+
         permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="read")
         logger.info("Checking whether %r has %r", user, permission)
-        await check_permission(request, permission.action, [permission])
+        await check_permissions(request, [permission])
 
         pod_name = self._kube_helper.get_job_pod_name(job)
         log_reader = await self._log_reader_factory.get_pod_log_reader(pod_name)
@@ -140,9 +141,10 @@ class MonitoringApiHandler:
         user = await untrusted_user(request)
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
+
         permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="read")
         logger.info("Checking whether %r has %r", user, permission)
-        await check_permission(request, permission.action, [permission])
+        await check_permissions(request, [permission])
 
         logger.info("Websocket connection starting")
         ws = aiohttp.web.WebSocketResponse()
@@ -222,9 +224,10 @@ class MonitoringApiHandler:
         user = await untrusted_user(request)
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
+
         permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="write")
         logger.info("Checking whether %r has %r", user, permission)
-        await check_permission(request, permission.action, [permission])
+        await check_permissions(request, [permission])
 
         container = await self._parse_save_container(request)
 
