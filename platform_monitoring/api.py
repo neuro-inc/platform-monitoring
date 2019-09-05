@@ -113,7 +113,7 @@ class MonitoringApiHandler:
 
         permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="read")
         logger.info("Checking whether %r has %r", user, permission)
-        await check_permissions(request, user.name, [permission])
+        await check_permissions(request, [permission])
 
         pod_name = self._kube_helper.get_job_pod_name(job)
         log_reader = await self._log_reader_factory.get_pod_log_reader(pod_name)
@@ -144,7 +144,7 @@ class MonitoringApiHandler:
 
         permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="read")
         logger.info("Checking whether %r has %r", user, permission)
-        await check_permissions(request, user.name, [permission])
+        await check_permissions(request, [permission])
 
         logger.info("Websocket connection starting")
         ws = aiohttp.web.WebSocketResponse()
@@ -227,7 +227,7 @@ class MonitoringApiHandler:
 
         permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="write")
         logger.info("Checking whether %r has %r", user, permission)
-        await check_permissions(request, user.name, [permission])
+        await check_permissions(request, [permission])
 
         container = await self._parse_save_container(request)
 
