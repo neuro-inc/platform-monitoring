@@ -14,7 +14,7 @@ export PIP_EXTRA_INDEX_URL
 include k8s.mk
 
 setup:
-    echo "Using extra pip index: $PIP_EXTRA_INDEX_URL"
+	echo "Using extra pip index: $PIP_EXTRA_INDEX_URL"
 	pip install --no-use-pep517 -r requirements/test.txt
 
 lint:
