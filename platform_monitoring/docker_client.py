@@ -12,7 +12,7 @@ from docker_image.reference import (
 class DockerImages(AioDockerImages):
     async def commit(self, container: str, repo: str, tag: str) -> None:
         params = dict(container=container, repo=repo, tag=tag)
-        await self.docker._query(
+        await self.docker._query_json(
             "commit",
             method="POST",
             params=params,
@@ -29,8 +29,8 @@ class Docker(AioDocker):
         self.images = DockerImages(self)
 
     async def ping(self) -> None:
-        resp = await self._query("_ping", method="GET")
-        resp.raise_for_status()
+        async with self._query("_ping", method="GET") as resp:
+            resp.raise_for_status()
 
 
 class ImageReferenceError(ValueError):
