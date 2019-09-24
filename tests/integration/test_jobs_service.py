@@ -50,9 +50,13 @@ class TestJobsService:
         jobs = []
 
         async def _factory(
-            image: RemoteImage, command: Optional[str], resources: Resources
+            image: str, command: Optional[str], resources: Resources
         ) -> Job:
-            container = ApiContainer(image=image, command=command, resources=resources)
+            container = ApiContainer(
+                image=platform_api_client.parse.remote_image(image),
+                command=command,
+                resources=resources,
+            )
             job = await platform_api_client.jobs.run(container)
             jobs.append(job)
             return job
@@ -131,7 +135,13 @@ class TestJobsService:
         wait_for_job_succeeded: Any,
     ) -> None:
         resources = Resources(
-            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+            memory_mb=16,
+            cpu=0.1,
+            gpu=None,
+            shm=False,
+            gpu_model=None,
+            tpu_type=None,
+            tpu_software_version=None,
         )
         job = await job_factory(
             "alpine:latest", "sh -c 'echo -n 123 > /test; sleep 300'", resources
@@ -165,7 +175,13 @@ class TestJobsService:
         wait_for_job_succeeded: Any,
     ) -> None:
         resources = Resources(
-            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+            memory_mb=16,
+            cpu=0.1,
+            gpu=None,
+            shm=False,
+            gpu_model=None,
+            tpu_type=None,
+            tpu_software_version=None,
         )
         job = await job_factory(
             "alpine:latest",
@@ -199,7 +215,13 @@ class TestJobsService:
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=16 ** 10, cpu=0.1, gpu=None, shm=False, gpu_model=None
+            memory_mb=16 ** 10,
+            cpu=0.1,
+            gpu=None,
+            shm=False,
+            gpu_model=None,
+            tpu_type=None,
+            tpu_software_version=None,
         )
         job = await job_factory("alpine:latest", None, resources)
 
@@ -224,7 +246,13 @@ class TestJobsService:
         wait_for_job_running: Any,
     ) -> None:
         resources = Resources(
-            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+            memory_mb=16,
+            cpu=0.1,
+            gpu=None,
+            shm=False,
+            gpu_model=None,
+            tpu_type=None,
+            tpu_software_version=None,
         )
         job = await job_factory("alpine:latest", "sh -c 'sleep 300'", resources)
         await wait_for_job_running(job)
@@ -264,7 +292,13 @@ class TestJobsService:
         wait_for_job_running: Any,
     ) -> None:
         resources = Resources(
-            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+            memory_mb=16,
+            cpu=0.1,
+            gpu=None,
+            shm=False,
+            gpu_model=None,
+            tpu_type=None,
+            tpu_software_version=None,
         )
         job = await job_factory("alpine:latest", "sh -c 'sleep 300'", resources)
         await wait_for_job_running(job)
