@@ -10,7 +10,7 @@ install_requires = (
     "async-exit-stack==1.0.1",  # backport from 3.7 stdlib
     "aioelasticsearch==0.5.2",
     "aiodocker==0.14.0",
-    "docker-image-py==0.1.5",
+    "docker-image-py==0.1.10",
     "trafaret==1.2.0",
 )
 
