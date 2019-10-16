@@ -117,7 +117,13 @@ class TestJobsService:
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+            memory_mb=16,
+            cpu=0.1,
+            gpu=None,
+            shm=False,
+            gpu_model=None,
+            tpu_type=None,
+            tpu_software_version=None,
         )
         job = await job_factory(
             RemoteImage(
@@ -156,7 +162,13 @@ class TestJobsService:
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+            memory_mb=16,
+            cpu=0.1,
+            gpu=None,
+            shm=False,
+            gpu_model=None,
+            tpu_type=None,
+            tpu_software_version=None,
         )
         job = await job_factory(
             RemoteImage(
@@ -194,7 +206,13 @@ class TestJobsService:
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=16 ** 10, cpu=0.1, gpu=None, shm=False, gpu_model=None
+            memory_mb=16 ** 10,
+            cpu=0.1,
+            gpu=None,
+            shm=False,
+            gpu_model=None,
+            tpu_type=None,
+            tpu_software_version=None,
         )
         job = await job_factory(
             RemoteImage(image="alpine:latest", command=None), resources
@@ -220,7 +238,13 @@ class TestJobsService:
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+            memory_mb=16,
+            cpu=0.1,
+            gpu=None,
+            shm=False,
+            gpu_model=None,
+            tpu_type=None,
+            tpu_software_version=None,
         )
         job = await job_factory(
             RemoteImage(image="alpine:latest", command="sh -c 'sleep 300'"), resources
@@ -261,7 +285,13 @@ class TestJobsService:
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+            memory_mb=16,
+            cpu=0.1,
+            gpu=None,
+            shm=False,
+            gpu_model=None,
+            tpu_type=None,
+            tpu_software_version=None,
         )
         job = await job_factory(
             RemoteImage(image="alpine:latest", command="sh -c 'sleep 300'"), resources
