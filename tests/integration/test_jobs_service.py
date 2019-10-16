@@ -12,7 +12,6 @@ from neuromation.api import (
     JobStatus,
     Resources,
 )
-from neuromation.api.jobs import Jobs as JobsClient
 from platform_monitoring.config import DockerConfig
 from platform_monitoring.jobs_service import (
     Container,
@@ -33,11 +32,11 @@ class TestJobsService:
     @pytest.fixture
     async def jobs_service(
         self,
-        jobs_client: JobsClient,
+        platform_api_client: PlatformApiClient,
         kube_client: MyKubeClient,
         docker_config: DockerConfig,
     ) -> JobsService:
-        return JobsService(jobs_client, kube_client, docker_config)
+        return JobsService(platform_api_client.job, kube_client, docker_config)
 
     @pytest.fixture
     async def job_factory(
@@ -124,7 +123,7 @@ class TestJobsService:
     async def test_save_ok(
         self,
         job_factory: JobFactory,
-        jobs_client: JobsClient,
+        platform_api_client: PlatformApiClient,
         jobs_service: JobsService,
         user: User,
         registry_host: str,
@@ -142,7 +141,7 @@ class TestJobsService:
         job = await job_factory(
             "alpine:latest", "sh -c 'echo -n 123 > /test; sleep 300'", resources
         )
-        await self.wait_for_job_running(job, jobs_client)
+        await self.wait_for_job_running(job, platform_api_client)
 
         container = Container(
             image=ImageReference(
@@ -156,13 +155,13 @@ class TestJobsService:
         new_job = await job_factory(
             str(container.image), 'sh -c \'[ "$(cat /test)" = "123" ]\'', resources
         )
-        await self.wait_for_job_succeeded(new_job, jobs_client)
+        await self.wait_for_job_succeeded(new_job, platform_api_client)
 
     @pytest.mark.asyncio
     async def test_save_no_tag(
         self,
         job_factory: JobFactory,
-        jobs_client: JobsClient,
+        platform_api_client: PlatformApiClient,
         jobs_service: JobsService,
         user: User,
         registry_host: str,
@@ -182,7 +181,7 @@ class TestJobsService:
             f"sh -c 'echo -n {image_tag} > /test; sleep 300'",
             resources,
         )
-        await self.wait_for_job_running(job, jobs_client)
+        await self.wait_for_job_running(job, platform_api_client)
 
         container = Container(
             image=ImageReference(domain=registry_host, path=f"{user.name}/alpine")
@@ -196,13 +195,13 @@ class TestJobsService:
             f'sh -c \'[ "$(cat /test)" = "{image_tag}" ]\'',
             resources,
         )
-        await self.wait_for_job_succeeded(new_job, jobs_client)
+        await self.wait_for_job_succeeded(new_job, platform_api_client)
 
     @pytest.mark.asyncio
     async def test_save_pending_job(
         self,
         job_factory: JobFactory,
-        jobs_client: JobsClient,
+        platform_api_client: PlatformApiClient,
         jobs_service: JobsService,
         user: User,
         registry_host: str,
@@ -233,7 +232,7 @@ class TestJobsService:
     async def test_save_push_failure(
         self,
         job_factory: JobFactory,
-        jobs_client: JobsClient,
+        platform_api_client: PlatformApiClient,
         jobs_service: JobsService,
         user: User,
         image_tag: str,
@@ -248,7 +247,7 @@ class TestJobsService:
             tpu_software_version=None,
         )
         job = await job_factory("alpine:latest", "sh -c 'sleep 300'", resources)
-        await self.wait_for_job_running(job, jobs_client)
+        await self.wait_for_job_running(job, platform_api_client)
 
         registry_host = "unknown:5000"
         container = Container(
@@ -278,7 +277,7 @@ class TestJobsService:
     async def test_save_commit_fails_with_exception(
         self,
         job_factory: JobFactory,
-        jobs_client: JobsClient,
+        platform_api_client: PlatformApiClient,
         jobs_service: JobsService,
         user: User,
         image_tag: str,
@@ -293,7 +292,7 @@ class TestJobsService:
             tpu_software_version=None,
         )
         job = await job_factory("alpine:latest", "sh -c 'sleep 300'", resources)
-        await self.wait_for_job_running(job, jobs_client)
+        await self.wait_for_job_running(job, platform_api_client)
 
         registry_host = "localhost:5000"
         container = Container(
