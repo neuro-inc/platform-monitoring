@@ -9,7 +9,7 @@ install_requires = (
     "neuromation==19.7.4",
     "async-exit-stack==1.0.1",  # backport from 3.7 stdlib
     "aioelasticsearch==0.5.2",
-    "aiodocker==0.14.0",
+    "aiodocker==0.17.0",
     "docker-image-py==0.1.10",
     "trafaret==1.2.0",
 )
