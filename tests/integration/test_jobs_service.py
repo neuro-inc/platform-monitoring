@@ -7,9 +7,9 @@ import pytest
 from async_timeout import timeout
 from neuromation.api import (
     Client as PlatformApiClient,
-    Image,
     JobDescription as Job,
     JobStatus,
+    RemoteImage,
     Resources,
 )
 from neuromation.api.jobs import Jobs as JobsClient
@@ -25,7 +25,7 @@ from platform_monitoring.user import User
 from .conftest_kube import MyKubeClient
 
 
-JobFactory = Callable[[Image, Resources], Awaitable[Job]]
+JobFactory = Callable[[RemoteImage, Resources], Awaitable[Job]]
 
 
 class TestJobsService:
@@ -46,7 +46,7 @@ class TestJobsService:
     async def job_factory(self, jobs_client: JobsClient) -> AsyncIterator[JobFactory]:
         jobs = []
 
-        async def _factory(image: Image, resources: Resources) -> Job:
+        async def _factory(image: RemoteImage, resources: Resources) -> Job:
             job = await jobs_client.submit(image=image, resources=resources)
             jobs.append(job)
             return job
@@ -120,7 +120,7 @@ class TestJobsService:
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
         )
         job = await job_factory(
-            Image(
+            RemoteImage(
                 image="alpine:latest", command="sh -c 'echo -n 123 > /test; sleep 300'"
             ),
             resources,
@@ -137,7 +137,7 @@ class TestJobsService:
             pass
 
         new_job = await job_factory(
-            Image(
+            RemoteImage(
                 image=str(container.image),
                 command='sh -c \'[ "$(cat /test)" = "123" ]\'',
             ),
@@ -159,7 +159,7 @@ class TestJobsService:
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
         )
         job = await job_factory(
-            Image(
+            RemoteImage(
                 image="alpine:latest",
                 command=f"sh -c 'echo -n {image_tag} > /test; sleep 300'",
             ),
@@ -175,7 +175,7 @@ class TestJobsService:
             pass
 
         new_job = await job_factory(
-            Image(
+            RemoteImage(
                 image=str(container.image),
                 command=f'sh -c \'[ "$(cat /test)" = "{image_tag}" ]\'',
             ),
@@ -196,7 +196,9 @@ class TestJobsService:
         resources = Resources(
             memory_mb=16 ** 10, cpu=0.1, gpu=None, shm=False, gpu_model=None
         )
-        job = await job_factory(Image(image="alpine:latest", command=None), resources)
+        job = await job_factory(
+            RemoteImage(image="alpine:latest", command=None), resources
+        )
 
         container = Container(
             image=ImageReference(
@@ -221,7 +223,7 @@ class TestJobsService:
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
         )
         job = await job_factory(
-            Image(image="alpine:latest", command="sh -c 'sleep 300'"), resources
+            RemoteImage(image="alpine:latest", command="sh -c 'sleep 300'"), resources
         )
         await self.wait_for_job_running(job, jobs_client)
 
@@ -262,7 +264,7 @@ class TestJobsService:
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
         )
         job = await job_factory(
-            Image(image="alpine:latest", command="sh -c 'sleep 300'"), resources
+            RemoteImage(image="alpine:latest", command="sh -c 'sleep 300'"), resources
         )
         await self.wait_for_job_running(job, jobs_client)
 
