@@ -423,7 +423,7 @@ class TestLogReader:
                         return
                     await asyncio.sleep(interval_s)
         except asyncio.TimeoutError:
-            pytest.fail(f"Pod logs did not match. Last payload: {payload}")
+            pytest.fail(f"Pod logs did not match. Last payload: {payload!r}")
 
     @pytest.mark.asyncio
     async def test_elasticsearch_log_reader_empty(
@@ -477,4 +477,4 @@ class TestLogReader:
                         break
                     await asyncio.sleep(interval_s)
         except asyncio.TimeoutError:
-            pytest.fail(f"Pod logs did not match. Last payload: {payload}")
+            pytest.fail(f"Pod logs did not match. Last payload: {payload!r}")
