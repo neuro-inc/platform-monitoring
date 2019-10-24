@@ -12,7 +12,7 @@ install_requires = (
     "aiodocker==0.17.0",
     "docker-image-py==0.1.10",
     "trafaret==1.2.0",
-    "platform-logging==0.2",
+    "platform-logging==0.3",
 )
 
 setup(
