@@ -27,6 +27,7 @@ from neuromation.api import (
     Factory as PlatformClientFactory,
     JobDescription as Job,
 )
+from platform_logging import init_logging
 from platform_monitoring.user import untrusted_user
 
 from .base import JobStats, Telemetry
@@ -45,14 +46,6 @@ from .validators import create_save_request_payload_validator
 
 
 logger = logging.getLogger(__name__)
-
-
-def init_logging() -> None:
-    logging.basicConfig(
-        # TODO (A Yushkovskiy after A Danshyn 06/01/18): expose in the Config
-        level=logging.DEBUG,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
 
 
 class ApiHandler:
