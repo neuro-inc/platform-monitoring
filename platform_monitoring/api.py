@@ -303,7 +303,7 @@ async def create_monitoring_app(config: Config) -> aiohttp.web.Application:
 
 @asynccontextmanager
 async def create_platform_api_client(
-    config: PlatformApiConfig
+    config: PlatformApiConfig,
 ) -> AsyncIterator[PlatformApiClient]:
     tmp_config = Path(mktemp())
     platform_api_factory = PlatformClientFactory(tmp_config)
@@ -348,7 +348,7 @@ async def create_kube_client(config: KubeConfig) -> AsyncIterator[KubeClient]:
 
 @asynccontextmanager
 async def create_elasticsearch_client(
-    config: ElasticsearchConfig
+    config: ElasticsearchConfig,
 ) -> AsyncIterator[Elasticsearch]:
     async with Elasticsearch(hosts=config.hosts) as client:
         yield client
