@@ -102,7 +102,7 @@ async def platform_api_config(
 
 @pytest.fixture
 async def platform_api_client(
-    platform_api_config: PlatformApiConfig
+    platform_api_config: PlatformApiConfig,
 ) -> AsyncIterator[PlatformApiClient]:
     async with create_platform_api_client(platform_api_config) as client:
         yield client

@@ -90,7 +90,7 @@ async def monitoring_api(config: Config) -> AsyncIterator[MonitoringApiEndpoints
 
 @pytest.fixture
 async def platform_api(
-    platform_api_config: PlatformApiConfig
+    platform_api_config: PlatformApiConfig,
 ) -> AsyncIterator[PlatformApiEndpoints]:
     yield PlatformApiEndpoints(url=platform_api_config.url)
 
