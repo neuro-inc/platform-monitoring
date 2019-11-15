@@ -9,8 +9,6 @@ defaults: &defaults
 
 orbs:
   codecov: codecov/codecov@1.0.4
-  gcloud: circleci/gcp-cli@1.8.3
-  k8s: circleci/kubernetes@0.10.1
 
 
 jobs:
@@ -59,6 +57,18 @@ jobs:
           name: Setting up Python Virtual Environment
           command: |
             pyenv global 3.6.5
+
+            curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+            sudo touch /etc/apt/sources.list.d/kubernetes.list
+            echo "deb http://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee -a /etc/apt/sources.list.d/kubernetes.list
+            export DEBIAN_FRONTEND="noninteractive"
+             sudo apt-get update
+            sudo apt-get install -y nfs-common
+            sudo apt-get install -y kubectl
+            # see https://github.com/docker/for-linux/issues/597
+            sudo apt-get install -y docker-ce=5:18.09.4~3-0~ubuntu-xenial docker-ce-cli=5:18.09.4~3-0~ubuntu-xenial containerd.io=1.2.5-1
+            openssl version -a
+
             python -m venv venv
             source venv/bin/activate
             pip install --upgrade pip==19.1.1
