@@ -36,28 +36,28 @@ function k8s::start {
 
     sudo -E minikube start --vm-driver=none --kubernetes-version=v1.13.0
 
-    k8s::setup_dns
-
-    k8s::setup_registry
-}
-
-function k8s::setup_dns {
-    for f in $(find /etc/kubernetes/addons/ -name kube-dns*)
-    do
-      k8s::wait "sudo kubectl -n kube-system apply -f $f"
-    done
-}
-
-function k8s::setup_registry {
+#    k8s::setup_dns
+#    k8s::setup_registry
     sudo -E minikube addons enable registry
-    for f in $(find /etc/kubernetes/addons/ -name registry*)
-    do
-      k8s::wait "sudo kubectl -n kube-system apply -f $f"
-    done
-    # NOTE: registry-proxy is a part of the registry addon in newer versions of
-    # minikube
-    sudo kubectl apply -f tests/k8s/registry.yml
 }
+
+#function k8s::setup_dns {
+#    for f in $(find /etc/kubernetes/addons/ -name kube-dns*)
+#    do
+#      k8s::wait "sudo kubectl -n kube-system apply -f $f"
+#    done
+#}
+#
+#function k8s::setup_registry {
+#    sudo -E minikube addons enable registry
+#    for f in $(find /etc/kubernetes/addons/ -name registry*)
+#    do
+#      k8s::wait "sudo kubectl -n kube-system apply -f $f"
+#    done
+#    # NOTE: registry-proxy is a part of the registry addon in newer versions of
+#    # minikube
+#    sudo kubectl apply -f tests/k8s/registry.yml
+#}
 
 function k8s::apply_all_configurations {
     echo "Applying configurations..."
