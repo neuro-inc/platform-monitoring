@@ -94,7 +94,7 @@ jobs:
           name: Running Integration Tests
           command: |
             source venv/bin/activate
-            pytest -sv --log-cli-level=debug tests/integration/test_api.py -k TestSaveApi
+            pytest -sv --tb=short tests/integration/test_api.py -k TestSaveApi
             make test_integration
 
 #      - codecov/upload:

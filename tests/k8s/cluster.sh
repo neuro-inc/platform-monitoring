@@ -33,31 +33,9 @@ function k8s::start {
 
     sudo -E mkdir -p ~/.minikube/files/files
     sudo -E cp tests/k8s/fluentd/kubernetes.conf ~/.minikube/files/files/fluentd-kubernetes.conf
-
     sudo -E minikube start --vm-driver=none --kubernetes-version=v1.13.0
-
-#    k8s::setup_dns
-#    k8s::setup_registry
     sudo -E minikube addons enable registry
 }
-
-#function k8s::setup_dns {
-#    for f in $(find /etc/kubernetes/addons/ -name kube-dns*)
-#    do
-#      k8s::wait "sudo kubectl -n kube-system apply -f $f"
-#    done
-#}
-#
-#function k8s::setup_registry {
-#    sudo -E minikube addons enable registry
-#    for f in $(find /etc/kubernetes/addons/ -name registry*)
-#    do
-#      k8s::wait "sudo kubectl -n kube-system apply -f $f"
-#    done
-#    # NOTE: registry-proxy is a part of the registry addon in newer versions of
-#    # minikube
-#    sudo kubectl apply -f tests/k8s/registry.yml
-#}
 
 function k8s::apply_all_configurations {
     echo "Applying configurations..."
@@ -70,19 +48,6 @@ function k8s::apply_all_configurations {
     kubectl apply -f tests/k8s/dockerengineapi.yml
 }
 
-function k8s::wait {
-    local cmd=$1
-    set +e
-    # this for loop waits until kubectl can access the api server that Minikube has created
-    for i in {1..150}; do # timeout for 5 minutes
-        $cmd
-        if [ $? -ne 1 ]; then
-            break
-        fi
-        sleep 2
-    done
-    set -e
-}
 
 function k8s::stop {
     sudo -E minikube stop || :
