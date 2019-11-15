@@ -36,13 +36,14 @@ function k8s::start {
     sudo -E minikube start --vm-driver=none --kubernetes-version=v1.13.0
 
     sudo -E minikube addons enable registry
+    kubectl config use-context minikube
     kubectl -n kube-system wait pod --for=condition=Ready --timeout=120s --selector=kubernetes.io/minikube-addons=registry
 }
 
 function k8s::apply_all_configurations {
     echo "Applying configurations..."
     kubectl config use-context minikube
-    kubectl apply -f deploy/platformmonitoringapi/templates/dockerengineapi.yml 
+    kubectl apply -f deploy/platformmonitoringapi/templates/dockerengineapi.yml
     kubectl apply -f tests/k8s/rb.default.gke.yml
     kubectl apply -f tests/k8s/logging.yml
     kubectl apply -f tests/k8s/platformconfig.yml
