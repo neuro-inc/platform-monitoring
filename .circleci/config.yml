@@ -49,11 +49,6 @@ jobs:
             sudo mount --make-rshared /run
             sudo mount --make-rshared /var/lib/docker
 
-            sudo -E echo "DOCKER_OPTS=--insecure-registry localhost:5000" >> /etc/default/docker
-            sudo -E docker pull alpine
-            sudo -E docker tag alpine localhost:5000/alpine
-            sudo -E docker push localhost:5000/alpine
-
             # without containerd, tests TestTopApi won't work
             # see https://github.com/neuromation/platform-api/pull/928/files#diff-1d37e48f9ceff6d8030570cd36286a61R76
             export DEBIAN_FRONTEND=noninteractive
@@ -99,6 +94,7 @@ jobs:
           name: Running Integration Tests
           command: |
             source venv/bin/activate
+            pytest -sv --log-cli-level=debug tests/integration/test_api.py -k TestSaveApi
             make test_integration
 
 #      - codecov/upload:
