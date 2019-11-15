@@ -36,8 +36,6 @@ function k8s::start {
     sudo -E minikube start --vm-driver=none --kubernetes-version=v1.13.0
 
     sudo -E minikube addons enable registry
-    kubectl config use-context minikube
-    kubectl -n kube-system wait pod --for=condition=Ready --timeout=120s --selector=kubernetes.io/minikube-addons=registry
 }
 
 function k8s::apply_all_configurations {
@@ -49,6 +47,9 @@ function k8s::apply_all_configurations {
     kubectl apply -f tests/k8s/platformconfig.yml
     kubectl apply -f tests/k8s/platformapi.yml
     kubectl apply -f tests/k8s/dockerengineapi.yml
+
+    kubectl -n kube-system wait pod --for=condition=Ready --timeout=120s --selector=registry-proxy=true  || true
+    kubectl -n kube-system wait pod --for=condition=Ready --timeout=120s --selector=kubernetes.io/minikube-addons=registry  || true
 }
 
 
