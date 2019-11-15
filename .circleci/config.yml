@@ -69,26 +69,26 @@ jobs:
             pip install --upgrade pip==19.1.1
             make setup
 
-      - save_cache:
-          paths:
-            - venv
-          key: v1-dependencies-python_3.6.5-{{ checksum "setup.py" }}-{{ checksum "requirements/syntax.txt" }}-{{ checksum "requirements/test.txt" }}
-
-      - run:
-          name: Running Static Code Analysis
-          command: |
-            source venv/bin/activate
-            make lint
-
-      - run:
-          name: Running Unit Tests
-          command: |
-            source venv/bin/activate
-            make test_unit
-
-      - codecov/upload:
-          file: .coverage-unit.xml
-          flags: unit
+#      - save_cache:
+#          paths:
+#            - venv
+#          key: v1-dependencies-python_3.6.5-{{ checksum "setup.py" }}-{{ checksum "requirements/syntax.txt" }}-{{ checksum "requirements/test.txt" }}
+#
+#      - run:
+#          name: Running Static Code Analysis
+#          command: |
+#            source venv/bin/activate
+#            make lint
+#
+#      - run:
+#          name: Running Unit Tests
+#          command: |
+#            source venv/bin/activate
+#            make test_unit
+#
+#      - codecov/upload:
+#          file: .coverage-unit.xml
+#          flags: unit
 
       - run:
           name: Running Integration Tests
@@ -96,9 +96,9 @@ jobs:
             source venv/bin/activate
             make test_integration
 
-      - codecov/upload:
-          file: .coverage-integration.xml
-          flags: integration
+#      - codecov/upload:
+#          file: .coverage-integration.xml
+#          flags: integration
 
       - run:
           name: Stopping Kubernetes
