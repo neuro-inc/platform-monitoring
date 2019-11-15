@@ -34,7 +34,7 @@ function k8s::start {
     sudo -E mkdir -p ~/.minikube/files/files
     sudo -E cp tests/k8s/fluentd/kubernetes.conf ~/.minikube/files/files/fluentd-kubernetes.conf
 
-    export MINIKUBE_IN_STYLE=true
+    export MINIKUBE_IN_STYLE=false
     sudo -E minikube start --vm-driver=none --kubernetes-version=v1.13.0
 
     k8s::setup_dns

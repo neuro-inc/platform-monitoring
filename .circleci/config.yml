@@ -73,33 +73,33 @@ jobs:
           name: Running Static Code Analysis
           command: |
             source venv/bin/activate
-            make lint
+#            make lint
 
       - run:
           name: Running Unit Tests
           command: |
             source venv/bin/activate
-            make test_unit
-
-      - codecov/upload:
-          file: .coverage-unit.xml
-          flags: unit
+#            make test_unit
+#
+#      - codecov/upload:
+#          file: .coverage-unit.xml
+#          flags: unit
 
       - run:
           name: Running Integration Tests
           command: |
             source venv/bin/activate
             make test_integration
-
-      - codecov/upload:
-          file: .coverage-integration.xml
-          flags: integration
-
-      - run:
-          name: Stopping Kubernetes
-          command: |
-            make clean_k8s
-          when: always
+#
+#      - codecov/upload:
+#          file: .coverage-integration.xml
+#          flags: integration
+#
+#      - run:
+#          name: Stopping Kubernetes
+#          command: |
+#            make clean_k8s
+#          when: always
 
   gke_deploy:
     <<: *defaults

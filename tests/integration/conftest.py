@@ -92,6 +92,7 @@ async def platform_api_config(
     token_factory: Callable[[str], str],
 ) -> AsyncIterator[PlatformApiConfig]:
     base_url = get_service_url("platformapi", namespace="default")
+    assert base_url.startswith("http")
     url = URL(base_url) / "api/v1"
     await wait_for_service("platformapi", url / "ping")
     yield PlatformApiConfig(
