@@ -206,7 +206,13 @@ def get_service_url(  # type: ignore
         )
         output = process.stdout
         if output:
-            return output.decode().strip()
+            url = output.decode().strip()
+            # Sometimes `minikube service ... --url` returns a prefixed
+            # string such as: "* https://127.0.0.1:8081/"
+            start_idx = url.find("http")
+            if start_idx > 0:
+                url = url[start_idx:]
+            return url
         time.sleep(interval_s)
         timeout_s -= interval_s
 
