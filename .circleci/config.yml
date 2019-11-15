@@ -94,11 +94,11 @@ jobs:
           name: Running Integration Tests
           command: |
             source venv/bin/activate
-            pytest -sv --tb=short tests/integration/test_api.py -k test_save_ok | true
-            pytest -sv --tb=short tests/integration/test_api.py -k test_save_ok | true
-            pytest -sv --tb=short tests/integration/test_api.py -k TestSaveApi | true
-            make test_integration | true
-            make test_integration | true
+            pytest -sv --tb=short tests/integration/test_api.py -k test_save_ok || true
+            pytest -sv --tb=short tests/integration/test_api.py -k test_save_ok || true
+            pytest -sv --tb=short tests/integration/test_api.py -k TestSaveApi || true
+            make test_integration || true
+            make test_integration || true
 
 #      - codecov/upload:
 #          file: .coverage-integration.xml
