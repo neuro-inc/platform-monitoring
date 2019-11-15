@@ -34,7 +34,9 @@ function k8s::start {
     sudo -E mkdir -p ~/.minikube/files/files
     sudo -E cp tests/k8s/fluentd/kubernetes.conf ~/.minikube/files/files/fluentd-kubernetes.conf
     sudo -E minikube start --vm-driver=none --kubernetes-version=v1.13.0
+
     sudo -E minikube addons enable registry
+    kubectl -n kube-system wait pod --for=condition=Ready --timeout=120s --selector=kubernetes.io/minikube-addons=registry
 }
 
 function k8s::apply_all_configurations {
