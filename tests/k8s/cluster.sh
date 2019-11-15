@@ -34,10 +34,10 @@ function k8s::start {
     sudo -E mkdir -p ~/.minikube/files/files
     sudo -E cp tests/k8s/fluentd/kubernetes.conf ~/.minikube/files/files/fluentd-kubernetes.conf
 
-    export MINIKUBE_IN_STYLE=false
     sudo -E minikube start --vm-driver=none --kubernetes-version=v1.13.0
 
     k8s::setup_dns
+
     k8s::setup_registry
 }
 
@@ -116,11 +116,9 @@ case "${1:-}" in
         ;;
     start)
         k8s::start
-        sleep 2s ; k8s::wait "kubectl get po --all-namespaces"
         ;;
     apply)
         k8s::apply_all_configurations
-        sleep 2s ; k8s::wait "kubectl get po --all-namespaces"
         ;;
     stop)
         k8s::stop
