@@ -11,6 +11,7 @@ function minikube::start {
     echo "Starting minikube..."
     mkdir -p ~/.minikube/files/files
     cp tests/k8s/fluentd/kubernetes.conf ~/.minikube/files/files/fluentd-kubernetes.conf
+    minikube config set WantUpdateNotification false
     minikube start --kubernetes-version=v1.13.0
     minikube addons enable registry
     kubectl config use-context minikube
