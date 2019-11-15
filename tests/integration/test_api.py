@@ -737,7 +737,7 @@ class TestSaveApi:
                 assert (
                     f"Failed to save job '{infinite_job}': DockerError(503" in error
                 ), debug
-                assert "getsockopt: connection refused" in error, debug
+                assert "connection refused" in error, debug
 
     @pytest.mark.asyncio
     async def test_save_ok(
