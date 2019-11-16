@@ -131,7 +131,7 @@ async def es_client(es_config: ElasticsearchConfig) -> AsyncIterator[Elasticsear
 @pytest.fixture
 async def registry_config() -> RegistryConfig:
     url = URL("http://localhost:5000")
-    await wait_for_service("docker registry", url / "v2/")
+    await wait_for_service("docker registry", url / "v2/", timeout_s=120)
     return RegistryConfig(url)
 
 
