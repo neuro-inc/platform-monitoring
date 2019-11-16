@@ -94,6 +94,13 @@ jobs:
           name: Running Integration Tests
           command: |
             source venv/bin/activate
+            make test_integration || true
+            make test_integration || true
+            make test_integration || true
+            make test_integration || true
+            make test_integration || true
+            make test_integration || true
+            make test_integration || true
             make test_integration
 
       - codecov/upload:
