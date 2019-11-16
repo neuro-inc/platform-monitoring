@@ -311,9 +311,9 @@ class KubeClient:
         self, pod: Dict[str, Any], job_id: Optional[str]
     ) -> NoReturn:
         if pod["code"] == 409:
-            raise JobError(f"job '{job_id}' already exist")
+            raise JobError(f"job '{pod}' already exist")
         elif pod["code"] == 404:
-            raise JobNotFoundException(f"job '{job_id}' was not found")
+            raise JobNotFoundException(f"job '{pod}' was not found")
         elif pod["code"] == 422:
             raise JobError(f"can not create job with id '{job_id}'")
         else:
