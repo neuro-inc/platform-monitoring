@@ -13,11 +13,12 @@ function k8s::install_kubectl {
 function k8s::install_minikube {
     # we have to pin this version in order to run minikube on CircleCI
     # Ubuntu 14 VMs. The newer versions depend on systemd.
-    local minikube_version="v0.25.2"
+    local minikube_version="v1.4.0"
     curl -Lo minikube https://storage.googleapis.com/minikube/releases/${minikube_version}/minikube-linux-amd64
     chmod +x minikube
     sudo mv minikube /usr/local/bin/
     sudo -E minikube config set WantReportErrorPrompt false
+    sudo -E minikube config set WantNoneDriverWarning false
 }
 
 function k8s::start {
@@ -32,37 +33,15 @@ function k8s::start {
 
     sudo -E mkdir -p ~/.minikube/files/files
     sudo -E cp tests/k8s/fluentd/kubernetes.conf ~/.minikube/files/files/fluentd-kubernetes.conf
+    sudo -E minikube start --vm-driver=none --kubernetes-version=v1.13.0
 
-    sudo -E minikube config set WantReportErrorPrompt false
-    sudo -E minikube start --vm-driver=none --kubernetes-version=v1.10.0
-
-    k8s::setup_dns
-
-    k8s::setup_registry
-}
-
-function k8s::setup_dns {
-    for f in $(find /etc/kubernetes/addons/ -name kube-dns*)
-    do
-      k8s::wait "sudo kubectl -n kube-system apply -f $f"
-    done
-}
-
-function k8s::setup_registry {
     sudo -E minikube addons enable registry
-    for f in $(find /etc/kubernetes/addons/ -name registry*)
-    do
-      k8s::wait "sudo kubectl -n kube-system apply -f $f"
-    done
-    # NOTE: registry-proxy is a part of the registry addon in newer versions of
-    # minikube
-    sudo kubectl apply -f tests/k8s/registry.yml
 }
 
 function k8s::apply_all_configurations {
     echo "Applying configurations..."
     kubectl config use-context minikube
-    kubectl apply -f deploy/platformmonitoringapi/templates/dockerengineapi.yml 
+    kubectl apply -f deploy/platformmonitoringapi/templates/dockerengineapi.yml
     kubectl apply -f tests/k8s/rb.default.gke.yml
     kubectl apply -f tests/k8s/logging.yml
     kubectl apply -f tests/k8s/platformconfig.yml
@@ -70,19 +49,6 @@ function k8s::apply_all_configurations {
     kubectl apply -f tests/k8s/dockerengineapi.yml
 }
 
-function k8s::wait {
-    local cmd=$1
-    set +e
-    # this for loop waits until kubectl can access the api server that Minikube has created
-    for i in {1..150}; do # timeout for 5 minutes
-        $cmd
-        if [ $? -ne 1 ]; then
-            break
-        fi
-        sleep 2
-    done
-    set -e
-}
 
 function k8s::stop {
     sudo -E minikube stop || :
