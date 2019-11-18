@@ -11,7 +11,7 @@ install_requires = (
     "aioelasticsearch==0.5.2",
     "aiodocker==0.17.0",
     "docker-image-py==0.1.10",
-    "trafaret==2.0.0",
+    "trafaret==2.0.1",
     "platform-logging==0.3",
 )
 
