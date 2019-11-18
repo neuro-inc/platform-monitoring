@@ -7,7 +7,7 @@ from typing import Any, AsyncIterator, Dict, Optional
 import pytest
 from async_timeout import timeout
 from platform_monitoring.config import KubeConfig
-from platform_monitoring.kube_client import KubeClient
+from platform_monitoring.kube_client import JobNotFoundException, KubeClient
 
 
 class MyKubeClient(KubeClient):
@@ -40,12 +40,22 @@ class MyKubeClient(KubeClient):
         raise ValueError(f"Missing pod status: `{payload}`")
 
     async def wait_pod_is_terminated(
-        self, pod_name: str, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
+        self,
+        pod_name: str,
+        timeout_s: float = 10.0 * 60,
+        interval_s: float = 1.0,
+        allow_pod_not_exists: bool = False,
     ) -> None:
         try:
             async with timeout(timeout_s):
                 while True:
-                    state = await self._get_raw_container_state(pod_name)
+                    try:
+                        state = await self._get_raw_container_state(pod_name)
+                    except JobNotFoundException:
+                        # job's pod does not exist: maybe it's already garbage-collected
+                        if allow_pod_not_exists:
+                            return
+                        raise
                     is_terminated = bool(state) and "terminated" in state
                     if is_terminated:
                         return
