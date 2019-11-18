@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict
+from typing import Any, AsyncIterator, Dict, Optional
 
 from aiodocker.exceptions import DockerError
 from neuromation.api import JobDescription as Job
@@ -7,7 +7,7 @@ from neuromation.api.jobs import Jobs as JobsClient
 from platform_monitoring.config import DockerConfig
 
 from .docker_client import Docker, ImageReference
-from .kube_client import KubeClient
+from .kube_client import JobNotFoundException, KubeClient, Pod
 from .user import User
 from .utils import KubeHelper
 
@@ -40,10 +40,8 @@ class JobsService:
         self, job: Job, user: User, container: Container
     ) -> AsyncIterator[Dict[str, Any]]:
         pod_name = self._kube_helper.get_job_pod_name(job)
-        pod = await self._kube_client.get_pod(pod_name)
-        if not pod.is_phase_running:
-            raise JobException(f"Job '{job.id}' is not running.")
 
+        pod = await self._get_running_jobs_pod(pod_name)
         cont_id = pod.get_container_id(pod_name)
         assert cont_id
         async with self._kube_client.get_node_proxy_client(
@@ -74,3 +72,18 @@ class JobsService:
 
             except DockerError as error:
                 raise JobException(f"Failed to save job '{job.id}': {error}")
+
+    async def _get_running_jobs_pod(self, job_id: str) -> Pod:
+        pod: Optional[Pod]
+        try:
+            pod = await self._kube_client.get_pod(job_id)
+            if not pod.is_phase_running:
+                pod = None
+        except JobNotFoundException:
+            # job's pod does not exist: it might be already garbage-collected
+            pod = None
+
+        if not pod:
+            raise JobException(f"Job '{job_id}' is not running.")
+
+        return pod
