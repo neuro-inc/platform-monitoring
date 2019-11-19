@@ -36,7 +36,7 @@ class TestJobsService:
         kube_client: MyKubeClient,
         docker_config: DockerConfig,
     ) -> JobsService:
-        return JobsService(platform_api_client.job, kube_client, docker_config)
+        return JobsService(platform_api_client.jobs, kube_client, docker_config)
 
     @pytest.fixture
     async def job_factory(
