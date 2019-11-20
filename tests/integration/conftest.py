@@ -2,6 +2,7 @@ import asyncio
 import logging
 import subprocess
 import time
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Callable, Iterator
 from uuid import uuid1
@@ -10,7 +11,6 @@ import aiohttp
 import aiohttp.web
 import pytest
 from aioelasticsearch import Elasticsearch
-from async_generator import asynccontextmanager
 from async_timeout import timeout
 from neuromation.api import Client as PlatformApiClient
 from platform_monitoring.api import (

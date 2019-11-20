@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import ssl
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, NoReturn, Optional
@@ -8,7 +9,6 @@ from urllib.parse import urlsplit
 
 import aiohttp
 from aiohttp import ContentTypeError
-from async_generator import asynccontextmanager
 from async_timeout import timeout
 from yarl import URL
 
