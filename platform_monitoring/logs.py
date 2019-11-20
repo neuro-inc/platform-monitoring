@@ -1,7 +1,7 @@
 import io
 import logging
 import warnings
-from typing import Any, Dict, Optional
+from typing import Any, AsyncContextManager, Dict, Optional
 
 import aiohttp
 from aioelasticsearch import Elasticsearch
@@ -88,7 +88,7 @@ class PodContainerLogReader(LogReader):
         self._client_conn_timeout_s = client_conn_timeout_s
         self._client_read_timeout_s = client_read_timeout_s
 
-        self._stream_cm = None
+        self._stream_cm: Optional[AsyncContextManager[aiohttp.StreamReader]] = None
         self._stream: Optional[FilteredStreamWrapper] = None
 
     async def __aenter__(self) -> LogReader:
