@@ -238,3 +238,43 @@ class TestFilteredStreamWrapper:
         assert chunk == b"line2\n"
         chunk = await stream.read()
         assert not chunk
+
+    @pytest.mark.asyncio
+    async def test_min_line_chunk(self) -> None:
+        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False))
+        stream = FilteredStreamWrapper(reader)
+
+        async def _read_all() -> List[bytes]:
+            chunks: List[bytes] = []
+            while True:
+                c = await stream.read()
+                chunks.append(c)
+                if not c:
+                    break
+            return chunks
+
+        async def _feed_raw_chunk(data: bytes) -> None:
+            reader.feed_data(data)
+            await asyncio.sleep(0.0)
+
+        task = asyncio.create_task(_read_all())
+        await _feed_raw_chunk(b"chunk01\r")
+        await _feed_raw_chunk(b"chunk02\r")
+        await _feed_raw_chunk(b"chunk03\r")
+        await _feed_raw_chunk(b"chunk04\r")
+        await _feed_raw_chunk(b"chunk05\r\n")
+        await _feed_raw_chunk(b"chunk06\r\n")
+        await _feed_raw_chunk(b"chunk07\r")
+        await _feed_raw_chunk(b"chunk08\r\n")
+        await _feed_raw_chunk(b"rpc error: ")
+        await _feed_raw_chunk(b"code =")
+        reader.feed_eof()
+        chunks = await task
+        assert chunks == [
+            b"chunk01\rchunk02\rchunk03\r",
+            b"chunk04\r",
+            b"chunk05\r\n",
+            b"chunk06\r\n",
+            b"chunk07\rchunk08\r\n",
+            b"",
+        ]
