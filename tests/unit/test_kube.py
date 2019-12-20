@@ -221,3 +221,20 @@ class TestFilteredStreamWrapper:
         assert chunk == b"rpc error: code = whatever\n"
         chunk = await stream.read()
         assert not chunk
+
+    @pytest.mark.asyncio
+    async def test_not_filtered_single_rpc_not_eof(self) -> None:
+        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False))
+        reader.feed_data(b"line1\n")
+        reader.feed_data(b"rpc error: code = whatever\n")
+        reader.feed_data(b"line2\n")
+        reader.feed_eof()
+        stream = FilteredStreamWrapper(reader)
+        chunk = await stream.read()
+        assert chunk == b"line1\n"
+        chunk = await stream.read()
+        assert chunk == b"rpc error: code = whatever\n"
+        chunk = await stream.read()
+        assert chunk == b"line2\n"
+        chunk = await stream.read()
+        assert not chunk
