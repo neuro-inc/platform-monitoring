@@ -1,4 +1,5 @@
-from typing import Any, Dict
+import asyncio
+from typing import Any, Dict, List
 from unittest import mock
 
 import aiohttp
