@@ -61,48 +61,60 @@ class FilteredStreamWrapper:
         # does not exist. we should try to not expose such internals, but only
         # if it is the last line indeed.
         error_prefix = b"rpc error: code ="
-        chunk, is_line_start = await self._read_chunk(
-            min_chunk_length=len(error_prefix)
-        )
+        chunk, is_line_start = await self._read_chunk(min_line_length=len(error_prefix))
+        # 1. `chunk` may not be a whole line, ending with "\n";
+        # 2. `chunk` may be the beginning of a line with the min length of
+        # `len(error_prefix)`.
         if is_line_start and chunk.startswith(error_prefix):
-            self._unread(chunk)
-            line = await self._stream.readline()
-            next_line = await self._stream.readline()
-            if next_line:
+            self._unreadline(chunk)
+            line = await self._readline()
+            next_chunk, _ = await self._read_chunk(min_line_length=1)
+            if next_chunk:
                 logging.warning("An rpc error line was not at the end of the log")
                 chunk = line
-                self._unread(next_line)
+                self._unreadline(next_chunk)
             else:
                 logging.info("Skipping an rpc error line at the end of the log")
-                chunk = next_line  # b""
+                chunk = next_chunk  # b""
         return chunk
 
-    async def _read_chunk(self, *, min_chunk_length: int) -> Tuple[bytes, bool]:
+    async def _read_chunk(self, *, min_line_length: int) -> Tuple[bytes, bool]:
         chunk = io.BytesIO()
         is_line_start = self._is_line_start
-        while chunk.tell() < min_chunk_length:
+
+        while chunk.tell() < min_line_length:
             data = await self._stream.readany()
             if not data:
-                break  # b""
+                break
 
             n_pos = data.find(b"\n") + 1
+            self._is_line_start = bool(n_pos)
             if n_pos:
                 line, tail = data[:n_pos], data[n_pos:]
                 if tail:
-                    self._unread(tail)
+                    self._unreadline(tail)
                 chunk.write(line)
                 break
-            else:
-                chunk.write(data)
 
-        data = chunk.getvalue()
-        self._is_line_start = data.endswith(b"\n")
-        return data, is_line_start
+            chunk.write(data)
+            if not is_line_start:
+                # if this chunk is somewhere in the middle of the line, we
+                # want to return immediately without waiting for the rest of
+                # `min_chunk_length`
+                break
 
-    def _unread(self, data: bytes) -> None:
+        return chunk.getvalue(), is_line_start
+
+    async def _readline(self) -> bytes:
+        line = await self._stream.readline()
+        self._is_line_start = True
+        return line
+
+    def _unreadline(self, data: bytes) -> None:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=DeprecationWarning)
             self._stream.unread_data(data)
+        self._is_line_start = True
 
 
 class PodContainerLogReader(LogReader):
