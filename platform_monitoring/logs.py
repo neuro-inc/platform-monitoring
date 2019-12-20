@@ -1,7 +1,7 @@
 import io
 import logging
 import warnings
-from typing import Any, AsyncContextManager, Dict, Optional
+from typing import Any, AsyncContextManager, Dict, Optional, Tuple
 
 import aiohttp
 from aioelasticsearch import Elasticsearch
@@ -39,6 +39,7 @@ class FilteredStreamWrapper:
     def __init__(self, stream: aiohttp.StreamReader) -> None:
         self._stream = stream
         self._buffer = LogBuffer()
+        self._is_line_start = True
 
     def close(self) -> None:
         self._buffer.close()
@@ -48,29 +49,60 @@ class FilteredStreamWrapper:
         if chunk:
             return chunk
 
-        chunk = await self._readline()
+        chunk = await self._read()
 
         self._buffer.write(chunk)
         return self._buffer.read(size)
 
-    async def _readline(self) -> bytes:
-        line = await self._stream.readline()
+    async def _read(self) -> bytes:
         # https://github.com/neuromation/platform-api/issues/131
         # k8s API (and the underlying docker API) sometimes returns an rpc
         # error as the last log line. it says that the corresponding container
         # does not exist. we should try to not expose such internals, but only
         # if it is the last line indeed.
-        if line.startswith(b"rpc error: code ="):
+        error_prefix = b"rpc error: code ="
+        chunk, is_line_start = await self._read_chunk(
+            min_chunk_length=len(error_prefix)
+        )
+        if is_line_start and chunk.startswith(error_prefix):
+            self._unread(chunk)
+            line = await self._stream.readline()
             next_line = await self._stream.readline()
             if next_line:
                 logging.warning("An rpc error line was not at the end of the log")
-                with warnings.catch_warnings():
-                    warnings.filterwarnings("ignore", category=DeprecationWarning)
-                    self._stream.unread_data(next_line)
+                chunk = line
+                self._unread(next_line)
             else:
                 logging.info("Skipping an rpc error line at the end of the log")
-                line = next_line
-        return line
+                chunk = next_line  # b""
+        return chunk
+
+    async def _read_chunk(self, *, min_chunk_length: int) -> Tuple[bytes, bool]:
+        chunk = io.BytesIO()
+        is_line_start = self._is_line_start
+        while chunk.tell() < min_chunk_length:
+            data = await self._stream.readany()
+            if not data:
+                break  # b""
+
+            n_pos = data.find(b"\n") + 1
+            if n_pos:
+                line, tail = data[:n_pos], data[n_pos:]
+                if tail:
+                    self._unread(tail)
+                chunk.write(line)
+                break
+            else:
+                chunk.write(data)
+
+        data = chunk.getvalue()
+        self._is_line_start = data.endswith(b"\n")
+        return data, is_line_start
+
+    def _unread(self, data: bytes) -> None:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=DeprecationWarning)
+            self._stream.unread_data(data)
 
 
 class PodContainerLogReader(LogReader):
