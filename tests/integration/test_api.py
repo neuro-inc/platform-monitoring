@@ -28,7 +28,7 @@ from yarl import URL
 from tests.integration.conftest_kube import MyKubeClient
 
 from .conftest import ApiAddress, create_local_app_server
-from .conftest_auth import _User
+from .conftest_auth import _User, cluster_name
 
 
 @dataclass(frozen=True)
@@ -546,7 +546,12 @@ class TestLogApi:
             assert resp.status == HTTPForbidden.status_code
             result = await resp.json()
             assert result == {
-                "missing": [{"uri": f"job://{user1.name}/{job_id}", "action": "read"}]
+                "missing": [
+                    {
+                        "uri": f"job://{cluster_name}/{user1.name}/{job_id}",
+                        "action": "read",
+                    }
+                ]
             }
 
     @pytest.mark.asyncio
@@ -619,7 +624,12 @@ class TestSaveApi:
             assert resp.status == HTTPForbidden.status_code
             result = await resp.json()
             assert result == {
-                "missing": [{"uri": f"job://{user1.name}/{job_id}", "action": "write"}]
+                "missing": [
+                    {
+                        "uri": f"job://{cluster_name}/{user1.name}/{job_id}",
+                        "action": "write",
+                    }
+                ]
             }
 
     @pytest.mark.asyncio

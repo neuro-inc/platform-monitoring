@@ -68,7 +68,7 @@ class MonitoringApiHandler:
     def __init__(self, app: aiohttp.web.Application, config: Config) -> None:
         self._app = app
         self._config = config
-        self._jobs_helper = JobsHelper()
+        self._jobs_helper = JobsHelper(cluster_name=config.cluster_name)
         self._kube_helper = KubeHelper()
 
         self._save_request_payload_validator = create_save_request_payload_validator(

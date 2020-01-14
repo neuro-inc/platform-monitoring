@@ -29,6 +29,9 @@ class LogReaderFactory:
 
 
 class JobsHelper:
+    def __init__(self, cluster_name: str) -> None:
+        self._cluster_name = cluster_name
+
     def is_job_running(self, job: Job) -> bool:
         return job.status == JobStatus.RUNNING
 
@@ -37,8 +40,13 @@ class JobsHelper:
 
     def job_to_uri(self, job: Job) -> str:
         base_uri = "job:"
-        if job.owner:
-            base_uri += "//" + job.owner
+        if self._cluster_name:
+            base_uri += "//" + job.cluster_name
+            if job.owner:
+                base_uri += "/" + job.owner
+        else:
+            if job.owner:
+                base_uri += "//" + job.owner
         return f"{base_uri}/{job.id}"
 
 

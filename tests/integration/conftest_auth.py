@@ -72,6 +72,20 @@ async def regular_user_factory(
             name = f"user-{random_str(8)}"
         user = AuthClientUser(name=name)
         await auth_client.add_user(user, token=admin_token)
+        # Grant permissions to the user home directory
+        headers = auth_client._generate_headers(admin_token)
+        payload = [
+            {"uri": f"job://{cluster_name}/{name}", "action": "manage"},
+        ]
+        async with auth_client._request(
+            "POST", f"/api/v1/users/{name}/permissions", headers=headers, json=payload
+        ) as p:
+            assert p.status == 201
         return _User(name=user.name, token=token_factory(user.name))  # type: ignore
 
     yield _factory
+
+
+@pytest.fixture
+def cluster_name() -> str:
+    return "test-cluster"

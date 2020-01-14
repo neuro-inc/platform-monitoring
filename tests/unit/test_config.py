@@ -57,6 +57,7 @@ def test_create(cert_authority_path: str, token_path: str) -> None:
         "NP_MONITORING_K8S_CLIENT_READ_TIMEOUT": "222",
         "NP_MONITORING_K8S_CLIENT_CONN_POOL_SIZE": "333",
         "NP_MONITORING_REGISTRY_URL": "http://testhost:5000",
+        "NP_CLUSTER_NAME": "test-cluster",
     }
     config = EnvironConfigFactory(environ).create()
     assert config == Config(
@@ -82,6 +83,7 @@ def test_create(cert_authority_path: str, token_path: str) -> None:
         ),
         registry=RegistryConfig(url=URL("http://testhost:5000")),
         docker=DockerConfig(),
+        cluster_name="test-cluster",
     )
 
 
