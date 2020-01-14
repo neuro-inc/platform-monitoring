@@ -158,6 +158,7 @@ def config_factory(
             kube=kube_config,
             registry=registry_config,
             docker=docker_config,
+            cluster_name=cluster_name,
         )
         kwargs = {**defaults, **kwargs}
         return Config(**kwargs)
@@ -219,3 +220,8 @@ def get_service_url(  # type: ignore
         timeout_s -= interval_s
 
     pytest.fail(f"Service {service_name} is unavailable.")
+
+
+@pytest.fixture
+def cluster_name() -> str:
+    return "test-cluster"

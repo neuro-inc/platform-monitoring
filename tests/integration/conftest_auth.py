@@ -17,7 +17,7 @@ from platform_monitoring.api import create_auth_client
 from platform_monitoring.config import PlatformAuthConfig
 from yarl import URL
 
-from tests.integration.conftest import get_service_url, random_str
+from tests.integration.conftest import cluster_name, get_service_url, random_str
 
 
 @pytest.fixture(scope="session")
@@ -84,8 +84,3 @@ async def regular_user_factory(
         return _User(name=user.name, token=token_factory(user.name))  # type: ignore
 
     yield _factory
-
-
-@pytest.fixture
-def cluster_name() -> str:
-    return "test-cluster"

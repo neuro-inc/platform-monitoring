@@ -27,8 +27,8 @@ from yarl import URL
 
 from tests.integration.conftest_kube import MyKubeClient
 
-from .conftest import ApiAddress, create_local_app_server
-from .conftest_auth import _User, cluster_name
+from .conftest import ApiAddress, cluster_name, create_local_app_server
+from .conftest_auth import _User
 
 
 @dataclass(frozen=True)
