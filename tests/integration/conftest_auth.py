@@ -80,6 +80,7 @@ async def regular_user_factory(
         payload = [
             {"uri": f"job://{cluster_name}/{name}", "action": "manage"},
         ]
+        print("payload =", payload)
         async with auth_client._request(
             "POST", f"/api/v1/users/{name}/permissions", headers=headers, json=payload
         ) as p:
