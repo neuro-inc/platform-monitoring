@@ -148,6 +148,7 @@ def config_factory(
     kube_config: KubeConfig,
     registry_config: RegistryConfig,
     docker_config: DockerConfig,
+    cluster_name: str,
 ) -> Callable[..., Config]:
     def _f(**kwargs: Any) -> Config:
         defaults = dict(
