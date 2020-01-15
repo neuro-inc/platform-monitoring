@@ -41,7 +41,7 @@ class JobsHelper:
     def job_to_uri(self, job: Job) -> str:
         base_uri = "job:"
         if self._cluster_name:
-            base_uri += "//" + job.cluster_name
+            base_uri += "//" + self._cluster_name
             if job.owner:
                 base_uri += "/" + job.owner
         else:
