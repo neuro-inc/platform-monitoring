@@ -27,7 +27,7 @@ from yarl import URL
 
 from tests.integration.conftest_kube import MyKubeClient
 
-from .conftest import ApiAddress, cluster_name, create_local_app_server
+from .conftest import ApiAddress, create_local_app_server
 from .conftest_auth import _User
 
 
@@ -531,6 +531,7 @@ class TestLogApi:
         client: aiohttp.ClientSession,
         job_submit: Dict[str, Any],
         regular_user_factory: Callable[..., Awaitable[_User]],
+        cluster_name: str,
     ) -> None:
         user1 = await regular_user_factory()
         user2 = await regular_user_factory()
@@ -609,6 +610,7 @@ class TestSaveApi:
         client: aiohttp.ClientSession,
         job_submit: Dict[str, Any],
         regular_user_factory: Callable[..., Awaitable[_User]],
+        cluster_name: str,
     ) -> None:
         user1 = await regular_user_factory()
         user2 = await regular_user_factory()
