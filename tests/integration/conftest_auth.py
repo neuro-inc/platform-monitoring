@@ -70,7 +70,7 @@ async def regular_user_factory(
     async def _factory(name: Optional[str] = None) -> _User:
         if not name:
             name = f"user-{random_str(8)}"
-        user = AuthClientUser(name=name)
+        user = AuthClientUser(name=name, cluster_name=cluster_name)
         await auth_client.add_user(user, token=admin_token)
         # Grant permissions to the user home directory
         headers = auth_client._generate_headers(admin_token)
