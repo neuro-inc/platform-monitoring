@@ -224,4 +224,4 @@ def get_service_url(  # type: ignore
 
 @pytest.fixture
 def cluster_name() -> str:
-    return "test-cluster"
+    return "default"
