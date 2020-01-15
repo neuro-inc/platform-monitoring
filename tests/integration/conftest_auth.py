@@ -17,7 +17,7 @@ from platform_monitoring.api import create_auth_client
 from platform_monitoring.config import PlatformAuthConfig
 from yarl import URL
 
-from tests.integration.conftest import cluster_name, get_service_url, random_str
+from tests.integration.conftest import get_service_url, random_str
 
 
 @pytest.fixture(scope="session")
@@ -65,7 +65,10 @@ class _User(AuthClientUser):
 
 @pytest.fixture
 async def regular_user_factory(
-    auth_client: AuthClient, token_factory: Callable[[str], str], admin_token: str
+    auth_client: AuthClient,
+    token_factory: Callable[[str], str],
+    admin_token: str,
+    cluster_name: str,
 ) -> AsyncIterator[Callable[[Optional[str]], Awaitable[_User]]]:
     async def _factory(name: Optional[str] = None) -> _User:
         if not name:
