@@ -35,6 +35,11 @@ def admin_token(token_factory: Callable[[str], str]) -> str:
 
 
 @pytest.fixture(scope="session")
+def compute_token(token_factory: Callable[[str], str]) -> str:
+    return token_factory("compute")
+
+
+@pytest.fixture(scope="session")
 async def auth_config(
     token_factory: Callable[[str], str]
 ) -> AsyncIterator[PlatformAuthConfig]:
@@ -65,13 +70,26 @@ class _User(AuthClientUser):
 
 @pytest.fixture
 async def regular_user_factory(
-    auth_client: AuthClient, token_factory: Callable[[str], str], admin_token: str
+    auth_client: AuthClient,
+    token_factory: Callable[[str], str],
+    admin_token: str,
+    compute_token: str,
+    cluster_name: str,
 ) -> AsyncIterator[Callable[[Optional[str]], Awaitable[_User]]]:
     async def _factory(name: Optional[str] = None) -> _User:
         if not name:
             name = f"user-{random_str(8)}"
-        user = AuthClientUser(name=name)
+        user = AuthClientUser(name=name, cluster_name=cluster_name)
         await auth_client.add_user(user, token=admin_token)
+        # Grant permissions to the user home directory
+        headers = auth_client._generate_headers(compute_token)
+        payload = [
+            {"uri": f"job://{cluster_name}/{name}", "action": "manage"},
+        ]
+        async with auth_client._request(
+            "POST", f"/api/v1/users/{name}/permissions", headers=headers, json=payload
+        ) as p:
+            assert p.status == 201
         return _User(name=user.name, token=token_factory(user.name))  # type: ignore
 
     yield _factory

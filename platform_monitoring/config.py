@@ -74,3 +74,4 @@ class Config:
     kube: KubeConfig
     docker: DockerConfig
     registry: RegistryConfig
+    cluster_name: str

@@ -531,6 +531,7 @@ class TestLogApi:
         client: aiohttp.ClientSession,
         job_submit: Dict[str, Any],
         regular_user_factory: Callable[..., Awaitable[_User]],
+        cluster_name: str,
     ) -> None:
         user1 = await regular_user_factory()
         user2 = await regular_user_factory()
@@ -546,7 +547,12 @@ class TestLogApi:
             assert resp.status == HTTPForbidden.status_code
             result = await resp.json()
             assert result == {
-                "missing": [{"uri": f"job://{user1.name}/{job_id}", "action": "read"}]
+                "missing": [
+                    {
+                        "uri": f"job://{cluster_name}/{user1.name}/{job_id}",
+                        "action": "read",
+                    }
+                ]
             }
 
     @pytest.mark.asyncio
@@ -604,6 +610,7 @@ class TestSaveApi:
         client: aiohttp.ClientSession,
         job_submit: Dict[str, Any],
         regular_user_factory: Callable[..., Awaitable[_User]],
+        cluster_name: str,
     ) -> None:
         user1 = await regular_user_factory()
         user2 = await regular_user_factory()
@@ -619,7 +626,12 @@ class TestSaveApi:
             assert resp.status == HTTPForbidden.status_code
             result = await resp.json()
             assert result == {
-                "missing": [{"uri": f"job://{user1.name}/{job_id}", "action": "write"}]
+                "missing": [
+                    {
+                        "uri": f"job://{cluster_name}/{user1.name}/{job_id}",
+                        "action": "write",
+                    }
+                ]
             }
 
     @pytest.mark.asyncio

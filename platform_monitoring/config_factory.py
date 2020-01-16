@@ -26,6 +26,7 @@ class EnvironConfigFactory:
         self._environ = environ or os.environ
 
     def create(self) -> Config:
+        cluster_name = self._environ.get("NP_CLUSTER_NAME", "")
         return Config(
             server=self._create_server(),
             platform_api=self._create_platform_api(),
@@ -34,6 +35,7 @@ class EnvironConfigFactory:
             kube=self._create_kube(),
             registry=self._create_registry(),
             docker=self._create_docker(),
+            cluster_name=cluster_name,
         )
 
     def _create_server(self) -> ServerConfig:
