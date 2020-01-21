@@ -1,6 +1,6 @@
 -e .
 -r syntax.txt
-pytest==5.3.3
+pytest==5.3.4
 pytest-cov==2.8.1
 pytest-asyncio==0.10.0
 codecov==2.0.15
