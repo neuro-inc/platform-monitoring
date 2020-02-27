@@ -39,14 +39,10 @@ class JobsHelper:
         return job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED)
 
     def job_to_uri(self, job: Job) -> str:
-        base_uri = "job:"
-        if self._cluster_name:
-            base_uri += "//" + self._cluster_name
-            if job.owner:
-                base_uri += "/" + job.owner
-        else:
-            if job.owner:
-                base_uri += "//" + job.owner
+        assert self._cluster_name
+        base_uri = "job://" + self._cluster_name
+        if job.owner:
+            base_uri += "/" + job.owner
         return f"{base_uri}/{job.id}"
 
 
