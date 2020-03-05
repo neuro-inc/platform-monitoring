@@ -48,6 +48,8 @@ class KubeConfig:
     client_read_timeout_s: int = 300
     client_conn_pool_size: int = 100
 
+    kubelet_node_port: int = 10255
+
 
 @dataclass(frozen=True)
 class RegistryConfig:
