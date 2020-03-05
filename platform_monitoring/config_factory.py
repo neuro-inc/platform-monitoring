@@ -90,6 +90,10 @@ class EnvironConfigFactory:
                 self._environ.get("NP_MONITORING_K8S_CLIENT_CONN_POOL_SIZE")
                 or KubeConfig.client_conn_pool_size
             ),
+            kubelet_node_port=int(
+                self._environ.get("NP_MONITORING_K8S_KUBELET_PORT")
+                or KubeConfig.kubelet_node_port
+            ),
         )
 
     def _create_registry(self) -> RegistryConfig:

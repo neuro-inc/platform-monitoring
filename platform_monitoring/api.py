@@ -337,6 +337,7 @@ async def create_kube_client(config: KubeConfig) -> AsyncIterator[KubeClient]:
         conn_timeout_s=config.client_conn_timeout_s,
         read_timeout_s=config.client_read_timeout_s,
         conn_pool_size=config.client_conn_pool_size,
+        kubelet_node_port=config.kubelet_node_port,
     )
     try:
         await client.init()
