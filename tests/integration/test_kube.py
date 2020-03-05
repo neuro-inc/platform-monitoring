@@ -12,7 +12,6 @@ from async_timeout import timeout
 from platform_monitoring.base import LogReader
 from platform_monitoring.config import KubeConfig
 from platform_monitoring.kube_client import (
-    KUBELET_NODE_PORT,
     JobNotFoundException,
     KubeClient,
     KubeClientException,
@@ -235,11 +234,11 @@ class TestKubeClient:
         node_list = await kube_client.get_node_list()
         node_name = node_list["items"][0]["metadata"]["name"]
         async with kube_client.get_node_proxy_client(
-            node_name, KUBELET_NODE_PORT
+            node_name, KubeConfig.kubelet_node_port
         ) as client:
             assert client.url == URL(
                 kube_config.endpoint_url
-                + f"/api/v1/nodes/{node_name}:{KUBELET_NODE_PORT}/proxy"
+                + f"/api/v1/nodes/{node_name}:{KubeConfig.kubelet_node_port}/proxy"
             )
 
             async with client.session.get(URL(f"{client.url}/stats/summary")) as resp:
