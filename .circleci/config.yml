@@ -94,6 +94,7 @@ jobs:
       - run:
           name: Running Integration Tests
           command: |
+            sleep 3h
             source venv/bin/activate
             make test_integration
 
