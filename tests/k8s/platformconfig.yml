@@ -79,6 +79,9 @@ spec:
       - name: platformconfig
         image: platformconfig:latest
         imagePullPolicy: Never
+        env:
+        - name: NP_POSTGRES_HOST
+          value: not-important
         volumeMounts:
         - name: config-volume
           mountPath: /var/storage/neuromation/clusters
