@@ -82,6 +82,8 @@ spec:
         env:
         - name: NP_POSTGRES_HOST
           value: not-important
+        - name: NP_POSTGRES_PORT
+          value: 0
         volumeMounts:
         - name: config-volume
           mountPath: /var/storage/neuromation/clusters
