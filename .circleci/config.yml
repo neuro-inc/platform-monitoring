@@ -59,6 +59,10 @@ jobs:
             make start_k8s
             make apply_configuration_k8s
             make test_k8s
+            kubectl get po
+            kubectl get svc
+            docker ps
+
 
       - run:
           name: Setting up Python Virtual Environment
@@ -74,21 +78,21 @@ jobs:
             - venv
           key: v1-dependencies-python_3.7.2-{{ checksum "setup.py" }}-{{ checksum "requirements/syntax.txt" }}-{{ checksum "requirements/test.txt" }}
 
-      - run:
-          name: Running Static Code Analysis
-          command: |
-            source venv/bin/activate
-            make lint
-
-      - run:
-          name: Running Unit Tests
-          command: |
-            source venv/bin/activate
-            make test_unit
-
-      - codecov/upload:
-          file: .coverage-unit.xml
-          flags: unit
+#      - run:
+#          name: Running Static Code Analysis
+#          command: |
+#            source venv/bin/activate
+#            make lint
+#
+#      - run:
+#          name: Running Unit Tests
+#          command: |
+#            source venv/bin/activate
+#            make test_unit
+#
+#      - codecov/upload:
+#          file: .coverage-unit.xml
+#          flags: unit
 
       - run:
           name: Running Integration Tests
