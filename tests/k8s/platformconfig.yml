@@ -80,10 +80,50 @@ spec:
         image: platformconfig:latest
         imagePullPolicy: Never
         env:
+        - name: NP_AUTH_URL
+          value: not-important
+        - name: NP_AUTH_TOKEN
+          value: not-important
+        - name: NP_PUBLIC_NEURO_REGISTRY_URL
+          value: not-important
+        - name: NP_PUBLIC_NEURO_HELM_URL
+          value: not-important
+        - name: NP_PLATFORM_URL
+          value: not-important
+        - name: NP_PLATFORM_API_URL
+          value: not-important
+        - name: NP_PLATFORM_API_TOKEN
+          value: not-important
+        - name: NP_AWS_REGION
+          value: not-important
+        - name: NP_AWS_ACCESS_KEY_ID
+          value: not-important
+        - name: NP_AWS_SECRET_ACCESS_KEY
+          value: not-important
+        - name: NP_CLUSTER_DNS_SUFFIX
+          value: not-important
+        - name: NP_K8S_URL
+          value: not-important
+        - name: NP_K8S_WORKFLOW_NAMESPACE
+          value: not-important
+        - name: NP_JOB_FALLBACK_HOSTNAME
+          value: not-important
+        - name: NP_LATEST_PLATFORM_INFRA_IMAGE_TAG
+          value: not-important
+        - name: NP_PLATFORM_INFRA_WORKFLOWS_IMAGE_NAME
+          value: not-important
+        - name: NP_PLATFORM_INFRA_WORKFLOWS_IMAGE_PULL_POLICY
+          value: not-important
+        - name: NP_API_PORT
+          value: "0"
         - name: NP_POSTGRES_HOST
           value: not-important
         - name: NP_POSTGRES_PORT
-          value: 0
+          value: "0"
+        - name: NP_POSTGRES_USERNAME
+          value: not-important
+        - name: NP_POSTGRES_DB_NAME
+          value: not-important
         volumeMounts:
         - name: config-volume
           mountPath: /var/storage/neuromation/clusters
