@@ -112,6 +112,8 @@ spec:
           value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZGVudGl0eSI6ImNvbXB1dGUifQ.IJDlKCfbiuNGZH9Sh6p-CdUL5KxEK5JStqzfDk4-RAA
         - name: NP_ES_HOSTS
           value: http://elasticsearch-logging.kube-system:9200
+        - name: NP_JOBS_INGRESS_OAUTH_AUTHORIZE_URL
+          value: not-important
         - name: NP_API_URL
           value: http://platformapi/api/v1
         - name: NP_PLATFORM_CONFIG_URI
