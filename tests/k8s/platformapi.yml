@@ -114,7 +114,7 @@ spec:
           value: not-important
         - name: NP_NOTIFICATIONS_TOKEN
           value: not-important
-        - name: NP_STORAGE_ZIPKIN_URL
+        - name: NP_API_ZIPKIN_URL
           value: not-important
         - name: NP_API_ZIPKIN_SAMPLE_RATE
           value: not-important
