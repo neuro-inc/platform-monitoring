@@ -59,9 +59,6 @@ jobs:
             make start_k8s
             make apply_configuration_k8s
             make test_k8s
-            kubectl get po
-            kubectl get svc
-            docker ps
 
 
       - run:
@@ -97,6 +94,7 @@ jobs:
       - run:
           name: Running Integration Tests
           command: |
+            sleep 3h
             source venv/bin/activate
             make test_integration
 
