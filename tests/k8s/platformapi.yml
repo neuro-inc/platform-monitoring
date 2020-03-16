@@ -106,6 +106,14 @@ spec:
           value: not-important
         - name: NP_OAUTH_HEADLESS_CALLBACK_URL
           value: not-important
+        - name: NP_ENFORCER_PLATFORM_API_URL
+          value: not-important
+        - name: NP_ENFORCER_TOKEN
+          value: not-important
+        - name: NP_NOTIFICATIONS_URL
+          value: not-important
+        - name: NP_NOTIFICATIONS_TOKEN
+          value: not-important
         - name: NP_AUTH_URL
           value: http://platformauthapi:8080
         - name: NP_AUTH_TOKEN
@@ -113,6 +121,8 @@ spec:
         - name: NP_ES_HOSTS
           value: http://elasticsearch-logging.kube-system:9200
         - name: NP_JOBS_INGRESS_OAUTH_AUTHORIZE_URL
+          value: not-important
+        - name: NP_ADMIN_URL
           value: not-important
         - name: NP_API_URL
           value: http://platformapi/api/v1
