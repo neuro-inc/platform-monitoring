@@ -58,6 +58,7 @@ def test_create(cert_authority_path: str, token_path: str) -> None:
         "NP_MONITORING_K8S_CLIENT_CONN_POOL_SIZE": "333",
         "NP_MONITORING_REGISTRY_URL": "http://testhost:5000",
         "NP_CLUSTER_NAME": "test-cluster",
+        "NP_MONITORING_K8S_KUBELET_PORT": "12321",
     }
     config = EnvironConfigFactory(environ).create()
     assert config == Config(
@@ -80,6 +81,7 @@ def test_create(cert_authority_path: str, token_path: str) -> None:
             client_conn_timeout_s=111,
             client_read_timeout_s=222,
             client_conn_pool_size=333,
+            kubelet_node_port=12321,
         ),
         registry=RegistryConfig(url=URL("http://testhost:5000")),
         docker=DockerConfig(),

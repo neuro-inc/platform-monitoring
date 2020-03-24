@@ -13,13 +13,10 @@ from async_timeout import timeout
 from yarl import URL
 
 from .base import JobStats, Telemetry
-from .config import KubeClientAuthType
+from .config import KubeClientAuthType, KubeConfig
 
 
 logger = logging.getLogger(__name__)
-
-
-KUBELET_NODE_PORT = 10255
 
 
 class KubeClientException(Exception):
@@ -91,6 +88,7 @@ class KubeClient:
         conn_timeout_s: int = 300,
         read_timeout_s: int = 100,
         conn_pool_size: int = 100,
+        kubelet_node_port: int = KubeConfig.kubelet_node_port,
     ) -> None:
         self._base_url = base_url
         self._namespace = namespace
@@ -109,7 +107,7 @@ class KubeClient:
         self._conn_pool_size = conn_pool_size
         self._client: Optional[aiohttp.ClientSession] = None
 
-        self._kubelet_port = KUBELET_NODE_PORT
+        self._kubelet_port = kubelet_node_port
 
     @property
     def _is_ssl(self) -> bool:
