@@ -19,11 +19,13 @@ function minikube::start {
 
 function save_k8s_image {
     local image=$1
+    echo "Saving ${image}"
     docker save -o /tmp/${image}.image $image:latest
 }
 
 function load_k8s_image {
     local image=$1
+    echo "Loading ${image}"
     docker load -i /tmp/${image}.image
 }
 
@@ -32,12 +34,14 @@ function minikube::load_images {
     save_k8s_image platformauthapi
     save_k8s_image platformapi
     save_k8s_image platformconfig
+    save_k8s_image platformconfig-migrations
 
     eval $(minikube docker-env)
 
     load_k8s_image platformauthapi
-    load_k8s_image platformconfig
     load_k8s_image platformapi
+    load_k8s_image platformconfig
+    load_k8s_image platformconfig-migrations
 }
 
 function minikube::apply_all_configurations {
@@ -50,7 +54,7 @@ function minikube::apply_all_configurations {
     kubectl apply -f tests/k8s/platformapi.yml
 }
 
-function minikube::delete_all_configurations {
+function minikube::clean {
     echo "Cleaning up..."
     kubectl config use-context minikube
     kubectl delete -f deploy/platformmonitoringapi/templates/dockerengineapi.yml 
@@ -63,7 +67,7 @@ function minikube::delete_all_configurations {
 function minikube::stop {
     echo "Stopping minikube..."
     kubectl config use-context minikube
-    minikube::delete_all_configurations
+    minikube::clean
     minikube stop
 }
 
@@ -103,7 +107,7 @@ case "${1:-}" in
         minikube::apply
         ;;
     clean)
-        minikube::delete_all_configurations
+        minikube::clean
         ;;
     stop)
         minikube::stop

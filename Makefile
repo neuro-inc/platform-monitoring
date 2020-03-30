@@ -6,6 +6,7 @@ IMAGE ?= $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/$(IMAGE_NAME)
 PLATFORMAPI_TAG=6b56cbdb3ff7ce1cbbd5165bf38f1389902c8fba
 PLATFORMAUTHAPI_TAG=e4aa342b8d145abc05cb795c3c07ce90ffdc1f59
 PLATFORMCONFIG_TAG=cdbcae372da044f08fbbc9a2548049875ea9a479
+PLATFORMCONFIGMIGRATIONS_TAG=cdbcae372da044f08fbbc9a2548049875ea9a479
 
 
 ifdef CIRCLECI
@@ -55,9 +56,11 @@ gke_docker_pull_test_images:
 	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:$(PLATFORMAPI_TAG)
 	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:$(PLATFORMAUTHAPI_TAG)
 	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:$(PLATFORMCONFIG_TAG)
+	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig-migrations:$(PLATFORMCONFIGMIGRATIONS_TAG)
 	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:$(PLATFORMAPI_TAG) platformapi:latest
 	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:$(PLATFORMAUTHAPI_TAG) platformauthapi:latest
 	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:$(PLATFORMCONFIG_TAG) platformconfig:latest
+	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig-migrations:$(PLATFORMCONFIG_TAG) platformconfig-migrations:latest
 
 gke_docker_push: build
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE):latest

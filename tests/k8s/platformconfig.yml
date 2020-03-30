@@ -25,9 +25,9 @@ spec:
         - name: NP_API_PORT
           value: "8080"
         - name: NP_AUTH_URL
-          value: not-important
+          value: http://platformauthapi:8080
         - name: NP_AUTH_TOKEN
-          value: not-important
+          value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZGVudGl0eSI6ImNvbXB1dGUifQ.IJDlKCfbiuNGZH9Sh6p-CdUL5KxEK5JStqzfDk4-RAA
         - name: NP_PUBLIC_NEURO_REGISTRY_URL
           value: not-important
         - name: NP_PUBLIC_NEURO_HELM_URL
@@ -63,11 +63,11 @@ spec:
         - name: NP_POSTGRES_PORT
           value: "5432"
         - name: NP_POSTGRES_USERNAME
-          value: postgresadmin
+          value: postgres
         - name: NP_POSTGRES_PASSWORD
-          value: admin123
+          value: postgres
         - name: NP_POSTGRES_DB_NAME
-          value: postgresdb
+          value: postgres
 ---
 apiVersion: v1
 kind: Service
@@ -98,14 +98,13 @@ spec:
           imagePullPolicy: "IfNotPresent"
           ports:
             - containerPort: 5432
-              hostPort: 5432
           env:
             - name: POSTGRES_DB
-              value: postgresdb
+              value: postgres
             - name: POSTGRES_USER
-              value: postgresadmin
+              value: postgres
             - name: POSTGRES_PASSWORD
-              value: admin123
+              value: postgres
 ---
 apiVersion: v1
 kind: Service
@@ -119,3 +118,32 @@ spec:
    - port: 5432
   selector:
    app: postgres
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: platformconfig-migrations
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: platformconfig-migrations
+        image: platformconfig-migrations:latest
+        imagePullPolicy: Never
+        command: ["alembic", "upgrade", "head"]
+        env:
+        - name: NP_POSTGRES_HOST
+          value: platformconfig-postgres
+        - name: NP_POSTGRES_PORT
+          value: "5432"
+        - name: NP_POSTGRES_USERNAME
+          value: postgres
+        - name: NP_POSTGRES_PASSWORD
+          value: postgres
+        - name: NP_POSTGRES_DB_NAME
+          value: postgres
+  backoffLimit: 0

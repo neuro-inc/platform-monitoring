@@ -1,0 +1,3 @@
+[console_scripts]
+platform-monitoring = platform_monitoring.api:main
+
