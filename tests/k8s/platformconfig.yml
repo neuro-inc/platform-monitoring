@@ -63,11 +63,11 @@ spec:
         - name: NP_POSTGRES_PORT
           value: "5432"
         - name: NP_POSTGRES_USERNAME
-          value: postgresdb
+          value: postgresadmin
         - name: NP_POSTGRES_PASSWORD
           value: admin123
         - name: NP_POSTGRES_DB_NAME
-          value: postgresadmin
+          value: postgresdb
 ---
 apiVersion: v1
 kind: Service
@@ -90,7 +90,7 @@ spec:
   template:
     metadata:
       labels:
-        app: platformconfig
+        app: platformconfig-postgres
     spec:
       containers:
         - name: postgres
