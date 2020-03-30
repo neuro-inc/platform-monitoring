@@ -63,9 +63,11 @@ spec:
         - name: NP_POSTGRES_PORT
           value: "5432"
         - name: NP_POSTGRES_USERNAME
-          value: not-important
+          value: postgresdb
+        - name: NP_POSTGRES_PASSWORD
+          value: admin123
         - name: NP_POSTGRES_DB_NAME
-          value: not-important
+          value: postgresadmin
 ---
 apiVersion: v1
 kind: Service
@@ -96,6 +98,7 @@ spec:
           imagePullPolicy: "IfNotPresent"
           ports:
             - containerPort: 5432
+              hostPort: 5432
           env:
             - name: POSTGRES_DB
               value: postgresdb
