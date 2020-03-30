@@ -35,6 +35,11 @@ class KubeClientAuthType(str, enum.Enum):
 
 
 @dataclass(frozen=True)
+class CORSConfig:
+    allowed_origins: Sequence[str] = ()
+
+
+@dataclass(frozen=True)
 class KubeConfig:
     endpoint_url: str
     cert_authority_data_pem: Optional[str] = None
@@ -76,4 +81,5 @@ class Config:
     kube: KubeConfig
     docker: DockerConfig
     registry: RegistryConfig
+    cors: CORSConfig
     cluster_name: str
