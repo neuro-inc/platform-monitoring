@@ -90,7 +90,7 @@ spec:
   template:
     metadata:
       labels:
-        app: platformconfig-postgres
+        app: postgres
     spec:
       containers:
         - name: postgres
