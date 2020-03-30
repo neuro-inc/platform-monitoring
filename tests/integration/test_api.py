@@ -297,20 +297,20 @@ class TestApi:
 
     @pytest.mark.asyncio
     async def test_ping_unknown_origin(
-        self, api: MonitoringApiEndpoints, client: aiohttp.ClientSession
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
     ) -> None:
         async with client.get(
-            api.ping_url, headers={"Origin": "http://unknown"}
+            monitoring_api.ping_url, headers={"Origin": "http://unknown"}
         ) as response:
             assert response.status == HTTPOk.status_code, await response.text()
             assert "Access-Control-Allow-Origin" not in response.headers
 
     @pytest.mark.asyncio
     async def test_ping_allowed_origin(
-        self, api: MonitoringApiEndpoints, client: aiohttp.ClientSession
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
     ) -> None:
         async with client.get(
-            api.ping_url, headers={"Origin": "https://neu.ro"}
+            monitoring_api.ping_url, headers={"Origin": "https://neu.ro"}
         ) as resp:
             assert resp.status == HTTPOk.status_code, await resp.text()
             assert resp.headers["Access-Control-Allow-Origin"] == "https://neu.ro"
@@ -319,9 +319,9 @@ class TestApi:
 
     @pytest.mark.asyncio
     async def test_ping_options_no_headers(
-        self, api: MonitoringApiEndpoints, client: aiohttp.ClientSession
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
     ) -> None:
-        async with client.options(api.ping_url) as resp:
+        async with client.options(monitoring_api.ping_url) as resp:
             assert resp.status == HTTPForbidden.status_code, await resp.text()
             assert await resp.text() == (
                 "CORS preflight request failed: "
@@ -330,10 +330,10 @@ class TestApi:
 
     @pytest.mark.asyncio
     async def test_ping_options_unknown_origin(
-        self, api: MonitoringApiEndpoints, client: aiohttp.ClientSession
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
     ) -> None:
         async with client.options(
-            api.ping_url,
+            monitoring_api.ping_url,
             headers={
                 "Origin": "http://unknown",
                 "Access-Control-Request-Method": "GET",
@@ -347,10 +347,10 @@ class TestApi:
 
     @pytest.mark.asyncio
     async def test_ping_options(
-        self, api: MonitoringApiEndpoints, client: aiohttp.ClientSession
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
     ) -> None:
         async with client.options(
-            api.ping_url,
+            monitoring_api.ping_url,
             headers={
                 "Origin": "https://neu.ro",
                 "Access-Control-Request-Method": "GET",
