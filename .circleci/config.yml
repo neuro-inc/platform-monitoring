@@ -96,7 +96,7 @@ jobs:
           command: |
             source venv/bin/activate
             pytest -s tests/integration -k TestLogReader
-#            make test_integration
+            make test_integration
 
       - codecov/upload:
           file: .coverage-integration.xml
