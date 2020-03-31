@@ -110,6 +110,8 @@ spec:
           value: not-important-NP_ENFORCER_PLATFORM_API_URL
         - name: NP_ENFORCER_TOKEN
           value: not-important-NP_ENFORCER_TOKEN
+        - name: NP_ENFORCER_INTERVAL_SEC
+          value: "100500"
         - name: NP_NOTIFICATIONS_URL
           value: not-important-NP_NOTIFICATIONS_URL
         - name: NP_NOTIFICATIONS_TOKEN
