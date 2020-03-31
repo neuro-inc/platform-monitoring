@@ -43,7 +43,7 @@ spec:
         - name: NP_AUTH_URL
           value: http://platformauthapi:8080
         - name: NP_AUTH_TOKEN
-          value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZGVudGl0eSI6ImNvbXB1dGUifQ.IJDlKCfbiuNGZH9Sh6p-CdUL5KxEK5JStqzfDk4-RAA
+          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImNsdXN0ZXIifQ.kZG6EyaHMa2gNzrgKQlwVnZ0OZ5mruFZ0xVAbntm-dU
         - name: NP_PUBLIC_NEURO_REGISTRY_URL
           value: not-important
         - name: NP_PUBLIC_NEURO_HELM_URL
@@ -51,9 +51,9 @@ spec:
         - name: NP_PLATFORM_URL
           value: not-important
         - name: NP_PLATFORM_API_URL
-          value: not-important
+          value: http://platformapi:8080/api/v1
         - name: NP_PLATFORM_API_TOKEN
-          value: not-important
+          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImNsdXN0ZXIifQ.kZG6EyaHMa2gNzrgKQlwVnZ0OZ5mruFZ0xVAbntm-dU
         - name: NP_AWS_REGION
           value: not-important
         - name: NP_AWS_ACCESS_KEY_ID
@@ -90,7 +90,7 @@ kind: Service
 metadata:
   name: platformconfig
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   ports:
   - port: 8080
     targetPort: 8080
