@@ -587,6 +587,8 @@ class TestLogApi:
             result = await response.json()
             job_id = result["id"]
 
+        await jobs_client.long_polling_by_job_id(job_id, "succeeded")
+
         url = monitoring_api.generate_log_url(job_id)
         async with client.get(url, headers=headers) as response:
             assert response.status == HTTPOk.status_code
@@ -597,8 +599,6 @@ class TestLogApi:
             actual_payload = await response.read()
             expected_payload = "\n".join(str(i) for i in range(1, 6)) + "\n"
             assert actual_payload == expected_payload.encode()
-
-        await jobs_client.delete_job(job_id)
 
 
 class TestSaveApi:
