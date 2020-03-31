@@ -35,7 +35,7 @@ def _cluster_payload() -> Dict[str, Any]:
                 "url": "http://localhost:8001",
                 "ca_data": "certificate",
                 "auth_type": "none",
-                "token": "token",
+                "token": None,
                 "namespace": "default",
                 "node_label_gpu": "cloud.google.com/gke-accelerator",
                 "node_label_preemptible": "cloud.google.com/gke-preemptible",
