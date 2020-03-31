@@ -95,7 +95,7 @@ jobs:
           name: Running Integration Tests
           command: |
             source venv/bin/activate
-            pytest -s tests/integration -k test_log_no_auth_token_provided_unauthorized
+            pytest -s tests/integration -k TestLogReader
 #            make test_integration
 
       - codecov/upload:
