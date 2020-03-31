@@ -23,18 +23,18 @@ def _cluster_payload() -> Dict[str, Any]:
     return {
         "name": "default",
         "storage": {
-            "host": {"mount_path": "/host_mount_path"},
+            "host": {"mount_path": "/tmp"},
             "url": "http://platformapi/api/v1/storage",
         },
         "registry": {
-            "url": "https://platformregistry",
+            "url": "http://localhost:5000",
             "email": "registry@neuromation.io",
         },
         "orchestrator": {
             "kubernetes": {
                 "url": "http://localhost:8001",
                 "ca_data": "certificate",
-                "auth_type": "token",
+                "auth_type": "none",
                 "token": "token",
                 "namespace": "default",
                 "node_label_gpu": "cloud.google.com/gke-accelerator",
