@@ -351,6 +351,7 @@ async def create_elasticsearch_client(
     config: ElasticsearchConfig,
 ) -> AsyncIterator[Elasticsearch]:
     async with Elasticsearch(hosts=config.hosts) as client:
+        await client.ping()
         yield client
 
 
