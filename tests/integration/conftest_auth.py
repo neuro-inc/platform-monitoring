@@ -40,9 +40,7 @@ def compute_token(token_factory: Callable[[str], str]) -> str:
 
 
 @pytest.fixture(scope="session")
-async def auth_config(
-    token_factory: Callable[[str], str]
-) -> AsyncIterator[PlatformAuthConfig]:
+def auth_config(token_factory: Callable[[str], str]) -> Iterator[PlatformAuthConfig]:
     platform_auth = get_service_url("platformauthapi", namespace="default")
     yield PlatformAuthConfig(
         url=URL(platform_auth),

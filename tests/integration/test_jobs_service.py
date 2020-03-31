@@ -28,6 +28,7 @@ from .conftest_kube import MyKubeClient
 JobFactory = Callable[[str, Optional[str], Resources], Awaitable[Job]]
 
 
+@pytest.mark.usefixtures("cluster_name")
 class TestJobsService:
     @pytest.fixture
     async def jobs_service(
