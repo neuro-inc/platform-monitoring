@@ -17,6 +17,22 @@ spec:
       labels:
         service: platformconfig
     spec:
+      initContainers:
+      - name: platformconfig-migrations
+        image: platformconfig-migrations:latest
+        imagePullPolicy: Never
+        command: ["alembic", "upgrade", "head"]
+        env:
+        - name: NP_POSTGRES_HOST
+          value: platformconfig-postgres
+        - name: NP_POSTGRES_PORT
+          value: "5432"
+        - name: NP_POSTGRES_USERNAME
+          value: postgres
+        - name: NP_POSTGRES_PASSWORD
+          value: postgres
+        - name: NP_POSTGRES_DB_NAME
+          value: postgres
       containers:
       - name: platformconfig
         image: platformconfig:latest
@@ -118,32 +134,3 @@ spec:
    - port: 5432
   selector:
    app: postgres
----
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: platformconfig-migrations
-  annotations:
-    "helm.sh/hook": pre-install,pre-upgrade
-    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
-spec:
-  template:
-    spec:
-      restartPolicy: OnFailure
-      containers:
-      - name: platformconfig-migrations
-        image: platformconfig-migrations:latest
-        imagePullPolicy: Never
-        command: ["alembic", "upgrade", "head"]
-        env:
-        - name: NP_POSTGRES_HOST
-          value: platformconfig-postgres
-        - name: NP_POSTGRES_PORT
-          value: "5432"
-        - name: NP_POSTGRES_USERNAME
-          value: postgres
-        - name: NP_POSTGRES_PASSWORD
-          value: postgres
-        - name: NP_POSTGRES_DB_NAME
-          value: postgres
-  backoffLimit: 0

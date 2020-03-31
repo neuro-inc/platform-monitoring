@@ -47,7 +47,7 @@ function minikube::load_images {
 function minikube::apply_all_configurations {
     echo "Applying configurations..."
     kubectl config use-context minikube
-    kubectl apply -f deploy/platformmonitoringapi/templates/dockerengineapi.yml 
+    kubectl apply -f tests/k8s/dockerengineapi.yml
     kubectl apply -f tests/k8s/rb.default.gke.yml
     kubectl apply -f tests/k8s/logging.yml
     kubectl apply -f tests/k8s/platformconfig.yml
@@ -57,7 +57,7 @@ function minikube::apply_all_configurations {
 function minikube::clean {
     echo "Cleaning up..."
     kubectl config use-context minikube
-    kubectl delete -f deploy/platformmonitoringapi/templates/dockerengineapi.yml 
+    kubectl delete -f tests/k8s/dockerengineapi.yml
     kubectl delete -f tests/k8s/rb.default.gke.yml
     kubectl delete -f tests/k8s/logging.yml
     kubectl delete -f tests/k8s/platformconfig.yml
