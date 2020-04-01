@@ -10,7 +10,6 @@ from neuromation.api import (
     Container as JobContainer,
     JobDescription as Job,
     JobStatus,
-    RemoteImage,
     Resources,
 )
 from platform_monitoring.config import DockerConfig
@@ -130,8 +129,6 @@ class TestJobsService:
         user: User,
         registry_host: str,
         image_tag: str,
-        wait_for_job_running: Any,
-        wait_for_job_succeeded: Any,
     ) -> None:
         resources = Resources(
             memory_mb=16,
@@ -170,8 +167,6 @@ class TestJobsService:
         user: User,
         registry_host: str,
         image_tag: str,
-        wait_for_job_running: Any,
-        wait_for_job_succeeded: Any,
     ) -> None:
         resources = Resources(
             memory_mb=16,
@@ -242,7 +237,6 @@ class TestJobsService:
         jobs_service: JobsService,
         user: User,
         image_tag: str,
-        wait_for_job_running: Any,
     ) -> None:
         resources = Resources(
             memory_mb=16,
@@ -288,7 +282,6 @@ class TestJobsService:
         jobs_service: JobsService,
         user: User,
         image_tag: str,
-        wait_for_job_running: Any,
     ) -> None:
         resources = Resources(
             memory_mb=16,
