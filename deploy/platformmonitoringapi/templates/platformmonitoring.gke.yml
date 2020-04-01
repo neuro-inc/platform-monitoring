@@ -61,6 +61,8 @@ spec:
           value: {{ .Values.NP_CLUSTER_NAME }}
         - name: NP_MONITORING_K8S_KUBELET_PORT
           value: {{ .Values.NP_MONITORING_K8S_KUBELET_PORT | quote }}
+        - name: NP_CORS_ORIGINS
+          value: {{ .Values.NP_CORS_ORIGINS }}
       {{- if .Values.DOCKER_LOGIN_ARTIFACTORY_SECRET_NAME }}
       imagePullSecrets:
         - name: {{ .Values.DOCKER_LOGIN_ARTIFACTORY_SECRET_NAME }}
