@@ -3,6 +3,12 @@ IMAGE_TAG ?= latest
 ARTIFACTORY_TAG ?=$(shell echo "$(CIRCLE_TAG)" | awk -F/ '{print $$2}')
 IMAGE ?= $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/$(IMAGE_NAME)
 
+PLATFORMAPI_TAG=6b56cbdb3ff7ce1cbbd5165bf38f1389902c8fba
+PLATFORMAUTHAPI_TAG=e4aa342b8d145abc05cb795c3c07ce90ffdc1f59
+PLATFORMCONFIG_TAG=cdbcae372da044f08fbbc9a2548049875ea9a479
+PLATFORMCONFIGMIGRATIONS_TAG=cdbcae372da044f08fbbc9a2548049875ea9a479
+
+
 ifdef CIRCLECI
     PIP_EXTRA_INDEX_URL ?= https://$(DEVPI_USER):$(DEVPI_PASS)@$(DEVPI_HOST)/$(DEVPI_USER)/$(DEVPI_INDEX)
 else
@@ -14,8 +20,8 @@ export PIP_EXTRA_INDEX_URL
 include k8s.mk
 
 setup:
-	echo "Using extra pip index: $PIP_EXTRA_INDEX_URL"
-	pip install --no-use-pep517 -r requirements/test.txt
+	@echo "Using extra pip index: $(PIP_EXTRA_INDEX_URL)"
+	pip install -r requirements/test.txt
 
 lint:
 	black --check platform_monitoring tests setup.py
@@ -47,13 +53,14 @@ gke_login:
 	gcloud auth configure-docker
 
 gke_docker_pull_test_images:
-    # Pull images versioned around May 30 - June 11, 2019 and tag them as `latest`
-	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:3e475aa6a0665e2a88ec854f59ec092a6472cb91
-	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:33318ecfd6ca5b0974f050f16b780d57e4a43e4f
-	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:9d7cea532a7ab0e45871cb48cf355427a274dbd9
-	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:3e475aa6a0665e2a88ec854f59ec092a6472cb91 platformapi:latest
-	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:33318ecfd6ca5b0974f050f16b780d57e4a43e4f platformauthapi:latest
-	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:9d7cea532a7ab0e45871cb48cf355427a274dbd9 platformconfig:latest
+	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:$(PLATFORMAPI_TAG)
+	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:$(PLATFORMAUTHAPI_TAG)
+	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:$(PLATFORMCONFIG_TAG)
+	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig-migrations:$(PLATFORMCONFIGMIGRATIONS_TAG)
+	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:$(PLATFORMAPI_TAG) platformapi:latest
+	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:$(PLATFORMAUTHAPI_TAG) platformauthapi:latest
+	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:$(PLATFORMCONFIG_TAG) platformconfig:latest
+	docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig-migrations:$(PLATFORMCONFIG_TAG) platformconfig-migrations:latest
 
 gke_docker_push: build
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE):latest

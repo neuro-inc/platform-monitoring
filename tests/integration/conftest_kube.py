@@ -1,13 +1,14 @@
 import asyncio
 import json
 import shlex
+import subprocess
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, Optional
 
 import pytest
 from async_timeout import timeout
 from platform_monitoring.config import KubeConfig
-from platform_monitoring.kube_client import KubeClient
+from platform_monitoring.kube_client import JobNotFoundException, KubeClient
 
 
 class MyKubeClient(KubeClient):
@@ -40,12 +41,22 @@ class MyKubeClient(KubeClient):
         raise ValueError(f"Missing pod status: `{payload}`")
 
     async def wait_pod_is_terminated(
-        self, pod_name: str, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
+        self,
+        pod_name: str,
+        timeout_s: float = 10.0 * 60,
+        interval_s: float = 1.0,
+        allow_pod_not_exists: bool = False,
     ) -> None:
         try:
             async with timeout(timeout_s):
                 while True:
-                    state = await self._get_raw_container_state(pod_name)
+                    try:
+                        state = await self._get_raw_container_state(pod_name)
+                    except JobNotFoundException:
+                        # job's pod does not exist: maybe it's already garbage-collected
+                        if allow_pod_not_exists:
+                            return
+                        raise
                     is_terminated = bool(state) and "terminated" in state
                     if is_terminated:
                         return
@@ -105,17 +116,16 @@ class MyPodDescriptor:
 
 
 @pytest.fixture(scope="session")
-async def kube_config_payload() -> Dict[str, Any]:
-    process = await asyncio.create_subprocess_exec(
-        "kubectl", "config", "view", "-o", "json", stdout=asyncio.subprocess.PIPE
+def kube_config_payload() -> Dict[str, Any]:
+    result = subprocess.run(
+        ["kubectl", "config", "view", "-o", "json"], stdout=subprocess.PIPE
     )
-    output, _ = await process.communicate()
-    payload_str = output.decode().rstrip()
+    payload_str = result.stdout.decode().rstrip()
     return json.loads(payload_str)
 
 
 @pytest.fixture(scope="session")
-async def kube_config_cluster_payload(kube_config_payload: Dict[str, Any]) -> Any:
+def kube_config_cluster_payload(kube_config_payload: Dict[str, Any]) -> Any:
     cluster_name = "minikube"
     clusters = {
         cluster["name"]: cluster["cluster"]
@@ -125,7 +135,7 @@ async def kube_config_cluster_payload(kube_config_payload: Dict[str, Any]) -> An
 
 
 @pytest.fixture(scope="session")
-async def kube_config_user_payload(kube_config_payload: Dict[str, Any]) -> Any:
+def kube_config_user_payload(kube_config_payload: Dict[str, Any]) -> Any:
     user_name = "minikube"
     users = {user["name"]: user["user"] for user in kube_config_payload["users"]}
     return users[user_name]

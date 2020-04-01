@@ -19,7 +19,7 @@ data:
             location / {
                 proxy_pass http://unix:/var/run/docker.sock:/;
                 proxy_buffering off;
+                proxy_read_timeout 300s;  # 60s by default
             }
         }
     }
----

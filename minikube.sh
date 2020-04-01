@@ -11,21 +11,21 @@ function minikube::start {
     echo "Starting minikube..."
     mkdir -p ~/.minikube/files/files
     cp tests/k8s/fluentd/kubernetes.conf ~/.minikube/files/files/fluentd-kubernetes.conf
-    minikube start --kubernetes-version=v1.10.0
+    minikube config set WantUpdateNotification false
+    minikube start --kubernetes-version=v1.13.0
     minikube addons enable registry
     kubectl config use-context minikube
-    # NOTE: registry-proxy is a part of the registry addon in newer versions of
-    # minikube
-    kubectl apply -f tests/k8s/registry.yml
 }
 
 function save_k8s_image {
     local image=$1
+    echo "Saving ${image}"
     docker save -o /tmp/${image}.image $image:latest
 }
 
 function load_k8s_image {
     local image=$1
+    echo "Loading ${image}"
     docker load -i /tmp/${image}.image
 }
 
@@ -34,28 +34,30 @@ function minikube::load_images {
     save_k8s_image platformauthapi
     save_k8s_image platformapi
     save_k8s_image platformconfig
+    save_k8s_image platformconfig-migrations
 
     eval $(minikube docker-env)
 
     load_k8s_image platformauthapi
-    load_k8s_image platformconfig
     load_k8s_image platformapi
+    load_k8s_image platformconfig
+    load_k8s_image platformconfig-migrations
 }
 
 function minikube::apply_all_configurations {
     echo "Applying configurations..."
     kubectl config use-context minikube
-    kubectl apply -f deploy/platformmonitoringapi/templates/dockerengineapi.yml 
+    kubectl apply -f tests/k8s/dockerengineapi.yml
     kubectl apply -f tests/k8s/rb.default.gke.yml
     kubectl apply -f tests/k8s/logging.yml
     kubectl apply -f tests/k8s/platformconfig.yml
     kubectl apply -f tests/k8s/platformapi.yml
 }
 
-function minikube::delete_all_configurations {
+function minikube::clean {
     echo "Cleaning up..."
     kubectl config use-context minikube
-    kubectl delete -f deploy/platformmonitoringapi/templates/dockerengineapi.yml 
+    kubectl delete -f tests/k8s/dockerengineapi.yml
     kubectl delete -f tests/k8s/rb.default.gke.yml
     kubectl delete -f tests/k8s/logging.yml
     kubectl delete -f tests/k8s/platformconfig.yml
@@ -65,7 +67,7 @@ function minikube::delete_all_configurations {
 function minikube::stop {
     echo "Stopping minikube..."
     kubectl config use-context minikube
-    minikube::delete_all_configurations
+    minikube::clean
     minikube stop
 }
 
@@ -105,7 +107,7 @@ case "${1:-}" in
         minikube::apply
         ;;
     clean)
-        minikube::delete_all_configurations
+        minikube::clean
         ;;
     stop)
         minikube::stop

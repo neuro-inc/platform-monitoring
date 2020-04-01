@@ -35,6 +35,11 @@ class KubeClientAuthType(str, enum.Enum):
 
 
 @dataclass(frozen=True)
+class CORSConfig:
+    allowed_origins: Sequence[str] = ()
+
+
+@dataclass(frozen=True)
 class KubeConfig:
     endpoint_url: str
     cert_authority_data_pem: Optional[str] = None
@@ -47,6 +52,8 @@ class KubeConfig:
     client_conn_timeout_s: int = 300
     client_read_timeout_s: int = 300
     client_conn_pool_size: int = 100
+
+    kubelet_node_port: int = 10255
 
 
 @dataclass(frozen=True)
@@ -74,3 +81,5 @@ class Config:
     kube: KubeConfig
     docker: DockerConfig
     registry: RegistryConfig
+    cors: CORSConfig
+    cluster_name: str

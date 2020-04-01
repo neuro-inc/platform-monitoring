@@ -9,3 +9,6 @@ NP_MONITORING_PLATFORM_AUTH_URL: http://platformauthapi:8080
 NP_MONITORING_ES_HOSTS: http://logging-elasticsearch:9200
 NP_MONITORING_K8S_NS: default
 NP_MONITORING_REGISTRY_URL: https://registry-staging.neu.ro
+NP_CLUSTER_NAME: ""
+NP_MONITORING_K8S_KUBELET_PORT: ""
+NP_CORS_ORIGINS: https://release--neuro-web.netlify.com,https://app.neu.ro

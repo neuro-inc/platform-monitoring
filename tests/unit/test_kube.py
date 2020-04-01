@@ -1,4 +1,5 @@
-from typing import Any, Dict
+import asyncio
+from typing import Any, Dict, List
 from unittest import mock
 
 import aiohttp
@@ -221,3 +222,60 @@ class TestFilteredStreamWrapper:
         assert chunk == b"rpc error: code = whatever\n"
         chunk = await stream.read()
         assert not chunk
+
+    @pytest.mark.asyncio
+    async def test_not_filtered_single_rpc_not_eof(self) -> None:
+        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False))
+        reader.feed_data(b"line1\n")
+        reader.feed_data(b"rpc error: code = whatever\n")
+        reader.feed_data(b"line2\n")
+        reader.feed_eof()
+        stream = FilteredStreamWrapper(reader)
+        chunk = await stream.read()
+        assert chunk == b"line1\n"
+        chunk = await stream.read()
+        assert chunk == b"rpc error: code = whatever\n"
+        chunk = await stream.read()
+        assert chunk == b"line2\n"
+        chunk = await stream.read()
+        assert not chunk
+
+    @pytest.mark.asyncio
+    async def test_min_line_chunk(self) -> None:
+        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False))
+        stream = FilteredStreamWrapper(reader)
+
+        async def _read_all() -> List[bytes]:
+            chunks: List[bytes] = []
+            while True:
+                c = await stream.read()
+                chunks.append(c)
+                if not c:
+                    break
+            return chunks
+
+        async def _feed_raw_chunk(data: bytes) -> None:
+            reader.feed_data(data)
+            await asyncio.sleep(0.0)
+
+        task = asyncio.create_task(_read_all())
+        await _feed_raw_chunk(b"chunk01\r")
+        await _feed_raw_chunk(b"chunk02\r")
+        await _feed_raw_chunk(b"chunk03\r")
+        await _feed_raw_chunk(b"chunk04\r")
+        await _feed_raw_chunk(b"chunk05\r\n")
+        await _feed_raw_chunk(b"chunk06\r\n")
+        await _feed_raw_chunk(b"chunk07\r")
+        await _feed_raw_chunk(b"chunk08\r\n")
+        await _feed_raw_chunk(b"rpc error: ")
+        await _feed_raw_chunk(b"code =")
+        reader.feed_eof()
+        chunks = await task
+        assert chunks == [
+            b"chunk01\rchunk02\rchunk03\r",
+            b"chunk04\r",
+            b"chunk05\r\n",
+            b"chunk06\r\n",
+            b"chunk07\rchunk08\r\n",
+            b"",
+        ]

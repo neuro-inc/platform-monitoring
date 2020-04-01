@@ -1,12 +1,14 @@
 import asyncio
 import json
 import logging
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from tempfile import mktemp
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict
 
 import aiohttp
 import aiohttp.web
+import aiohttp_cors
 from aioelasticsearch import Elasticsearch
 from aiohttp.web import (
     HTTPBadRequest,
@@ -18,8 +20,6 @@ from aiohttp.web import (
 from aiohttp.web_middlewares import middleware
 from aiohttp.web_response import json_response
 from aiohttp_security import check_authorized
-from async_exit_stack import AsyncExitStack
-from async_generator import asynccontextmanager
 from neuro_auth_client import AuthClient, Permission, check_permissions
 from neuro_auth_client.security import AuthScheme, setup_security
 from neuromation.api import (
@@ -27,11 +27,13 @@ from neuromation.api import (
     Factory as PlatformClientFactory,
     JobDescription as Job,
 )
+from platform_logging import init_logging
 from platform_monitoring.user import untrusted_user
 
 from .base import JobStats, Telemetry
 from .config import (
     Config,
+    CORSConfig,
     ElasticsearchConfig,
     KubeConfig,
     PlatformApiConfig,
@@ -45,14 +47,6 @@ from .validators import create_save_request_payload_validator
 
 
 logger = logging.getLogger(__name__)
-
-
-def init_logging() -> None:
-    logging.basicConfig(
-        # TODO (A Yushkovskiy after A Danshyn 06/01/18): expose in the Config
-        level=logging.DEBUG,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
 
 
 class ApiHandler:
@@ -76,7 +70,7 @@ class MonitoringApiHandler:
     def __init__(self, app: aiohttp.web.Application, config: Config) -> None:
         self._app = app
         self._config = config
-        self._jobs_helper = JobsHelper()
+        self._jobs_helper = JobsHelper(cluster_name=config.cluster_name)
         self._kube_helper = KubeHelper()
 
         self._save_request_payload_validator = create_save_request_payload_validator(
@@ -310,7 +304,7 @@ async def create_monitoring_app(config: Config) -> aiohttp.web.Application:
 
 @asynccontextmanager
 async def create_platform_api_client(
-    config: PlatformApiConfig
+    config: PlatformApiConfig,
 ) -> AsyncIterator[PlatformApiClient]:
     tmp_config = Path(mktemp())
     platform_api_factory = PlatformClientFactory(tmp_config)
@@ -345,6 +339,7 @@ async def create_kube_client(config: KubeConfig) -> AsyncIterator[KubeClient]:
         conn_timeout_s=config.client_conn_timeout_s,
         read_timeout_s=config.client_read_timeout_s,
         conn_pool_size=config.client_conn_pool_size,
+        kubelet_node_port=config.kubelet_node_port,
     )
     try:
         await client.init()
@@ -355,10 +350,27 @@ async def create_kube_client(config: KubeConfig) -> AsyncIterator[KubeClient]:
 
 @asynccontextmanager
 async def create_elasticsearch_client(
-    config: ElasticsearchConfig
+    config: ElasticsearchConfig,
 ) -> AsyncIterator[Elasticsearch]:
     async with Elasticsearch(hosts=config.hosts) as client:
+        await client.ping()
         yield client
+
+
+def _setup_cors(app: aiohttp.web.Application, config: CORSConfig) -> None:
+    if not config.allowed_origins:
+        return
+
+    logger.info(f"Setting up CORS with allowed origins: {config.allowed_origins}")
+    default_options = aiohttp_cors.ResourceOptions(
+        allow_credentials=True, expose_headers="*", allow_headers="*",
+    )
+    cors = aiohttp_cors.setup(
+        app, defaults={origin: default_options for origin in config.allowed_origins}
+    )
+    for route in app.router.routes():
+        logger.debug(f"Setting up CORS for {route}")
+        cors.add(route)
 
 
 async def create_app(config: Config) -> aiohttp.web.Application:
@@ -413,6 +425,8 @@ async def create_app(config: Config) -> aiohttp.web.Application:
     api_v1_app.add_subapp("/jobs", monitoring_app)
 
     app.add_subapp("/api/v1", api_v1_app)
+
+    _setup_cors(app, config.cors)
     return app
 
 

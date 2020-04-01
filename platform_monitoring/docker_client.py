@@ -12,14 +12,15 @@ from docker_image.reference import (
 class DockerImages(AioDockerImages):
     async def commit(self, container: str, repo: str, tag: str) -> None:
         params = dict(container=container, repo=repo, tag=tag)
-        await self.docker._query_json(
+        async with self.docker._query(
             "commit",
             method="POST",
             params=params,
             # TODO: a bug in aiodocker. had to explicitly pass the content
             # type, although there is a logic for this
             headers={"content-type": "application/json"},
-        )
+        ):
+            pass
 
 
 class Docker(AioDocker):

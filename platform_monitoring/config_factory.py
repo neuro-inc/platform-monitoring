@@ -1,12 +1,13 @@
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Sequence
 
 from yarl import URL
 
 from .config import (
     Config,
+    CORSConfig,
     DockerConfig,
     ElasticsearchConfig,
     KubeClientAuthType,
@@ -26,6 +27,7 @@ class EnvironConfigFactory:
         self._environ = environ or os.environ
 
     def create(self) -> Config:
+        cluster_name = self._environ.get("NP_CLUSTER_NAME", "")
         return Config(
             server=self._create_server(),
             platform_api=self._create_platform_api(),
@@ -34,6 +36,8 @@ class EnvironConfigFactory:
             kube=self._create_kube(),
             registry=self._create_registry(),
             docker=self._create_docker(),
+            cluster_name=cluster_name,
+            cors=self.create_cors(),
         )
 
     def _create_server(self) -> ServerConfig:
@@ -88,6 +92,10 @@ class EnvironConfigFactory:
                 self._environ.get("NP_MONITORING_K8S_CLIENT_CONN_POOL_SIZE")
                 or KubeConfig.client_conn_pool_size
             ),
+            kubelet_node_port=int(
+                self._environ.get("NP_MONITORING_K8S_KUBELET_PORT")
+                or KubeConfig.kubelet_node_port
+            ),
         )
 
     def _create_registry(self) -> RegistryConfig:
@@ -95,3 +103,10 @@ class EnvironConfigFactory:
 
     def _create_docker(self) -> DockerConfig:
         return DockerConfig()
+
+    def create_cors(self) -> CORSConfig:
+        origins: Sequence[str] = CORSConfig.allowed_origins
+        origins_str = self._environ.get("NP_CORS_ORIGINS", "").strip()
+        if origins_str:
+            origins = origins_str.split(",")
+        return CORSConfig(allowed_origins=origins)

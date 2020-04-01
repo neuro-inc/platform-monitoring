@@ -90,7 +90,7 @@ async def monitoring_api(config: Config) -> AsyncIterator[MonitoringApiEndpoints
 
 @pytest.fixture
 async def platform_api(
-    platform_api_config: PlatformApiConfig
+    platform_api_config: PlatformApiConfig,
 ) -> AsyncIterator[PlatformApiEndpoints]:
     yield PlatformApiEndpoints(url=platform_api_config.url)
 
@@ -294,6 +294,72 @@ class TestApi:
         headers = {"Authorization": f"Bearer {token}"}
         async with client.get(url, headers=headers) as resp:
             assert resp.status == HTTPUnauthorized.status_code
+
+    @pytest.mark.asyncio
+    async def test_ping_unknown_origin(
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
+    ) -> None:
+        async with client.get(
+            monitoring_api.ping_url, headers={"Origin": "http://unknown"}
+        ) as response:
+            assert response.status == HTTPOk.status_code, await response.text()
+            assert "Access-Control-Allow-Origin" not in response.headers
+
+    @pytest.mark.asyncio
+    async def test_ping_allowed_origin(
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
+    ) -> None:
+        async with client.get(
+            monitoring_api.ping_url, headers={"Origin": "https://neu.ro"}
+        ) as resp:
+            assert resp.status == HTTPOk.status_code, await resp.text()
+            assert resp.headers["Access-Control-Allow-Origin"] == "https://neu.ro"
+            assert resp.headers["Access-Control-Allow-Credentials"] == "true"
+            assert resp.headers["Access-Control-Expose-Headers"] == ""
+
+    @pytest.mark.asyncio
+    async def test_ping_options_no_headers(
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
+    ) -> None:
+        async with client.options(monitoring_api.ping_url) as resp:
+            assert resp.status == HTTPForbidden.status_code, await resp.text()
+            assert await resp.text() == (
+                "CORS preflight request failed: "
+                "origin header is not specified in the request"
+            )
+
+    @pytest.mark.asyncio
+    async def test_ping_options_unknown_origin(
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
+    ) -> None:
+        async with client.options(
+            monitoring_api.ping_url,
+            headers={
+                "Origin": "http://unknown",
+                "Access-Control-Request-Method": "GET",
+            },
+        ) as resp:
+            assert resp.status == HTTPForbidden.status_code, await resp.text()
+            assert await resp.text() == (
+                "CORS preflight request failed: "
+                "origin 'http://unknown' is not allowed"
+            )
+
+    @pytest.mark.asyncio
+    async def test_ping_options(
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
+    ) -> None:
+        async with client.options(
+            monitoring_api.ping_url,
+            headers={
+                "Origin": "https://neu.ro",
+                "Access-Control-Request-Method": "GET",
+            },
+        ) as resp:
+            assert resp.status == HTTPOk.status_code, await resp.text()
+            assert resp.headers["Access-Control-Allow-Origin"] == "https://neu.ro"
+            assert resp.headers["Access-Control-Allow-Credentials"] == "true"
+            assert resp.headers["Access-Control-Allow-Methods"] == "GET"
 
 
 class TestTopApi:
@@ -531,6 +597,7 @@ class TestLogApi:
         client: aiohttp.ClientSession,
         job_submit: Dict[str, Any],
         regular_user_factory: Callable[..., Awaitable[_User]],
+        cluster_name: str,
     ) -> None:
         user1 = await regular_user_factory()
         user2 = await regular_user_factory()
@@ -546,7 +613,12 @@ class TestLogApi:
             assert resp.status == HTTPForbidden.status_code
             result = await resp.json()
             assert result == {
-                "missing": [{"uri": f"job://{user1.name}/{job_id}", "action": "read"}]
+                "missing": [
+                    {
+                        "uri": f"job://{cluster_name}/{user1.name}/{job_id}",
+                        "action": "read",
+                    }
+                ]
             }
 
     @pytest.mark.asyncio
@@ -581,6 +653,8 @@ class TestLogApi:
             result = await response.json()
             job_id = result["id"]
 
+        await jobs_client.long_polling_by_job_id(job_id, "succeeded")
+
         url = monitoring_api.generate_log_url(job_id)
         async with client.get(url, headers=headers) as response:
             assert response.status == HTTPOk.status_code
@@ -592,8 +666,6 @@ class TestLogApi:
             expected_payload = "\n".join(str(i) for i in range(1, 6)) + "\n"
             assert actual_payload == expected_payload.encode()
 
-        await jobs_client.delete_job(job_id)
-
 
 class TestSaveApi:
     @pytest.mark.asyncio
@@ -604,6 +676,7 @@ class TestSaveApi:
         client: aiohttp.ClientSession,
         job_submit: Dict[str, Any],
         regular_user_factory: Callable[..., Awaitable[_User]],
+        cluster_name: str,
     ) -> None:
         user1 = await regular_user_factory()
         user2 = await regular_user_factory()
@@ -619,7 +692,12 @@ class TestSaveApi:
             assert resp.status == HTTPForbidden.status_code
             result = await resp.json()
             assert result == {
-                "missing": [{"uri": f"job://{user1.name}/{job_id}", "action": "write"}]
+                "missing": [
+                    {
+                        "uri": f"job://{cluster_name}/{user1.name}/{job_id}",
+                        "action": "write",
+                    }
+                ]
             }
 
     @pytest.mark.asyncio
@@ -679,7 +757,9 @@ class TestSaveApi:
         kube_client: MyKubeClient,
     ) -> None:
         await jobs_client.delete_job(infinite_job)
-        await kube_client.wait_pod_is_terminated(pod_name=infinite_job)
+        await kube_client.wait_pod_is_terminated(
+            pod_name=infinite_job, allow_pod_not_exists=True
+        )
 
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
@@ -737,7 +817,7 @@ class TestSaveApi:
                 assert (
                     f"Failed to save job '{infinite_job}': DockerError(503" in error
                 ), debug
-                assert "getsockopt: connection refused" in error, debug
+                assert "connection refused" in error, debug
 
     @pytest.mark.asyncio
     async def test_save_ok(

@@ -2,6 +2,7 @@ import asyncio
 import logging
 import subprocess
 import time
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Callable, Iterator
 from uuid import uuid1
@@ -10,7 +11,6 @@ import aiohttp
 import aiohttp.web
 import pytest
 from aioelasticsearch import Elasticsearch
-from async_generator import asynccontextmanager
 from async_timeout import timeout
 from neuromation.api import Client as PlatformApiClient
 from platform_monitoring.api import (
@@ -19,6 +19,7 @@ from platform_monitoring.api import (
 )
 from platform_monitoring.config import (
     Config,
+    CORSConfig,
     DockerConfig,
     ElasticsearchConfig,
     KubeConfig,
@@ -33,7 +34,11 @@ from yarl import URL
 logger = logging.getLogger(__name__)
 
 
-pytest_plugins = ["tests.integration.conftest_auth", "tests.integration.conftest_kube"]
+pytest_plugins = [
+    "tests.integration.conftest_auth",
+    "tests.integration.conftest_config",
+    "tests.integration.conftest_kube",
+]
 
 
 @pytest.fixture(scope="session")
@@ -92,6 +97,7 @@ async def platform_api_config(
     token_factory: Callable[[str], str],
 ) -> AsyncIterator[PlatformApiConfig]:
     base_url = get_service_url("platformapi", namespace="default")
+    assert base_url.startswith("http")
     url = URL(base_url) / "api/v1"
     await wait_for_service("platformapi", url / "ping")
     yield PlatformApiConfig(
@@ -102,7 +108,7 @@ async def platform_api_config(
 
 @pytest.fixture
 async def platform_api_client(
-    platform_api_config: PlatformApiConfig
+    platform_api_config: PlatformApiConfig,
 ) -> AsyncIterator[PlatformApiClient]:
     async with create_platform_api_client(platform_api_config) as client:
         yield client
@@ -128,8 +134,10 @@ async def es_client(es_config: ElasticsearchConfig) -> AsyncIterator[Elasticsear
 
 
 @pytest.fixture
-def registry_config() -> RegistryConfig:
-    return RegistryConfig(url=URL("http://localhost:5000"))
+async def registry_config() -> RegistryConfig:
+    url = URL("http://localhost:5000")
+    await wait_for_service("docker registry", url / "v2/", timeout_s=120)
+    return RegistryConfig(url)
 
 
 @pytest.fixture
@@ -145,6 +153,7 @@ def config_factory(
     kube_config: KubeConfig,
     registry_config: RegistryConfig,
     docker_config: DockerConfig,
+    cluster_name: str,
 ) -> Callable[..., Config]:
     def _f(**kwargs: Any) -> Config:
         defaults = dict(
@@ -155,6 +164,8 @@ def config_factory(
             kube=kube_config,
             registry=registry_config,
             docker=docker_config,
+            cluster_name=cluster_name,
+            cors=CORSConfig(allowed_origins=["https://neu.ro"]),
         )
         kwargs = {**defaults, **kwargs}
         return Config(**kwargs)
@@ -205,7 +216,13 @@ def get_service_url(  # type: ignore
         )
         output = process.stdout
         if output:
-            return output.decode().strip()
+            url = output.decode().strip()
+            # Sometimes `minikube service ... --url` returns a prefixed
+            # string such as: "* https://127.0.0.1:8081/"
+            start_idx = url.find("http")
+            if start_idx > 0:
+                url = url[start_idx:]
+            return url
         time.sleep(interval_s)
         timeout_s -= interval_s
 

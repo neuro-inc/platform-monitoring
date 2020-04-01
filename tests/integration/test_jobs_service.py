@@ -7,13 +7,12 @@ import pytest
 from async_timeout import timeout
 from neuromation.api import (
     Client as PlatformApiClient,
-    Container as ApiContainer,
+    Container as JobContainer,
     JobDescription as Job,
     JobStatus,
     RemoteImage,
     Resources,
 )
-from neuromation.api.jobs import Jobs as JobsClient
 from platform_monitoring.config import DockerConfig
 from platform_monitoring.jobs_service import (
     Container,
@@ -26,14 +25,12 @@ from platform_monitoring.user import User
 from .conftest_kube import MyKubeClient
 
 
-JobFactory = Callable[[RemoteImage, Optional[str], Resources], Awaitable[Job]]
+# arguments: (image, command, resources)
+JobFactory = Callable[[str, Optional[str], Resources], Awaitable[Job]]
 
 
+@pytest.mark.usefixtures("cluster_name")
 class TestJobsService:
-    @pytest.fixture
-    async def jobs_client(self, platform_api_client: PlatformApiClient) -> JobsClient:
-        return platform_api_client.jobs
-
     @pytest.fixture
     async def jobs_service(
         self,
@@ -52,7 +49,7 @@ class TestJobsService:
         async def _factory(
             image: str, command: Optional[str], resources: Resources
         ) -> Job:
-            container = ApiContainer(
+            container = JobContainer(
                 image=platform_api_client.parse.remote_image(image),
                 command=command,
                 resources=resources,
@@ -66,49 +63,51 @@ class TestJobsService:
         for job in jobs:
             await platform_api_client.jobs.kill(job.id)
 
-    @pytest.fixture
-    def wait_for_job(self, platform_api_client: PlatformApiClient) -> Any:
-        async def go(
-            job: Job,
-            condition: Callable[[Job], bool],
-            timeout_s: float = 300.0,
-            interval_s: float = 1.0,
-        ) -> None:
-            try:
-                async with timeout(timeout_s):
-                    while True:
-                        job = await platform_api_client.jobs.status(job.id)
-                        if condition(job):
-                            return
-                        await asyncio.sleep(interval_s)
-            except asyncio.TimeoutError:
-                pytest.fail(f"Job '{job.id}' has not reached the condition")
+    async def wait_for_job(
+        self,
+        job: Job,
+        platform_api_client: PlatformApiClient,
+        condition: Callable[[Job], bool],
+        timeout_s: float = 300.0,
+        interval_s: float = 1.0,
+    ) -> None:
+        try:
+            async with timeout(timeout_s):
+                while True:
+                    job = await platform_api_client.jobs.status(job.id)
+                    if condition(job):
+                        return
+                    await asyncio.sleep(interval_s)
+        except asyncio.TimeoutError:
+            pytest.fail(f"Job '{job.id}' has not reached the condition")
 
-        return go
+    async def wait_for_job_running(
+        self,
+        job: Job,
+        platform_api_client: PlatformApiClient,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        def _condition(job: Job) -> bool:
+            if job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED):
+                pytest.fail(f"Job '{job.id} has completed'")
+            return job.status == JobStatus.RUNNING
 
-    @pytest.fixture
-    def wait_for_job_running(self, wait_for_job: Any) -> Any:
-        async def go(job: Job, *args: Any, **kwargs: Any) -> None:
-            def _condition(job: Job) -> bool:
-                if job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED):
-                    pytest.fail(f"Job '{job.id} has completed'")
-                return job.status == JobStatus.RUNNING
+        await self.wait_for_job(job, platform_api_client, _condition, *args, **kwargs)
 
-            await wait_for_job(job, _condition, *args, **kwargs)
+    async def wait_for_job_succeeded(
+        self,
+        job: Job,
+        platform_api_client: PlatformApiClient,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        def _condition(job: Job) -> bool:
+            if job.status == JobStatus.FAILED:
+                pytest.fail(f"Job '{job.id} has failed'")
+            return job.status == JobStatus.SUCCEEDED
 
-        return go
-
-    @pytest.fixture
-    def wait_for_job_succeeded(self, wait_for_job: Any) -> Any:
-        async def go(job: Job, *args: Any, **kwargs: Any) -> None:
-            def _condition(job: Job) -> bool:
-                if job.status == JobStatus.FAILED:
-                    pytest.fail(f"Job '{job.id} has failed'")
-                return job.status == JobStatus.SUCCEEDED
-
-            await wait_for_job(job, _condition, *args, **kwargs)
-
-        return go
+        await self.wait_for_job(job, platform_api_client, _condition, *args, **kwargs)
 
     @pytest.fixture
     def user(self) -> User:
@@ -146,7 +145,7 @@ class TestJobsService:
         job = await job_factory(
             "alpine:latest", "sh -c 'echo -n 123 > /test; sleep 300'", resources
         )
-        await wait_for_job_running(job)
+        await self.wait_for_job_running(job, platform_api_client)
 
         container = Container(
             image=ImageReference(
@@ -160,7 +159,7 @@ class TestJobsService:
         new_job = await job_factory(
             str(container.image), 'sh -c \'[ "$(cat /test)" = "123" ]\'', resources
         )
-        await wait_for_job_succeeded(new_job)
+        await self.wait_for_job_succeeded(new_job, platform_api_client)
 
     @pytest.mark.asyncio
     async def test_save_no_tag(
@@ -188,7 +187,7 @@ class TestJobsService:
             f"sh -c 'echo -n {image_tag} > /test; sleep 300'",
             resources,
         )
-        await wait_for_job_running(job)
+        await self.wait_for_job_running(job, platform_api_client)
 
         container = Container(
             image=ImageReference(domain=registry_host, path=f"{user.name}/alpine")
@@ -202,7 +201,7 @@ class TestJobsService:
             f'sh -c \'[ "$(cat /test)" = "{image_tag}" ]\'',
             resources,
         )
-        await wait_for_job_succeeded(new_job)
+        await self.wait_for_job_succeeded(new_job, platform_api_client)
 
     @pytest.mark.asyncio
     async def test_save_pending_job(
@@ -255,7 +254,7 @@ class TestJobsService:
             tpu_software_version=None,
         )
         job = await job_factory("alpine:latest", "sh -c 'sleep 300'", resources)
-        await wait_for_job_running(job)
+        await self.wait_for_job_running(job, platform_api_client)
 
         registry_host = "unknown:5000"
         container = Container(
@@ -301,7 +300,7 @@ class TestJobsService:
             tpu_software_version=None,
         )
         job = await job_factory("alpine:latest", "sh -c 'sleep 300'", resources)
-        await wait_for_job_running(job)
+        await self.wait_for_job_running(job, platform_api_client)
 
         registry_host = "localhost:5000"
         container = Container(

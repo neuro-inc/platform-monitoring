@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import ssl
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, NoReturn, Optional
@@ -8,18 +9,14 @@ from urllib.parse import urlsplit
 
 import aiohttp
 from aiohttp import ContentTypeError
-from async_generator import asynccontextmanager
 from async_timeout import timeout
 from yarl import URL
 
 from .base import JobStats, Telemetry
-from .config import KubeClientAuthType
+from .config import KubeClientAuthType, KubeConfig
 
 
 logger = logging.getLogger(__name__)
-
-
-KUBELET_NODE_PORT = 10255
 
 
 class KubeClientException(Exception):
@@ -91,6 +88,7 @@ class KubeClient:
         conn_timeout_s: int = 300,
         read_timeout_s: int = 100,
         conn_pool_size: int = 100,
+        kubelet_node_port: int = KubeConfig.kubelet_node_port,
     ) -> None:
         self._base_url = base_url
         self._namespace = namespace
@@ -109,7 +107,7 @@ class KubeClient:
         self._conn_pool_size = conn_pool_size
         self._client: Optional[aiohttp.ClientSession] = None
 
-        self._kubelet_port = KUBELET_NODE_PORT
+        self._kubelet_port = kubelet_node_port
 
     @property
     def _is_ssl(self) -> bool:
@@ -122,8 +120,9 @@ class KubeClient:
             cafile=self._cert_authority_path, cadata=self._cert_authority_data_pem
         )
         if self._auth_type == KubeClientAuthType.CERTIFICATE:
-            ssl_context.load_cert_chain(  # type: ignore
-                self._auth_cert_path, self._auth_cert_key_path
+            ssl_context.load_cert_chain(
+                self._auth_cert_path,  # type: ignore
+                self._auth_cert_key_path,
             )
         return ssl_context
 
