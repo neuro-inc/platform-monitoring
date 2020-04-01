@@ -1,18 +1,17 @@
 import asyncio
 import re
 import uuid
-from typing import Any, AsyncIterator, Awaitable, Callable
+from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
 import pytest
 from async_timeout import timeout
 from neuromation.api import (
     Client as PlatformApiClient,
-    Image,
+    Container as JobContainer,
     JobDescription as Job,
     JobStatus,
     Resources,
 )
-from neuromation.api.jobs import Jobs as JobsClient
 from platform_monitoring.config import DockerConfig
 from platform_monitoring.jobs_service import (
     Container,
@@ -25,41 +24,48 @@ from platform_monitoring.user import User
 from .conftest_kube import MyKubeClient
 
 
-JobFactory = Callable[[Image, Resources], Awaitable[Job]]
+# arguments: (image, command, resources)
+JobFactory = Callable[[str, Optional[str], Resources], Awaitable[Job]]
 
 
+@pytest.mark.usefixtures("cluster_name")
 class TestJobsService:
-    @pytest.fixture
-    async def jobs_client(self, platform_api_client: PlatformApiClient) -> JobsClient:
-        return platform_api_client.jobs
-
     @pytest.fixture
     async def jobs_service(
         self,
-        jobs_client: JobsClient,
+        platform_api_client: PlatformApiClient,
         kube_client: MyKubeClient,
         docker_config: DockerConfig,
     ) -> JobsService:
-        return JobsService(jobs_client, kube_client, docker_config)
+        return JobsService(platform_api_client.jobs, kube_client, docker_config)
 
     @pytest.fixture
-    async def job_factory(self, jobs_client: JobsClient) -> AsyncIterator[JobFactory]:
+    async def job_factory(
+        self, platform_api_client: PlatformApiClient
+    ) -> AsyncIterator[JobFactory]:
         jobs = []
 
-        async def _factory(image: Image, resources: Resources) -> Job:
-            job = await jobs_client.submit(image=image, resources=resources)
+        async def _factory(
+            image: str, command: Optional[str], resources: Resources
+        ) -> Job:
+            container = JobContainer(
+                image=platform_api_client.parse.remote_image(image),
+                command=command,
+                resources=resources,
+            )
+            job = await platform_api_client.jobs.run(container)
             jobs.append(job)
             return job
 
         yield _factory
 
         for job in jobs:
-            await jobs_client.kill(job.id)
+            await platform_api_client.jobs.kill(job.id)
 
     async def wait_for_job(
         self,
         job: Job,
-        jobs_client: JobsClient,
+        platform_api_client: PlatformApiClient,
         condition: Callable[[Job], bool],
         timeout_s: float = 300.0,
         interval_s: float = 1.0,
@@ -67,7 +73,7 @@ class TestJobsService:
         try:
             async with timeout(timeout_s):
                 while True:
-                    job = await jobs_client.status(job.id)
+                    job = await platform_api_client.jobs.status(job.id)
                     if condition(job):
                         return
                     await asyncio.sleep(interval_s)
@@ -75,24 +81,32 @@ class TestJobsService:
             pytest.fail(f"Job '{job.id}' has not reached the condition")
 
     async def wait_for_job_running(
-        self, job: Job, jobs_client: JobsClient, *args: Any, **kwargs: Any
+        self,
+        job: Job,
+        platform_api_client: PlatformApiClient,
+        *args: Any,
+        **kwargs: Any,
     ) -> None:
         def _condition(job: Job) -> bool:
             if job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED):
                 pytest.fail(f"Job '{job.id} has completed'")
             return job.status == JobStatus.RUNNING
 
-        await self.wait_for_job(job, jobs_client, _condition, *args, **kwargs)
+        await self.wait_for_job(job, platform_api_client, _condition, *args, **kwargs)
 
     async def wait_for_job_succeeded(
-        self, job: Job, jobs_client: JobsClient, *args: Any, **kwargs: Any
+        self,
+        job: Job,
+        platform_api_client: PlatformApiClient,
+        *args: Any,
+        **kwargs: Any,
     ) -> None:
         def _condition(job: Job) -> bool:
             if job.status == JobStatus.FAILED:
                 pytest.fail(f"Job '{job.id} has failed'")
             return job.status == JobStatus.SUCCEEDED
 
-        await self.wait_for_job(job, jobs_client, _condition, *args, **kwargs)
+        await self.wait_for_job(job, platform_api_client, _condition, *args, **kwargs)
 
     @pytest.fixture
     def user(self) -> User:
@@ -110,22 +124,25 @@ class TestJobsService:
     async def test_save_ok(
         self,
         job_factory: JobFactory,
-        jobs_client: JobsClient,
+        platform_api_client: PlatformApiClient,
         jobs_service: JobsService,
         user: User,
         registry_host: str,
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+            memory_mb=16,
+            cpu=0.1,
+            gpu=None,
+            shm=False,
+            gpu_model=None,
+            tpu_type=None,
+            tpu_software_version=None,
         )
         job = await job_factory(
-            Image(
-                image="alpine:latest", command="sh -c 'echo -n 123 > /test; sleep 300'"
-            ),
-            resources,
+            "alpine:latest", "sh -c 'echo -n 123 > /test; sleep 300'", resources
         )
-        await self.wait_for_job_running(job, jobs_client)
+        await self.wait_for_job_running(job, platform_api_client)
 
         container = Container(
             image=ImageReference(
@@ -137,35 +154,35 @@ class TestJobsService:
             pass
 
         new_job = await job_factory(
-            Image(
-                image=str(container.image),
-                command='sh -c \'[ "$(cat /test)" = "123" ]\'',
-            ),
-            resources,
+            str(container.image), 'sh -c \'[ "$(cat /test)" = "123" ]\'', resources
         )
-        await self.wait_for_job_succeeded(new_job, jobs_client)
+        await self.wait_for_job_succeeded(new_job, platform_api_client)
 
     @pytest.mark.asyncio
     async def test_save_no_tag(
         self,
         job_factory: JobFactory,
-        jobs_client: JobsClient,
+        platform_api_client: PlatformApiClient,
         jobs_service: JobsService,
         user: User,
         registry_host: str,
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+            memory_mb=16,
+            cpu=0.1,
+            gpu=None,
+            shm=False,
+            gpu_model=None,
+            tpu_type=None,
+            tpu_software_version=None,
         )
         job = await job_factory(
-            Image(
-                image="alpine:latest",
-                command=f"sh -c 'echo -n {image_tag} > /test; sleep 300'",
-            ),
+            "alpine:latest",
+            f"sh -c 'echo -n {image_tag} > /test; sleep 300'",
             resources,
         )
-        await self.wait_for_job_running(job, jobs_client)
+        await self.wait_for_job_running(job, platform_api_client)
 
         container = Container(
             image=ImageReference(domain=registry_host, path=f"{user.name}/alpine")
@@ -175,28 +192,32 @@ class TestJobsService:
             pass
 
         new_job = await job_factory(
-            Image(
-                image=str(container.image),
-                command=f'sh -c \'[ "$(cat /test)" = "{image_tag}" ]\'',
-            ),
+            str(container.image),
+            f'sh -c \'[ "$(cat /test)" = "{image_tag}" ]\'',
             resources,
         )
-        await self.wait_for_job_succeeded(new_job, jobs_client)
+        await self.wait_for_job_succeeded(new_job, platform_api_client)
 
     @pytest.mark.asyncio
     async def test_save_pending_job(
         self,
         job_factory: JobFactory,
-        jobs_client: JobsClient,
+        platform_api_client: PlatformApiClient,
         jobs_service: JobsService,
         user: User,
         registry_host: str,
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=16 ** 10, cpu=0.1, gpu=None, shm=False, gpu_model=None
+            memory_mb=16 ** 10,
+            cpu=0.1,
+            gpu=None,
+            shm=False,
+            gpu_model=None,
+            tpu_type=None,
+            tpu_software_version=None,
         )
-        job = await job_factory(Image(image="alpine:latest", command=None), resources)
+        job = await job_factory("alpine:latest", None, resources)
 
         container = Container(
             image=ImageReference(
@@ -212,18 +233,22 @@ class TestJobsService:
     async def test_save_push_failure(
         self,
         job_factory: JobFactory,
-        jobs_client: JobsClient,
+        platform_api_client: PlatformApiClient,
         jobs_service: JobsService,
         user: User,
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+            memory_mb=16,
+            cpu=0.1,
+            gpu=None,
+            shm=False,
+            gpu_model=None,
+            tpu_type=None,
+            tpu_software_version=None,
         )
-        job = await job_factory(
-            Image(image="alpine:latest", command="sh -c 'sleep 300'"), resources
-        )
-        await self.wait_for_job_running(job, jobs_client)
+        job = await job_factory("alpine:latest", "sh -c 'sleep 300'", resources)
+        await self.wait_for_job_running(job, platform_api_client)
 
         registry_host = "unknown:5000"
         container = Container(
@@ -253,18 +278,22 @@ class TestJobsService:
     async def test_save_commit_fails_with_exception(
         self,
         job_factory: JobFactory,
-        jobs_client: JobsClient,
+        platform_api_client: PlatformApiClient,
         jobs_service: JobsService,
         user: User,
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+            memory_mb=16,
+            cpu=0.1,
+            gpu=None,
+            shm=False,
+            gpu_model=None,
+            tpu_type=None,
+            tpu_software_version=None,
         )
-        job = await job_factory(
-            Image(image="alpine:latest", command="sh -c 'sleep 300'"), resources
-        )
-        await self.wait_for_job_running(job, jobs_client)
+        job = await job_factory("alpine:latest", "sh -c 'sleep 300'", resources)
+        await self.wait_for_job_running(job, platform_api_client)
 
         registry_host = "localhost:5000"
         container = Container(
