@@ -1,12 +1,13 @@
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Sequence
 
 from yarl import URL
 
 from .config import (
     Config,
+    CORSConfig,
     DockerConfig,
     ElasticsearchConfig,
     KubeClientAuthType,
@@ -36,6 +37,7 @@ class EnvironConfigFactory:
             registry=self._create_registry(),
             docker=self._create_docker(),
             cluster_name=cluster_name,
+            cors=self.create_cors(),
         )
 
     def _create_server(self) -> ServerConfig:
@@ -101,3 +103,10 @@ class EnvironConfigFactory:
 
     def _create_docker(self) -> DockerConfig:
         return DockerConfig()
+
+    def create_cors(self) -> CORSConfig:
+        origins: Sequence[str] = CORSConfig.allowed_origins
+        origins_str = self._environ.get("NP_CORS_ORIGINS", "").strip()
+        if origins_str:
+            origins = origins_str.split(",")
+        return CORSConfig(allowed_origins=origins)

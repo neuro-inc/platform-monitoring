@@ -8,6 +8,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Dict
 
 import aiohttp
 import aiohttp.web
+import aiohttp_cors
 from aioelasticsearch import Elasticsearch
 from aiohttp.web import (
     HTTPBadRequest,
@@ -32,6 +33,7 @@ from platform_monitoring.user import untrusted_user
 from .base import JobStats, Telemetry
 from .config import (
     Config,
+    CORSConfig,
     ElasticsearchConfig,
     KubeConfig,
     PlatformApiConfig,
@@ -351,7 +353,24 @@ async def create_elasticsearch_client(
     config: ElasticsearchConfig,
 ) -> AsyncIterator[Elasticsearch]:
     async with Elasticsearch(hosts=config.hosts) as client:
+        await client.ping()
         yield client
+
+
+def _setup_cors(app: aiohttp.web.Application, config: CORSConfig) -> None:
+    if not config.allowed_origins:
+        return
+
+    logger.info(f"Setting up CORS with allowed origins: {config.allowed_origins}")
+    default_options = aiohttp_cors.ResourceOptions(
+        allow_credentials=True, expose_headers="*", allow_headers="*",
+    )
+    cors = aiohttp_cors.setup(
+        app, defaults={origin: default_options for origin in config.allowed_origins}
+    )
+    for route in app.router.routes():
+        logger.debug(f"Setting up CORS for {route}")
+        cors.add(route)
 
 
 async def create_app(config: Config) -> aiohttp.web.Application:
@@ -406,6 +425,8 @@ async def create_app(config: Config) -> aiohttp.web.Application:
     api_v1_app.add_subapp("/jobs", monitoring_app)
 
     app.add_subapp("/api/v1", api_v1_app)
+
+    _setup_cors(app, config.cors)
     return app
 
 
