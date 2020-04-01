@@ -19,6 +19,7 @@ from platform_monitoring.api import (
 )
 from platform_monitoring.config import (
     Config,
+    CORSConfig,
     DockerConfig,
     ElasticsearchConfig,
     KubeConfig,
@@ -33,7 +34,11 @@ from yarl import URL
 logger = logging.getLogger(__name__)
 
 
-pytest_plugins = ["tests.integration.conftest_auth", "tests.integration.conftest_kube"]
+pytest_plugins = [
+    "tests.integration.conftest_auth",
+    "tests.integration.conftest_config",
+    "tests.integration.conftest_kube",
+]
 
 
 @pytest.fixture(scope="session")
@@ -160,6 +165,7 @@ def config_factory(
             registry=registry_config,
             docker=docker_config,
             cluster_name=cluster_name,
+            cors=CORSConfig(allowed_origins=["https://neu.ro"]),
         )
         kwargs = {**defaults, **kwargs}
         return Config(**kwargs)
@@ -221,8 +227,3 @@ def get_service_url(  # type: ignore
         timeout_s -= interval_s
 
     pytest.fail(f"Service {service_name} is unavailable.")
-
-
-@pytest.fixture
-def cluster_name() -> str:
-    return "default"

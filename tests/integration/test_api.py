@@ -295,6 +295,72 @@ class TestApi:
         async with client.get(url, headers=headers) as resp:
             assert resp.status == HTTPUnauthorized.status_code
 
+    @pytest.mark.asyncio
+    async def test_ping_unknown_origin(
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
+    ) -> None:
+        async with client.get(
+            monitoring_api.ping_url, headers={"Origin": "http://unknown"}
+        ) as response:
+            assert response.status == HTTPOk.status_code, await response.text()
+            assert "Access-Control-Allow-Origin" not in response.headers
+
+    @pytest.mark.asyncio
+    async def test_ping_allowed_origin(
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
+    ) -> None:
+        async with client.get(
+            monitoring_api.ping_url, headers={"Origin": "https://neu.ro"}
+        ) as resp:
+            assert resp.status == HTTPOk.status_code, await resp.text()
+            assert resp.headers["Access-Control-Allow-Origin"] == "https://neu.ro"
+            assert resp.headers["Access-Control-Allow-Credentials"] == "true"
+            assert resp.headers["Access-Control-Expose-Headers"] == ""
+
+    @pytest.mark.asyncio
+    async def test_ping_options_no_headers(
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
+    ) -> None:
+        async with client.options(monitoring_api.ping_url) as resp:
+            assert resp.status == HTTPForbidden.status_code, await resp.text()
+            assert await resp.text() == (
+                "CORS preflight request failed: "
+                "origin header is not specified in the request"
+            )
+
+    @pytest.mark.asyncio
+    async def test_ping_options_unknown_origin(
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
+    ) -> None:
+        async with client.options(
+            monitoring_api.ping_url,
+            headers={
+                "Origin": "http://unknown",
+                "Access-Control-Request-Method": "GET",
+            },
+        ) as resp:
+            assert resp.status == HTTPForbidden.status_code, await resp.text()
+            assert await resp.text() == (
+                "CORS preflight request failed: "
+                "origin 'http://unknown' is not allowed"
+            )
+
+    @pytest.mark.asyncio
+    async def test_ping_options(
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
+    ) -> None:
+        async with client.options(
+            monitoring_api.ping_url,
+            headers={
+                "Origin": "https://neu.ro",
+                "Access-Control-Request-Method": "GET",
+            },
+        ) as resp:
+            assert resp.status == HTTPOk.status_code, await resp.text()
+            assert resp.headers["Access-Control-Allow-Origin"] == "https://neu.ro"
+            assert resp.headers["Access-Control-Allow-Credentials"] == "true"
+            assert resp.headers["Access-Control-Allow-Methods"] == "GET"
+
 
 class TestTopApi:
     @pytest.mark.asyncio
@@ -587,6 +653,8 @@ class TestLogApi:
             result = await response.json()
             job_id = result["id"]
 
+        await jobs_client.long_polling_by_job_id(job_id, "succeeded")
+
         url = monitoring_api.generate_log_url(job_id)
         async with client.get(url, headers=headers) as response:
             assert response.status == HTTPOk.status_code
@@ -597,8 +665,6 @@ class TestLogApi:
             actual_payload = await response.read()
             expected_payload = "\n".join(str(i) for i in range(1, 6)) + "\n"
             assert actual_payload == expected_payload.encode()
-
-        await jobs_client.delete_job(job_id)
 
 
 class TestSaveApi:
