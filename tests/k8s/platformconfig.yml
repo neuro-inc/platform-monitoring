@@ -1,61 +1,3 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: platformconfig
-data:
-  clusters.json: |-
-    [
-        {
-            "name": "default",
-
-            "storage": {
-                "host": {"mount_path": "/tmp"},
-                "url": "http://platformapi/api/v1/storage"
-            },
-
-            "registry": {
-                "url": "http://localhost:5000",
-                "email": "registry@neuromation.io"
-            },
-
-            "orchestrator": {
-                "kubernetes": {
-                    "url": "http://localhost:8001",
-                    "ca_data": "certificate",
-                    "auth_type": "none",
-                    "token": "token",
-                    "namespace": "default",
-
-                    "jobs_ingress_name": "not-important",
-                    "jobs_ingress_auth_name": "not-important",
-
-                    "node_label_gpu": "not-important",
-                    "node_label_preemptible": "not-important"
-                },
-
-                "is_http_ingress_secure": false,
-                "job_hostname_template": "not-important",
-                "named_job_hostname_template": "not-important",
-
-                "resource_pool_types": [
-                    {}
-                ]
-            },
-
-            "ssh": {
-                "server": "not-important"
-            },
-
-            "monitoring": {
-                "url": "not-important",
-
-                "elasticsearch": {
-                    "hosts": ["http://elasticsearch-logging.kube-system:9200"]
-                }
-            }
-        }
-    ]
----
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
@@ -75,26 +17,120 @@ spec:
       labels:
         service: platformconfig
     spec:
+      initContainers:
+      - name: platformconfig-migrations
+        image: platformconfig-migrations:latest
+        imagePullPolicy: Never
+        command: ["alembic", "upgrade", "head"]
+        env:
+        - name: NP_POSTGRES_HOST
+          value: platformconfig-postgres
+        - name: NP_POSTGRES_PORT
+          value: "5432"
+        - name: NP_POSTGRES_USERNAME
+          value: postgres
+        - name: NP_POSTGRES_PASSWORD
+          value: postgres
+        - name: NP_POSTGRES_DB_NAME
+          value: postgres
       containers:
       - name: platformconfig
         image: platformconfig:latest
         imagePullPolicy: Never
-        volumeMounts:
-        - name: config-volume
-          mountPath: /var/storage/neuromation/clusters
-      volumes:
-        - name: config-volume
-          configMap:
-            name: platformconfig
+        env:
+        - name: NP_API_PORT
+          value: "8080"
+        - name: NP_AUTH_URL
+          value: http://platformauthapi:8080
+        - name: NP_AUTH_TOKEN
+          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImNsdXN0ZXIifQ.kZG6EyaHMa2gNzrgKQlwVnZ0OZ5mruFZ0xVAbntm-dU
+        - name: NP_PUBLIC_NEURO_REGISTRY_URL
+          value: not-important
+        - name: NP_PUBLIC_NEURO_HELM_URL
+          value: not-important
+        - name: NP_PLATFORM_URL
+          value: not-important
+        - name: NP_PLATFORM_API_URL
+          value: http://platformapi:8080/api/v1
+        - name: NP_PLATFORM_API_TOKEN
+          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImNsdXN0ZXIifQ.kZG6EyaHMa2gNzrgKQlwVnZ0OZ5mruFZ0xVAbntm-dU
+        - name: NP_AWS_REGION
+          value: not-important
+        - name: NP_AWS_ACCESS_KEY_ID
+          value: not-important
+        - name: NP_AWS_SECRET_ACCESS_KEY
+          value: not-important
+        - name: NP_CLUSTER_DNS_SUFFIX
+          value: not-important
+        - name: NP_K8S_URL
+          value: not-important
+        - name: NP_K8S_WORKFLOW_NAMESPACE
+          value: not-important
+        - name: NP_JOB_FALLBACK_HOSTNAME
+          value: not-important
+        - name: NP_LATEST_PLATFORM_INFRA_IMAGE_TAG
+          value: not-important
+        - name: NP_PLATFORM_INFRA_WORKFLOWS_IMAGE_NAME
+          value: not-important
+        - name: NP_PLATFORM_INFRA_WORKFLOWS_IMAGE_PULL_POLICY
+          value: Always
+        - name: NP_POSTGRES_HOST
+          value: platformconfig-postgres
+        - name: NP_POSTGRES_PORT
+          value: "5432"
+        - name: NP_POSTGRES_USERNAME
+          value: postgres
+        - name: NP_POSTGRES_PASSWORD
+          value: postgres
+        - name: NP_POSTGRES_DB_NAME
+          value: postgres
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: platformconfig
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   ports:
   - port: 8080
     targetPort: 8080
   selector:
     service: platformconfig
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: platformconfig-postgres
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:11.3
+          imagePullPolicy: "IfNotPresent"
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: postgres
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              value: postgres
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: platformconfig-postgres
+  labels:
+    app: platformconfig
+spec:
+  type: NodePort
+  ports:
+   - port: 5432
+  selector:
+   app: postgres

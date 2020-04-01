@@ -1,6 +1,7 @@
 import asyncio
 import json
 import shlex
+import subprocess
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, Optional
 
@@ -115,17 +116,16 @@ class MyPodDescriptor:
 
 
 @pytest.fixture(scope="session")
-async def kube_config_payload() -> Dict[str, Any]:
-    process = await asyncio.create_subprocess_exec(
-        "kubectl", "config", "view", "-o", "json", stdout=asyncio.subprocess.PIPE
+def kube_config_payload() -> Dict[str, Any]:
+    result = subprocess.run(
+        ["kubectl", "config", "view", "-o", "json"], stdout=subprocess.PIPE
     )
-    output, _ = await process.communicate()
-    payload_str = output.decode().rstrip()
+    payload_str = result.stdout.decode().rstrip()
     return json.loads(payload_str)
 
 
 @pytest.fixture(scope="session")
-async def kube_config_cluster_payload(kube_config_payload: Dict[str, Any]) -> Any:
+def kube_config_cluster_payload(kube_config_payload: Dict[str, Any]) -> Any:
     cluster_name = "minikube"
     clusters = {
         cluster["name"]: cluster["cluster"]
@@ -135,7 +135,7 @@ async def kube_config_cluster_payload(kube_config_payload: Dict[str, Any]) -> An
 
 
 @pytest.fixture(scope="session")
-async def kube_config_user_payload(kube_config_payload: Dict[str, Any]) -> Any:
+def kube_config_user_payload(kube_config_payload: Dict[str, Any]) -> Any:
     user_name = "minikube"
     users = {user["name"]: user["user"] for user in kube_config_payload["users"]}
     return users[user_name]
