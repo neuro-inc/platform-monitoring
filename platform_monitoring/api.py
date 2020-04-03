@@ -527,8 +527,8 @@ async def create_app(config: Config) -> aiohttp.web.Application:
 
 
 def _parse_bool(value: str) -> bool:
-    if value == "1":
-        return True
+    if value == "0":
+        return False
     elif value == "1":
         return True
     else:
