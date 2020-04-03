@@ -19,6 +19,7 @@ from platform_monitoring.api import (
 )
 from platform_monitoring.config import (
     Config,
+    CORSConfig,
     DockerConfig,
     ElasticsearchConfig,
     KubeConfig,
@@ -49,7 +50,7 @@ def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
     loop = asyncio.get_event_loop_policy().new_event_loop()
     loop.set_debug(True)
 
-    watcher = asyncio.SafeChildWatcher()  # type: ignore
+    watcher = asyncio.SafeChildWatcher()
     watcher.attach_loop(loop)
     asyncio.get_event_loop_policy().set_child_watcher(watcher)
 
@@ -164,6 +165,7 @@ def config_factory(
             registry=registry_config,
             docker=docker_config,
             cluster_name=cluster_name,
+            cors=CORSConfig(allowed_origins=["https://neu.ro"]),
         )
         kwargs = {**defaults, **kwargs}
         return Config(**kwargs)
