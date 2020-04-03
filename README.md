@@ -1,6 +1,12 @@
 # platform-monitoring
 
 ## Local Development
+0. Set env vars:
+```shell
+   export GKE_DOCKER_REGISTRY=gcr.io
+   export GKE_PROJECT_ID=light-reality-205619
+```
+
 1. Install minikube (https://github.com/kubernetes/minikube#installation);
 2. Authenticate local docker:
 ```shell
