@@ -329,6 +329,9 @@ class TestJobsService:
         )
         await self.wait_for_job_running(job, platform_api_client)
 
+        job = await platform_api_client.jobs.status(job.id)
+        print(job)
+
         async with jobs_service.attach(
             job, stdout=True, stderr=True, logs=True
         ) as stream:
