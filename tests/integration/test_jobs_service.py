@@ -323,7 +323,8 @@ class TestJobsService:
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
         )
         job = await job_factory(
-            "alpine:latest", "sh -c 'echo abc; echo def; sleep 300'", resources,
+            "alpine:latest",
+            "sh -c 'sleep 15; echo abc; echo def; sleep 300'", resources,
         )
         await self.wait_for_job_running(job, platform_api_client)
 
