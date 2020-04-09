@@ -310,7 +310,7 @@ class TestJobsService:
                 pass
 
     @pytest.mark.asyncio
-    async def xtest_attach_ok(
+    async def test_attach_ok(
         self,
         job_factory: JobFactory,
         platform_api_client: PlatformApiClient,
