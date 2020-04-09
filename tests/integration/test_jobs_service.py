@@ -338,4 +338,4 @@ class TestJobsService:
             data = await stream.read_out()
             assert data == b"abc\n"
 
-        await self.wait_for_job_succeeded(job, platform_api_client)
+        await platform_api_client.jobs.kill(job.id)
