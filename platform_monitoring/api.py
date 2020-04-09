@@ -359,8 +359,9 @@ class MonitoringApiHandler:
     @staticmethod
     async def _do_output(response: WebSocketResponse, stream: Stream) -> None:
         while True:
-            data = await stream.read_out()
-            if not data:
+            try:
+                data = await stream.read_out()
+            except aiohttp.EofStream:
                 break
             await response.send_bytes(bytes([data.stream]) + data.data)
 
