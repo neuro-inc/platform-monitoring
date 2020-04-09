@@ -362,7 +362,7 @@ class MonitoringApiHandler:
             data = await stream.read_out()
             if not data:
                 break
-            await response.send_bytes(chr(data.stream) + data.data)
+            await response.send_bytes(bytes([data.stream]) + data.data)
 
 
 @middleware
