@@ -94,7 +94,13 @@ class JobsService:
             docker = Docker(
                 url=str(proxy_client.url), session=session, connector=session.connector,
             )
-            async with docker.containers.container(cont_id).attach(
+            container = docker.containers.container(cont_id)
+            data = await container.show()
+            import pprint
+
+            print("Container")
+            pprint.pprint(data)
+            async with container.attach(
                 stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
             ) as stream:
                 yield stream
