@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 import shlex
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from pathlib import Path
 from tempfile import mktemp
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict
@@ -327,20 +327,21 @@ class MonitoringApiHandler:
     async def _transfer_data(
         self, response: WebSocketResponse, stream: Stream, stdin: bool, stdout: bool
     ) -> None:
-        if not stdin:
-            output_task = asyncio.create_task(self._do_output(response, stream))
-            await output_task
-        elif not stdout:
-            input_task = asyncio.create_task(self._do_input(response, stream))
-            await input_task
-        else:
-            input_task = asyncio.create_task(self._do_input(response, stream))
-            try:
-                output_task = asyncio.create_task(self._do_output(response, stream))
-                await output_task
-            except:  # noqa: E722
-                input_task.cancel()
-                raise
+        tasks = []
+        if stdin:
+            tasks.append(asyncio.create_task(self._do_input(response, stream)))
+        if stdout:
+            tasks.append(asyncio.create_task(self._do_output(response, stream)))
+
+        try:
+            await asyncio.gather(*tasks)
+        except:  # noqa: E722
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await task
+            raise
 
     @staticmethod
     async def _do_input(response: WebSocketResponse, stream: Stream) -> None:
@@ -361,7 +362,7 @@ class MonitoringApiHandler:
             data = await stream.read_out()
             if not data:
                 break
-            await response.send_bytes(data)
+            await response.send_bytes(chr(data.stream) + data.data)
 
 
 @middleware
