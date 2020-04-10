@@ -127,6 +127,9 @@ class KubeClient:
         return ssl_context
 
     async def init(self) -> None:
+        self._client = await self.create_http_client()
+
+    async def create_http_client(self) -> aiohttp.ClientSession:
         connector = aiohttp.TCPConnector(
             limit=self._conn_pool_size, ssl=self._create_ssl_context()
         )
@@ -141,7 +144,7 @@ class KubeClient:
         timeout = aiohttp.ClientTimeout(
             connect=self._conn_timeout_s, total=self._read_timeout_s
         )
-        self._client = aiohttp.ClientSession(
+        return aiohttp.ClientSession(
             connector=connector, timeout=timeout, headers=headers
         )
 

@@ -1,7 +1,8 @@
 import asyncio
 import json
 import logging
-from contextlib import AsyncExitStack, asynccontextmanager
+import shlex
+from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from pathlib import Path
 from tempfile import mktemp
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict
@@ -9,6 +10,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Dict
 import aiohttp
 import aiohttp.web
 import aiohttp_cors
+from aiodocker.stream import Stream
 from aioelasticsearch import Elasticsearch
 from aiohttp.web import (
     HTTPBadRequest,
@@ -16,6 +18,7 @@ from aiohttp.web import (
     Request,
     Response,
     StreamResponse,
+    WebSocketResponse,
 )
 from aiohttp.web_middlewares import middleware
 from aiohttp.web_response import json_response
@@ -63,7 +66,7 @@ class ApiHandler:
 
     async def handle_secured_ping(self, request: Request) -> Response:
         await check_authorized(request)
-        return aiohttp.web.Response(text=f"Secured Pong")
+        return Response(text=f"Secured Pong")
 
 
 class MonitoringApiHandler:
@@ -83,6 +86,8 @@ class MonitoringApiHandler:
                 aiohttp.web.get("/{job_id}/log", self.stream_log),
                 aiohttp.web.get("/{job_id}/top", self.stream_top),
                 aiohttp.web.post("/{job_id}/save", self.stream_save),
+                aiohttp.web.post("/{job_id}/attach", self.ws_attach),
+                aiohttp.web.post("/{job_id}/exec", self.ws_exec),
             ]
         )
 
@@ -98,9 +103,7 @@ class MonitoringApiHandler:
     def _log_reader_factory(self) -> LogReaderFactory:
         return self._app["log_reader_factory"]
 
-    async def stream_log(
-        self, request: aiohttp.web.Request
-    ) -> aiohttp.web.StreamResponse:
+    async def stream_log(self, request: Request) -> StreamResponse:
         user = await untrusted_user(request)
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
@@ -114,7 +117,7 @@ class MonitoringApiHandler:
 
         # TODO (A Danshyn, 05.07.2018): expose. make configurable
         chunk_size = 1024
-        response = aiohttp.web.StreamResponse(status=200)
+        response = StreamResponse(status=200)
         response.enable_chunked_encoding()
         response.enable_compression(aiohttp.web.ContentCoding.identity)
         response.content_type = "text/plain"
@@ -131,7 +134,7 @@ class MonitoringApiHandler:
         await response.write_eof()
         return response
 
-    async def stream_top(self, request: Request) -> aiohttp.web.WebSocketResponse:
+    async def stream_top(self, request: Request) -> WebSocketResponse:
         user = await untrusted_user(request)
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
@@ -141,7 +144,7 @@ class MonitoringApiHandler:
         await check_permissions(request, [permission])
 
         logger.info("Websocket connection starting")
-        ws = aiohttp.web.WebSocketResponse()
+        ws = WebSocketResponse()
         await ws.prepare(request)
         logger.info("Websocket connection ready")
 
@@ -266,6 +269,101 @@ class MonitoringApiHandler:
             raise ValueError("Unknown registry host")
 
         return Container(image=image)
+
+    async def ws_attach(self, request: Request) -> StreamResponse:
+        user = await untrusted_user(request)
+        job_id = request.match_info["job_id"]
+        job = await self._get_job(job_id)
+
+        stdin = _parse_bool(request.query.get("stdin", "0"))
+        stdout = _parse_bool(request.query.get("stdout", "0"))
+        stderr = _parse_bool(request.query.get("stderr", "0"))
+        logs = _parse_bool(request.query.get("logs", "0"))
+
+        if not (stdin or stdout or stderr):
+            raise ValueError("Required at least one of stdin, stdout or stderr")
+
+        permission = Permission(
+            uri=self._jobs_helper.job_to_uri(job), action="write" if stdin else "read"
+        )
+        logger.info("Checking whether %r has %r", user, permission)
+        await check_permissions(request, [permission])
+
+        response = WebSocketResponse()
+        await response.prepare(request)
+
+        async with self._jobs_service.attach(
+            job, stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
+        ) as stream:
+            await self._transfer_data(response, stream, stdin, stdout or stderr)
+
+        return response
+
+    async def ws_exec(self, request: Request) -> StreamResponse:
+        user = await untrusted_user(request)
+        job_id = request.match_info["job_id"]
+        job = await self._get_job(job_id)
+
+        cmd = shlex.split(request.query["cmd"])
+        stdin = _parse_bool(request.query.get("stdin", "1"))
+        stdout = _parse_bool(request.query.get("stdout", "1"))
+        stderr = _parse_bool(request.query.get("stderr", "0"))
+        tty = _parse_bool(request.query.get("tty", "0"))
+
+        permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="write")
+        logger.info("Checking whether %r has %r", user, permission)
+        await check_permissions(request, [permission])
+
+        response = WebSocketResponse()
+        await response.prepare(request)
+
+        async with self._jobs_service.exec(
+            job, cmd=cmd, stdin=stdin, stdout=stdout, stderr=stderr, tty=tty
+        ) as stream:
+            await self._transfer_data(response, stream, stdin, stdout or stderr)
+
+        return response
+
+    async def _transfer_data(
+        self, response: WebSocketResponse, stream: Stream, stdin: bool, stdout: bool
+    ) -> None:
+        tasks = []
+        if stdin:
+            tasks.append(asyncio.create_task(self._do_input(response, stream)))
+        if stdout:
+            tasks.append(asyncio.create_task(self._do_output(response, stream)))
+
+        try:
+            await asyncio.gather(*tasks)
+        except:  # noqa: E722
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await task
+            raise
+
+    @staticmethod
+    async def _do_input(response: WebSocketResponse, stream: Stream) -> None:
+        async for msg in response:
+            if msg.type == aiohttp.WSMsgType.BINARY:
+                await stream.write_in(msg.data)
+            elif msg.type == aiohttp.WSMsgType.ERROR:
+                exc = response.exception()
+                logger.error(
+                    "WS connection closed with exception %s", exc, exc_info=exc
+                )
+            else:
+                raise ValueError(f"Unsupported WS message type {msg.type}")
+
+    @staticmethod
+    async def _do_output(response: WebSocketResponse, stream: Stream) -> None:
+        while True:
+            try:
+                data = await stream.read_out()
+            except aiohttp.EofStream:
+                break
+            await response.send_bytes(bytes([data.stream]) + data.data)
 
 
 @middleware
@@ -428,6 +526,15 @@ async def create_app(config: Config) -> aiohttp.web.Application:
 
     _setup_cors(app, config.cors)
     return app
+
+
+def _parse_bool(value: str) -> bool:
+    if value == "0":
+        return False
+    elif value == "1":
+        return True
+    else:
+        raise ValueError('Required "0" or "1"')
 
 
 def main() -> None:  # pragma: no coverage

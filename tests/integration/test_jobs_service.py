@@ -308,3 +308,31 @@ class TestJobsService:
         ):
             async for chunk in jobs_service.save(job, user, container):
                 pass
+
+    @pytest.mark.asyncio
+    async def xtest_attach_ok(
+        self,
+        job_factory: JobFactory,
+        platform_api_client: PlatformApiClient,
+        jobs_service: JobsService,
+        user: User,
+        registry_host: str,
+        image_tag: str,
+    ) -> None:
+        resources = Resources(
+            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+        )
+        job = await job_factory(
+            "alpine:latest", "sh -c 'echo abc; echo def; sleep 300'", resources,
+        )
+        await self.wait_for_job_running(job, platform_api_client)
+
+        job = await platform_api_client.jobs.status(job.id)
+
+        async with jobs_service.attach(
+            job, stdout=True, stderr=True, logs=True
+        ) as stream:
+            data = await stream.read_out()
+            assert data == b"abc\n"
+
+        await platform_api_client.jobs.kill(job.id)

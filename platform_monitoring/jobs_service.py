@@ -1,7 +1,9 @@
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict, Optional
+from typing import Any, AsyncIterator, Dict, Optional, Sequence
 
 from aiodocker.exceptions import DockerError
+from aiodocker.stream import Stream
 from neuromation.api import JobDescription as Job
 from neuromation.api.jobs import Jobs as JobsClient
 from platform_monitoring.config import DockerConfig
@@ -72,6 +74,57 @@ class JobsService:
 
             except DockerError as error:
                 raise JobException(f"Failed to save job '{job.id}': {error}")
+
+    @asynccontextmanager
+    async def attach(
+        self,
+        job: Job,
+        stdout: bool = False,
+        stderr: bool = False,
+        stdin: bool = False,
+        logs: bool = False,
+    ) -> AsyncIterator[Stream]:
+        pod_name = self._kube_helper.get_job_pod_name(job)
+        pod = await self._get_running_jobs_pod(pod_name)
+        cont_id = pod.get_container_id(pod_name)
+        async with self._kube_client.get_node_proxy_client(
+            pod.node_name, self._docker_config.docker_engine_api_port
+        ) as proxy_client:
+            session = await self._kube_client.create_http_client()
+            docker = Docker(
+                url=str(proxy_client.url), session=session, connector=session.connector,
+            )
+            container = docker.containers.container(cont_id)
+            async with container.attach(
+                stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
+            ) as stream:
+                yield stream
+
+    @asynccontextmanager
+    async def exec(
+        self,
+        job: Job,
+        cmd: Sequence[str],
+        stdout: bool = True,
+        stderr: bool = True,
+        stdin: bool = False,
+        tty: bool = False,
+    ) -> AsyncIterator[Stream]:
+        pod_name = self._kube_helper.get_job_pod_name(job)
+        pod = await self._get_running_jobs_pod(pod_name)
+        cont_id = pod.get_container_id(pod_name)
+        async with self._kube_client.get_node_proxy_client(
+            pod.node_name, self._docker_config.docker_engine_api_port
+        ) as proxy_client:
+            session = await self._kube_client.create_http_client()
+            docker = Docker(
+                url=str(proxy_client.url), session=session, connector=session.connector,
+            )
+            execute = await docker.containers.container(cont_id).exec(
+                cmd=cmd, stdin=stdin, stdout=stdout, stderr=stderr, tty=tty
+            )
+            async with execute.start(detach=False) as stream:
+                yield stream
 
     async def _get_running_jobs_pod(self, job_id: str) -> Pod:
         pod: Optional[Pod]
