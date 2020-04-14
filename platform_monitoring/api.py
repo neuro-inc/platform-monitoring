@@ -19,9 +19,9 @@ from aiohttp.web import (
     Response,
     StreamResponse,
     WebSocketResponse,
+    json_response,
+    middleware,
 )
-from aiohttp.web_middlewares import middleware
-from aiohttp.web_response import json_response
 from aiohttp_security import check_authorized
 from neuro_auth_client import AuthClient, Permission, check_permissions
 from neuro_auth_client.security import AuthScheme, setup_security
@@ -87,6 +87,7 @@ class MonitoringApiHandler:
                 aiohttp.web.get("/{job_id}/top", self.stream_top),
                 aiohttp.web.post("/{job_id}/save", self.stream_save),
                 aiohttp.web.post("/{job_id}/attach", self.ws_attach),
+                aiohttp.web.post("/{job_id}/resize", self.resize),
                 aiohttp.web.post("/{job_id}/exec", self.ws_exec),
             ]
         )
@@ -270,11 +271,28 @@ class MonitoringApiHandler:
 
         return Container(image=image)
 
+    async def resize(self, request: Request) -> Response:
+        user = await untrusted_user(request)
+        job_id = request.match_info["job_id"]
+        job = await self._get_job(job_id)
+
+        w = int(request.query.get("w", "80"))
+        h = int(request.query.get("h", "25"))
+
+        permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="write")
+        logger.info("Checking whether %r has %r", user, permission)
+        await check_permissions(request, [permission])
+
+        await self._jobs_service.resize(job, w=w, h=h)
+        return json_response(None)
+
     async def ws_attach(self, request: Request) -> StreamResponse:
         user = await untrusted_user(request)
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
 
+        w = int(request.query.get("w", "80"))
+        h = int(request.query.get("h", "25"))
         stdin = _parse_bool(request.query.get("stdin", "0"))
         stdout = _parse_bool(request.query.get("stdout", "0"))
         stderr = _parse_bool(request.query.get("stderr", "0"))
@@ -283,16 +301,14 @@ class MonitoringApiHandler:
         if not (stdin or stdout or stderr):
             raise ValueError("Required at least one of stdin, stdout or stderr")
 
-        permission = Permission(
-            uri=self._jobs_helper.job_to_uri(job), action="write" if stdin else "read"
-        )
+        permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="write")
         logger.info("Checking whether %r has %r", user, permission)
         await check_permissions(request, [permission])
 
+        await self._jobs_service.resize(job, w=w, h=h)
+
         response = WebSocketResponse()
         await response.prepare(request)
-
-        await self._jobs_service.resize(job, w=80, h=25)
 
         async with self._jobs_service.attach(
             job, stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
