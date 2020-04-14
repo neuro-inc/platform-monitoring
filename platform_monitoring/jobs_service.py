@@ -100,6 +100,23 @@ class JobsService:
             ) as stream:
                 yield stream
 
+    async def resize(self, job: Job, *, w: int, h: int) -> None:
+        pod_name = self._kube_helper.get_job_pod_name(job)
+
+        pod = await self._get_running_jobs_pod(pod_name)
+        cont_id = pod.get_container_id(pod_name)
+        assert cont_id
+        async with self._kube_client.get_node_proxy_client(
+            pod.node_name, self._docker_config.docker_engine_api_port
+        ) as proxy_client:
+            docker = Docker(
+                url=str(proxy_client.url),
+                session=proxy_client.session,
+                connector=proxy_client.session.connector,
+            )
+            container = docker.containers.container(cont_id)
+            await container.resize(w=w, h=h)
+
     @asynccontextmanager
     async def exec(
         self,
@@ -124,6 +141,7 @@ class JobsService:
                 cmd=cmd, stdin=stdin, stdout=stdout, stderr=stderr, tty=tty
             )
             async with execute.start(detach=False) as stream:
+                await execute.resize(w=80, h=25)
                 yield stream
 
     async def _get_running_jobs_pod(self, job_id: str) -> Pod:

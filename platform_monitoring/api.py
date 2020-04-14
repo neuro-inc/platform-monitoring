@@ -292,6 +292,8 @@ class MonitoringApiHandler:
         response = WebSocketResponse()
         await response.prepare(request)
 
+        await self._jobs_service.resize(job, w=80, h=25)
+
         async with self._jobs_service.attach(
             job, stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
         ) as stream:
