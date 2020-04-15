@@ -79,6 +79,7 @@ class JobsService:
     async def attach(
         self,
         job: Job,
+        *,
         stdout: bool = False,
         stderr: bool = False,
         stdin: bool = False,

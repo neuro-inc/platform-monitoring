@@ -333,8 +333,10 @@ class TestJobsService:
 
         job = await platform_api_client.jobs.status(job.id)
 
+        await jobs_service.resize(job, w=80, h=25)
+
         async with jobs_service.attach(
-            job, stdout=True, stderr=True, logs=False, w=80, h=25
+            job, stdout=True, stderr=True, logs=False
         ) as stream:
             data = await stream.read_out()
             assert data.stream == 1
