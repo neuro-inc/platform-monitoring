@@ -96,6 +96,7 @@ class JobsService:
                 url=str(proxy_client.url), session=session, connector=session.connector,
             )
             container = docker.containers.container(cont_id)
+            await container.resize(w=80, h=25)
             async with container.attach(
                 stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
             ) as stream:
