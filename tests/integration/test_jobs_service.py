@@ -25,7 +25,7 @@ from .conftest_kube import MyKubeClient
 
 
 # arguments: (image, command, resources)
-JobFactory = Callable[[str, Optional[str], Resources], Awaitable[Job]]
+JobFactory = Callable[..., Awaitable[Job]]
 
 
 @pytest.mark.usefixtures("cluster_name")
@@ -46,12 +46,13 @@ class TestJobsService:
         jobs = []
 
         async def _factory(
-            image: str, command: Optional[str], resources: Resources
+            image: str, command: Optional[str], resources: Resources, tty: bool = False
         ) -> Job:
             container = JobContainer(
                 image=platform_api_client.parse.remote_image(image),
                 command=command,
                 resources=resources,
+                tty=tty,
             )
             job = await platform_api_client.jobs.run(container)
             jobs.append(job)
@@ -310,7 +311,7 @@ class TestJobsService:
                 pass
 
     @pytest.mark.asyncio
-    async def xtest_attach_ok(
+    async def test_attach_ok(
         self,
         job_factory: JobFactory,
         platform_api_client: PlatformApiClient,
@@ -323,16 +324,20 @@ class TestJobsService:
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
         )
         job = await job_factory(
-            "alpine:latest", "sh -c 'echo abc; echo def; sleep 300'", resources,
+            "alpine:latest",
+            "sh -c 'sleep 30; echo abc; echo def; sleep 300'",
+            resources,
+            tty=True,
         )
         await self.wait_for_job_running(job, platform_api_client)
 
         job = await platform_api_client.jobs.status(job.id)
 
         async with jobs_service.attach(
-            job, stdout=True, stderr=True, logs=True
+            job, stdout=True, stderr=True, logs=False, w=80, h=25
         ) as stream:
             data = await stream.read_out()
-            assert data == b"abc\n"
+            assert data.stream == 1
+            assert data.data == b"abc\n"
 
         await platform_api_client.jobs.kill(job.id)
