@@ -88,19 +88,37 @@ class JobsService:
         pod_name = self._kube_helper.get_job_pod_name(job)
         pod = await self._get_running_jobs_pod(pod_name)
         cont_id = pod.get_container_id(pod_name)
-        async with self._kube_client.get_node_proxy_client(
-            pod.node_name, self._docker_config.docker_engine_api_port
-        ) as proxy_client:
-            session = await self._kube_client.create_http_client()
-            docker = Docker(
-                url=str(proxy_client.url), session=session, connector=session.connector,
-            )
-            container = docker.containers.container(cont_id)
-            await container.resize(w=80, h=25)
-            async with container.attach(
-                stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
-            ) as stream:
-                yield stream
+        from aiohttp.client_proto import ResponseHandler
+
+        old_close = ResponseHandler.close
+
+        def close(self):
+            print("CLOSE")
+            import traceback
+
+            traceback.print_stack()
+            old_close()
+
+        ResponseHandler.close = close
+
+        try:
+            async with self._kube_client.get_node_proxy_client(
+                pod.node_name, self._docker_config.docker_engine_api_port
+            ) as proxy_client:
+                session = await self._kube_client.create_http_client()
+                docker = Docker(
+                    url=str(proxy_client.url),
+                    session=session,
+                    connector=session.connector,
+                )
+                container = docker.containers.container(cont_id)
+                await container.resize(w=80, h=25)
+                async with container.attach(
+                    stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
+                ) as stream:
+                    yield stream
+        finally:
+            ResponseHandler.close = old_close
 
     async def resize(self, job: Job, *, w: int, h: int) -> None:
         pod_name = self._kube_helper.get_job_pod_name(job)
