@@ -92,14 +92,14 @@ class JobsService:
 
         old_close = ResponseHandler.close
 
-        def close(self):
+        def close(self: ResponseHandler) -> None:
             print("CLOSE")
             import traceback
 
             traceback.print_stack()
-            old_close()
+            old_close(self)
 
-        ResponseHandler.close = close
+        ResponseHandler.close = close  # type: ignore
 
         try:
             async with self._kube_client.get_node_proxy_client(
@@ -118,7 +118,7 @@ class JobsService:
                 ) as stream:
                     yield stream
         finally:
-            ResponseHandler.close = old_close
+            ResponseHandler.close = old_close  # type: ignore
 
     async def resize(self, job: Job, *, w: int, h: int) -> None:
         pod_name = self._kube_helper.get_job_pod_name(job)
