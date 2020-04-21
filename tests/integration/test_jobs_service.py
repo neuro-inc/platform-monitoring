@@ -364,6 +364,7 @@ class TestJobsService:
 
 class _Parser:
     def __init__(self, orig):
+        print("INIT")
         self._orig = orig
     def feed_eof(self):
         print("EOF")
