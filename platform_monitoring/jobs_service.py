@@ -89,8 +89,12 @@ class JobsService:
         pod = await self._get_running_jobs_pod(pod_name)
         cont_id = pod.get_container_id(pod_name)
         from aiohttp.client_proto import ResponseHandler
+        from aiohttp.client_reqrep import ClientResponse
 
         old_close = ResponseHandler.close
+        old_response_eof = ClientResponse._response_eof
+        old_resp_close = ClientResponse.close
+        old_release = ClientResponse.release
 
         def close(self: ResponseHandler) -> None:
             print("CLOSE")
@@ -100,6 +104,36 @@ class JobsService:
             old_close(self)
 
         ResponseHandler.close = close  # type: ignore
+
+        def _response_eof(self: ClientResponse) -> None:
+            print("RESPONSE_EOF")
+            import traceback
+
+            traceback.print_stack()
+            old_response_eof(self)
+            print("CONN", repr(self._connection))
+
+        ClientResponse._response_eof = _response_eof  # type: ignore
+
+        def resp_close(self: ClientResponse) -> None:
+            print("RESPONSE_CLOSE")
+            import traceback
+
+            traceback.print_stack()
+            old_resp_close(self)
+            print("CONN", repr(self._connection))
+
+        ClientResponse.close = resp_close  # type: ignore
+
+        def resp_release(self: ClientResponse) -> None:
+            print("RESPONSE_RELEASE")
+            import traceback
+
+            traceback.print_stack()
+            old_release(self)
+            print("CONN", repr(self._connection))
+
+        ClientResponse.release = resp_release  # type: ignore
 
         try:
             async with self._kube_client.get_node_proxy_client(
@@ -119,6 +153,9 @@ class JobsService:
                     yield stream
         finally:
             ResponseHandler.close = old_close  # type: ignore
+            ClientResponse.close = resp_close  # type: ignore
+            ClientResponse.release = resp_release  # type: ignore
+            ClientResponse._response_eof = _response_eof  # type: ignore
 
     async def resize(self, job: Job, *, w: int, h: int) -> None:
         pod_name = self._kube_helper.get_job_pod_name(job)
