@@ -14,10 +14,10 @@ from .user import User
 from .utils import KubeHelper
 
 
-def _monkey_patch():
+def _monkey_patch() -> None:
     from aiohttp.client_reqrep import ClientResponse
 
-    ClientResponse._response_eof = lambda self: None
+    ClientResponse._response_eof = lambda self: None  # type: ignore
 
 
 _monkey_patch()
