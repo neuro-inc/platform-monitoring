@@ -380,7 +380,7 @@ class MonitoringApiHandler:
             try:
                 data = await stream.read_out()
             except aiohttp.EofStream:
-                break
+                await asyncio.sleep(0.01)
             await response.send_bytes(bytes([data.stream]) + data.data)
 
 
