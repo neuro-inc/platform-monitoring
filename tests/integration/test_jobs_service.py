@@ -326,7 +326,7 @@ class TestJobsService:
         )
         job = await job_factory(
             "alpine:latest",
-            "sh -c 'echo abc; echo def; sleep 300'",
+            "sh -c 'sleep 60; echo abc; echo def; sleep 300'",
             resources,
             tty=True,
         )
