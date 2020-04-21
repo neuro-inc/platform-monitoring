@@ -340,7 +340,7 @@ class TestJobsService:
             job, stdout=True, stderr=True, logs=True
         ) as stream:
             print("enter")
-            conn = stream._resp.conn
+            conn = stream._resp.connection
             proto = conn.protocol
             parser = proto._payload
             proto._payload = _Parser(parser)
