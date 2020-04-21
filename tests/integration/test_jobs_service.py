@@ -340,6 +340,9 @@ class TestJobsService:
             job, stdout=True, stderr=True, logs=True
         ) as stream:
             print("enter")
+            proto = stream._resp.protocol
+            parser = proto._payload
+            proto._payload = _Parser(parser)
             delay = 0.01
             for i in range(1000):
                 try:
@@ -356,3 +359,18 @@ class TestJobsService:
             assert data.data == b"abc\n"
 
         await platform_api_client.jobs.kill(job.id)
+
+
+class _Parser:
+    def __init__(self, orig):
+        self._orig = orig
+    def feed_eof(self):
+        print("EOF")
+        self._orig.feed_eof()
+    def feed_data(self, data):
+        print("DATA", data)
+        self._orig.feed_data(data)
+    def set_exception(self, exc):
+        print("EXC")
+        self._orig.set_exception(exc)
+
