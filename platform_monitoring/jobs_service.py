@@ -90,6 +90,7 @@ class JobsService:
         cont_id = pod.get_container_id(pod_name)
         from aiohttp.client_proto import ResponseHandler
         from aiohttp.client_reqrep import ClientResponse
+        import sys
 
         old_close = ResponseHandler.close
         old_response_eof = ClientResponse._response_eof
@@ -100,36 +101,36 @@ class JobsService:
             print("CLOSE")
             import traceback
 
-            traceback.print_stack()
+            traceback.print_stack(file=sys.stdout)
             old_close(self)
 
         ResponseHandler.close = close  # type: ignore
 
         def _response_eof(self: ClientResponse) -> None:
-            print("RESPONSE_EOF")
+            print("RESPONSE_EOF", self.url)
             import traceback
 
-            traceback.print_stack()
+            traceback.print_stack(file=sys.stdout)
             old_response_eof(self)
             print("CONN", repr(self._connection))
 
         ClientResponse._response_eof = _response_eof  # type: ignore
 
         def resp_close(self: ClientResponse) -> None:
-            print("RESPONSE_CLOSE")
+            print("RESPONSE_CLOSE", self.url)
             import traceback
 
-            traceback.print_stack()
+            traceback.print_stack(file=sys.stdout)
             old_resp_close(self)
             print("CONN", repr(self._connection))
 
         ClientResponse.close = resp_close  # type: ignore
 
         def resp_release(self: ClientResponse) -> None:
-            print("RESPONSE_RELEASE")
+            print("RESPONSE_RELEASE", self.url)
             import traceback
 
-            traceback.print_stack()
+            traceback.print_stack(file=sys.stdout)
             old_release(self)
             print("CONN", repr(self._connection))
 
