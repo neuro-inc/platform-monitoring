@@ -124,7 +124,7 @@ class JobsService:
                 traceback.print_stack(file=sys.stdout)
                 old_close(self)
 
-            ResponseHandler.close = close  # type: ignore
+            #ResponseHandler.close = close  # type: ignore
 
             def _response_eof(self: ClientResponse) -> None:
                 print("RESPONSE_EOF", self.url)
@@ -134,7 +134,7 @@ class JobsService:
                 old_response_eof(self)
                 print("CONN", repr(self._connection))
 
-            ClientResponse._response_eof = _response_eof  # type: ignore
+            #ClientResponse._response_eof = _response_eof  # type: ignore
 
             def resp_close(self: ClientResponse) -> None:
                 print("RESPONSE_CLOSE", self.url)
@@ -144,7 +144,7 @@ class JobsService:
                 old_resp_close(self)
                 print("CONN", repr(self._connection))
 
-            ClientResponse.close = resp_close  # type: ignore
+            #ClientResponse.close = resp_close  # type: ignore
 
             def resp_release(self: ClientResponse) -> None:
                 print("RESPONSE_RELEASE", self.url)
@@ -154,7 +154,7 @@ class JobsService:
                 old_release(self)
                 print("CONN", repr(self._connection))
 
-            ClientResponse.release = resp_release  # type: ignore
+            #ClientResponse.release = resp_release  # type: ignore
 
             try:
                 async with self._kube_client.get_node_proxy_client(
