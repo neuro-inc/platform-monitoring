@@ -339,6 +339,7 @@ class TestJobsService:
         async with jobs_service.attach(
             job, stdout=True, stderr=True, logs=True
         ) as stream:
+            print("enter")
             while True:
                 try:
                     data = await stream.read_out()
