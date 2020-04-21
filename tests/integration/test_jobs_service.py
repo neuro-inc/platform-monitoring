@@ -340,14 +340,18 @@ class TestJobsService:
             job, stdout=True, stderr=True, logs=True
         ) as stream:
             print("enter")
-            while True:
+            delay = 0.01
+            for i in range(1000):
                 try:
                     data = await stream.read_out()
                 except aiohttp.EofStream:
                     print("sleep")
-                    await asyncio.sleep(0.01)
+                    delay *= 2
+                    await asyncio.sleep(delay)
                 else:
                     break
+            else:
+                assert False, "Timeout"
             assert data.stream == 1
             assert data.data == b"abc\n"
 
