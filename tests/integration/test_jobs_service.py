@@ -3,6 +3,7 @@ import re
 import uuid
 from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
+import aiohttp
 import pytest
 from async_timeout import timeout
 from neuromation.api import (
@@ -338,7 +339,13 @@ class TestJobsService:
         async with jobs_service.attach(
             job, stdout=True, stderr=True, logs=False
         ) as stream:
-            data = await stream.read_out()
+            while True:
+                try:
+                    data = await stream.read_out()
+                except aiohttp.EofStream:
+                    pass
+                else:
+                    break
             assert data.stream == 1
             assert data.data == b"abc\n"
 

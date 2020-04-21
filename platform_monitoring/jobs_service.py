@@ -104,9 +104,7 @@ class JobsService:
         ) as proxy_client:
             session = await self._kube_client.create_http_client()
             docker = Docker(
-                url=str(proxy_client.url),
-                session=session,
-                connector=session.connector,
+                url=str(proxy_client.url), session=session, connector=session.connector,
             )
             container = docker.containers.container(cont_id)
             async with container.attach(
