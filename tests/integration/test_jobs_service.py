@@ -343,7 +343,7 @@ class TestJobsService:
                 try:
                     data = await stream.read_out()
                 except aiohttp.EofStream:
-                    pass
+                    await asyncio.sleep(0.01)
                 else:
                     break
             assert data.stream == 1
