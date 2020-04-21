@@ -98,75 +98,21 @@ class JobsService:
         pod_name = self._kube_helper.get_job_pod_name(job)
         pod = await self._get_running_jobs_pod(pod_name)
         cont_id = pod.get_container_id(pod_name)
-        from aiohttp.client_proto import ResponseHandler
-        from aiohttp.client_reqrep import ClientResponse
-        import sys
 
-        old_close = ResponseHandler.close
-        old_response_eof = ClientResponse._response_eof
-        old_resp_close = ClientResponse.close
-        old_release = ClientResponse.release
-
-        def close(self: ResponseHandler) -> None:
-            print("CLOSE")
-            import traceback
-
-            traceback.print_stack(file=sys.stdout)
-            old_close(self)
-
-        ResponseHandler.close = close  # type: ignore
-
-        def _response_eof(self: ClientResponse) -> None:
-            print("RESPONSE_EOF", self.url)
-            import traceback
-
-            traceback.print_stack(file=sys.stdout)
-            old_response_eof(self)
-            print("CONN", repr(self._connection))
-
-        ClientResponse._response_eof = _response_eof  # type: ignore
-
-        def resp_close(self: ClientResponse) -> None:
-            print("RESPONSE_CLOSE", self.url)
-            import traceback
-
-            traceback.print_stack(file=sys.stdout)
-            old_resp_close(self)
-            print("CONN", repr(self._connection))
-
-        ClientResponse.close = resp_close  # type: ignore
-
-        def resp_release(self: ClientResponse) -> None:
-            print("RESPONSE_RELEASE", self.url)
-            import traceback
-
-            traceback.print_stack(file=sys.stdout)
-            old_release(self)
-            print("CONN", repr(self._connection))
-
-        ClientResponse.release = resp_release  # type: ignore
-
-        try:
-            async with self._kube_client.get_node_proxy_client(
-                pod.node_name, self._docker_config.docker_engine_api_port
-            ) as proxy_client:
-                session = await self._kube_client.create_http_client()
-                docker = Docker(
-                    url=str(proxy_client.url),
-                    session=session,
-                    connector=session.connector,
-                )
-                container = docker.containers.container(cont_id)
-                await container.resize(w=80, h=25)
-                async with container.attach(
-                    stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
-                ) as stream:
-                    yield stream
-        finally:
-            ResponseHandler.close = old_close  # type: ignore
-            ClientResponse.close = resp_close  # type: ignore
-            ClientResponse.release = resp_release  # type: ignore
-            ClientResponse._response_eof = _response_eof  # type: ignore
+        async with self._kube_client.get_node_proxy_client(
+            pod.node_name, self._docker_config.docker_engine_api_port
+        ) as proxy_client:
+            session = await self._kube_client.create_http_client()
+            docker = Docker(
+                url=str(proxy_client.url),
+                session=session,
+                connector=session.connector,
+            )
+            container = docker.containers.container(cont_id)
+            async with container.attach(
+                stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
+            ) as stream:
+                yield stream
 
     async def resize(self, job: Job, *, w: int, h: int) -> None:
         pod_name = self._kube_helper.get_job_pod_name(job)
