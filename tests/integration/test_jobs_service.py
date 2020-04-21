@@ -340,7 +340,8 @@ class TestJobsService:
             job, stdout=True, stderr=True, logs=True
         ) as stream:
             print("enter")
-            proto = stream._resp.protocol
+            conn = stream._resp.conn
+            proto = conn.protocol
             parser = proto._payload
             proto._payload = _Parser(parser)
             delay = 0.01
