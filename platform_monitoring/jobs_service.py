@@ -14,6 +14,16 @@ from .user import User
 from .utils import KubeHelper
 
 
+def _monkey_patch():
+    from aiohttp.client_reqrep import ClientResponse
+
+    ClientResponse._response_eof = lambda self: None
+
+
+_monkey_patch()
+del _monkey_patch
+
+
 @dataclass(frozen=True)
 class Container:
     image: ImageReference
