@@ -326,7 +326,7 @@ class TestJobsService:
         )
         job = await job_factory(
             "alpine:latest",
-            "sh -c 'sleep 30; echo abc; echo def; sleep 300'",
+            "sh -c 'echo abc; echo def; sleep 300'",
             resources,
             tty=True,
         )
@@ -337,7 +337,7 @@ class TestJobsService:
         await jobs_service.resize(job, w=80, h=25)
 
         async with jobs_service.attach(
-            job, stdout=True, stderr=True, logs=False
+            job, stdout=True, stderr=True, logs=True
         ) as stream:
             while True:
                 try:
