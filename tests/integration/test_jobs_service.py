@@ -344,6 +344,7 @@ class TestJobsService:
             proto = conn.protocol
             parser = proto._payload
             proto._payload = _Parser(parser)
+            print(parser.tty, parser.queue)
             delay = 0.01
             for i in range(1000):
                 try:
