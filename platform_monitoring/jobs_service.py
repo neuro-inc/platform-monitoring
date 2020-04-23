@@ -134,7 +134,7 @@ class JobsService:
                 old_response_eof(self)
                 print("CONN", repr(self._connection))
 
-            #ClientResponse._response_eof = _response_eof  # type: ignore
+            ClientResponse._response_eof = _response_eof  # type: ignore
 
             def resp_close(self: ClientResponse) -> None:
                 print("RESPONSE_CLOSE", self.url)
