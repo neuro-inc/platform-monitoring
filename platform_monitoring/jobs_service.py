@@ -171,7 +171,9 @@ class JobsService:
                     async with container.attach(
                         stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
                     ) as stream:
+                        print("BEFORE_YIELD")
                         yield stream
+                        print("AFTER_YIELD")
             finally:
                 ResponseHandler.close = old_close  # type: ignore
                 ClientResponse.close = resp_close  # type: ignore
