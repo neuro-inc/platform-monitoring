@@ -336,6 +336,21 @@ class TestJobsService:
 
         await jobs_service.resize(job, w=80, h=25)
 
+        from aiodocker.stream import Stream
+        old_aenter = Stream.__aenter__
+        old_aexit = Stream.__aexit__
+
+        async def aenter(self):
+            print("AENTER")
+            return await old_aenter(self)
+        Stream.__aenter__ = aenter
+
+        async def aexit(self, *args):
+            print("AENTER")
+            return await old_aexit(self, *args)
+
+        Stream.__aexit__ = aexit
+
         async with jobs_service.attach(
             job, stdout=True, stderr=True, logs=True
         ) as stream:
