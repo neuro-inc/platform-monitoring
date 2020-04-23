@@ -383,6 +383,7 @@ class _Parser:
         print("INIT")
         self._orig = orig
     def feed_eof(self):
+        return
         print("EOF")
         import traceback
         import sys
