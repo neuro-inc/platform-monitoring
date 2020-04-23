@@ -384,6 +384,10 @@ class _Parser:
         self._orig = orig
     def feed_eof(self):
         print("EOF")
+        import traceback
+        import sys
+
+        traceback.print_stack(file=sys.stdout)
         self._orig.feed_eof()
     def feed_data(self, data):
         print("DATA", data)
