@@ -346,7 +346,7 @@ class TestJobsService:
         Stream.__aenter__ = aenter
 
         async def aexit(self, *args):
-            print("AEXIT")
+            print("AEXIT", args)
             return await old_aexit(self, *args)
 
         Stream.__aexit__ = aexit

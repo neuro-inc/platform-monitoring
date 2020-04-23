@@ -172,8 +172,12 @@ class JobsService:
                         stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
                     ) as stream:
                         print("BEFORE_YIELD")
-                        yield stream
-                        print("AFTER_YIELD")
+                        try:
+                            yield stream
+                            print("AFTER_YIELD")
+                        except Exception as exc:
+                            print("AFTER_YIELD_EXC", exc)
+                            raise
             finally:
                 ResponseHandler.close = old_close  # type: ignore
                 ClientResponse.close = old_resp_close  # type: ignore
