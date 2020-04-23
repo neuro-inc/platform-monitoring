@@ -176,9 +176,9 @@ class JobsService:
                         print("AFTER_YIELD")
             finally:
                 ResponseHandler.close = old_close  # type: ignore
-                ClientResponse.close = resp_close  # type: ignore
-                ClientResponse.release = resp_release  # type: ignore
-                ClientResponse._response_eof = _response_eof  # type: ignore
+                ClientResponse.close = old_resp_close  # type: ignore
+                ClientResponse.release = old_release  # type: ignore
+                ClientResponse._response_eof = old_response_eof  # type: ignore
             # async with container.attach(
             #     stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
             # ) as stream:
