@@ -357,8 +357,8 @@ class TestJobsService:
             print("enter")
             conn = stream._resp.connection
             proto = conn.protocol
-            parser = proto._payload
-            proto._payload = _Parser(parser)
+            parser = proto._payload_parser
+            proto._payload_parser = _Parser(parser)
             print(parser.tty, parser.queue)
             delay = 0.01
             for i in range(1000):
