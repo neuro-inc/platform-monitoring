@@ -113,9 +113,17 @@ class JobsService:
             import sys
 
             old_close = ResponseHandler.close
+            old_data_received = ClientResponse.data_received
             old_response_eof = ClientResponse._response_eof
             old_resp_close = ClientResponse.close
             old_release = ClientResponse.release
+
+            def data_received(self: ResponseHandler, data: bytes) -> None:
+                print("DATA_RECEIVED")
+                print(data)
+                old_data_received(self, data)
+
+            ResponseHandler.data_received = data_received  # type: ignore
 
             def close(self: ResponseHandler) -> None:
                 print("CLOSE")
@@ -179,6 +187,7 @@ class JobsService:
                             print("AFTER_YIELD_EXC", exc)
                             raise
             finally:
+                ResponseHandler.data_received = old_data_received  # type: ignore
                 ResponseHandler.close = old_close  # type: ignore
                 ClientResponse.close = old_resp_close  # type: ignore
                 ClientResponse.release = old_release  # type: ignore
