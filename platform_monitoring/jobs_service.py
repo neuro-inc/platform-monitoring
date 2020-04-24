@@ -14,16 +14,6 @@ from .user import User
 from .utils import KubeHelper
 
 
-def _monkey_patch() -> None:
-    from aiohttp.client_reqrep import ClientResponse
-
-    ClientResponse._response_eof = lambda self: None  # type: ignore
-
-
-# _monkey_patch()
-del _monkey_patch
-
-
 @dataclass(frozen=True)
 class Container:
     image: ImageReference
@@ -145,7 +135,7 @@ class JobsService:
                 old_response_eof(self)
                 print("CONN", repr(self._connection))
 
-            ClientResponse._response_eof = _response_eof  # type: ignore
+            # ClientResponse._response_eof = _response_eof  # type: ignore
 
             def resp_close(self: ClientResponse) -> None:
                 print("RESPONSE_CLOSE", self.url)
