@@ -20,7 +20,7 @@ def _monkey_patch() -> None:
     ClientResponse._response_eof = lambda self: None  # type: ignore
 
 
-_monkey_patch()
+# _monkey_patch()
 del _monkey_patch
 
 
