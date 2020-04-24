@@ -20,7 +20,8 @@ data:
             location / {
                 proxy_pass http://unix:/var/run/docker.sock:/;
                 proxy_buffering off;
-                proxy_http_version 1.1;
+                proxy_read_timeout 300s;  # 60s by default
+x                proxy_http_version 1.1;
                 proxy_set_header Upgrade $http_upgrade;
                 proxy_set_header Connection $connection_upgrade;
             }

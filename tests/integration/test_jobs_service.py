@@ -328,7 +328,7 @@ class TestJobsService:
             "alpine:latest",
             "sh -c 'sleep 60; echo abc; echo def; sleep 300'",
             resources,
-            tty=True,
+            tty=False,
         )
         await self.wait_for_job_running(job, platform_api_client)
 
