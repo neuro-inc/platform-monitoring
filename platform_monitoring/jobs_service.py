@@ -113,7 +113,7 @@ class JobsService:
             import sys
 
             old_close = ResponseHandler.close
-            old_data_received = ClientResponse.data_received
+            old_data_received = ResponseHandler.data_received
             old_response_eof = ClientResponse._response_eof
             old_resp_close = ClientResponse.close
             old_release = ClientResponse.release
@@ -135,6 +135,8 @@ class JobsService:
             #ResponseHandler.close = close  # type: ignore
 
             def _response_eof(self: ClientResponse) -> None:
+                if "attach" not in str(self.url):
+                    return
                 print("RESPONSE_EOF", self.url)
                 import traceback
 
