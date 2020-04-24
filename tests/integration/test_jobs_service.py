@@ -396,3 +396,64 @@ class _Parser:
     def set_exception(self, exc):
         print("EXC")
         self._orig.set_exception(exc)
+
+
+from aiohttp.client_proto import ResponseHandler
+from aiohttp.client_reqrep import ClientResponse
+import sys
+
+oold_close = ResponseHandler.close
+old_data_received = ResponseHandler.data_received
+old_response_eof = ClientResponse._response_eof
+old_resp_close = ClientResponse.close
+old_release = ClientResponse.release
+
+def data_received(self: ResponseHandler, data: bytes) -> None:
+    print("DATA_RECEIVED")
+    print(data)
+    old_data_received(self, data)
+
+ResponseHandler.data_received = data_received  # type: ignore
+
+def close(self: ResponseHandler) -> None:
+    print("CLOSE")
+    import traceback
+
+    traceback.print_stack(file=sys.stdout)
+    old_close(self)
+
+#ResponseHandler.close = close  # type: ignore
+
+def _response_eof(self: ClientResponse) -> None:
+    if "attach" not in str(self.url):
+        return
+    print("RESPONSE_EOF", self.url)
+    return
+    import traceback
+
+    traceback.print_stack(file=sys.stdout)
+    old_response_eof(self)
+    print("CONN", repr(self._connection))
+
+# ClientResponse._response_eof = _response_eof  # type: ignore
+
+def resp_close(self: ClientResponse) -> None:
+    print("RESPONSE_CLOSE", self.url)
+    import traceback
+
+    traceback.print_stack(file=sys.stdout)
+    old_resp_close(self)
+    print("CONN", repr(self._connection))
+
+#ClientResponse.close = resp_close  # type: ignore
+
+def resp_release(self: ClientResponse) -> None:
+    print("RESPONSE_RELEASE", self.url)
+    import traceback
+
+    traceback.print_stack(file=sys.stdout)
+    old_release(self)
+    print("CONN", repr(self._connection))
+
+#ClientResponse.release = resp_release  # type: ignore
+
