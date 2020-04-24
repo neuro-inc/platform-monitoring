@@ -27,7 +27,7 @@ data:
                 proxy_set_header Upgrade $http_upgrade;
                 proxy_set_header Connection $connection_upgrade;
                 # proxy_pass_header Date Server X-Pad;
-                #proxy_request_buffering off;
+                proxy_request_buffering off;
                 #proxy_socket_keepalive on;
             }
         }
