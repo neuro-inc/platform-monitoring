@@ -138,6 +138,7 @@ class JobsService:
                 if "attach" not in str(self.url):
                     return
                 print("RESPONSE_EOF", self.url)
+                return
                 import traceback
 
                 traceback.print_stack(file=sys.stdout)
