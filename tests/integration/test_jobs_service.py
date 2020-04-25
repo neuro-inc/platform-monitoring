@@ -352,7 +352,7 @@ class TestJobsService:
         Stream.__aexit__ = aexit
 
         async with jobs_service.attach(
-            job, stdout=True, stderr=True, logs=True
+            job, stdin=False, stdout=True, stderr=True, logs=False
         ) as stream:
             print("enter")
             conn = stream._resp.connection
