@@ -121,8 +121,7 @@ class JobsService:
             container = docker.containers.container(cont_id)
             await container.resize(w=w, h=h)
 
-    @asynccontextmanager
-    async def exec(
+    async def exec_create(
         self,
         job: Job,
         cmd: Sequence[str],
@@ -130,22 +129,66 @@ class JobsService:
         stderr: bool = True,
         stdin: bool = False,
         tty: bool = False,
-    ) -> AsyncIterator[Stream]:
+    ) -> str:
         pod_name = self._kube_helper.get_job_pod_name(job)
         pod = await self._get_running_jobs_pod(pod_name)
         cont_id = pod.get_container_id(pod_name)
         async with self._kube_client.get_node_proxy_client(
             pod.node_name, self._docker_config.docker_engine_api_port
         ) as proxy_client:
-            session = await self._kube_client.create_http_client()
             docker = Docker(
-                url=str(proxy_client.url), session=session, connector=session.connector,
+                url=str(proxy_client.url),
+                session=proxy_client.session,
+                connector=proxy_client.session.connector,
             )
-            execute = await docker.containers.container(cont_id).exec(
+            container = docker.containers.container(cont_id)
+            exe = await container(cont_id).exec(
                 cmd=cmd, stdin=stdin, stdout=stdout, stderr=stderr, tty=tty
             )
-            async with execute.start(detach=False) as stream:
-                await execute.resize(w=80, h=25)
+            return exe.id
+
+    async def exec_resize(self, job: Job, exec_id: str, *, w: int, h: int) -> None:
+        pod_name = self._kube_helper.get_job_pod_name(job)
+        pod = await self._get_running_jobs_pod(pod_name)
+        async with self._kube_client.get_node_proxy_client(
+            pod.node_name, self._docker_config.docker_engine_api_port
+        ) as proxy_client:
+            docker = Docker(
+                url=str(proxy_client.url),
+                session=proxy_client.session,
+                connector=proxy_client.session.connector,
+            )
+            exe = docker.exec(exec_id)
+            await exe.resize(w=w, h=h)
+
+    async def exec_inspect(self, job: Job, exec_id: str) -> Dict[str, Any]:
+        pod_name = self._kube_helper.get_job_pod_name(job)
+        pod = await self._get_running_jobs_pod(pod_name)
+        async with self._kube_client.get_node_proxy_client(
+            pod.node_name, self._docker_config.docker_engine_api_port
+        ) as proxy_client:
+            docker = Docker(
+                url=str(proxy_client.url),
+                session=proxy_client.session,
+                connector=proxy_client.session.connector,
+            )
+            exe = docker.exec(exec_id)
+            return await exe.inspect()
+
+    @asynccontextmanager
+    async def exec_start(self, job: Job, exec_id: str,) -> AsyncIterator[Stream]:
+        pod_name = self._kube_helper.get_job_pod_name(job)
+        pod = await self._get_running_jobs_pod(pod_name)
+        async with self._kube_client.get_node_proxy_client(
+            pod.node_name, self._docker_config.docker_engine_api_port
+        ) as proxy_client:
+            docker = Docker(
+                url=str(proxy_client.url),
+                session=proxy_client.session,
+                connector=proxy_client.session.connector,
+            )
+            exe = docker.exec(exec_id)
+            async with exe.start(detach=False) as stream:
                 yield stream
 
     async def _get_running_jobs_pod(self, job_id: str) -> Pod:

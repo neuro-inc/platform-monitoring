@@ -1,10 +1,13 @@
 import asyncio
 import re
+import sys
 import uuid
 from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
 import aiohttp
 import pytest
+from aiohttp.client_proto import ResponseHandler
+from aiohttp.client_reqrep import ClientResponse
 from async_timeout import timeout
 from neuromation.api import (
     Client as PlatformApiClient,
@@ -337,12 +340,14 @@ class TestJobsService:
         await jobs_service.resize(job, w=80, h=25)
 
         from aiodocker.stream import Stream
+
         old_aenter = Stream.__aenter__
         old_aexit = Stream.__aexit__
 
         async def aenter(self):
             print("AENTER")
             return await old_aenter(self)
+
         Stream.__aenter__ = aenter
 
         async def aexit(self, *args):
@@ -382,6 +387,7 @@ class _Parser:
     def __init__(self, orig):
         print("INIT")
         self._orig = orig
+
     def feed_eof(self):
         print("EOF")
         return
@@ -390,30 +396,31 @@ class _Parser:
 
         traceback.print_stack(file=sys.stdout)
         self._orig.feed_eof()
+
     def feed_data(self, data):
         print("DATA", data)
         self._orig.feed_data(data)
+
     def set_exception(self, exc):
         print("EXC")
         self._orig.set_exception(exc)
 
 
-from aiohttp.client_proto import ResponseHandler
-from aiohttp.client_reqrep import ClientResponse
-import sys
-
-oold_close = ResponseHandler.close
+old_close = ResponseHandler.close
 old_data_received = ResponseHandler.data_received
 old_response_eof = ClientResponse._response_eof
 old_resp_close = ClientResponse.close
 old_release = ClientResponse.release
+
 
 def data_received(self: ResponseHandler, data: bytes) -> None:
     print("DATA_RECEIVED")
     print(data)
     old_data_received(self, data)
 
+
 ResponseHandler.data_received = data_received  # type: ignore
+
 
 def close(self: ResponseHandler) -> None:
     print("CLOSE")
@@ -422,7 +429,9 @@ def close(self: ResponseHandler) -> None:
     traceback.print_stack(file=sys.stdout)
     old_close(self)
 
-#ResponseHandler.close = close  # type: ignore
+
+# ResponseHandler.close = close  # type: ignore
+
 
 def _response_eof(self: ClientResponse) -> None:
     if "attach" not in str(self.url):
@@ -435,7 +444,9 @@ def _response_eof(self: ClientResponse) -> None:
     old_response_eof(self)
     print("CONN", repr(self._connection))
 
+
 # ClientResponse._response_eof = _response_eof  # type: ignore
+
 
 def resp_close(self: ClientResponse) -> None:
     print("RESPONSE_CLOSE", self.url)
@@ -445,7 +456,9 @@ def resp_close(self: ClientResponse) -> None:
     old_resp_close(self)
     print("CONN", repr(self._connection))
 
-#ClientResponse.close = resp_close  # type: ignore
+
+# ClientResponse.close = resp_close  # type: ignore
+
 
 def resp_release(self: ClientResponse) -> None:
     print("RESPONSE_RELEASE", self.url)
@@ -455,5 +468,5 @@ def resp_release(self: ClientResponse) -> None:
     old_release(self)
     print("CONN", repr(self._connection))
 
-#ClientResponse.release = resp_release  # type: ignore
 
+# ClientResponse.release = resp_release  # type: ignore

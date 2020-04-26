@@ -88,7 +88,10 @@ class MonitoringApiHandler:
                 aiohttp.web.post("/{job_id}/save", self.stream_save),
                 aiohttp.web.post("/{job_id}/attach", self.ws_attach),
                 aiohttp.web.post("/{job_id}/resize", self.resize),
-                aiohttp.web.post("/{job_id}/exec", self.ws_exec),
+                aiohttp.web.post("/{job_id}/exec_create", self.exec_create),
+                aiohttp.web.post("/{job_id}/{exec_id}/exec_resize", self.exec_resize),
+                aiohttp.web.get("/{job_id}/{exec_id}/exec_inspect", self.exec_inspect),
+                aiohttp.web.post("/{job_id}/{exec_id}/exec_start", self.exec_start),
             ]
         )
 
@@ -317,7 +320,7 @@ class MonitoringApiHandler:
 
         return response
 
-    async def ws_exec(self, request: Request) -> StreamResponse:
+    async def exec_create(self, request: Request) -> StreamResponse:
         user = await untrusted_user(request)
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
@@ -332,13 +335,62 @@ class MonitoringApiHandler:
         logger.info("Checking whether %r has %r", user, permission)
         await check_permissions(request, [permission])
 
+        exec_id = await self._jobs_service.exec_create(
+            job, cmd=cmd, stdin=stdin, stdout=stdout, stderr=stderr, tty=tty
+        )
+        return json_response({"job_id": job_id, "exec_id": exec_id})
+
+    async def exec_resize(self, request: Request) -> StreamResponse:
+        user = await untrusted_user(request)
+        job_id = request.match_info["job_id"]
+        job = await self._get_job(job_id)
+        exec_id = request.match_info["exec_id"]
+
+        permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="write")
+        logger.info("Checking whether %r has %r", user, permission)
+        await check_permissions(request, [permission])
+
+        w = int(request.query["w"])
+        h = int(request.query["h"])
+        await self._jobs_service.exec_resize(job_id, exec_id, w=w, h=h)
+
+        return json_response(None)
+
+    async def exec_inspect(self, request: Request) -> StreamResponse:
+        user = await untrusted_user(request)
+        job_id = request.match_info["job_id"]
+        job = await self._get_job(job_id)
+        exec_id = request.match_info["exec_id"]
+
+        permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="write")
+        logger.info("Checking whether %r has %r", user, permission)
+        await check_permissions(request, [permission])
+
+        ret = await self._jobs_service.exec_inspect(job_id, exec_id)
+        return json_response(ret)
+
+    async def exec_start(self, request: Request) -> StreamResponse:
+        user = await untrusted_user(request)
+        job_id = request.match_info["job_id"]
+        job = await self._get_job(job_id)
+        exec_id = request.match_info["exec_id"]
+
+        permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="write")
+        logger.info("Checking whether %r has %r", user, permission)
+        await check_permissions(request, [permission])
+
+        data = await self._jobs_service.exec_inspect(job_id, exec_id)
+
         response = WebSocketResponse()
         await response.prepare(request)
 
-        async with self._jobs_service.exec(
-            job, cmd=cmd, stdin=stdin, stdout=stdout, stderr=stderr, tty=tty
-        ) as stream:
-            await self._transfer_data(response, stream, stdin, stdout or stderr)
+        async with self._jobs_service.exec_start(job, exec_id) as stream:
+            await self._transfer_data(
+                response,
+                stream,
+                data["attachStdin"],
+                data["attachStdout"] or data["attachStderr"],
+            )
 
         return response
 
