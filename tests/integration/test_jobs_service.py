@@ -402,8 +402,8 @@ class TestJobsService:
         )
         await self.wait_for_job_running(job, platform_api_client)
 
-        exec_id = await jobs_service.exec_create(job.id, "sh -c 'sleep 30; echo abc'")
-        async with jobs_service.exec_start(job.id, exec_id) as stream:
+        exec_id = await jobs_service.exec_create(job, "sh -c 'sleep 30; echo abc'")
+        async with jobs_service.exec_start(job, exec_id) as stream:
             data = await stream.read_out()
             assert data == "abc"
 
