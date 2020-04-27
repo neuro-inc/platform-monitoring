@@ -37,7 +37,7 @@ async def expect_prompt(stream: Stream) -> bytes:
     try:
         ret: bytes = b""
         async with timeout(3):
-            while "/ #" not in ret:
+            while b"/ #" not in ret:
                 msg = await stream.read_out()
                 assert msg.stream == 1
                 ret += msg.data
