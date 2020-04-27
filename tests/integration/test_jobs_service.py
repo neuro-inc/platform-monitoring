@@ -383,7 +383,7 @@ class TestJobsService:
         await platform_api_client.jobs.kill(job.id)
 
     @pytest.mark.asyncio
-    async def test_exec_ok(
+    async def test_exec_no_tty_stdout(
         self,
         job_factory: JobFactory,
         platform_api_client: PlatformApiClient,
@@ -402,7 +402,65 @@ class TestJobsService:
         )
         await self.wait_for_job_running(job, platform_api_client)
 
-        exec_id = await jobs_service.exec_create(job, "sh -c 'sleep 30; echo abc'")
+        exec_id = await jobs_service.exec_create(job, "sh -c 'sleep 5; echo abc'")
+        async with jobs_service.exec_start(job, exec_id) as stream:
+            data = await stream.read_out()
+            assert data.data == "abc\n"
+            assert data.stream == 1
+
+        print("done")
+        await platform_api_client.jobs.kill(job.id)
+
+    @pytest.mark.asyncio
+    async def test_exec_no_tty_stderr(
+        self,
+        job_factory: JobFactory,
+        platform_api_client: PlatformApiClient,
+        jobs_service: JobsService,
+        user: User,
+        registry_host: str,
+        image_tag: str,
+    ) -> None:
+        resources = Resources(
+            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+        )
+        job = await job_factory(
+            "alpine:latest",
+            "sleep 300",
+            resources,
+        )
+        await self.wait_for_job_running(job, platform_api_client)
+
+        exec_id = await jobs_service.exec_create(job, "sh -c 'sleep 5; echo abc 1>&2'")
+        async with jobs_service.exec_start(job, exec_id) as stream:
+            data = await stream.read_out()
+            assert data.data == "abc\n"
+            assert data.stream == 2
+
+        print("done")
+        await platform_api_client.jobs.kill(job.id)
+
+    @pytest.mark.asyncio
+    async def test_exec_tty(
+        self,
+        job_factory: JobFactory,
+        platform_api_client: PlatformApiClient,
+        jobs_service: JobsService,
+        user: User,
+        registry_host: str,
+        image_tag: str,
+    ) -> None:
+        resources = Resources(
+            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+        )
+        job = await job_factory(
+            "alpine:latest",
+            "sleep 300",
+            resources,
+        )
+        await self.wait_for_job_running(job, platform_api_client)
+
+        exec_id = await jobs_service.exec_create(job, "sh", tty=True, stdin=True)
         async with jobs_service.exec_start(job, exec_id) as stream:
             data = await stream.read_out()
             assert data.data == "abc\n"
