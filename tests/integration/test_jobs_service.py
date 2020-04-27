@@ -467,7 +467,10 @@ class TestJobsService:
             assert data.stream == 1
             await stream.write_in(b"echo 'abc'\n")
             data = await stream.read_out()
-            assert data.data == b"/ # \x1b[6n"
+            assert data.data == b"abc'\r\n"
+            assert data.stream == 1
+            data = await stream.read_out()
+            assert data.data == b"abc'\r\n"
             assert data.stream == 1
 
         print("done")
