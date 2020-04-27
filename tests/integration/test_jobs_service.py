@@ -418,7 +418,6 @@ class TestJobsService:
             assert data.data == b"abc\n"
             assert data.stream == 1
 
-        print("done")
         await platform_api_client.jobs.kill(job.id)
 
     @pytest.mark.asyncio
@@ -443,7 +442,6 @@ class TestJobsService:
             assert data.data == b"abc\n"
             assert data.stream == 2
 
-        print("done")
         await platform_api_client.jobs.kill(job.id)
 
     @pytest.mark.asyncio
@@ -463,6 +461,7 @@ class TestJobsService:
         await self.wait_for_job_running(job, platform_api_client)
 
         exec_id = await jobs_service.exec_create(job, "sh", tty=True, stdin=True)
+        await jobs_service.exec_resize(job, exec_id, w=120, h=15)
         async with jobs_service.exec_start(job, exec_id) as stream:
             assert await expect_prompt(stream) == b"/ # "
             await stream.write_in(b"echo 'abc'\n")
@@ -470,7 +469,8 @@ class TestJobsService:
             await stream.write_in(b"exit 1\n")
             assert await expect_prompt(stream) == b"echo 'abc'\r\nabc\r\n/ # "
 
-        print("done")
+        ret = await jobs_service.exec_inspect(job, exec_id)
+        assert ret == {}
         await platform_api_client.jobs.kill(job.id)
 
 
