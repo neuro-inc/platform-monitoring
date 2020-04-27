@@ -464,9 +464,9 @@ class TestJobsService:
 
         exec_id = await jobs_service.exec_create(job, "sh", tty=True, stdin=True)
         async with jobs_service.exec_start(job, exec_id) as stream:
-            assert await expect_prompt(stream) == b"/ # \x1b[6n"
+            assert await expect_prompt(stream) == b"/ # "
             await stream.write_in(b"echo 'abc'\n")
-            assert await expect_prompt(stream) == b"/ # \x1b[6n"
+            assert await expect_prompt(stream) == b"/ # "
             await stream.write_in(b"exit 1\n")
 
         print("done")
