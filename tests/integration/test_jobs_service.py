@@ -407,6 +407,9 @@ class TestJobsService:
             data = await stream.read_out()
             assert data == "abc"
 
+        print("done")
+        await platform_api_client.jobs.kill(job.id)
+
 
 class _Parser:
     def __init__(self, orig):
