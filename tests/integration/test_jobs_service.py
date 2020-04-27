@@ -4,7 +4,7 @@ import sys
 import uuid
 from typing import Any, AsyncIterator, Awaitable, Callable, List, Optional
 
-import aiodocker
+from aiodocker.stream import Stream
 import aiohttp
 import pytest
 from aiohttp.client_proto import ResponseHandler
@@ -33,7 +33,7 @@ from .conftest_kube import MyKubeClient
 JobFactory = Callable[..., Awaitable[Job]]
 
 
-async def expect_prompt(stream: aiodocker.Stream) -> bytes:
+async def expect_prompt(stream: Stream) -> bytes:
     try:
         inp = []
         ret: List[bytes] = []
