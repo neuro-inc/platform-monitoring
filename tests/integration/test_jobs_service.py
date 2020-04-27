@@ -43,7 +43,7 @@ async def expect_prompt(stream: Stream) -> bytes:
                 inp.append(msg.data)
                 assert msg.stream == 1
                 lines = [line.strip() for line in msg.data.splitlines()]
-                lines = [line if b"\x1b[K" not in line else b"" for line in lines]
+                lines = [line if b"\x1b[6n" not in line else b"" for line in lines]
                 lines = [line for line in lines if line]
                 ret.extend(lines)
             return b"\n".join(ret)
