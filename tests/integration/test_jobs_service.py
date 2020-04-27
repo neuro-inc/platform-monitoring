@@ -405,7 +405,7 @@ class TestJobsService:
         exec_id = await jobs_service.exec_create(job, "sh -c 'sleep 5; echo abc'")
         async with jobs_service.exec_start(job, exec_id) as stream:
             data = await stream.read_out()
-            assert data.data == "abc\n"
+            assert data.data == b"abc\n"
             assert data.stream == 1
 
         print("done")
@@ -434,7 +434,7 @@ class TestJobsService:
         exec_id = await jobs_service.exec_create(job, "sh -c 'sleep 5; echo abc 1>&2'")
         async with jobs_service.exec_start(job, exec_id) as stream:
             data = await stream.read_out()
-            assert data.data == "abc\n"
+            assert data.data == b"abc\n"
             assert data.stream == 2
 
         print("done")
@@ -463,7 +463,11 @@ class TestJobsService:
         exec_id = await jobs_service.exec_create(job, "sh", tty=True, stdin=True)
         async with jobs_service.exec_start(job, exec_id) as stream:
             data = await stream.read_out()
-            assert data.data == "abc\n"
+            assert data.data == b"/ # \x1b[6n"
+            assert data.stream == 1
+            await stream.write_in(b"echo 'abc'")
+            data = await stream.read_out()
+            assert data.data == b"/ # \x1b[6n"
             assert data.stream == 1
 
         print("done")
