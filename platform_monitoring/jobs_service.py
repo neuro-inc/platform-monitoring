@@ -142,7 +142,7 @@ class JobsService:
                 connector=proxy_client.session.connector,
             )
             container = docker.containers.container(cont_id)
-            exe = await container(cont_id).exec(
+            exe = await container.exec(
                 cmd=cmd, stdin=stdin, stdout=stdout, stderr=stderr, tty=tty
             )
             return exe.id
