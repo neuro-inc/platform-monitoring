@@ -405,7 +405,8 @@ class TestJobsService:
         exec_id = await jobs_service.exec_create(job, "sh -c 'sleep 30; echo abc'")
         async with jobs_service.exec_start(job, exec_id) as stream:
             data = await stream.read_out()
-            assert data == "abc"
+            assert data.data == "abc\n"
+            assert data.stream == 1
 
         print("done")
         await platform_api_client.jobs.kill(job.id)
