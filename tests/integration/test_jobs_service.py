@@ -2,8 +2,9 @@ import asyncio
 import re
 import sys
 import uuid
-from typing import Any, AsyncIterator, Awaitable, Callable, Optional
+from typing import Any, AsyncIterator, Awaitable, Callable, List, Optional
 
+import aiodocker
 import aiohttp
 import pytest
 from aiohttp.client_proto import ResponseHandler
@@ -30,6 +31,24 @@ from .conftest_kube import MyKubeClient
 
 # arguments: (image, command, resources)
 JobFactory = Callable[..., Awaitable[Job]]
+
+
+async def expect_prompt(stream: aiodocker.Stream) -> bytes:
+    try:
+        inp = []
+        ret: List[bytes] = []
+        async with timeout(3):
+            while not ret or not ret[-1].endswith(b">>>"):
+                msg = await stream.read_out()
+                inp.append(msg.data)
+                assert msg.stream == 1
+                lines = [line.strip() for line in msg.data.splitlines()]
+                lines = [line if b"\x1b[K" not in line else b"" for line in lines]
+                lines = [line for line in lines if line]
+                ret.extend(lines)
+            return b"\n".join(ret)
+    except asyncio.TimeoutError:
+        raise AssertionError(f"[Timeout] {ret} {inp}")
 
 
 @pytest.mark.usefixtures("cluster_name")
@@ -395,11 +414,7 @@ class TestJobsService:
         resources = Resources(
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
         )
-        job = await job_factory(
-            "alpine:latest",
-            "sleep 300",
-            resources,
-        )
+        job = await job_factory("alpine:latest", "sleep 300", resources,)
         await self.wait_for_job_running(job, platform_api_client)
 
         exec_id = await jobs_service.exec_create(job, "sh -c 'sleep 5; echo abc'")
@@ -424,11 +439,7 @@ class TestJobsService:
         resources = Resources(
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
         )
-        job = await job_factory(
-            "alpine:latest",
-            "sleep 300",
-            resources,
-        )
+        job = await job_factory("alpine:latest", "sleep 300", resources,)
         await self.wait_for_job_running(job, platform_api_client)
 
         exec_id = await jobs_service.exec_create(job, "sh -c 'sleep 5; echo abc 1>&2'")
@@ -453,25 +464,15 @@ class TestJobsService:
         resources = Resources(
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
         )
-        job = await job_factory(
-            "alpine:latest",
-            "sleep 300",
-            resources,
-        )
+        job = await job_factory("alpine:latest", "sleep 300", resources,)
         await self.wait_for_job_running(job, platform_api_client)
 
         exec_id = await jobs_service.exec_create(job, "sh", tty=True, stdin=True)
         async with jobs_service.exec_start(job, exec_id) as stream:
-            data = await stream.read_out()
-            assert data.data == b"/ # \x1b[6n"
-            assert data.stream == 1
+            assert await expect_prompt(stream) == b"/ # \x1b[6n"
             await stream.write_in(b"echo 'abc'\n")
-            data = await stream.read_out()
-            assert data.data == b"abc'\r\n"
-            assert data.stream == 1
-            data = await stream.read_out()
-            assert data.data == b"abc'\r\n"
-            assert data.stream == 1
+            assert await expect_prompt(stream) == b"/ # \x1b[6n"
+            await stream.write_in(b"exit 1\n")
 
         print("done")
         await platform_api_client.jobs.kill(job.id)
