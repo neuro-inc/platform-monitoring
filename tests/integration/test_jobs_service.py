@@ -466,8 +466,9 @@ class TestJobsService:
         async with jobs_service.exec_start(job, exec_id) as stream:
             assert await expect_prompt(stream) == b"/ # "
             await stream.write_in(b"echo 'abc'\n")
-            assert await expect_prompt(stream) == b"/ # "
+            assert await expect_prompt(stream) == b"echo 'abc'\r\nabc\r\n/ # "
             await stream.write_in(b"exit 1\n")
+            assert await expect_prompt(stream) == b"echo 'abc'\r\nabc\r\n/ # "
 
         print("done")
         await platform_api_client.jobs.kill(job.id)
