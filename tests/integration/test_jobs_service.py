@@ -35,20 +35,15 @@ JobFactory = Callable[..., Awaitable[Job]]
 
 async def expect_prompt(stream: Stream) -> bytes:
     try:
-        inp = []
-        ret: List[bytes] = []
+        ret: bytes = b""
         async with timeout(3):
-            while not ret or not ret[-1].endswith(b"/ #"):
+            while "/ #" not in ret:
                 msg = await stream.read_out()
-                inp.append(msg.data)
                 assert msg.stream == 1
-                lines = [line.strip() for line in msg.data.splitlines()]
-                lines = [line.replace(b"\x1b[6n", b"") for line in lines]
-                lines = [line for line in lines if line]
-                ret.extend(lines)
-            return b"\n".join(ret)
+                ret += msg.data
+            return ret.replace(b"\x1b[6n", b"")
     except asyncio.TimeoutError:
-        raise AssertionError(f"[Timeout] {ret} {inp}")
+        raise AssertionError(f"[Timeout] {ret}")
 
 
 @pytest.mark.usefixtures("cluster_name")
