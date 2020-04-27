@@ -158,7 +158,7 @@ class JobsService:
                 session=proxy_client.session,
                 connector=proxy_client.session.connector,
             )
-            exe = docker.exec(exec_id)
+            exe = docker.containers.exec(exec_id)
             await exe.resize(w=w, h=h)
 
     async def exec_inspect(self, job: Job, exec_id: str) -> Dict[str, Any]:
@@ -172,7 +172,7 @@ class JobsService:
                 session=proxy_client.session,
                 connector=proxy_client.session.connector,
             )
-            exe = docker.exec(exec_id)
+            exe = docker.containers.exec(exec_id)
             return await exe.inspect()
 
     @asynccontextmanager
@@ -187,7 +187,7 @@ class JobsService:
                 session=proxy_client.session,
                 connector=proxy_client.session.connector,
             )
-            exe = docker.exec(exec_id)
+            exe = docker.containers.exec(exec_id)
             async with exe.start(detach=False) as stream:
                 yield stream
 
