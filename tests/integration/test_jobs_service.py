@@ -5,7 +5,6 @@ import uuid
 from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
 from aiodocker.stream import Stream
-import aiohttp
 import pytest
 from aiohttp.client_proto import ResponseHandler
 from aiohttp.client_reqrep import ClientResponse
