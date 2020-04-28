@@ -470,7 +470,7 @@ class TestJobsService:
             assert await expect_prompt(stream) == b"exit 1\r\n"
 
         ret = await jobs_service.exec_inspect(job, exec_id)
-        assert ret == {}
+        assert ret["ExitCode"] == 1
         await platform_api_client.jobs.kill(job.id)
 
 
