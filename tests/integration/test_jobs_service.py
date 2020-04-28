@@ -344,7 +344,7 @@ class TestJobsService:
         )
         job = await job_factory(
             "alpine:latest",
-            "sh -c 'while true; echo abc; sleep 1; done'",
+            "sh -c 'while true; do echo abc; sleep 1; done'",
             resources,
             tty=False,
         )
