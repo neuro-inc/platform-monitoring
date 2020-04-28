@@ -92,13 +92,12 @@ class JobsService:
         async with self._kube_client.get_node_proxy_client(
             pod.node_name, self._docker_config.docker_engine_api_port
         ) as proxy_client:
-            session = await self._kube_client.create_http_client()
             docker = Docker(
-                url=str(proxy_client.url), session=session, connector=session.connector,
+                url=str(proxy_client.url),
+                session=proxy_client.session,
+                connector=proxy_client.session.connector,
             )
             container = docker.containers.container(cont_id)
-
-            await container.resize(w=80, h=25)
             async with container.attach(
                 stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
             ) as stream:
