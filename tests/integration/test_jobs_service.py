@@ -39,6 +39,7 @@ async def expect_prompt(stream: Stream) -> bytes:
             while b"/ #" not in ret:
                 msg = await stream.read_out()
                 if msg is None:
+                    print("EXPECT_PROMPT_END")
                     break
                 assert msg.stream == 1
                 ret += msg.data
