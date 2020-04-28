@@ -2,7 +2,7 @@ import asyncio
 import re
 import sys
 import uuid
-from typing import Any, AsyncIterator, Awaitable, Callable, List, Optional
+from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
 from aiodocker.stream import Stream
 import aiohttp
@@ -39,6 +39,8 @@ async def expect_prompt(stream: Stream) -> bytes:
         async with timeout(3):
             while b"/ #" not in ret:
                 msg = await stream.read_out()
+                if msg is None:
+                    break
                 assert msg.stream == 1
                 ret += msg.data
             return ret.replace(b"\x1b[6n", b"")
