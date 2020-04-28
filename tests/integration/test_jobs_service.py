@@ -349,6 +349,7 @@ class TestJobsService:
             tty=False,
         )
         await self.wait_for_job_running(job, platform_api_client)
+        await asyncio.sleep(5)
 
         job = await platform_api_client.jobs.status(job.id)
 
@@ -371,7 +372,6 @@ class TestJobsService:
 
         Stream.__aexit__ = aexit
 
-        await asyncio.sleep(5)
 
         async with jobs_service.attach(
             job, stdin=False, stdout=True, stderr=True, logs=False
