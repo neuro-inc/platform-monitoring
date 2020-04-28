@@ -467,7 +467,7 @@ class TestJobsService:
             await stream.write_in(b"echo 'abc'\n")
             assert await expect_prompt(stream) == b"echo 'abc'\r\nabc\r\n/ # "
             await stream.write_in(b"exit 1\n")
-            assert await expect_prompt(stream) == b"echo 'abc'\r\nabc\r\n/ # "
+            assert await expect_prompt(stream) == b"exit 1\r\n"
 
         ret = await jobs_service.exec_inspect(job, exec_id)
         assert ret == {}
