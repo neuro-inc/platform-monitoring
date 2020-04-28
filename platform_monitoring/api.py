@@ -73,7 +73,7 @@ class MonitoringApiHandler:
     def __init__(self, app: aiohttp.web.Application, config: Config) -> None:
         self._app = app
         self._config = config
-        self._jobs_helper = JobsHelper(cluster_name=config.cluster_name)
+        self._jobs_helper = JobsHelper()
         self._kube_helper = KubeHelper()
 
         self._save_request_payload_validator = create_save_request_payload_validator(
@@ -109,7 +109,7 @@ class MonitoringApiHandler:
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
 
-        permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="read")
+        permission = Permission(uri=str(job.uri), action="read")
         logger.info("Checking whether %r has %r", user, permission)
         await check_permissions(request, [permission])
 
@@ -140,7 +140,7 @@ class MonitoringApiHandler:
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
 
-        permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="read")
+        permission = Permission(uri=str(job.uri), action="read")
         logger.info("Checking whether %r has %r", user, permission)
         await check_permissions(request, [permission])
 
@@ -223,7 +223,7 @@ class MonitoringApiHandler:
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
 
-        permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="write")
+        permission = Permission(uri=str(job.uri), action="write")
         logger.info("Checking whether %r has %r", user, permission)
         await check_permissions(request, [permission])
 

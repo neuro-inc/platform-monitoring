@@ -82,4 +82,3 @@ class Config:
     docker: DockerConfig
     registry: RegistryConfig
     cors: CORSConfig
-    cluster_name: str

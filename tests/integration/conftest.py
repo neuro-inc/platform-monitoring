@@ -164,7 +164,6 @@ def config_factory(
             kube=kube_config,
             registry=registry_config,
             docker=docker_config,
-            cluster_name=cluster_name,
             cors=CORSConfig(allowed_origins=["https://neu.ro"]),
         )
         kwargs = {**defaults, **kwargs}
