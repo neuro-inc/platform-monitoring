@@ -359,6 +359,9 @@ class TestJobsService:
         ) as stream:
             print("enter")
             data = await stream.read_out()
+            if data is None:
+                job = await platform_api_client.jobs.status(job.id)
+                print(job)
             assert data.stream == 1
             assert data.data == b"abc\n"
 
