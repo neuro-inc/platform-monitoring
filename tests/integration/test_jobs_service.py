@@ -371,6 +371,8 @@ class TestJobsService:
 
         Stream.__aexit__ = aexit
 
+        await asyncio.sleep(5)
+
         async with jobs_service.attach(
             job, stdin=False, stdout=True, stderr=True, logs=False
         ) as stream:
