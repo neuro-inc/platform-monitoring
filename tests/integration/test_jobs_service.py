@@ -462,8 +462,9 @@ class TestJobsService:
 
         exec_id = await jobs_service.exec_create(job, "sh", tty=True, stdin=True)
         ret = await jobs_service.exec_inspect(job, exec_id)
-        while not ret['Running']:
-            ret = await jobs_service.exec_inspect(job, exec_id)
+        await asyncio.sleep(5)
+        # while not ret['Running']:
+        #     ret = await jobs_service.exec_inspect(job, exec_id)
         await jobs_service.exec_resize(job, exec_id, w=120, h=15)
         async with jobs_service.exec_start(job, exec_id) as stream:
             assert await expect_prompt(stream) == b"/ # "
