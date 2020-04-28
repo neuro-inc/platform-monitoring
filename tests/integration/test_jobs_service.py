@@ -352,47 +352,13 @@ class TestJobsService:
         await asyncio.sleep(5)
 
         job = await platform_api_client.jobs.status(job.id)
-
         await jobs_service.resize(job, w=80, h=25)
 
-        from aiodocker.stream import Stream
-
-        old_aenter = Stream.__aenter__
-        old_aexit = Stream.__aexit__
-
-        async def aenter(self):
-            print("AENTER")
-            return await old_aenter(self)
-
-        Stream.__aenter__ = aenter
-
-        async def aexit(self, *args):
-            print("AEXIT", args)
-            return await old_aexit(self, *args)
-
-        Stream.__aexit__ = aexit
-
-
         async with jobs_service.attach(
-            job, stdin=False, stdout=True, stderr=True, logs=False
+            job, stdin=False, stdout=True, stderr=True, logs=True
         ) as stream:
             print("enter")
-            conn = stream._resp.connection
-            proto = conn.protocol
-            parser = proto._payload_parser
-            proto._payload_parser = _Parser(parser)
-            print(parser, parser.tty, parser.queue, parser.queue._buffer)
-            delay = 0.01
-            for i in range(1000):
-                data = await stream.read_out()
-                if data is None:
-                    print("sleep")
-                    delay *= 2
-                    await asyncio.sleep(delay)
-                else:
-                    break
-            else:
-                assert False, "Timeout"
+            data = await stream.read_out()
             assert data.stream == 1
             assert data.data == b"abc\n"
 
