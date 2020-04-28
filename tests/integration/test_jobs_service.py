@@ -461,7 +461,10 @@ class TestJobsService:
         await self.wait_for_job_running(job, platform_api_client)
 
         exec_id = await jobs_service.exec_create(job, "sh", tty=True, stdin=True)
-        # await jobs_service.exec_resize(job, exec_id, w=120, h=15)
+        ret = await jobs_service.exec_inspect(job, exec_id)
+        while not ret['Running']:
+            ret = await jobs_service.exec_inspect(job, exec_id)
+        await jobs_service.exec_resize(job, exec_id, w=120, h=15)
         async with jobs_service.exec_start(job, exec_id) as stream:
             assert await expect_prompt(stream) == b"/ # "
             await stream.write_in(b"echo 'abc'\n")
