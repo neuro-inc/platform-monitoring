@@ -64,7 +64,7 @@ jobs:
           name: Setting up Python Virtual Environment
           command: |
             # 3.7.0 is already present
-            pyenv install 3.7.0
+            # pyenv install 3.7.0
             pyenv global 3.7.0
             python -m venv venv
             source venv/bin/activate
