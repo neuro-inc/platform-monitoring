@@ -383,9 +383,8 @@ class TestJobsService:
             print(parser, parser.tty, parser.queue, parser.queue._buffer)
             delay = 0.01
             for i in range(1000):
-                try:
-                    data = await stream.read_out()
-                except aiohttp.EofStream:
+                data = await stream.read_out()
+                if data is None:
                     print("sleep")
                     delay *= 2
                     await asyncio.sleep(delay)
