@@ -21,7 +21,12 @@ from aiohttp.web_exceptions import (
 )
 from async_timeout import timeout
 from platform_monitoring.api import create_app
-from platform_monitoring.config import Config, DockerConfig, PlatformApiConfig
+from platform_monitoring.config import (
+    DOCKER_API_VERSION,
+    Config,
+    DockerConfig,
+    PlatformApiConfig,
+)
 from platform_monitoring.docker_client import Docker
 from yarl import URL
 
@@ -239,6 +244,7 @@ async def wait_for_job_docker_client(
                 url=str(proxy_client.url),
                 session=proxy_client.session,
                 connector=proxy_client.session.connector,
+                api_version=DOCKER_API_VERSION,
             )
             while True:
                 try:

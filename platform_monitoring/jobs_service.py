@@ -8,6 +8,7 @@ from neuromation.api import JobDescription as Job
 from neuromation.api.jobs import Jobs as JobsClient
 from platform_monitoring.config import DockerConfig
 
+from .config import DOCKER_API_VERSION
 from .docker_client import Docker, ImageReference
 from .kube_client import JobNotFoundException, KubeClient, Pod
 from .user import User
@@ -53,6 +54,7 @@ class JobsService:
                 url=str(proxy_client.url),
                 session=proxy_client.session,
                 connector=proxy_client.session.connector,
+                api_version=DOCKER_API_VERSION,
             )
             try:
                 repo = container.image.repository
@@ -96,6 +98,7 @@ class JobsService:
                 url=str(proxy_client.url),
                 session=proxy_client.session,
                 connector=proxy_client.session.connector,
+                api_version=DOCKER_API_VERSION,
             )
             container = docker.containers.container(cont_id)
             async with container.attach(
@@ -116,6 +119,7 @@ class JobsService:
                 url=str(proxy_client.url),
                 session=proxy_client.session,
                 connector=proxy_client.session.connector,
+                api_version=DOCKER_API_VERSION,
             )
             container = docker.containers.container(cont_id)
             await container.resize(w=w, h=h)
@@ -139,6 +143,7 @@ class JobsService:
                 url=str(proxy_client.url),
                 session=proxy_client.session,
                 connector=proxy_client.session.connector,
+                api_version=DOCKER_API_VERSION,
             )
             container = docker.containers.container(cont_id)
             exe = await container.exec(
@@ -156,6 +161,7 @@ class JobsService:
                 url=str(proxy_client.url),
                 session=proxy_client.session,
                 connector=proxy_client.session.connector,
+                api_version=DOCKER_API_VERSION,
             )
             exe = docker.containers.exec(exec_id)
             await exe.resize(w=w, h=h)
@@ -170,6 +176,7 @@ class JobsService:
                 url=str(proxy_client.url),
                 session=proxy_client.session,
                 connector=proxy_client.session.connector,
+                api_version=DOCKER_API_VERSION,
             )
             exe = docker.containers.exec(exec_id)
             return await exe.inspect()
@@ -185,6 +192,7 @@ class JobsService:
                 url=str(proxy_client.url),
                 session=proxy_client.session,
                 connector=proxy_client.session.connector,
+                api_version=DOCKER_API_VERSION,
             )
             exe = docker.containers.exec(exec_id)
             async with exe.start(detach=False) as stream:
