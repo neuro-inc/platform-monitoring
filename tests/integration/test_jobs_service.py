@@ -494,7 +494,7 @@ class TestJobsService:
         job = await job_factory("alpine:latest", "sleep 300", resources,)
         await self.wait_for_job_running(job, platform_api_client)
 
-        wait_for_job_docker_client(job.id)
+        await wait_for_job_docker_client(job.id)
 
         exec_id = await jobs_service.exec_create(job, "sh", tty=True, stdin=True)
         ret = await jobs_service.exec_inspect(job, exec_id)
