@@ -4,7 +4,6 @@ import uuid
 from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
 import pytest
-import timeout
 from aiodocker.stream import Stream
 from async_timeout import timeout
 from neuromation.api import (
@@ -462,7 +461,7 @@ class TestJobsService:
 
         exec_id = await jobs_service.exec_create(job, "sh", tty=True, stdin=True)
         ret = await jobs_service.exec_inspect(job, exec_id)
-        async with timeout.timeout(30):
+        async with timeout(30):
             while not ret["Running"]:
                 ret = await jobs_service.exec_inspect(job, exec_id)
         await jobs_service.exec_resize(job, exec_id, w=120, h=15)
