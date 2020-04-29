@@ -29,6 +29,64 @@ from .conftest_kube import MyKubeClient
 JobFactory = Callable[..., Awaitable[Job]]
 
 
+@pytest.fixture
+async def job_factory(
+    platform_api_client: PlatformApiClient
+) -> AsyncIterator[JobFactory]:
+    jobs = []
+
+    async def _factory(
+        image: str, command: Optional[str], resources: Resources, tty: bool = False
+    ) -> Job:
+        container = JobContainer(
+            image=platform_api_client.parse.remote_image(image),
+            command=command,
+            resources=resources,
+            tty=tty,
+        )
+        job = await platform_api_client.jobs.run(container)
+        jobs.append(job)
+        return job
+
+    yield _factory
+
+    for job in jobs:
+        await platform_api_client.jobs.kill(job.id)
+
+
+@pytest.fixture
+async def wait_for_job_docker_client(
+    kube_client: MyKubeClient,
+    docker_config: DockerConfig,
+    job_factory: Callable[[str], Awaitable[str]],
+) -> None:
+    timeout_s: float = 60
+    interval_s: float = 1
+
+    job_id = await job_factory("sleep 5m")
+    pod_name = job_id
+    async with timeout(timeout_s):
+        pod = await kube_client.get_pod(pod_name)
+        async with kube_client.get_node_proxy_client(
+            pod.node_name, docker_config.docker_engine_api_port
+        ) as proxy_client:
+            docker = Docker(
+                url=str(proxy_client.url),
+                session=proxy_client.session,
+                connector=proxy_client.session.connector,
+                api_version=DOCKER_API_VERSION,
+            )
+            while True:
+                try:
+                    await docker.ping()
+                    return
+                except aiohttp.ClientError as e:
+                    logging.info(
+                        f"Failed to ping docker client: {proxy_client.url}: {e}"
+                    )
+                    await asyncio.sleep(interval_s)
+
+
 async def expect_prompt(stream: Stream) -> bytes:
     try:
         ret: bytes = b""
@@ -54,30 +112,6 @@ class TestJobsService:
         docker_config: DockerConfig,
     ) -> JobsService:
         return JobsService(platform_api_client.jobs, kube_client, docker_config)
-
-    @pytest.fixture
-    async def job_factory(
-        self, platform_api_client: PlatformApiClient
-    ) -> AsyncIterator[JobFactory]:
-        jobs = []
-
-        async def _factory(
-            image: str, command: Optional[str], resources: Resources, tty: bool = False
-        ) -> Job:
-            container = JobContainer(
-                image=platform_api_client.parse.remote_image(image),
-                command=command,
-                resources=resources,
-                tty=tty,
-            )
-            job = await platform_api_client.jobs.run(container)
-            jobs.append(job)
-            return job
-
-        yield _factory
-
-        for job in jobs:
-            await platform_api_client.jobs.kill(job.id)
 
     async def wait_for_job(
         self,
@@ -452,6 +486,7 @@ class TestJobsService:
         user: User,
         registry_host: str,
         image_tag: str,
+        wait_for_job_docker_client: None
     ) -> None:
         resources = Resources(
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
