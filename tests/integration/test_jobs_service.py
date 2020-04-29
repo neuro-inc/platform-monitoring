@@ -1,13 +1,10 @@
 import asyncio
 import re
-import sys
 import uuid
 from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
-from aiodocker.stream import Stream
 import pytest
-from aiohttp.client_proto import ResponseHandler
-from aiohttp.client_reqrep import ClientResponse
+from aiodocker.stream import Stream
 from async_timeout import timeout
 from neuromation.api import (
     Client as PlatformApiClient,
@@ -44,7 +41,7 @@ async def expect_prompt(stream: Stream) -> bytes:
                 ret += msg.data
             return ret.replace(b"\x1b[6n", b"")
     except asyncio.TimeoutError:
-        raise AssertionError(f"[Timeout] {ret}")
+        raise AssertionError(f"[Timeout] {ret!r}")
 
 
 @pytest.mark.usefixtures("cluster_name")
@@ -358,6 +355,7 @@ class TestJobsService:
             job, stdin=False, stdout=True, stderr=True, logs=True
         ) as stream:
             data = await stream.read_out()
+            assert data is not None
             assert data.stream == 1
             assert data.data == b"abc\n"
 
@@ -376,12 +374,7 @@ class TestJobsService:
         resources = Resources(
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
         )
-        job = await job_factory(
-            "alpine:latest",
-            "sh",
-            resources,
-            tty=True,
-        )
+        job = await job_factory("alpine:latest", "sh", resources, tty=True,)
         await self.wait_for_job_running(job, platform_api_client)
         await asyncio.sleep(1)
 
@@ -419,6 +412,7 @@ class TestJobsService:
         exec_id = await jobs_service.exec_create(job, "sh -c 'sleep 5; echo abc'")
         async with jobs_service.exec_start(job, exec_id) as stream:
             data = await stream.read_out()
+            assert data is not None
             assert data.data == b"abc\n"
             assert data.stream == 1
 
@@ -443,6 +437,7 @@ class TestJobsService:
         exec_id = await jobs_service.exec_create(job, "sh -c 'sleep 5; echo abc 1>&2'")
         async with jobs_service.exec_start(job, exec_id) as stream:
             data = await stream.read_out()
+            assert data is not None
             assert data.data == b"abc\n"
             assert data.stream == 2
 
