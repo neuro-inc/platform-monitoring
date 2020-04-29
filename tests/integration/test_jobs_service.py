@@ -60,31 +60,32 @@ async def job_factory(
 async def wait_for_job_docker_client(
     kube_client: MyKubeClient,
     docker_config: DockerConfig,
-    job_factory: Callable[[str], Awaitable[str]],
 ) -> None:
-    timeout_s: float = 60
-    interval_s: float = 1
+    async def go(job_id):
+        timeout_s: float = 60
+        interval_s: float = 1
 
-    job_id = await job_factory("sleep 5m")
-    pod_name = job_id
-    async with timeout(timeout_s):
-        pod = await kube_client.get_pod(pod_name)
-        async with kube_client.get_node_proxy_client(
-            pod.node_name, docker_config.docker_engine_api_port
-        ) as proxy_client:
-            docker = Docker(
-                url=str(proxy_client.url),
-                session=proxy_client.session,
-                connector=proxy_client.session.connector,
-                api_version=DOCKER_API_VERSION,
-            )
-            while True:
-                try:
-                    await docker.ping()  # type: ignore
-                    return
-                except aiohttp.ClientError as e:
-                    print(f"Failed to ping docker client: {proxy_client.url}: {e}")
-                    await asyncio.sleep(interval_s)
+        pod_name = job_id
+        async with timeout(timeout_s):
+            pod = await kube_client.get_pod(pod_name)
+            async with kube_client.get_node_proxy_client(
+                pod.node_name, docker_config.docker_engine_api_port
+            ) as proxy_client:
+                docker = Docker(
+                    url=str(proxy_client.url),
+                    session=proxy_client.session,
+                    connector=proxy_client.session.connector,
+                    api_version=DOCKER_API_VERSION,
+                )
+                while True:
+                    try:
+                        await docker.ping()  # type: ignore
+                        return
+                    except aiohttp.ClientError as e:
+                        print(f"Failed to ping docker client: {proxy_client.url}: {e}")
+                        await asyncio.sleep(interval_s)
+
+    return go
 
 
 async def expect_prompt(stream: Stream) -> bytes:
@@ -486,13 +487,15 @@ class TestJobsService:
         user: User,
         registry_host: str,
         image_tag: str,
-        wait_for_job_docker_client: None,
+        wait_for_job_docker_client: Callable[[], Awaitable[None]],
     ) -> None:
         resources = Resources(
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
         )
         job = await job_factory("alpine:latest", "sleep 300", resources,)
         await self.wait_for_job_running(job, platform_api_client)
+
+        wait_for_job_docker_client(job.id)
 
         exec_id = await jobs_service.exec_create(job, "sh", tty=True, stdin=True)
         ret = await jobs_service.exec_inspect(job, exec_id)
