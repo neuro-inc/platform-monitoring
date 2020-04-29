@@ -78,7 +78,7 @@ async def wait_for_job_docker_client(
                 )
                 while True:
                     try:
-                        await docker.ping()  # type: ignore
+                        await docker.version()
                         return
                     except aiohttp.ClientError as e:
                         print(f"Failed to ping docker client: {proxy_client.url}: {e}")
