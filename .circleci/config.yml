@@ -74,21 +74,21 @@ jobs:
             - venv
           key: v1-dependencies-python_3.7.2-{{ checksum "setup.py" }}-{{ checksum "requirements/syntax.txt" }}-{{ checksum "requirements/test.txt" }}
 
-      # - run:
-      #     name: Running Static Code Analysis
-      #     command: |
-      #       source venv/bin/activate
-      #       make lint
+      - run:
+          name: Running Static Code Analysis
+          command: |
+            source venv/bin/activate
+            make lint
 
-      # - run:
-      #     name: Running Unit Tests
-      #     command: |
-      #       source venv/bin/activate
-      #       make test_unit
+      - run:
+          name: Running Unit Tests
+          command: |
+            source venv/bin/activate
+            make test_unit
 
-      # - codecov/upload:
-      #     file: .coverage-unit.xml
-      #     flags: unit
+      - codecov/upload:
+          file: .coverage-unit.xml
+          flags: unit
 
       - run:
           name: Running Integration Tests
