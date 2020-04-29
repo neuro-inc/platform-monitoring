@@ -3,7 +3,9 @@ import re
 import uuid
 from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
+import aiohttp
 import pytest
+from aiodocker import Docker
 from aiodocker.stream import Stream
 from async_timeout import timeout
 from neuromation.api import (
@@ -13,7 +15,7 @@ from neuromation.api import (
     JobStatus,
     Resources,
 )
-from platform_monitoring.config import DockerConfig
+from platform_monitoring.config import DOCKER_API_VERSION, DockerConfig
 from platform_monitoring.jobs_service import (
     Container,
     ImageReference,
@@ -31,7 +33,7 @@ JobFactory = Callable[..., Awaitable[Job]]
 
 @pytest.fixture
 async def job_factory(
-    platform_api_client: PlatformApiClient
+    platform_api_client: PlatformApiClient,
 ) -> AsyncIterator[JobFactory]:
     jobs = []
 
@@ -78,12 +80,10 @@ async def wait_for_job_docker_client(
             )
             while True:
                 try:
-                    await docker.ping()
+                    await docker.ping()  # type: ignore
                     return
                 except aiohttp.ClientError as e:
-                    logging.info(
-                        f"Failed to ping docker client: {proxy_client.url}: {e}"
-                    )
+                    print(f"Failed to ping docker client: {proxy_client.url}: {e}")
                     await asyncio.sleep(interval_s)
 
 
@@ -486,7 +486,7 @@ class TestJobsService:
         user: User,
         registry_host: str,
         image_tag: str,
-        wait_for_job_docker_client: None
+        wait_for_job_docker_client: None,
     ) -> None:
         resources = Resources(
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
