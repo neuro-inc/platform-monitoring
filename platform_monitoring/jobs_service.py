@@ -95,7 +95,7 @@ class JobsService:
         async with self._kube_client.get_node_proxy_client(
             pod.node_name, self._docker_config.docker_engine_api_port
         ) as proxy_client:
-            session = await self._kube_client.create_http_client()
+            session = await self._kube_client.create_http_client(force_close=True)
             async with Docker(
                 url=str(proxy_client.url),
                 session=session,
@@ -117,7 +117,7 @@ class JobsService:
         async with self._kube_client.get_node_proxy_client(
             pod.node_name, self._docker_config.docker_engine_api_port
         ) as proxy_client:
-            session = await self._kube_client.create_http_client()
+            session = await self._kube_client.create_http_client(force_close=True)
             async with Docker(
                 url=str(proxy_client.url),
                 session=session,
@@ -142,7 +142,7 @@ class JobsService:
         async with self._kube_client.get_node_proxy_client(
             pod.node_name, self._docker_config.docker_engine_api_port
         ) as proxy_client:
-            session = await self._kube_client.create_http_client()
+            session = await self._kube_client.create_http_client(force_close=True)
             async with Docker(
                 url=str(proxy_client.url),
                 session=session,
@@ -161,7 +161,7 @@ class JobsService:
         async with self._kube_client.get_node_proxy_client(
             pod.node_name, self._docker_config.docker_engine_api_port
         ) as proxy_client:
-            session = await self._kube_client.create_http_client()
+            session = await self._kube_client.create_http_client(force_close=True)
             async with Docker(
                 url=str(proxy_client.url),
                 session=session,
@@ -177,7 +177,7 @@ class JobsService:
         async with self._kube_client.get_node_proxy_client(
             pod.node_name, self._docker_config.docker_engine_api_port
         ) as proxy_client:
-            session = await self._kube_client.create_http_client()
+            session = await self._kube_client.create_http_client(force_close=True)
             async with Docker(
                 url=str(proxy_client.url),
                 session=session,
@@ -194,7 +194,7 @@ class JobsService:
         async with self._kube_client.get_node_proxy_client(
             pod.node_name, self._docker_config.docker_engine_api_port
         ) as proxy_client:
-            session = await self._kube_client.create_http_client()
+            session = await self._kube_client.create_http_client(force_close=True)
             async with Docker(
                 url=str(proxy_client.url),
                 session=session,
