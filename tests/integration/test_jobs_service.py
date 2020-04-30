@@ -3,7 +3,10 @@ import re
 import uuid
 from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
+import aiohttp
 import pytest
+from aiodocker import Docker
+from aiodocker.stream import Stream
 from async_timeout import timeout
 from neuromation.api import (
     Client as PlatformApiClient,
@@ -12,7 +15,7 @@ from neuromation.api import (
     JobStatus,
     Resources,
 )
-from platform_monitoring.config import DockerConfig
+from platform_monitoring.config import DOCKER_API_VERSION, DockerConfig
 from platform_monitoring.jobs_service import (
     Container,
     ImageReference,
@@ -25,7 +28,78 @@ from .conftest_kube import MyKubeClient
 
 
 # arguments: (image, command, resources)
-JobFactory = Callable[[str, Optional[str], Resources], Awaitable[Job]]
+JobFactory = Callable[..., Awaitable[Job]]
+
+
+@pytest.fixture
+async def job_factory(
+    platform_api_client: PlatformApiClient,
+) -> AsyncIterator[JobFactory]:
+    jobs = []
+
+    async def _factory(
+        image: str, command: Optional[str], resources: Resources, tty: bool = False
+    ) -> Job:
+        container = JobContainer(
+            image=platform_api_client.parse.remote_image(image),
+            command=command,
+            resources=resources,
+            tty=tty,
+        )
+        job = await platform_api_client.jobs.run(container)
+        jobs.append(job)
+        return job
+
+    yield _factory
+
+    for job in jobs:
+        await platform_api_client.jobs.kill(job.id)
+
+
+@pytest.fixture
+async def wait_for_job_docker_client(
+    kube_client: MyKubeClient, docker_config: DockerConfig,
+) -> Callable[[str], Awaitable[None]]:
+    async def go(job_id: str) -> None:
+        timeout_s: float = 60
+        interval_s: float = 1
+
+        pod_name = job_id
+        async with timeout(timeout_s):
+            pod = await kube_client.get_pod(pod_name)
+            async with kube_client.get_node_proxy_client(
+                pod.node_name, docker_config.docker_engine_api_port
+            ) as proxy_client:
+                docker = Docker(
+                    url=str(proxy_client.url),
+                    session=proxy_client.session,
+                    connector=proxy_client.session.connector,
+                    api_version=DOCKER_API_VERSION,
+                )
+                while True:
+                    try:
+                        await docker.version()
+                        return
+                    except aiohttp.ClientError as e:
+                        print(f"Failed to ping docker client: {proxy_client.url}: {e}")
+                        await asyncio.sleep(interval_s)
+
+    return go
+
+
+async def expect_prompt(stream: Stream) -> bytes:
+    try:
+        ret: bytes = b""
+        async with timeout(3):
+            while b"/ #" not in ret:
+                msg = await stream.read_out()
+                if msg is None:
+                    break
+                assert msg.stream == 1
+                ret += msg.data
+            return ret.replace(b"\x1b[6n", b"")
+    except asyncio.TimeoutError:
+        raise AssertionError(f"[Timeout] {ret!r}")
 
 
 @pytest.mark.usefixtures("cluster_name")
@@ -38,29 +112,6 @@ class TestJobsService:
         docker_config: DockerConfig,
     ) -> JobsService:
         return JobsService(platform_api_client.jobs, kube_client, docker_config)
-
-    @pytest.fixture
-    async def job_factory(
-        self, platform_api_client: PlatformApiClient
-    ) -> AsyncIterator[JobFactory]:
-        jobs = []
-
-        async def _factory(
-            image: str, command: Optional[str], resources: Resources
-        ) -> Job:
-            container = JobContainer(
-                image=platform_api_client.parse.remote_image(image),
-                command=command,
-                resources=resources,
-            )
-            job = await platform_api_client.jobs.run(container)
-            jobs.append(job)
-            return job
-
-        yield _factory
-
-        for job in jobs:
-            await platform_api_client.jobs.kill(job.id)
 
     async def wait_for_job(
         self,
@@ -323,16 +374,141 @@ class TestJobsService:
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
         )
         job = await job_factory(
-            "alpine:latest", "sh -c 'echo abc; echo def; sleep 300'", resources,
+            "alpine:latest",
+            "sh -c 'while true; do echo abc; sleep 1; done'",
+            resources,
+            tty=False,
         )
         await self.wait_for_job_running(job, platform_api_client)
+        await asyncio.sleep(5)
 
         job = await platform_api_client.jobs.status(job.id)
+        await jobs_service.resize(job, w=80, h=25)
 
         async with jobs_service.attach(
-            job, stdout=True, stderr=True, logs=True
+            job, stdin=False, stdout=True, stderr=True, logs=True
         ) as stream:
             data = await stream.read_out()
-            assert data == b"abc\n"
+            assert data is not None
+            assert data.stream == 1
+            assert data.data == b"abc\n"
 
+        await platform_api_client.jobs.kill(job.id)
+
+    @pytest.mark.asyncio
+    async def xtest_attach_tty(
+        self,
+        job_factory: JobFactory,
+        platform_api_client: PlatformApiClient,
+        jobs_service: JobsService,
+        user: User,
+        registry_host: str,
+        image_tag: str,
+    ) -> None:
+        resources = Resources(
+            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+        )
+        job = await job_factory("alpine:latest", "sh", resources, tty=True,)
+        await self.wait_for_job_running(job, platform_api_client)
+        await asyncio.sleep(1)
+
+        job = await platform_api_client.jobs.status(job.id)
+        await jobs_service.resize(job, w=80, h=25)
+
+        async with jobs_service.attach(
+            job, stdin=True, stdout=True, stderr=True, logs=False
+        ) as stream:
+            assert await expect_prompt(stream) == b"/ # "
+            await stream.write_in(b"echo 'abc'\n")
+            assert await expect_prompt(stream) == b"echo 'abc'\r\nabc\r\n/ # "
+            await stream.write_in(b"exit 1\n")
+            assert await expect_prompt(stream) == b"exit 1\r\n"
+
+        job = await platform_api_client.jobs.status(job.id)
+        assert job.history.exit_code == 1
+
+    @pytest.mark.asyncio
+    async def test_exec_no_tty_stdout(
+        self,
+        job_factory: JobFactory,
+        platform_api_client: PlatformApiClient,
+        jobs_service: JobsService,
+        user: User,
+        registry_host: str,
+        image_tag: str,
+    ) -> None:
+        resources = Resources(
+            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+        )
+        job = await job_factory("alpine:latest", "sleep 300", resources,)
+        await self.wait_for_job_running(job, platform_api_client)
+
+        exec_id = await jobs_service.exec_create(job, "sh -c 'sleep 5; echo abc'")
+        async with jobs_service.exec_start(job, exec_id) as stream:
+            data = await stream.read_out()
+            assert data is not None
+            assert data.data == b"abc\n"
+            assert data.stream == 1
+
+        await platform_api_client.jobs.kill(job.id)
+
+    @pytest.mark.asyncio
+    async def test_exec_no_tty_stderr(
+        self,
+        job_factory: JobFactory,
+        platform_api_client: PlatformApiClient,
+        jobs_service: JobsService,
+        user: User,
+        registry_host: str,
+        image_tag: str,
+    ) -> None:
+        resources = Resources(
+            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+        )
+        job = await job_factory("alpine:latest", "sleep 300", resources,)
+        await self.wait_for_job_running(job, platform_api_client)
+
+        exec_id = await jobs_service.exec_create(job, "sh -c 'sleep 5; echo abc 1>&2'")
+        async with jobs_service.exec_start(job, exec_id) as stream:
+            data = await stream.read_out()
+            assert data is not None
+            assert data.data == b"abc\n"
+            assert data.stream == 2
+
+        await platform_api_client.jobs.kill(job.id)
+
+    @pytest.mark.asyncio
+    async def xtest_exec_tty(
+        self,
+        job_factory: JobFactory,
+        platform_api_client: PlatformApiClient,
+        jobs_service: JobsService,
+        user: User,
+        registry_host: str,
+        image_tag: str,
+        wait_for_job_docker_client: Callable[[str], Awaitable[None]],
+    ) -> None:
+        resources = Resources(
+            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+        )
+        job = await job_factory("alpine:latest", "sleep 300", resources,)
+        await self.wait_for_job_running(job, platform_api_client)
+
+        await wait_for_job_docker_client(job.id)
+
+        exec_id = await jobs_service.exec_create(job, "sh", tty=True, stdin=True)
+        ret = await jobs_service.exec_inspect(job, exec_id)
+        async with timeout(30):
+            while not ret["Running"]:
+                ret = await jobs_service.exec_inspect(job, exec_id)
+        await jobs_service.exec_resize(job, exec_id, w=120, h=15)
+        async with jobs_service.exec_start(job, exec_id) as stream:
+            assert await expect_prompt(stream) == b"/ # "
+            await stream.write_in(b"echo 'abc'\n")
+            assert await expect_prompt(stream) == b"echo 'abc'\r\nabc\r\n/ # "
+            await stream.write_in(b"exit 1\n")
+            assert await expect_prompt(stream) == b"exit 1\r\n"
+
+        ret = await jobs_service.exec_inspect(job, exec_id)
+        assert ret["ExitCode"] == 1
         await platform_api_client.jobs.kill(job.id)

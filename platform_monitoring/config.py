@@ -5,6 +5,9 @@ from typing import Optional, Sequence
 from yarl import URL
 
 
+DOCKER_API_VERSION = "v1.39"
+
+
 @dataclass(frozen=True)
 class ServerConfig:
     host: str = "0.0.0.0"

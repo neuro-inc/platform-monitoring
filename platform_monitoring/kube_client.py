@@ -129,9 +129,13 @@ class KubeClient:
     async def init(self) -> None:
         self._client = await self.create_http_client()
 
-    async def create_http_client(self) -> aiohttp.ClientSession:
+    async def create_http_client(
+        self, *, force_close: bool = False
+    ) -> aiohttp.ClientSession:
         connector = aiohttp.TCPConnector(
-            limit=self._conn_pool_size, ssl=self._create_ssl_context()
+            limit=self._conn_pool_size,
+            ssl=self._create_ssl_context(),
+            force_close=force_close,
         )
         if self._auth_type == KubeClientAuthType.TOKEN:
             token = self._token
