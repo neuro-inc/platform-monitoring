@@ -512,3 +512,39 @@ class TestJobsService:
         ret = await jobs_service.exec_inspect(job, exec_id)
         assert ret["ExitCode"] == 1
         await platform_api_client.jobs.kill(job.id)
+
+    @pytest.mark.asyncio
+    async def test_exec_tty_2(
+        self,
+        job_factory: JobFactory,
+        platform_api_client: PlatformApiClient,
+        jobs_service: JobsService,
+        user: User,
+        registry_host: str,
+        image_tag: str,
+        wait_for_job_docker_client: Callable[[str], Awaitable[None]],
+    ) -> None:
+        resources = Resources(
+            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+        )
+        job = await job_factory("alpine:latest", "sleep 300", resources,)
+        await self.wait_for_job_running(job, platform_api_client)
+
+        await wait_for_job_docker_client(job.id)
+
+        exec_id = await jobs_service.exec_create(job, "sh", tty=True, stdin=True)
+        ret = await jobs_service.exec_inspect(job, exec_id)
+        async with timeout(30):
+            while not ret["Running"]:
+                ret = await jobs_service.exec_inspect(job, exec_id)
+        await jobs_service.exec_resize(job, exec_id, w=120, h=15)
+        async with jobs_service.exec_start(job, exec_id) as stream:
+            assert await expect_prompt(stream) == b"/ # "
+            await stream.write_in(b"echo 'abc'\n")
+            assert await expect_prompt(stream) == b"echo 'abc'\r\nabc\r\n/ # "
+            await stream.write_in(b"exit 1\n")
+            assert await expect_prompt(stream) == b"exit 1\r\n"
+
+        ret = await jobs_service.exec_inspect(job, exec_id)
+        assert ret["ExitCode"] == 1
+        await platform_api_client.jobs.kill(job.id)
