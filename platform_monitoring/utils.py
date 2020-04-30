@@ -29,25 +29,11 @@ class LogReaderFactory:
 
 
 class JobsHelper:
-    def __init__(self, cluster_name: str) -> None:
-        self._cluster_name = cluster_name
-
     def is_job_running(self, job: Job) -> bool:
         return job.status == JobStatus.RUNNING
 
     def is_job_finished(self, job: Job) -> bool:
         return job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED)
-
-    def job_to_uri(self, job: Job) -> str:
-        base_uri = "job:"
-        if self._cluster_name:
-            base_uri += "//" + self._cluster_name
-            if job.owner:
-                base_uri += "/" + job.owner
-        else:
-            if job.owner:
-                base_uri += "//" + job.owner
-        return f"{base_uri}/{job.id}"
 
 
 class KubeHelper:
