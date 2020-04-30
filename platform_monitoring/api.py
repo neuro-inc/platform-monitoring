@@ -282,7 +282,7 @@ class MonitoringApiHandler:
         w = int(request.query.get("w", "80"))
         h = int(request.query.get("h", "25"))
 
-        permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="write")
+        permission = Permission(uri=str(job.uri), action="write")
         logger.info("Checking whether %r has %r", user, permission)
         await check_permissions(request, [permission])
 
@@ -304,7 +304,7 @@ class MonitoringApiHandler:
         if not (stdin or stdout or stderr):
             raise ValueError("Required at least one of stdin, stdout or stderr")
 
-        permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="write")
+        permission = Permission(uri=str(job.uri), action="write")
         logger.info("Checking whether %r has %r", user, permission)
         await check_permissions(request, [permission])
 
@@ -331,7 +331,7 @@ class MonitoringApiHandler:
         stderr = _parse_bool(request.query.get("stderr", "0"))
         tty = _parse_bool(request.query.get("tty", "0"))
 
-        permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="write")
+        permission = Permission(uri=str(job.uri), action="write")
         logger.info("Checking whether %r has %r", user, permission)
         await check_permissions(request, [permission])
 
@@ -346,7 +346,7 @@ class MonitoringApiHandler:
         job = await self._get_job(job_id)
         exec_id = request.match_info["exec_id"]
 
-        permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="write")
+        permission = Permission(uri=str(job.uri), action="write")
         logger.info("Checking whether %r has %r", user, permission)
         await check_permissions(request, [permission])
 
@@ -362,7 +362,7 @@ class MonitoringApiHandler:
         job = await self._get_job(job_id)
         exec_id = request.match_info["exec_id"]
 
-        permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="write")
+        permission = Permission(uri=str(job.uri), action="write")
         logger.info("Checking whether %r has %r", user, permission)
         await check_permissions(request, [permission])
 
@@ -375,7 +375,7 @@ class MonitoringApiHandler:
         job = await self._get_job(job_id)
         exec_id = request.match_info["exec_id"]
 
-        permission = Permission(uri=self._jobs_helper.job_to_uri(job), action="write")
+        permission = Permission(uri=str(job.uri), action="write")
         logger.info("Checking whether %r has %r", user, permission)
         await check_permissions(request, [permission])
 
