@@ -498,8 +498,9 @@ class TestJobsService:
 
         exec_id = await jobs_service.exec_create(job, "sh", tty=True, stdin=True)
         ret = await jobs_service.exec_inspect(job, exec_id)
-        async with timeout(30):
+        async with timeout(60):
             while not ret["Running"]:
+                await asyncio.sleep(1)
                 ret = await jobs_service.exec_inspect(job, exec_id)
         await jobs_service.exec_resize(job, exec_id, w=120, h=15)
         async with jobs_service.exec_start(job, exec_id) as stream:
