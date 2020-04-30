@@ -478,7 +478,7 @@ class TestJobsService:
         await platform_api_client.jobs.kill(job.id)
 
     @pytest.mark.asyncio
-    async def test_exec_tty(
+    async def xtest_exec_tty(
         self,
         job_factory: JobFactory,
         platform_api_client: PlatformApiClient,
