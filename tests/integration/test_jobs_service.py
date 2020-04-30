@@ -361,7 +361,7 @@ class TestJobsService:
                 pass
 
     @pytest.mark.asyncio
-    async def xtest_attach_ok(
+    async def test_attach_ok(
         self,
         job_factory: JobFactory,
         platform_api_client: PlatformApiClient,
@@ -396,7 +396,7 @@ class TestJobsService:
         await platform_api_client.jobs.kill(job.id)
 
     @pytest.mark.asyncio
-    async def xtest_attach_tty(
+    async def test_attach_tty(
         self,
         job_factory: JobFactory,
         platform_api_client: PlatformApiClient,
@@ -478,7 +478,7 @@ class TestJobsService:
         await platform_api_client.jobs.kill(job.id)
 
     @pytest.mark.asyncio
-    async def xtest_exec_tty(
+    async def test_exec_tty(
         self,
         job_factory: JobFactory,
         platform_api_client: PlatformApiClient,
