@@ -92,13 +92,13 @@ async def expect_prompt(stream: Stream) -> bytes:
     try:
         ret: bytes = b""
         async with timeout(3):
-            while b"/ #" not in ret:
+            while not ret.endswith(b"/ #"):
                 msg = await stream.read_out()
                 if msg is None:
                     break
                 assert msg.stream == 1
-                ret += msg.data
-            return _ansi_re.sub(b"", ret)
+                ret += _ansi_re.sub(b"", msg.data)
+            return ret
     except asyncio.TimeoutError:
         raise AssertionError(f"[Timeout] {ret!r}")
 
@@ -498,16 +498,12 @@ class TestJobsService:
         await wait_for_job_docker_client(job.id)
 
         exec_id = await jobs_service.exec_create(job, "sh", tty=True, stdin=True)
-        # ret = await jobs_service.exec_inspect(job, exec_id)
-        # async with timeout(60):
-        #     while not ret["Running"]:
-        #         await asyncio.sleep(1)
-        #         ret = await jobs_service.exec_inspect(job, exec_id)
         async with jobs_service.exec_start(job, exec_id) as stream:
             await jobs_service.exec_resize(job, exec_id, w=120, h=15)
             assert await expect_prompt(stream) == b"/ # "
             await stream.write_in(b"echo 'abc'\n")
             assert await expect_prompt(stream) == b"echo 'abc'\r\nabc\r\n/ # "
+            # assert await expect_prompt(stream) == b"echo 'abc'\r\nabc\r\n/ # "
             await stream.write_in(b"exit 1\n")
             assert await expect_prompt(stream) == b"exit 1\r\n"
 
