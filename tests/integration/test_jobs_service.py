@@ -88,6 +88,7 @@ async def wait_for_job_docker_client(
 
 
 async def expect_prompt(stream: Stream) -> bytes:
+    _ansi_re = re.compile(r"\033\[[;?0-9]*[a-zA-Z]")
     try:
         ret: bytes = b""
         async with timeout(3):
@@ -97,7 +98,7 @@ async def expect_prompt(stream: Stream) -> bytes:
                     break
                 assert msg.stream == 1
                 ret += msg.data
-            return ret.replace(b"\x1b[6n", b"")
+            return _ansi_re.sub("", ret)
     except asyncio.TimeoutError:
         raise AssertionError(f"[Timeout] {ret!r}")
 
