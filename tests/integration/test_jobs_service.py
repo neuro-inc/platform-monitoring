@@ -92,7 +92,7 @@ async def expect_prompt(stream: Stream) -> bytes:
     try:
         ret: bytes = b""
         async with timeout(3):
-            while not ret.endswith(b"/ #"):
+            while not ret.strip().endswith(b"/ #"):
                 msg = await stream.read_out()
                 if msg is None:
                     break
