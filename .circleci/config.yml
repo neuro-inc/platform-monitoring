@@ -21,7 +21,7 @@ jobs:
 
       - restore_cache:
           keys:
-          - v1-dependencies-python_3.7.2-{{ checksum "setup.py" }}-{{ checksum "requirements/syntax.txt" }}-{{ checksum "requirements/test.txt" }}
+          - v1-dependencies-python_3.7.0-{{ checksum "setup.py" }}-{{ checksum "requirements/syntax.txt" }}-{{ checksum "requirements/test.txt" }}
 
       - run:
           name: Configuring Docker Client
@@ -71,7 +71,7 @@ jobs:
       - save_cache:
           paths:
             - venv
-          key: v1-dependencies-python_3.7.2-{{ checksum "setup.py" }}-{{ checksum "requirements/syntax.txt" }}-{{ checksum "requirements/test.txt" }}
+          key: v1-dependencies-python_3.7.0-{{ checksum "setup.py" }}-{{ checksum "requirements/syntax.txt" }}-{{ checksum "requirements/test.txt" }}
 
       - run:
           name: Running Static Code Analysis
