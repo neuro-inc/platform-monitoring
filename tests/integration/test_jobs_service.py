@@ -88,16 +88,17 @@ async def wait_for_job_docker_client(
 
 
 async def expect_prompt(stream: Stream) -> bytes:
+    _ansi_re = re.compile(br"\033\[[;?0-9]*[a-zA-Z]")
     try:
         ret: bytes = b""
         async with timeout(3):
-            while b"/ #" not in ret:
+            while not ret.strip().endswith(b"/ #"):
                 msg = await stream.read_out()
                 if msg is None:
                     break
                 assert msg.stream == 1
-                ret += msg.data
-            return ret.replace(b"\x1b[6n", b"")
+                ret += _ansi_re.sub(b"", msg.data)
+            return ret
     except asyncio.TimeoutError:
         raise AssertionError(f"[Timeout] {ret!r}")
 
@@ -478,7 +479,7 @@ class TestJobsService:
         await platform_api_client.jobs.kill(job.id)
 
     @pytest.mark.asyncio
-    async def xtest_exec_tty(
+    async def test_exec_tty(
         self,
         job_factory: JobFactory,
         platform_api_client: PlatformApiClient,
@@ -497,14 +498,11 @@ class TestJobsService:
         await wait_for_job_docker_client(job.id)
 
         exec_id = await jobs_service.exec_create(job, "sh", tty=True, stdin=True)
-        ret = await jobs_service.exec_inspect(job, exec_id)
-        async with timeout(30):
-            while not ret["Running"]:
-                ret = await jobs_service.exec_inspect(job, exec_id)
-        await jobs_service.exec_resize(job, exec_id, w=120, h=15)
         async with jobs_service.exec_start(job, exec_id) as stream:
+            await jobs_service.exec_resize(job, exec_id, w=120, h=15)
             assert await expect_prompt(stream) == b"/ # "
             await stream.write_in(b"echo 'abc'\n")
+            assert await expect_prompt(stream) == b"\r/ # "
             assert await expect_prompt(stream) == b"echo 'abc'\r\nabc\r\n/ # "
             await stream.write_in(b"exit 1\n")
             assert await expect_prompt(stream) == b"exit 1\r\n"
