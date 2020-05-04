@@ -70,7 +70,7 @@ class JobsService:
                     yield {"status": "CommitFinished"}
 
                     push_auth = dict(username=user.name, password=user.token)
-                    async for chunk in docker.images.push(  # type: ignore
+                    async for chunk in docker.images.push(
                         name=repo, tag=tag, auth=push_auth, stream=True
                     ):
                         yield chunk
