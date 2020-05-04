@@ -384,6 +384,7 @@ class TestJobsService:
         await asyncio.sleep(5)
 
         job = await platform_api_client.jobs.status(job.id)
+        print(job)
         # await jobs_service.resize(job, w=80, h=25)
 
         async with jobs_service.attach(
