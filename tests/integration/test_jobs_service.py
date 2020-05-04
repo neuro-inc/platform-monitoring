@@ -417,7 +417,7 @@ class TestJobsService:
         await jobs_service.resize(job, w=80, h=25)
 
         async with jobs_service.attach(
-            job, stdin=True, stdout=True, stderr=True, logs=False
+            job, stdin=True, stdout=True, stderr=True, logs=True
         ) as stream:
             assert await expect_prompt(stream) == b"/ # "
             await stream.write_in(b"echo 'abc'\n")
