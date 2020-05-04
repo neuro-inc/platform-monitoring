@@ -294,12 +294,10 @@ class MonitoringApiHandler:
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
 
-        w = int(request.query.get("w", "80"))
-        h = int(request.query.get("h", "25"))
         stdin = _parse_bool(request.query.get("stdin", "0"))
-        stdout = _parse_bool(request.query.get("stdout", "0"))
-        stderr = _parse_bool(request.query.get("stderr", "0"))
-        logs = _parse_bool(request.query.get("logs", "0"))
+        stdout = _parse_bool(request.query.get("stdout", "1"))
+        stderr = _parse_bool(request.query.get("stderr", "1"))
+        logs = _parse_bool(request.query.get("logs", "1"))
 
         if not (stdin or stdout or stderr):
             raise ValueError("Required at least one of stdin, stdout or stderr")
@@ -307,8 +305,6 @@ class MonitoringApiHandler:
         permission = Permission(uri=str(job.uri), action="write")
         logger.info("Checking whether %r has %r", user, permission)
         await check_permissions(request, [permission])
-
-        await self._jobs_service.resize(job, w=w, h=h)
 
         response = WebSocketResponse()
         await response.prepare(request)
@@ -326,9 +322,10 @@ class MonitoringApiHandler:
         job = await self._get_job(job_id)
 
         cmd = shlex.split(request.query["cmd"])
-        stdin = _parse_bool(request.query.get("stdin", "1"))
+        stdin = _parse_bool(request.query.get("stdin", "0"))
         stdout = _parse_bool(request.query.get("stdout", "1"))
-        stderr = _parse_bool(request.query.get("stderr", "0"))
+
+        stderr = _parse_bool(request.query.get("stderr", "1"))
         tty = _parse_bool(request.query.get("tty", "0"))
 
         permission = Permission(uri=str(job.uri), action="write")
