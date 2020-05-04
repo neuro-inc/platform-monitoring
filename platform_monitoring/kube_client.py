@@ -249,6 +249,11 @@ class KubeClient:
         self, host: str, port: int
     ) -> AsyncIterator[ProxyClient]:
         assert self._client
+        # return f"{self._api_v1_url}/nodes/{name}:{port}/proxy"
+
+        url = URL(f"{self._api_v1_url}/pods").with_query("fieldSelector"=12,
+        "labelSelector"=23)
+
         yield ProxyClient(
             url=self._get_node_proxy_url(host, port), session=self._client
         )
