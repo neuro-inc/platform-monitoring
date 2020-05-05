@@ -62,6 +62,11 @@ def random_str(length: int = 8) -> str:
     return str(uuid1())[:length]
 
 
+@pytest.fixture(scope="session")
+def minikube_ip() -> str:
+    return subprocess.check_output(("minikube", "ip"), text=True).strip()
+
+
 @pytest.fixture
 async def client() -> AsyncIterator[aiohttp.ClientSession]:
     async with aiohttp.ClientSession() as session:
@@ -134,10 +139,11 @@ async def es_client(es_config: ElasticsearchConfig) -> AsyncIterator[Elasticsear
 
 
 @pytest.fixture
-async def registry_config() -> RegistryConfig:
-    url = URL("http://localhost:5000")
-    await wait_for_service("docker registry", url / "v2/", timeout_s=120)
-    return RegistryConfig(url)
+async def registry_config(minikube_ip: str) -> RegistryConfig:
+    external_url = URL(f"http://{minikube_ip}:5000")
+    await wait_for_service("docker registry", external_url / "v2/", timeout_s=120)
+    # localhost will be insecure by default, so use that
+    return RegistryConfig(URL("http://localhost:5000"))
 
 
 @pytest.fixture
