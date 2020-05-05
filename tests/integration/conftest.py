@@ -140,9 +140,10 @@ async def es_client(es_config: ElasticsearchConfig) -> AsyncIterator[Elasticsear
 
 @pytest.fixture
 async def registry_config(minikube_ip: str) -> RegistryConfig:
-    url = URL(f"http://{minikube_ip}:5000")
-    await wait_for_service("docker registry", url / "v2/", timeout_s=120)
-    return RegistryConfig(url)
+    external_url = URL(f"http://{minikube_ip}:5000")
+    await wait_for_service("docker registry", external_url / "v2/", timeout_s=120)
+    # localhost will be insecure by default, so use that
+    return RegistryConfig(URL("http://localhost:5000"))
 
 
 @pytest.fixture
