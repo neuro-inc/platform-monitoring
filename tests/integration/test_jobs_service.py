@@ -362,7 +362,7 @@ class TestJobsService:
                 pass
 
     @pytest.mark.asyncio
-    async def xtest_attach_ok(
+    async def test_attach_ok(
         self,
         job_factory: JobFactory,
         platform_api_client: PlatformApiClient,
@@ -381,10 +381,8 @@ class TestJobsService:
             tty=False,
         )
         await self.wait_for_job_running(job, platform_api_client)
-        await asyncio.sleep(5)
 
         job = await platform_api_client.jobs.status(job.id)
-        await jobs_service.resize(job, w=80, h=25)
 
         async with jobs_service.attach(
             job, stdin=False, stdout=True, stderr=True, logs=True
@@ -397,7 +395,7 @@ class TestJobsService:
         await platform_api_client.jobs.kill(job.id)
 
     @pytest.mark.asyncio
-    async def xtest_attach_tty(
+    async def test_attach_tty(
         self,
         job_factory: JobFactory,
         platform_api_client: PlatformApiClient,
@@ -411,7 +409,6 @@ class TestJobsService:
         )
         job = await job_factory("alpine:latest", "sh", resources, tty=True,)
         await self.wait_for_job_running(job, platform_api_client)
-        await asyncio.sleep(1)
 
         job = await platform_api_client.jobs.status(job.id)
         await jobs_service.resize(job, w=80, h=25)
@@ -419,13 +416,24 @@ class TestJobsService:
         async with jobs_service.attach(
             job, stdin=True, stdout=True, stderr=True, logs=False
         ) as stream:
-            assert await expect_prompt(stream) == b"/ # "
+            # We can't be sure if we connect before inital prompt or after
+            try:
+                await asyncio.wait_for(stream.read_out(), timeout=0.2)
+            except asyncio.TimeoutError:
+                pass
+
+            await stream.write_in(b"\n")
+            assert await expect_prompt(stream) == b"\r\n/ # "
             await stream.write_in(b"echo 'abc'\n")
             assert await expect_prompt(stream) == b"echo 'abc'\r\nabc\r\n/ # "
             await stream.write_in(b"exit 1\n")
             assert await expect_prompt(stream) == b"exit 1\r\n"
 
-        job = await platform_api_client.jobs.status(job.id)
+        for r in range(10):
+            job = await platform_api_client.jobs.status(job.id)
+            if job.status != JobStatus.RUNNING:
+                break
+            await asyncio.sleep(1)
         assert job.history.exit_code == 1
 
     @pytest.mark.asyncio
