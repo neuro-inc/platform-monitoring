@@ -71,6 +71,14 @@ class Pod:
     def is_phase_running(self) -> bool:
         return self._status_payload.get("phase") == "Running"
 
+    @property
+    def pod_ip(self) -> str:
+        return self._status_payload["podIP"]
+
+    @property
+    def host_ip(self) -> str:
+        return self._status_payload["hostIP"]
+
 
 class KubeClient:
     def __init__(

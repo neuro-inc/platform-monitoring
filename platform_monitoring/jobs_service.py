@@ -47,36 +47,27 @@ class JobsService:
         pod = await self._get_running_jobs_pod(pod_name)
         cont_id = pod.get_container_id(pod_name)
         assert cont_id
-        async with self._kube_client.get_node_proxy_client(
-            pod.node_name, self._docker_config.docker_engine_api_port
-        ) as proxy_client:
-            session = await self._kube_client.create_http_client()
-            async with Docker(
-                url=str(proxy_client.url),
-                session=session,
-                connector=session.connector,
-                api_version=DOCKER_API_VERSION,
-            ) as docker:
-                try:
-                    repo = container.image.repository
-                    tag = container.image.tag
+        async with self._get_docker_client(pod) as docker:
+            try:
+                repo = container.image.repository
+                tag = container.image.tag
 
-                    yield {
-                        "status": "CommitStarted",
-                        "details": {"container": cont_id, "image": f"{repo}:{tag}"},
-                    }
-                    await docker.images.commit(container=cont_id, repo=repo, tag=tag)  # type: ignore  # noqa
-                    # TODO (A.Yushkovskiy) check result of commit() and break if failed
-                    yield {"status": "CommitFinished"}
+                yield {
+                    "status": "CommitStarted",
+                    "details": {"container": cont_id, "image": f"{repo}:{tag}"},
+                }
+                await docker.images.commit(container=cont_id, repo=repo, tag=tag)  # type: ignore  # noqa
+                # TODO (A.Yushkovskiy) check result of commit() and break if failed
+                yield {"status": "CommitFinished"}
 
-                    push_auth = dict(username=user.name, password=user.token)
-                    async for chunk in docker.images.push(
-                        name=repo, tag=tag, auth=push_auth, stream=True
-                    ):
-                        yield chunk
+                push_auth = dict(username=user.name, password=user.token)
+                async for chunk in docker.images.push(
+                    name=repo, tag=tag, auth=push_auth, stream=True
+                ):
+                    yield chunk
 
-                except DockerError as error:
-                    raise JobException(f"Failed to save job '{job.id}': {error}")
+            except DockerError as error:
+                raise JobException(f"Failed to save job '{job.id}': {error}")
 
     @asynccontextmanager
     async def attach(
@@ -92,21 +83,12 @@ class JobsService:
         pod = await self._get_running_jobs_pod(pod_name)
         cont_id = pod.get_container_id(pod_name)
 
-        async with self._kube_client.get_node_proxy_client(
-            pod.node_name, self._docker_config.docker_engine_api_port
-        ) as proxy_client:
-            session = await self._kube_client.create_http_client(force_close=True)
-            async with Docker(
-                url=str(proxy_client.url),
-                session=session,
-                connector=session.connector,
-                api_version=DOCKER_API_VERSION,
-            ) as docker:
-                container = docker.containers.container(cont_id)
-                async with container.attach(
-                    stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
-                ) as stream:
-                    yield stream
+        async with self._get_docker_client(pod) as docker:
+            container = docker.containers.container(cont_id)
+            async with container.attach(
+                stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
+            ) as stream:
+                yield stream
 
     async def resize(self, job: Job, *, w: int, h: int) -> None:
         pod_name = self._kube_helper.get_job_pod_name(job)
@@ -114,18 +96,10 @@ class JobsService:
         pod = await self._get_running_jobs_pod(pod_name)
         cont_id = pod.get_container_id(pod_name)
         assert cont_id
-        async with self._kube_client.get_node_proxy_client(
-            pod.node_name, self._docker_config.docker_engine_api_port
-        ) as proxy_client:
-            session = await self._kube_client.create_http_client(force_close=True)
-            async with Docker(
-                url=str(proxy_client.url),
-                session=session,
-                connector=session.connector,
-                api_version=DOCKER_API_VERSION,
-            ) as docker:
-                container = docker.containers.container(cont_id)
-                await container.resize(w=w, h=h)
+
+        async with self._get_docker_client(pod) as docker:
+            container = docker.containers.container(cont_id)
+            await container.resize(w=w, h=h)
 
     async def exec_create(
         self,
@@ -139,71 +113,35 @@ class JobsService:
         pod_name = self._kube_helper.get_job_pod_name(job)
         pod = await self._get_running_jobs_pod(pod_name)
         cont_id = pod.get_container_id(pod_name)
-        async with self._kube_client.get_node_proxy_client(
-            pod.node_name, self._docker_config.docker_engine_api_port
-        ) as proxy_client:
-            session = await self._kube_client.create_http_client(force_close=True)
-            async with Docker(
-                url=str(proxy_client.url),
-                session=session,
-                connector=session.connector,
-                api_version=DOCKER_API_VERSION,
-            ) as docker:
-                container = docker.containers.container(cont_id)
-                exe = await container.exec(
-                    cmd=cmd, stdin=stdin, stdout=stdout, stderr=stderr, tty=tty
-                )
-                return exe.id
+        async with self._get_docker_client(pod) as docker:
+            container = docker.containers.container(cont_id)
+            exe = await container.exec(
+                cmd=cmd, stdin=stdin, stdout=stdout, stderr=stderr, tty=tty
+            )
+            return exe.id
 
     async def exec_resize(self, job: Job, exec_id: str, *, w: int, h: int) -> None:
         pod_name = self._kube_helper.get_job_pod_name(job)
         pod = await self._get_running_jobs_pod(pod_name)
-        async with self._kube_client.get_node_proxy_client(
-            pod.node_name, self._docker_config.docker_engine_api_port
-        ) as proxy_client:
-            session = await self._kube_client.create_http_client(force_close=True)
-            async with Docker(
-                url=str(proxy_client.url),
-                session=session,
-                connector=session.connector,
-                api_version=DOCKER_API_VERSION,
-            ) as docker:
-                exe = docker.containers.exec(exec_id)
-                await exe.resize(w=w, h=h)
+        async with self._get_docker_client(pod) as docker:
+            exe = docker.containers.exec(exec_id)
+            await exe.resize(w=w, h=h)
 
     async def exec_inspect(self, job: Job, exec_id: str) -> Dict[str, Any]:
         pod_name = self._kube_helper.get_job_pod_name(job)
         pod = await self._get_running_jobs_pod(pod_name)
-        async with self._kube_client.get_node_proxy_client(
-            pod.node_name, self._docker_config.docker_engine_api_port
-        ) as proxy_client:
-            session = await self._kube_client.create_http_client(force_close=True)
-            async with Docker(
-                url=str(proxy_client.url),
-                session=session,
-                connector=session.connector,
-                api_version=DOCKER_API_VERSION,
-            ) as docker:
-                exe = docker.containers.exec(exec_id)
-                return await exe.inspect()
+        async with self._get_docker_client(pod) as docker:
+            exe = docker.containers.exec(exec_id)
+            return await exe.inspect()
 
     @asynccontextmanager
     async def exec_start(self, job: Job, exec_id: str,) -> AsyncIterator[Stream]:
         pod_name = self._kube_helper.get_job_pod_name(job)
         pod = await self._get_running_jobs_pod(pod_name)
-        async with self._kube_client.get_node_proxy_client(
-            pod.node_name, self._docker_config.docker_engine_api_port
-        ) as proxy_client:
-            session = await self._kube_client.create_http_client(force_close=True)
-            async with Docker(
-                url=str(proxy_client.url),
-                session=session,
-                connector=session.connector,
-                api_version=DOCKER_API_VERSION,
-            ) as docker:
-                exe = docker.containers.exec(exec_id)
-                async with exe.start(detach=False) as stream:
-                    yield stream
+        async with self._get_docker_client(pod) as docker:
+            exe = docker.containers.exec(exec_id)
+            async with exe.start(detach=False) as stream:
+                yield stream
 
     async def _get_running_jobs_pod(self, job_id: str) -> Pod:
         pod: Optional[Pod]
@@ -219,3 +157,23 @@ class JobsService:
             raise JobException(f"Job '{job_id}' is not running.")
 
         return pod
+
+    @asynccontextmanager
+    async def _get_docker_client(
+        self, pod: Pod, force_close: bool = True
+    ) -> AsyncIterator[Docker]:
+        # NOTE: because Docker socket is wrapped in a proxy it may delay socket
+        # disconnects, making the keep-alive socket taken from pool not reliable (it
+        # may have already disconnected). We did see some examples of such behaviour
+        # with Nginx. Thus we end up with "force-close" to recycle the socket after
+        # each connection to be sure we can execute the command safely.
+
+        url = f"http://{pod.host_ip}:{self._docker_config.docker_engine_api_port}"
+        session = await self._kube_client.create_http_client(force_close=force_close)
+        async with Docker(
+            url=url,
+            session=session,
+            connector=session.connector,
+            api_version=DOCKER_API_VERSION,
+        ) as docker:
+            yield docker
