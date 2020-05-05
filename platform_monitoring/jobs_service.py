@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict, Optional, Sequence
+from typing import Any, AsyncIterator, Dict, Optional, Sequence, cast
 
 from aiodocker.exceptions import DockerError
 from aiodocker.stream import Stream
@@ -176,4 +176,5 @@ class JobsService:
             connector=session.connector,
             api_version=DOCKER_API_VERSION,
         ) as docker:
-            yield docker
+            # from "aiodocker.docker.Docker" to ".docker_client.Docker"
+            yield cast(Docker, docker)
