@@ -821,9 +821,9 @@ class TestSaveApi:
 
                 error = chunks[1]["error"]
                 assert (
-                    f"Failed to save job '{infinite_job}': DockerError(503" in error
+                    f"Failed to save job '{infinite_job}': DockerError(900" in error
                 ), debug
-                assert "connection refused" in error, debug
+                assert "Connect call failed" in error, debug
 
     @pytest.mark.asyncio
     async def test_save_ok(
