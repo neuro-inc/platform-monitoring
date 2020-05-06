@@ -42,11 +42,15 @@ async def expect_prompt(ws: aiohttp.ClientWebSocketResponse) -> bytes:
         ret: bytes = b""
         async with timeout(3):
             while not ret.strip().endswith(b"/ #"):
-                msg = await ws.receive_bytes()
-                if msg is None:
+                msg = await ws.receive()
+                if msg.type in (
+                    aiohttp.WSMsgType.CLOSE,
+                    aiohttp.WSMsgType.CLOSING,
+                    aiohttp.WSMsgType.CLOSED,
+                ):
                     break
-                assert msg[0] == 1
-                ret += _ansi_re.sub(b"", msg[1:])
+                assert msg.data[0] == 1
+                ret += _ansi_re.sub(b"", msg.data[1:])
             return ret
     except asyncio.TimeoutError:
         raise AssertionError(f"[Timeout] {ret!r}")
