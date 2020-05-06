@@ -362,14 +362,11 @@ class TestJobsService:
                 pass
 
     @pytest.mark.asyncio
-    async def test_attach_ok(
+    async def test_attach_nontty(
         self,
         job_factory: JobFactory,
         platform_api_client: PlatformApiClient,
         jobs_service: JobsService,
-        user: User,
-        registry_host: str,
-        image_tag: str,
     ) -> None:
         resources = Resources(
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
@@ -400,9 +397,6 @@ class TestJobsService:
         job_factory: JobFactory,
         platform_api_client: PlatformApiClient,
         jobs_service: JobsService,
-        user: User,
-        registry_host: str,
-        image_tag: str,
     ) -> None:
         resources = Resources(
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
@@ -442,9 +436,6 @@ class TestJobsService:
         job_factory: JobFactory,
         platform_api_client: PlatformApiClient,
         jobs_service: JobsService,
-        user: User,
-        registry_host: str,
-        image_tag: str,
     ) -> None:
         resources = Resources(
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
@@ -467,9 +458,6 @@ class TestJobsService:
         job_factory: JobFactory,
         platform_api_client: PlatformApiClient,
         jobs_service: JobsService,
-        user: User,
-        registry_host: str,
-        image_tag: str,
     ) -> None:
         resources = Resources(
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
@@ -492,9 +480,6 @@ class TestJobsService:
         job_factory: JobFactory,
         platform_api_client: PlatformApiClient,
         jobs_service: JobsService,
-        user: User,
-        registry_host: str,
-        image_tag: str,
         wait_for_job_docker_client: Callable[[str], Awaitable[None]],
     ) -> None:
         resources = Resources(
