@@ -990,12 +990,15 @@ class TestSaveApi:
             await ws.send_bytes(b"exit 1\n")
             assert await expect_prompt(ws) == b"exit 1\r\n"
 
-        # for r in range(10):
-        #     job = await platform_api_client.jobs.status(job.id)
-        #     if job.status != JobStatus.RUNNING:
-        #         break
-        #     await asyncio.sleep(1)
-        # assert job.history.exit_code == 1
+        url = platform_api.jobs_base_url
+        for r in range(10):
+            async with client.post(url, headers=headers, json=job_submit) as response:
+                assert response.status == 202
+                result = await response.json()
+                if result["status"] in ["succeeded", "failed"]:
+                    break
+
+        assert result["history"]["exit_code"] == 1
 
     # @pytest.mark.asyncio
     # async def test_exec_no_tty_stdout(
