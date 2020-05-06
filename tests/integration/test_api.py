@@ -885,10 +885,6 @@ class TestSaveApi:
         config: Config,
         wait_for_job_docker_client: None,
         job_submit: Dict[str, Any],
-        self,
-        job_factory: JobFactory,
-        platform_api_client: PlatformApiClient,
-        jobs_service: JobsService,
     ) -> None:
         command = 'bash -c "for i in {1..10}; do echo $i; sleep 1; done"'
         job_submit["container"]["command"] = command
@@ -906,19 +902,14 @@ class TestSaveApi:
         url = monitoring_api.generate_attach_url(job_id=job_id)
         headers = jobs_client.headers
 
-        url = url.with_query(
-            "stdin"="0",
-            "stdout"="1",
-            "stderr"="1",
-            "logs"="1",
-        )
+        url2 = URL(url).with_query(stdin="0", stdout="1", stderr="1", logs="1",)
 
         content = []
-        async with client.ws_connect(url, method="POST", headers=headers) as ws:
+        async with client.ws_connect(url2, method="POST", headers=headers) as ws:
             async for msg in ws:
                 content.append(msg.data)
 
-        assert b''.join(content) == b""
+        assert b"".join(content) == b""
 
     # @pytest.mark.asyncio
     # async def test_attach_tty(
@@ -1003,7 +994,8 @@ class TestSaveApi:
     #     job = await job_factory("alpine:latest", "sleep 300", resources,)
     #     await self.wait_for_job_running(job, platform_api_client)
 
-    #     exec_id = await jobs_service.exec_create(job, "sh -c 'sleep 5; echo abc 1>&2'")
+    #     exec_id = await jobs_service.exec_create(
+    #          job, "sh -c 'sleep 5; echo abc 1>&2'")
     #     async with jobs_service.exec_start(job, exec_id) as stream:
     #         data = await stream.read_out()
     #         assert data is not None
