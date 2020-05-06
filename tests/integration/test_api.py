@@ -36,6 +36,22 @@ from .conftest import ApiAddress, create_local_app_server
 from .conftest_auth import _User
 
 
+async def expect_prompt(ws: aiohttp.ClientWebSocketResponse) -> bytes:
+    _ansi_re = re.compile(br"\033\[[;?0-9]*[a-zA-Z]")
+    try:
+        ret: bytes = b""
+        async with timeout(3):
+            while not ret.strip().endswith(b"/ #"):
+                msg = await ws.receive_bytes()
+                if msg is None:
+                    break
+                assert msg[0] == 1
+                ret += _ansi_re.sub(b"", msg[1:])
+            return ret
+    except asyncio.TimeoutError:
+        raise AssertionError(f"[Timeout] {ret!r}")
+
+
 @dataclass(frozen=True)
 class MonitoringApiEndpoints:
     address: ApiAddress
@@ -923,7 +939,7 @@ class TestSaveApi:
         assert b"".join(content) == expected
 
     @pytest.mark.asyncio
-    async def xtest_attach_tty(
+    async def test_attach_tty(
         self,
         platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
@@ -962,12 +978,12 @@ class TestSaveApi:
             except asyncio.TimeoutError:
                 pass
 
-        #     await ws.send_bytes(b"\n")
-        #     assert await expect_prompt(ws) == b"\r\n/ # "
-        #     await stream.send_bytes(b"echo 'abc'\n")
-        #     assert await expect_prompt(ws) == b"echo 'abc'\r\nabc\r\n/ # "
-        #     await stream.send_bytes(b"exit 1\n")
-        #     assert await expect_prompt(ws) == b"exit 1\r\n"
+            await ws.send_bytes(b"\n")
+            assert await expect_prompt(ws) == b"\r\n/ # "
+            await ws.send_bytes(b"echo 'abc'\n")
+            assert await expect_prompt(ws) == b"echo 'abc'\r\nabc\r\n/ # "
+            await ws.send_bytes(b"exit 1\n")
+            assert await expect_prompt(ws) == b"exit 1\r\n"
 
         # for r in range(10):
         #     job = await platform_api_client.jobs.status(job.id)
