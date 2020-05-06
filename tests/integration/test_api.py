@@ -41,7 +41,7 @@ async def expect_prompt(ws: aiohttp.ClientWebSocketResponse) -> bytes:
     try:
         ret: bytes = b""
         async with timeout(3):
-            while not ret.strip().endswith(b"/ #"):
+            while not ret.strip().endswith(b"#"):
                 msg = await ws.receive()
                 if msg.type in (
                     aiohttp.WSMsgType.CLOSE,
@@ -930,7 +930,7 @@ class TestSaveApi:
 
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
 
-        url1 = monitoring_api.generate_attach_url(
+    url1 = monitoring_api.generate_attach_url(
             job_id=job_id, stdin=False, stdout=True, stderr=True, logs=True
         )
 
