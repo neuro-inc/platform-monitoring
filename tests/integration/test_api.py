@@ -75,7 +75,9 @@ class MonitoringApiEndpoints:
         logs: bool = False,
     ) -> URL:
         url = self.endpoint / job_id / "attach"
-        return url.with_query(stdin=stdin, stdout=stdout, stderr=stderr, logs=logs)
+        return url.with_query(
+            stdin=int(stdin), stdout=int(stdout), stderr=int(stderr), logs=int(logs)
+        )
 
     def generate_resize_url(self, job_id: str, *, w: int, h: int) -> URL:
         url = self.endpoint / job_id / "resize"
