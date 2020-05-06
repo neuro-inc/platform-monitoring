@@ -65,6 +65,9 @@ class MonitoringApiEndpoints:
     def generate_save_url(self, job_id: str) -> str:
         return f"{self.endpoint}/{job_id}/save"
 
+    def generate_attach_url(self, job_id: str) -> str:
+        return f"{self.endpoint}/{job_id}/attach"
+
 
 @dataclass(frozen=True)
 class PlatformApiEndpoints:
@@ -868,3 +871,176 @@ class TestSaveApi:
             assert chunks[2].get("status") == msg, debug
 
             assert chunks[-1].get("aux", {}).get("Tag") == infinite_job, debug
+
+    @pytest.mark.asyncio
+    async def test_attach_nontty(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        infinite_job: str,
+        kube_client: MyKubeClient,
+        docker_config: DockerConfig,
+        config: Config,
+        wait_for_job_docker_client: None,
+        job_submit: Dict[str, Any],
+        self,
+        job_factory: JobFactory,
+        platform_api_client: PlatformApiClient,
+        jobs_service: JobsService,
+    ) -> None:
+        command = 'bash -c "for i in {1..10}; do echo $i; sleep 1; done"'
+        job_submit["container"]["command"] = command
+        headers = jobs_client.headers
+
+        url = platform_api.jobs_base_url
+        async with client.post(url, headers=headers, json=job_submit) as response:
+            assert response.status == HTTPAccepted.status_code
+            result = await response.json()
+            assert result["status"] in ["pending"]
+            job_id = result["id"]
+
+        await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
+
+        url = monitoring_api.generate_attach_url(job_id=job_id)
+        headers = jobs_client.headers
+
+        url = url.with_query(
+            "stdin"="0",
+            "stdout"="1",
+            "stderr"="1",
+            "logs"="1",
+        )
+
+        content = []
+        async with client.ws_connect(url, method="POST", headers=headers) as ws:
+            async for msg in ws:
+                content.append(msg.data)
+
+        assert b''.join(content) == b""
+
+    # @pytest.mark.asyncio
+    # async def test_attach_tty(
+    #     self,
+    #     job_factory: JobFactory,
+    #     platform_api_client: PlatformApiClient,
+    #     jobs_service: JobsService,
+    #     user: User,
+    #     registry_host: str,
+    #     image_tag: str,
+    # ) -> None:
+    #     resources = Resources(
+    #         memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+    #     )
+    #     job = await job_factory("alpine:latest", "sh", resources, tty=True,)
+    #     await self.wait_for_job_running(job, platform_api_client)
+
+    #     job = await platform_api_client.jobs.status(job.id)
+    #     await jobs_service.resize(job, w=80, h=25)
+
+    #     async with jobs_service.attach(
+    #         job, stdin=True, stdout=True, stderr=True, logs=False
+    #     ) as stream:
+    #         # We can't be sure if we connect before inital prompt or after
+    #         try:
+    #             await asyncio.wait_for(stream.read_out(), timeout=0.2)
+    #         except asyncio.TimeoutError:
+    #             pass
+
+    #         await stream.write_in(b"\n")
+    #         assert await expect_prompt(stream) == b"\r\n/ # "
+    #         await stream.write_in(b"echo 'abc'\n")
+    #         assert await expect_prompt(stream) == b"echo 'abc'\r\nabc\r\n/ # "
+    #         await stream.write_in(b"exit 1\n")
+    #         assert await expect_prompt(stream) == b"exit 1\r\n"
+
+    #     for r in range(10):
+    #         job = await platform_api_client.jobs.status(job.id)
+    #         if job.status != JobStatus.RUNNING:
+    #             break
+    #         await asyncio.sleep(1)
+    #     assert job.history.exit_code == 1
+
+    # @pytest.mark.asyncio
+    # async def test_exec_no_tty_stdout(
+    #     self,
+    #     job_factory: JobFactory,
+    #     platform_api_client: PlatformApiClient,
+    #     jobs_service: JobsService,
+    #     user: User,
+    #     registry_host: str,
+    #     image_tag: str,
+    # ) -> None:
+    #     resources = Resources(
+    #         memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+    #     )
+    #     job = await job_factory("alpine:latest", "sleep 300", resources,)
+    #     await self.wait_for_job_running(job, platform_api_client)
+
+    #     exec_id = await jobs_service.exec_create(job, "sh -c 'sleep 5; echo abc'")
+    #     async with jobs_service.exec_start(job, exec_id) as stream:
+    #         data = await stream.read_out()
+    #         assert data is not None
+    #         assert data.data == b"abc\n"
+    #         assert data.stream == 1
+
+    #     await platform_api_client.jobs.kill(job.id)
+
+    # @pytest.mark.asyncio
+    # async def test_exec_no_tty_stderr(
+    #     self,
+    #     job_factory: JobFactory,
+    #     platform_api_client: PlatformApiClient,
+    #     jobs_service: JobsService,
+    #     user: User,
+    #     registry_host: str,
+    #     image_tag: str,
+    # ) -> None:
+    #     resources = Resources(
+    #         memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+    #     )
+    #     job = await job_factory("alpine:latest", "sleep 300", resources,)
+    #     await self.wait_for_job_running(job, platform_api_client)
+
+    #     exec_id = await jobs_service.exec_create(job, "sh -c 'sleep 5; echo abc 1>&2'")
+    #     async with jobs_service.exec_start(job, exec_id) as stream:
+    #         data = await stream.read_out()
+    #         assert data is not None
+    #         assert data.data == b"abc\n"
+    #         assert data.stream == 2
+
+    #     await platform_api_client.jobs.kill(job.id)
+
+    # @pytest.mark.asyncio
+    # async def test_exec_tty(
+    #     self,
+    #     job_factory: JobFactory,
+    #     platform_api_client: PlatformApiClient,
+    #     jobs_service: JobsService,
+    #     user: User,
+    #     registry_host: str,
+    #     image_tag: str,
+    #     wait_for_job_docker_client: Callable[[str], Awaitable[None]],
+    # ) -> None:
+    #     resources = Resources(
+    #         memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+    #     )
+    #     job = await job_factory("alpine:latest", "sleep 300", resources,)
+    #     await self.wait_for_job_running(job, platform_api_client)
+
+    #     await wait_for_job_docker_client(job.id)
+
+    #     exec_id = await jobs_service.exec_create(job, "sh", tty=True, stdin=True)
+    #     async with jobs_service.exec_start(job, exec_id) as stream:
+    #         await jobs_service.exec_resize(job, exec_id, w=120, h=15)
+    #         assert await expect_prompt(stream) == b"/ # "
+    #         await stream.write_in(b"echo 'abc'\n")
+    #         assert await expect_prompt(stream) == b"\r/ # "
+    #         assert await expect_prompt(stream) == b"echo 'abc'\r\nabc\r\n/ # "
+    #         await stream.write_in(b"exit 1\n")
+    #         assert await expect_prompt(stream) == b"exit 1\r\n"
+
+    #     ret = await jobs_service.exec_inspect(job, exec_id)
+    #     assert ret["ExitCode"] == 1
+    #     await platform_api_client.jobs.kill(job.id)
