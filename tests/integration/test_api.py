@@ -923,7 +923,7 @@ class TestSaveApi:
 
         url = platform_api.jobs_base_url
         async with client.post(url, headers=headers, json=job_submit) as response:
-            assert response.status == HTTPAccepted.status_code
+            assert response.status == 202
             result = await response.json()
             assert result["status"] in ["pending"]
             job_id = result["id"]
@@ -959,7 +959,7 @@ class TestSaveApi:
 
         url = platform_api.jobs_base_url
         async with client.post(url, headers=headers, json=job_submit) as response:
-            assert response.status == HTTPAccepted.status_code
+            assert response.status == 202
             result = await response.json()
             assert result["status"] in ["pending"]
             job_id = result["id"]
@@ -969,7 +969,7 @@ class TestSaveApi:
         url1 = monitoring_api.generate_resize_url(job_id=job_id, w=70, h=20)
 
         async with client.post(url1, headers=headers) as response:
-            assert response.status == HTTPAccepted.status_code
+            assert response.status == 200
 
         url2 = monitoring_api.generate_attach_url(
             job_id=job_id, stdin=True, stdout=True, stderr=True, logs=True
