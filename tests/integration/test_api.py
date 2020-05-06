@@ -998,7 +998,11 @@ class TestSaveApi:
                 if result["status"] in ["succeeded", "failed"]:
                     break
                 await asyncio.sleep(1)
+        else:
+            assert False, f'bad status {result["status"]}'
 
+        from pprint import pprint
+        pprint(result)
         assert result["history"]["exit_code"] == 1, result
 
     # @pytest.mark.asyncio
