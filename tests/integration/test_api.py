@@ -999,7 +999,7 @@ class TestSaveApi:
                     break
                 await asyncio.sleep(1)
 
-        assert result["history"]["exit_code"] == 1
+        assert result["history"]["exit_code"] == 1, result
 
     # @pytest.mark.asyncio
     # async def test_exec_no_tty_stdout(
