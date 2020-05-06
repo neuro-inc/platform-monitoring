@@ -997,6 +997,7 @@ class TestSaveApi:
                 result = await response.json()
                 if result["status"] in ["succeeded", "failed"]:
                     break
+                await asyncio.sleep(1)
 
         assert result["history"]["exit_code"] == 1
 
