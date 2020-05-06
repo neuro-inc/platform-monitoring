@@ -37,7 +37,7 @@ from .conftest_auth import _User
 
 
 async def expect_prompt(ws: aiohttp.ClientWebSocketResponse) -> bytes:
-    _ansi_re = re.compile(br"\033\[[;?0-9]*[a-zA-Z]")
+    _ansi_re = re.compile(br"\033\[[\\];?0-9]*[a-zA-Z]")
     try:
         ret: bytes = b""
         async with timeout(3):
