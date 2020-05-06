@@ -37,7 +37,7 @@ from .conftest_auth import _User
 
 
 async def expect_prompt(ws: aiohttp.ClientWebSocketResponse) -> bytes:
-    _ansi_re = re.compile(br"\033\[[\\];?0-9]*[a-zA-Z]")
+    _ansi_re = re.compile(br"\033\[[;?0-9]*[a-zA-Z]")
     try:
         ret: bytes = b""
         async with timeout(3):
@@ -952,7 +952,7 @@ class TestSaveApi:
         wait_for_job_docker_client: None,
         job_submit: Dict[str, Any],
     ) -> None:
-        command = "bash"
+        command = "sh"
         job_submit["container"]["command"] = command
         job_submit["container"]["tty"] = True
         headers = jobs_client.headers
