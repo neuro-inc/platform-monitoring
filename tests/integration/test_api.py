@@ -983,9 +983,9 @@ class TestSaveApi:
                 pass
 
             await ws.send_bytes(b"\n")
-            assert await expect_prompt(ws) == b"\r\n/ # "
+            assert await expect_prompt(ws) == b"\r\n# "
             await ws.send_bytes(b"echo 'abc'\n")
-            assert await expect_prompt(ws) == b"echo 'abc'\r\nabc\r\n/ # "
+            assert await expect_prompt(ws) == b"echo 'abc'\r\nabc\r\n# "
             await ws.send_bytes(b"exit 1\n")
             assert await expect_prompt(ws) == b"exit 1\r\n"
 
