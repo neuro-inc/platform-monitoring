@@ -41,32 +41,45 @@ class MonitoringApiEndpoints:
     address: ApiAddress
 
     @property
-    def api_v1_endpoint(self) -> str:
-        return f"http://{self.address.host}:{self.address.port}/api/v1"
+    def api_v1_endpoint(self) -> URL:
+        return URL(f"http://{self.address.host}:{self.address.port}/api/v1")
 
     @property
-    def ping_url(self) -> str:
-        return f"{self.api_v1_endpoint}/ping"
+    def ping_url(self) -> URL:
+        return self.api_v1_endpoint / "ping"
 
     @property
-    def secured_ping_url(self) -> str:
-        return f"{self.api_v1_endpoint}/secured-ping"
+    def secured_ping_url(self) -> URL:
+        return self.api_v1_endpoint / "secured-ping"
 
     @property
-    def endpoint(self) -> str:
-        return f"{self.api_v1_endpoint}/jobs"
+    def endpoint(self) -> URL:
+        return self.api_v1_endpoint / "jobs"
 
-    def generate_top_url(self, job_id: str) -> str:
-        return f"{self.endpoint}/{job_id}/top"
+    def generate_top_url(self, job_id: str) -> URL:
+        return self.endpoint / job_id / "top"
 
-    def generate_log_url(self, job_id: str) -> str:
-        return f"{self.endpoint}/{job_id}/log"
+    def generate_log_url(self, job_id: str) -> URL:
+        return self.endpoint / job_id / "log"
 
-    def generate_save_url(self, job_id: str) -> str:
-        return f"{self.endpoint}/{job_id}/save"
+    def generate_save_url(self, job_id: str) -> URL:
+        return self.endpoint / job_id / "save"
 
-    def generate_attach_url(self, job_id: str) -> str:
-        return f"{self.endpoint}/{job_id}/attach"
+    def generate_attach_url(
+        self,
+        job_id: str,
+        *,
+        stdin: bool = False,
+        stdout: bool = True,
+        stderr: bool = True,
+        logs: bool = False,
+    ) -> URL:
+        url = self.endpoint / job_id / "attach"
+        return url.with_query(stdin=stdin, stdout=stdout, stderr=stderr, logs=logs)
+
+    def generate_resize_url(self, job_id: str, *, w: int, h: int) -> URL:
+        url = self.endpoint / job_id / "resize"
+        return url.with_query(w=w, h=h)
 
 
 @dataclass(frozen=True)
@@ -74,19 +87,19 @@ class PlatformApiEndpoints:
     url: URL
 
     @property
-    def endpoint(self) -> str:
-        return str(self.url)
+    def endpoint(self) -> URL:
+        return self.url
 
     @property
-    def platform_config_url(self) -> str:
-        return f"{self.endpoint}/config"
+    def platform_config_url(self) -> URL:
+        return self.endpoint / "config"
 
     @property
-    def jobs_base_url(self) -> str:
-        return f"{self.endpoint}/jobs"
+    def jobs_base_url(self) -> URL:
+        return self.endpoint / "jobs"
 
-    def generate_job_url(self, job_id: str) -> str:
-        return f"{self.jobs_base_url}/{job_id}"
+    def generate_job_url(self, job_id: str) -> URL:
+        return self.jobs_base_url / job_id
 
 
 @pytest.fixture
@@ -895,13 +908,12 @@ class TestSaveApi:
 
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
 
-        url = monitoring_api.generate_attach_url(job_id=job_id)
-        headers = jobs_client.headers
-
-        url2 = URL(url).with_query(stdin="0", stdout="1", stderr="1", logs="1",)
+        url1 = monitoring_api.generate_attach_url(
+            job_id=job_id, stdin=False, stdout=True, stderr=True, logs=True
+        )
 
         content = []
-        async with client.ws_connect(url2, method="POST", headers=headers) as ws:
+        async with client.ws_connect(url1, method="POST", headers=headers) as ws:
             async for msg in ws:
                 content.append(msg.data)
 
@@ -911,44 +923,56 @@ class TestSaveApi:
     @pytest.mark.asyncio
     async def xtest_attach_tty(
         self,
-        job_factory: JobFactory,
-        platform_api_client: PlatformApiClient,
-        jobs_service: JobsService,
-        user: User,
-        registry_host: str,
-        image_tag: str,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        wait_for_job_docker_client: None,
+        job_submit: Dict[str, Any],
     ) -> None:
-        resources = Resources(
-            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+        command = "bash"
+        job_submit["container"]["command"] = command
+        job_submit["container"]["tty"] = True
+        headers = jobs_client.headers
+
+        url = platform_api.jobs_base_url
+        async with client.post(url, headers=headers, json=job_submit) as response:
+            assert response.status == HTTPAccepted.status_code
+            result = await response.json()
+            assert result["status"] in ["pending"]
+            job_id = result["id"]
+
+        await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
+
+        url1 = monitoring_api.generate_resize_url(job_id=job_id, w=70, h=20)
+
+        async with client.post(url1, headers=headers) as response:
+            assert response.status == HTTPAccepted.status_code
+
+        url2 = monitoring_api.generate_attach_url(
+            job_id=job_id, stdin=True, stdout=True, stderr=True, logs=True
         )
-        job = await job_factory("alpine:latest", "sh", resources, tty=True,)
-        await self.wait_for_job_running(job, platform_api_client)
 
-        job = await platform_api_client.jobs.status(job.id)
-        await jobs_service.resize(job, w=80, h=25)
-
-        async with jobs_service.attach(
-            job, stdin=True, stdout=True, stderr=True, logs=False
-        ) as stream:
+        async with client.ws_connect(url2, method="POST", headers=headers) as ws:
             # We can't be sure if we connect before inital prompt or after
             try:
-                await asyncio.wait_for(stream.read_out(), timeout=0.2)
+                await asyncio.wait_for(ws.receive_bytes(), timeout=0.2)
             except asyncio.TimeoutError:
                 pass
 
-            await stream.write_in(b"\n")
-            assert await expect_prompt(stream) == b"\r\n/ # "
-            await stream.write_in(b"echo 'abc'\n")
-            assert await expect_prompt(stream) == b"echo 'abc'\r\nabc\r\n/ # "
-            await stream.write_in(b"exit 1\n")
-            assert await expect_prompt(stream) == b"exit 1\r\n"
+        #     await ws.send_bytes(b"\n")
+        #     assert await expect_prompt(ws) == b"\r\n/ # "
+        #     await stream.send_bytes(b"echo 'abc'\n")
+        #     assert await expect_prompt(ws) == b"echo 'abc'\r\nabc\r\n/ # "
+        #     await stream.send_bytes(b"exit 1\n")
+        #     assert await expect_prompt(ws) == b"exit 1\r\n"
 
-        for r in range(10):
-            job = await platform_api_client.jobs.status(job.id)
-            if job.status != JobStatus.RUNNING:
-                break
-            await asyncio.sleep(1)
-        assert job.history.exit_code == 1
+        # for r in range(10):
+        #     job = await platform_api_client.jobs.status(job.id)
+        #     if job.status != JobStatus.RUNNING:
+        #         break
+        #     await asyncio.sleep(1)
+        # assert job.history.exit_code == 1
 
     # @pytest.mark.asyncio
     # async def test_exec_no_tty_stdout(
