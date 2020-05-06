@@ -909,7 +909,7 @@ class TestSaveApi:
             async for msg in ws:
                 content.append(msg.data)
 
-        expected = b"".join(f"0x0x{i}\n".encode("ascii") for i in range(10))
+        expected = b"".join(f"\0x01{i}\n".encode("ascii") for i in range(10))
         assert b"".join(content) == expected
 
     # @pytest.mark.asyncio
