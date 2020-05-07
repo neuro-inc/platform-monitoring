@@ -1037,7 +1037,7 @@ class TestSaveApi:
             },
         ) as response:
             content = await response.json()
-            exec_id = content["json_id"]
+            exec_id = content["exec_id"]
 
         url2 = monitoring_api.generate_exec_start_url(infinite_job, exec_id)
         async with client.ws_connect(url2, method="POST") as ws:
