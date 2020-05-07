@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict, Optional, Sequence, cast
+from typing import Any, AsyncIterator, Dict, Optional, cast
 
 from aiodocker.exceptions import DockerError
 from aiodocker.stream import Stream
@@ -18,6 +18,15 @@ from .utils import KubeHelper
 @dataclass(frozen=True)
 class Container:
     image: ImageReference
+
+
+@dataclass(frozen=True)
+class ExecCreate:
+    cmd: str
+    stdin: bool
+    stdout: bool
+    stderr: bool
+    tty: bool
 
 
 class JobException(Exception):
@@ -104,7 +113,7 @@ class JobsService:
     async def exec_create(
         self,
         job: Job,
-        cmd: Sequence[str],
+        cmd: str,
         stdout: bool = True,
         stderr: bool = True,
         stdin: bool = False,

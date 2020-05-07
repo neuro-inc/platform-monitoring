@@ -104,6 +104,21 @@ class MonitoringApiEndpoints:
         url = self.endpoint / job_id / "resize"
         return url.with_query(w=w, h=h)
 
+    def generate_exec_create_url(self, job_id: str) -> URL:
+        return self.endpoint / job_id / "exec_create"
+
+    def generate_exec_resize_url(
+        self, job_id: str, exec_id: str, *, w: int, h: int
+    ) -> URL:
+        url = self.endpoint / job_id / exec_id / "exec_resize"
+        return url.with_query(w=w, h=h)
+
+    def generate_exec_inspect_url(self, job_id: str, exec_id: str) -> URL:
+        return self.endpoint / job_id / exec_id / "exec_inspect"
+
+    def generate_exec_start_url(self, job_id: str, exec_id: str) -> URL:
+        return self.endpoint / job_id / exec_id / "exec_start"
+
 
 @dataclass(frozen=True)
 class PlatformApiEndpoints:
@@ -997,30 +1012,37 @@ class TestSaveApi:
         pprint(result)
         assert result["history"]["exit_code"] == 1, result
 
-    # @pytest.mark.asyncio
-    # async def test_exec_no_tty_stdout(
-    #     self,
-    #     job_factory: JobFactory,
-    #     platform_api_client: PlatformApiClient,
-    #     jobs_service: JobsService,
-    #     user: User,
-    #     registry_host: str,
-    #     image_tag: str,
-    # ) -> None:
-    #     resources = Resources(
-    #         memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
-    #     )
-    #     job = await job_factory("alpine:latest", "sleep 300", resources,)
-    #     await self.wait_for_job_running(job, platform_api_client)
+    @pytest.mark.asyncio
+    async def test_exec_notty(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        infinite_job: str,
+    ) -> None:
 
-    #     exec_id = await jobs_service.exec_create(job, "sh -c 'sleep 5; echo abc'")
-    #     async with jobs_service.exec_start(job, exec_id) as stream:
-    #         data = await stream.read_out()
-    #         assert data is not None
-    #         assert data.data == b"abc\n"
-    #         assert data.stream == 1
+        headers = jobs_client.headers
 
-    #     await platform_api_client.jobs.kill(job.id)
+        url1 = monitoring_api.generate_exec_create_url(infinite_job)
+        async with client.post(
+            url1,
+            headers=headers,
+            json={
+                "cmd": "sh -c 'sleep 5; echo abc'",
+                "stdin": False,
+                "stdout": True,
+                "stderr": True,
+                "tty": False,
+            },
+        ) as response:
+            content = await response.json()
+            exec_id = content["json_id"]
+
+        url2 = monitoring_api.generate_exec_start_url(infinite_job, exec_id)
+        async with client.ws_connect(url2, method="POST") as ws:
+            data = await ws.receive_bytes()
+            assert data == b"0x01abc\n"
 
     # @pytest.mark.asyncio
     # async def test_exec_no_tty_stderr(

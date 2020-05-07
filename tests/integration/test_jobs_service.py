@@ -440,7 +440,7 @@ class TestJobsService:
         resources = Resources(
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
         )
-        job = await job_factory("alpine:latest", "sleep 300", resources,)
+        job = await job_factory("alpine:latest", "sleep 300", resources)
         await self.wait_for_job_running(job, platform_api_client)
 
         exec_id = await jobs_service.exec_create(job, "sh -c 'sleep 5; echo abc'")
@@ -462,7 +462,7 @@ class TestJobsService:
         resources = Resources(
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
         )
-        job = await job_factory("alpine:latest", "sleep 300", resources,)
+        job = await job_factory("alpine:latest", "sleep 300", resources)
         await self.wait_for_job_running(job, platform_api_client)
 
         exec_id = await jobs_service.exec_create(job, "sh -c 'sleep 5; echo abc 1>&2'")
@@ -485,7 +485,7 @@ class TestJobsService:
         resources = Resources(
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
         )
-        job = await job_factory("alpine:latest", "sleep 300", resources,)
+        job = await job_factory("alpine:latest", "sleep 300", resources)
         await self.wait_for_job_running(job, platform_api_client)
 
         await wait_for_job_docker_client(job.id)
