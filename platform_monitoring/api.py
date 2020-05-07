@@ -394,7 +394,7 @@ class MonitoringApiHandler:
         logger.info("Checking whether %r has %r", user, permission)
         await check_permissions(request, [permission])
 
-        data = await self._jobs_service.exec_inspect(job_id, exec_id)
+        data = await self._jobs_service.exec_inspect(job, exec_id)
 
         response = WebSocketResponse()
         await response.prepare(request)
