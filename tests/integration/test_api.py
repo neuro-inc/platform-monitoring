@@ -1105,8 +1105,6 @@ class TestSaveApi:
 
         url2 = monitoring_api.generate_exec_start_url(infinite_job, exec_id)
         async with client.ws_connect(url2, method="POST", headers=headers) as ws:
-
-            await ws.send_bytes(b"\n")
             assert await expect_prompt(ws) == b"\r\n# "
             await ws.send_bytes(b"echo 'abc'\n")
             assert await expect_prompt(ws) == b"echo 'abc'\r\nabc\r\n# "
