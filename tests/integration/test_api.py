@@ -955,7 +955,7 @@ class TestSaveApi:
             async for msg in ws:
                 content.append(msg.data)
 
-        expected = b"".join((chr(1) + f"{i}\n").encode("ascii") for i in range(10))
+        expected = b"".join(f"\x01{i}\n".encode("ascii") for i in range(10))
         assert b"".join(content) == expected
 
     @pytest.mark.asyncio
@@ -1042,7 +1042,7 @@ class TestSaveApi:
         url2 = monitoring_api.generate_exec_start_url(infinite_job, exec_id)
         async with client.ws_connect(url2, method="POST", headers=headers) as ws:
             data = await ws.receive_bytes()
-            assert data == b"0x01abc\n"
+            assert data == b"\x01abc\n"
 
     # @pytest.mark.asyncio
     # async def test_exec_no_tty_stderr(
