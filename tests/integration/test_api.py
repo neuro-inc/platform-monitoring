@@ -990,16 +990,7 @@ class TestSaveApi:
             await ws.send_bytes(b"exit 1\n")
             assert await expect_prompt(ws) == b"exit 1\r\n"
 
-        url = platform_api.jobs_base_url
-        for r in range(10):
-            async with client.post(url, headers=headers, json=job_submit) as response:
-                assert response.status == 202
-                result = await response.json()
-                if result["status"] in ["succeeded", "failed"]:
-                    break
-                await asyncio.sleep(1)
-        else:
-            assert False, f'bad status {result["status"]}'
+        job = await jobs_client.long_polling_by_job_id(job_id, status="failed")
 
         from pprint import pprint
 
