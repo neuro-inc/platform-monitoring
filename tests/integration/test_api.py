@@ -1040,7 +1040,7 @@ class TestSaveApi:
             exec_id = content["exec_id"]
 
         url2 = monitoring_api.generate_exec_start_url(infinite_job, exec_id)
-        async with client.ws_connect(url2, method="POST") as ws:
+        async with client.ws_connect(url2, method="POST", headers=headers) as ws:
             data = await ws.receive_bytes()
             assert data == b"0x01abc\n"
 
