@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import shlex
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from pathlib import Path
 from tempfile import mktemp
@@ -43,10 +42,13 @@ from .config import (
     PlatformAuthConfig,
 )
 from .config_factory import EnvironConfigFactory
-from .jobs_service import Container, JobException, JobsService
+from .jobs_service import Container, ExecCreate, JobException, JobsService
 from .kube_client import JobError, KubeClient, KubeTelemetry
 from .utils import JobsHelper, KubeHelper, LogReaderFactory
-from .validators import create_save_request_payload_validator
+from .validators import (
+    create_exec_create_request_payload_validator,
+    create_save_request_payload_validator,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -78,6 +80,10 @@ class MonitoringApiHandler:
 
         self._save_request_payload_validator = create_save_request_payload_validator(
             config.registry.host
+        )
+
+        self._exec_create_request_payload_validator = (
+            create_exec_create_request_payload_validator()
         )
 
     def register(self, app: aiohttp.web.Application) -> None:
@@ -321,21 +327,33 @@ class MonitoringApiHandler:
         job_id = request.match_info["job_id"]
         job = await self._get_job(job_id)
 
-        cmd = shlex.split(request.query["cmd"])
-        stdin = _parse_bool(request.query.get("stdin", "0"))
-        stdout = _parse_bool(request.query.get("stdout", "1"))
-
-        stderr = _parse_bool(request.query.get("stderr", "1"))
-        tty = _parse_bool(request.query.get("tty", "0"))
+        exe = await self._parse_exec_create(request)
 
         permission = Permission(uri=str(job.uri), action="write")
         logger.info("Checking whether %r has %r", user, permission)
         await check_permissions(request, [permission])
 
         exec_id = await self._jobs_service.exec_create(
-            job, cmd=cmd, stdin=stdin, stdout=stdout, stderr=stderr, tty=tty
+            job,
+            cmd=exe.cmd,
+            stdin=exe.stdin,
+            stdout=exe.stdout,
+            stderr=exe.stderr,
+            tty=exe.tty,
         )
         return json_response({"job_id": job_id, "exec_id": exec_id})
+
+    async def _parse_exec_create(self, request: Request) -> ExecCreate:
+        payload = await request.json()
+        payload = self._exec_create_request_payload_validator.check(payload)
+
+        return ExecCreate(
+            cmd=payload["cmd"],
+            stdin=payload["stdin"],
+            stdout=payload["stdout"],
+            stderr=payload["stderr"],
+            tty=payload["tty"],
+        )
 
     async def exec_resize(self, request: Request) -> StreamResponse:
         user = await untrusted_user(request)
@@ -376,7 +394,7 @@ class MonitoringApiHandler:
         logger.info("Checking whether %r has %r", user, permission)
         await check_permissions(request, [permission])
 
-        data = await self._jobs_service.exec_inspect(job_id, exec_id)
+        data = await self._jobs_service.exec_inspect(job, exec_id)
 
         response = WebSocketResponse()
         await response.prepare(request)
@@ -385,8 +403,8 @@ class MonitoringApiHandler:
             await self._transfer_data(
                 response,
                 stream,
-                data["attachStdin"],
-                data["attachStdout"] or data["attachStderr"],
+                data["OpenStdin"],
+                data["OpenStdout"] or data["OpenStderr"],
             )
 
         return response
