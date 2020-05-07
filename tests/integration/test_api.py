@@ -990,7 +990,7 @@ class TestSaveApi:
             await ws.send_bytes(b"exit 1\n")
             assert await expect_prompt(ws) == b"exit 1\r\n"
 
-        job = await jobs_client.long_polling_by_job_id(job_id, status="failed")
+        result = await jobs_client.long_polling_by_job_id(job_id, status="failed")
 
         from pprint import pprint
 
