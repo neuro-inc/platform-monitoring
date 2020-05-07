@@ -1076,6 +1076,43 @@ class TestSaveApi:
             data = await ws.receive_bytes()
             assert data == b"\x02abc\n"
 
+    @pytest.mark.asyncio
+    async def test_exec_tty(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        infinite_job: str,
+    ) -> None:
+
+        headers = jobs_client.headers
+
+        url1 = monitoring_api.generate_exec_create_url(infinite_job)
+        async with client.post(
+            url1,
+            headers=headers,
+            json={
+                "cmd": "sh",
+                "stdin": Tre,
+                "stdout": True,
+                "stderr": True,
+                "tty": True,
+            },
+        ) as response:
+            content = await response.json()
+            exec_id = content["exec_id"]
+
+        url2 = monitoring_api.generate_exec_start_url(infinite_job, exec_id)
+        async with client.ws_connect(url2, method="POST", headers=headers) as ws:
+
+            await ws.send_bytes(b"\n")
+            assert await expect_prompt(ws) == b"\r\n# "
+            await ws.send_bytes(b"echo 'abc'\n")
+            assert await expect_prompt(ws) == b"echo 'abc'\r\nabc\r\n# "
+            await ws.send_bytes(b"exit 1\n")
+            assert await expect_prompt(ws) == b"exit 1\r\n"
+
     # @pytest.mark.asyncio
     # async def test_exec_tty(
     #     self,
