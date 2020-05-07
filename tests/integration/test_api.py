@@ -1094,7 +1094,7 @@ class TestSaveApi:
             headers=headers,
             json={
                 "cmd": "sh",
-                "stdin": Tre,
+                "stdin": True,
                 "stdout": True,
                 "stderr": True,
                 "tty": True,
