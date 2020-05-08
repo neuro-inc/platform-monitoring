@@ -93,11 +93,13 @@ class MonitoringApiHandler:
                 aiohttp.web.get("/{job_id}/top", self.stream_top),
                 aiohttp.web.post("/{job_id}/save", self.stream_save),
                 aiohttp.web.post("/{job_id}/attach", self.ws_attach),
+                aiohttp.web.get("/{job_id}/attach", self.ws_attach),
                 aiohttp.web.post("/{job_id}/resize", self.resize),
                 aiohttp.web.post("/{job_id}/exec_create", self.exec_create),
                 aiohttp.web.post("/{job_id}/{exec_id}/exec_resize", self.exec_resize),
                 aiohttp.web.get("/{job_id}/{exec_id}/exec_inspect", self.exec_inspect),
                 aiohttp.web.post("/{job_id}/{exec_id}/exec_start", self.exec_start),
+                aiohttp.web.get("/{job_id}/{exec_id}/exec_start", self.exec_start),
             ]
         )
 
