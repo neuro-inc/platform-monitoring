@@ -421,7 +421,7 @@ class MonitoringApiHandler:
             tasks.append(asyncio.create_task(self._do_output(response, stream)))
 
         try:
-            await asyncio.gather(*tasks)
+            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         except:  # noqa: E722
             for task in tasks:
                 if not task.done():
