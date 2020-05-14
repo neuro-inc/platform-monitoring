@@ -1116,4 +1116,4 @@ class TestSaveApi:
             headers=headers,
         ) as resp:
             data = await resp.json(content_type=None)
-            assert data["exit_code"] == 1
+            assert data["exit_code"] == 1, data
