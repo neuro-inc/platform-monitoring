@@ -385,7 +385,18 @@ class MonitoringApiHandler:
         await check_permissions(request, [permission])
 
         ret = await self._jobs_service.exec_inspect(job_id, exec_id)
-        return json_response(ret)
+        cmd = " ".join(shlex.quote(arg) for arg in ret["ProcessConfig"]["arguments"])
+        return json_response(
+            {
+                "id": ret["ID"],
+                "running": ret["Running"],
+                "exit_code": ret["ExitCode"],
+                "job_id": job_id,
+                "tty": ret["ProcessConfig"]["tty"],
+                "entrypoint": ret["ProcessConfig"]["entrypoint"],
+                "command": cmd,
+            }
+        )
 
     async def exec_start(self, request: Request) -> StreamResponse:
         user = await untrusted_user(request)
