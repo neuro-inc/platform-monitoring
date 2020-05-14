@@ -1115,5 +1115,7 @@ class TestSaveApi:
             monitoring_api.generate_exec_inspect_url(infinite_job, exec_id,),
             headers=headers,
         ) as resp:
-            data = await resp.json(content_type=None)
+            data = await resp.json()
+            while data["running"]:
+                data = await resp.json()
             assert data["exit_code"] == 1, data
