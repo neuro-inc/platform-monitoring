@@ -1114,5 +1114,7 @@ class TestSaveApi:
         async with client.get(
             monitoring_api.generate_exec_inspect_url(infinite_job, exec_id)
         ) as resp:
+            data = await resp.read()
+            print("DATA", data)
             data = await resp.json(content_type=None)
             assert data["exit_code"] == 1
