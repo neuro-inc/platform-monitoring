@@ -451,7 +451,7 @@ class Transfer:
         async for msg in self._ws:
             if msg.type == aiohttp.WSMsgType.BINARY:
                 await self._stream.write_in(msg.data)
-            if msg.type in (
+            elif msg.type in (
                 aiohttp.WSMsgType.CLOSE,
                 aiohttp.WSMsgType.CLOSING,
                 aiohttp.WSMsgType.CLOSED,
