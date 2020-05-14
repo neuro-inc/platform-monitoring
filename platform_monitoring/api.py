@@ -371,7 +371,7 @@ class MonitoringApiHandler:
 
         w = int(request.query["w"])
         h = int(request.query["h"])
-        await self._jobs_service.exec_resize(job_id, exec_id, w=w, h=h)
+        await self._jobs_service.exec_resize(job, exec_id, w=w, h=h)
 
         return json_response(None)
 
@@ -385,7 +385,7 @@ class MonitoringApiHandler:
         logger.info("Checking whether %r has %r", user, permission)
         await check_permissions(request, [permission])
 
-        ret = await self._jobs_service.exec_inspect(job_id, exec_id)
+        ret = await self._jobs_service.exec_inspect(job, exec_id)
         cmd = " ".join(shlex.quote(arg) for arg in ret["ProcessConfig"]["arguments"])
         return json_response(
             {
