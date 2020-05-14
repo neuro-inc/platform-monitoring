@@ -1112,9 +1112,8 @@ class TestSaveApi:
             assert await expect_prompt(ws) == b"exit 1\r\n"
 
         async with client.get(
-            monitoring_api.generate_exec_inspect_url(
-                infinite_job, exec_id, headers=headers
-            )
+            monitoring_api.generate_exec_inspect_url(infinite_job, exec_id,),
+            headers=headers,
         ) as resp:
             data = await resp.json(content_type=None)
             assert data["exit_code"] == 1
