@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import shlex
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from pathlib import Path
 from tempfile import mktemp

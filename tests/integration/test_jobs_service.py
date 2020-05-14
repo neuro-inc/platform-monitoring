@@ -496,6 +496,8 @@ class TestJobsService:
             assert await expect_prompt(stream) == b"/ # "
             await stream.write_in(b"echo 'abc'\n")
             val = await expect_prompt(stream)
+            # this trick is required to make tests stable
+            # for some reason the prompt is missed sometimes
             if val == b"\r/ # ":
                 val = await expect_prompt(stream)
             assert val == b"echo 'abc'\r\nabc\r\n/ # "
