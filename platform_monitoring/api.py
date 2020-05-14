@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import shlex
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from pathlib import Path
 from tempfile import mktemp
@@ -320,7 +321,8 @@ class MonitoringApiHandler:
         async with self._jobs_service.attach(
             job, stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
         ) as stream:
-            await self._transfer_data(response, stream, stdin, stdout or stderr)
+            transfer = Transfer(response, stream, stdin, stdout or stderr)
+            await transfer.transfer()
 
         return response
 
@@ -369,7 +371,7 @@ class MonitoringApiHandler:
 
         w = int(request.query["w"])
         h = int(request.query["h"])
-        await self._jobs_service.exec_resize(job_id, exec_id, w=w, h=h)
+        await self._jobs_service.exec_resize(job, exec_id, w=w, h=h)
 
         return json_response(None)
 
@@ -383,8 +385,19 @@ class MonitoringApiHandler:
         logger.info("Checking whether %r has %r", user, permission)
         await check_permissions(request, [permission])
 
-        ret = await self._jobs_service.exec_inspect(job_id, exec_id)
-        return json_response(ret)
+        ret = await self._jobs_service.exec_inspect(job, exec_id)
+        cmd = " ".join(shlex.quote(arg) for arg in ret["ProcessConfig"]["arguments"])
+        return json_response(
+            {
+                "id": ret["ID"],
+                "running": ret["Running"],
+                "exit_code": ret["ExitCode"],
+                "job_id": job_id,
+                "tty": ret["ProcessConfig"]["tty"],
+                "entrypoint": ret["ProcessConfig"]["entrypoint"],
+                "command": cmd,
+            }
+        )
 
     async def exec_start(self, request: Request) -> StreamResponse:
         user = await untrusted_user(request)
@@ -402,27 +415,43 @@ class MonitoringApiHandler:
         await response.prepare(request)
 
         async with self._jobs_service.exec_start(job, exec_id) as stream:
-            await self._transfer_data(
+            transfer = Transfer(
                 response,
                 stream,
                 data["OpenStdin"],
                 data["OpenStdout"] or data["OpenStderr"],
             )
+            await transfer.transfer()
 
         return response
 
-    async def _transfer_data(
-        self, response: WebSocketResponse, stream: Stream, stdin: bool, stdout: bool
+
+class Transfer:
+    def __init__(
+        self,
+        ws: WebSocketResponse,
+        stream: Stream,
+        handle_input: bool,
+        handle_output: bool,
     ) -> None:
+        self._ws = ws
+        self._stream = stream
+        self._handle_input = handle_input
+        self._handle_output = handle_output
+        self._closing = False
+
+    async def transfer(self) -> None:
         tasks = []
-        if stdin:
-            tasks.append(asyncio.create_task(self._do_input(response, stream)))
-        if stdout:
-            tasks.append(asyncio.create_task(self._do_output(response, stream)))
+        if self._handle_input:
+            tasks.append(asyncio.create_task(self._do_input()))
+        if self._handle_output:
+            tasks.append(asyncio.create_task(self._do_output()))
 
         try:
-            await asyncio.gather(*tasks)
+            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         except:  # noqa: E722
+            await self._ws.close()
+            await self._stream.close()
             for task in tasks:
                 if not task.done():
                     task.cancel()
@@ -430,26 +459,34 @@ class MonitoringApiHandler:
                         await task
             raise
 
-    @staticmethod
-    async def _do_input(response: WebSocketResponse, stream: Stream) -> None:
-        async for msg in response:
+    async def _do_input(self) -> None:
+        async for msg in self._ws:
             if msg.type == aiohttp.WSMsgType.BINARY:
-                await stream.write_in(msg.data)
+                await self._stream.write_in(msg.data)
+            elif msg.type in (
+                aiohttp.WSMsgType.CLOSE,
+                aiohttp.WSMsgType.CLOSING,
+                aiohttp.WSMsgType.CLOSED,
+            ):
+                self._closing = True
+                self._stream.close()
             elif msg.type == aiohttp.WSMsgType.ERROR:
-                exc = response.exception()
+                exc = self._ws.exception()
                 logger.error(
                     "WS connection closed with exception %s", exc, exc_info=exc
                 )
             else:
                 raise ValueError(f"Unsupported WS message type {msg.type}")
 
-    @staticmethod
-    async def _do_output(response: WebSocketResponse, stream: Stream) -> None:
+    async def _do_output(self) -> None:
         while True:
-            data = await stream.read_out()
+            data = await self._stream.read_out()
             if data is None:
+                self._closing = True
+                await self._ws.close()
                 return
-            await response.send_bytes(bytes([data.stream]) + data.data)
+            if not self._closing:
+                await self._ws.send_bytes(bytes([data.stream]) + data.data)
 
 
 @middleware

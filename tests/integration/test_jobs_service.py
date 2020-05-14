@@ -495,8 +495,12 @@ class TestJobsService:
             await jobs_service.exec_resize(job, exec_id, w=120, h=15)
             assert await expect_prompt(stream) == b"/ # "
             await stream.write_in(b"echo 'abc'\n")
-            assert await expect_prompt(stream) == b"\r/ # "
-            assert await expect_prompt(stream) == b"echo 'abc'\r\nabc\r\n/ # "
+            val = await expect_prompt(stream)
+            # this trick is required to make tests stable
+            # for some reason the prompt is missed sometimes
+            if val == b"\r/ # ":
+                val = await expect_prompt(stream)
+            assert val == b"echo 'abc'\r\nabc\r\n/ # "
             await stream.write_in(b"exit 1\n")
             assert await expect_prompt(stream) == b"exit 1\r\n"
 
