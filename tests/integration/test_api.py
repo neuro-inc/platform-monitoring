@@ -1036,6 +1036,7 @@ class TestSaveApi:
                 "tty": False,
             },
         ) as response:
+            assert response.status == 200, await response.text()
             content = await response.json()
             exec_id = content["exec_id"]
 
@@ -1068,6 +1069,7 @@ class TestSaveApi:
                 "tty": False,
             },
         ) as response:
+            assert response.status == 200, await response.text()
             content = await response.json()
             exec_id = content["exec_id"]
 
@@ -1100,6 +1102,7 @@ class TestSaveApi:
                 "tty": True,
             },
         ) as response:
+            assert response.status == 200, await response.text()
             content = await response.json()
             exec_id = content["exec_id"]
 
