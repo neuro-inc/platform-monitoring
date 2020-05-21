@@ -19,7 +19,7 @@ def create_save_request_payload_validator(expected_image_domain: str) -> t.Trafa
 def create_exec_create_request_payload_validator() -> t.Trafaret:
     return t.Dict(
         {
-            t.Key("cmd"): t.String,
+            t.Key("command"): t.String,
             t.Key("stdin", optional=True, default=False): t.Bool,
             t.Key("stdout", optional=True, default=True): t.Bool,
             t.Key("stderr", optional=True, default=True): t.Bool,
