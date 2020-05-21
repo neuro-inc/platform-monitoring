@@ -352,7 +352,7 @@ class MonitoringApiHandler:
         payload = self._exec_create_request_payload_validator.check(payload)
 
         return ExecCreate(
-            cmd=payload["cmd"],
+            cmd=payload["command"],
             stdin=payload["stdin"],
             stdout=payload["stdout"],
             stderr=payload["stderr"],

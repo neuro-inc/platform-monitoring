@@ -1029,7 +1029,7 @@ class TestSaveApi:
             url1,
             headers=headers,
             json={
-                "cmd": "sh -c 'sleep 5; echo abc'",
+                "command": "sh -c 'sleep 5; echo abc'",
                 "stdin": False,
                 "stdout": True,
                 "stderr": True,
@@ -1061,7 +1061,7 @@ class TestSaveApi:
             url1,
             headers=headers,
             json={
-                "cmd": "sh -c 'sleep 5; echo abc 1>&2'",
+                "command": "sh -c 'sleep 5; echo abc 1>&2'",
                 "stdin": False,
                 "stdout": True,
                 "stderr": True,
@@ -1093,7 +1093,7 @@ class TestSaveApi:
             url1,
             headers=headers,
             json={
-                "cmd": "sh",
+                "command": "sh",
                 "stdin": True,
                 "stdout": True,
                 "stderr": True,
