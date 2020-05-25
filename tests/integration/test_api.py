@@ -482,7 +482,6 @@ class TestTopApi:
     async def test_top_shared_by_name(
         self,
         monitoring_api: MonitoringApiEndpoints,
-        platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
         job_name: str,
@@ -494,8 +493,10 @@ class TestTopApi:
         await share_job(jobs_client.user, user2, job_name)
 
         url = monitoring_api.generate_top_url(named_infinite_job)
-        async with client.ws_connect(url, headers=user2.headers):
-            pass
+        async with client.ws_connect(url, headers=user2.headers) as ws:
+            proto = ws._writer.protocol
+            assert proto.transport is not None
+            proto.transport.close()
 
     @pytest.mark.asyncio
     async def test_top_no_permissions_unauthorized(
@@ -1262,7 +1263,6 @@ class TestExecApi:
     @pytest.mark.asyncio
     async def test_exec_notty_stdout_shared_by_name(
         self,
-        platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
@@ -1339,7 +1339,6 @@ class TestKillApi:
     @pytest.mark.asyncio
     async def test_kill_shared_by_name(
         self,
-        platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
