@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import re
+import signal
 import time
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator, List
@@ -85,6 +86,9 @@ class MonitoringApiEndpoints:
 
     def generate_save_url(self, job_id: str) -> URL:
         return self.endpoint / job_id / "save"
+
+    def generate_kill_url(self, job_id: str) -> URL:
+        return self.endpoint / job_id / "kill"
 
     def generate_attach_url(
         self,
@@ -1006,10 +1010,6 @@ class TestSaveApi:
             assert await expect_prompt(ws) == b"exit 1\r\n"
 
         result = await jobs_client.long_polling_by_job_id(job_id, status="failed")
-
-        from pprint import pprint
-
-        pprint(result)
         assert result["history"]["exit_code"] == 1, result
 
     @pytest.mark.asyncio
@@ -1114,11 +1114,52 @@ class TestSaveApi:
             await ws.send_bytes(b"exit 1\n")
             assert await expect_prompt(ws) == b"exit 1\r\n"
 
-        async with client.get(
-            monitoring_api.generate_exec_inspect_url(infinite_job, exec_id,),
-            headers=headers,
-        ) as resp:
-            data = await resp.json()
-            while data["running"]:
+        async with timeout(15):
+            async with client.get(
+                monitoring_api.generate_exec_inspect_url(infinite_job, exec_id,),
+                headers=headers,
+            ) as resp:
                 data = await resp.json()
-            assert data["exit_code"] == 1, data
+                while data["running"]:
+                    data = await resp.json()
+                    await asyncio.sleep(0.1)
+                assert data["exit_code"] == 1, data
+
+    @pytest.mark.asyncio
+    async def test_kill(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        infinite_job: str,
+    ) -> None:
+
+        headers = jobs_client.headers
+
+        url = monitoring_api.generate_kill_url(infinite_job)
+        url = url.with_query(signal=int(signal.SIGKILL))
+        async with client.post(url, headers=headers) as response:
+            assert response.status == 204, await response.text()
+
+        result = await jobs_client.long_polling_by_job_id(infinite_job, status="failed")
+        assert result["history"]["exit_code"] == 128 + signal.SIGKILL, result
+
+    @pytest.mark.asyncio
+    async def test_kill_default(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        infinite_job: str,
+    ) -> None:
+
+        headers = jobs_client.headers
+
+        url = monitoring_api.generate_kill_url(infinite_job)
+        async with client.post(url, headers=headers) as response:
+            assert response.status == 204, await response.text()
+
+        result = await jobs_client.long_polling_by_job_id(infinite_job, status="failed")
+        assert result["history"]["exit_code"] == 128 + signal.SIGKILL, result
