@@ -97,6 +97,7 @@ class MonitoringApiHandler:
                 aiohttp.web.post("/{job_id}/attach", self.ws_attach),
                 aiohttp.web.get("/{job_id}/attach", self.ws_attach),
                 aiohttp.web.post("/{job_id}/resize", self.resize),
+                aiohttp.web.post("/{job_id}/kill", self.kill),
                 aiohttp.web.post("/{job_id}/exec_create", self.exec_create),
                 aiohttp.web.post("/{job_id}/{exec_id}/exec_resize", self.exec_resize),
                 aiohttp.web.get("/{job_id}/{exec_id}/exec_inspect", self.exec_inspect),
@@ -291,6 +292,14 @@ class MonitoringApiHandler:
 
         await self._jobs_service.resize(job, w=w, h=h)
         return json_response(None)
+
+    async def kill(self, request: Request) -> Response:
+        signal = request.query.get("signal", "SIGKILL")
+
+        job = await self._resolve_job(request, "write")
+
+        await self._jobs_service.kill(job, signal)
+        return json_response(None, status=204)
 
     async def ws_attach(self, request: Request) -> StreamResponse:
         stdin = _parse_bool(request.query.get("stdin", "0"))

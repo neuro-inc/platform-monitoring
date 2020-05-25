@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict, Optional, cast
+from typing import Any, AsyncIterator, Dict, Optional, Union, cast
 
 from aiodocker.exceptions import DockerError
 from aiodocker.stream import Stream
@@ -109,6 +109,17 @@ class JobsService:
         async with self._get_docker_client(pod) as docker:
             container = docker.containers.container(cont_id)
             await container.resize(w=w, h=h)
+
+    async def kill(self, job: Job, signal: Union[str, int]) -> None:
+        pod_name = self._kube_helper.get_job_pod_name(job)
+
+        pod = await self._get_running_jobs_pod(pod_name)
+        cont_id = pod.get_container_id(pod_name)
+        assert cont_id
+
+        async with self._get_docker_client(pod) as docker:
+            container = docker.containers.container(cont_id)
+            await container.kill(signal=signal)
 
     async def exec_create(
         self,
