@@ -1114,14 +1114,16 @@ class TestSaveApi:
             await ws.send_bytes(b"exit 1\n")
             assert await expect_prompt(ws) == b"exit 1\r\n"
 
-        async with client.get(
-            monitoring_api.generate_exec_inspect_url(infinite_job, exec_id,),
-            headers=headers,
-        ) as resp:
-            data = await resp.json()
-            while data["running"]:
+        async with timeout(15):
+            async with client.get(
+                monitoring_api.generate_exec_inspect_url(infinite_job, exec_id,),
+                headers=headers,
+            ) as resp:
                 data = await resp.json()
-            assert data["exit_code"] == 1, data
+                while data["running"]:
+                    data = await resp.json()
+                    await asyncio.sleep(0.1)
+                    assert data["exit_code"] == 1, data
 
     @pytest.mark.asyncio
     async def test_kill(
