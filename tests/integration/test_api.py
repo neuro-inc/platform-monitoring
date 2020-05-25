@@ -1123,7 +1123,7 @@ class TestSaveApi:
                 while data["running"]:
                     data = await resp.json()
                     await asyncio.sleep(0.1)
-                    assert data["exit_code"] == 1, data
+                assert data["exit_code"] == 1, data
 
     @pytest.mark.asyncio
     async def test_kill(
@@ -1138,12 +1138,12 @@ class TestSaveApi:
         headers = jobs_client.headers
 
         url = monitoring_api.generate_kill_url(infinite_job)
-        url = url.with_query(signal=int(signal.SIGTERM))
+        url = url.with_query(signal=int(signal.SIGKILL))
         async with client.post(url, headers=headers) as response:
             assert response.status == 204, await response.text()
 
         result = await jobs_client.long_polling_by_job_id(infinite_job, status="failed")
-        assert result["history"]["exit_code"] == 128 + signal.SIGTERM, result
+        assert result["history"]["exit_code"] == 128 + signal.SIGKILL, result
 
     @pytest.mark.asyncio
     async def test_kill_default(
