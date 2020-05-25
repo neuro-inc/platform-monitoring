@@ -286,7 +286,7 @@ async def infinite_job(job_factory: Callable[[str], Awaitable[str]]) -> str:
 
 @pytest.fixture
 def job_name() -> str:
-    return f"job-name-{random_str()}"
+    return f"test-job-{random_str()}"
 
 
 @pytest.fixture
@@ -781,7 +781,7 @@ class TestLogApi:
 
         url = platform_api.jobs_base_url
         async with client.post(url, headers=user1.headers, json=job_submit) as resp:
-            assert resp.status == HTTPAccepted.status_code
+            assert resp.status == HTTPAccepted.status_code, await resp.text()
             payload = await resp.json()
             job_id = payload["id"]
             assert payload["name"] == job_name
@@ -1010,7 +1010,7 @@ class TestSaveApi:
         payload = {"container": {"image": image}}
 
         async with client.post(url, headers=user2.headers, json=payload) as resp:
-            assert resp.status == HTTPOk.status_code, str(resp)
+            assert resp.status == HTTPOk.status_code, await resp.text()
 
 
 class TestAttachApi:
@@ -1122,7 +1122,7 @@ class TestAttachApi:
         async with client.post(
             url, headers=jobs_client.headers, json=job_submit
         ) as response:
-            assert response.status == 202
+            assert response.status == 202, await response.text()
             result = await response.json()
             assert result["status"] in ["pending"]
             job_id = result["id"]
