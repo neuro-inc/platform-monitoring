@@ -86,6 +86,9 @@ class MonitoringApiEndpoints:
     def generate_save_url(self, job_id: str) -> URL:
         return self.endpoint / job_id / "save"
 
+    def generate_kill_url(self, job_id: str) -> URL:
+        return self.endpoint / job_id / "kill"
+
     def generate_attach_url(
         self,
         job_id: str,
@@ -1006,10 +1009,6 @@ class TestSaveApi:
             assert await expect_prompt(ws) == b"exit 1\r\n"
 
         result = await jobs_client.long_polling_by_job_id(job_id, status="failed")
-
-        from pprint import pprint
-
-        pprint(result)
         assert result["history"]["exit_code"] == 1, result
 
     @pytest.mark.asyncio
@@ -1122,3 +1121,49 @@ class TestSaveApi:
             while data["running"]:
                 data = await resp.json()
             assert data["exit_code"] == 1, data
+
+    @pytest.mark.asyncio
+    async def test_kill(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        infinite_job: str,
+    ) -> None:
+
+        headers = jobs_client.headers
+
+        url = monitoring_api.generate_kill_url(infinite_job)
+        url = url.with_query(signal=1)
+        async with client.post(
+            url1,
+            headers=headers,
+        ) as response:
+            assert response.status == 200, await response.text()
+
+        result = await jobs_client.long_polling_by_job_id(job_id, status="failed")
+        assert result["history"]["exit_code"] == 1, result
+
+
+    @pytest.mark.asyncio
+    async def test_kill_default(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        infinite_job: str,
+    ) -> None:
+
+        headers = jobs_client.headers
+
+        url = monitoring_api.generate_kill_url(infinite_job)
+        async with client.post(
+            url1,
+            headers=headers,
+        ) as response:
+            assert response.status == 200, await response.text()
+
+        result = await jobs_client.long_polling_by_job_id(job_id, status="failed")
+        assert result["history"]["exit_code"] == 1, result
