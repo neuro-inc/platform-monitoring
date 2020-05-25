@@ -1137,7 +1137,7 @@ class TestSaveApi:
         url = monitoring_api.generate_kill_url(infinite_job)
         url = url.with_query(signal=1)
         async with client.post(url, headers=headers) as response:
-            assert response.status == 200, await response.text()
+            assert response.status == 204, await response.text()
 
         result = await jobs_client.long_polling_by_job_id(infinite_job, status="failed")
         assert result["history"]["exit_code"] == 1, result
@@ -1156,7 +1156,7 @@ class TestSaveApi:
 
         url = monitoring_api.generate_kill_url(infinite_job)
         async with client.post(url, headers=headers) as response:
-            assert response.status == 200, await response.text()
+            assert response.status == 204, await response.text()
 
         result = await jobs_client.long_polling_by_job_id(infinite_job, status="failed")
         assert result["history"]["exit_code"] == 1, result
