@@ -311,7 +311,7 @@ class MonitoringApiHandler:
         await check_permissions(request, [permission])
 
         await self._jobs_service.kill(job, signal)
-        return json_response(status=204, None)
+        return json_response(None, status=204)
 
     async def ws_attach(self, request: Request) -> StreamResponse:
         user = await untrusted_user(request)

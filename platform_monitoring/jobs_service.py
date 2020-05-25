@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict, Optional, cast
+from typing import Any, AsyncIterator, Dict, Optional, Union, cast
 
 from aiodocker.exceptions import DockerError
 from aiodocker.stream import Stream
@@ -118,7 +118,7 @@ class JobsService:
         assert cont_id
 
         async with self._get_docker_client(pod) as docker:
-            container = docker.containers.kill(cont_id)
+            container = docker.containers.container(cont_id)
             await container.kill(signal=signal)
 
     async def exec_create(
