@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import re
+import signal
 import time
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator, List
@@ -1135,12 +1136,12 @@ class TestSaveApi:
         headers = jobs_client.headers
 
         url = monitoring_api.generate_kill_url(infinite_job)
-        url = url.with_query(signal=1)
+        url = url.with_query(signal=signal.SIGTERM)
         async with client.post(url, headers=headers) as response:
             assert response.status == 204, await response.text()
 
         result = await jobs_client.long_polling_by_job_id(infinite_job, status="failed")
-        assert result["history"]["exit_code"] == 1, result
+        assert result["history"]["exit_code"] == 128 + signal.SIGTERM, result
 
     @pytest.mark.asyncio
     async def test_kill_default(
@@ -1159,4 +1160,4 @@ class TestSaveApi:
             assert response.status == 204, await response.text()
 
         result = await jobs_client.long_polling_by_job_id(infinite_job, status="failed")
-        assert result["history"]["exit_code"] == 1, result
+        assert result["history"]["exit_code"] == 128 + signal.SIGKILL, result
