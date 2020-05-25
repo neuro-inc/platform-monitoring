@@ -286,7 +286,7 @@ async def infinite_job(job_factory: Callable[[str], Awaitable[str]]) -> str:
 
 @pytest.fixture
 def job_name() -> str:
-    return random_str()
+    return f"job-name-{random_str()}"
 
 
 @pytest.fixture
@@ -1108,6 +1108,7 @@ class TestAttachApi:
         jobs_client: JobsClient,
         wait_for_job_docker_client: None,
         job_submit: Dict[str, Any],
+        job_name: str,
         regular_user_factory: Callable[..., Awaitable[_User]],
         share_job: Callable[..., Awaitable[None]],
     ) -> None:
@@ -1115,7 +1116,6 @@ class TestAttachApi:
 
         command = 'bash -c "for i in {0..9}; do echo $i; sleep 1; done"'
         job_submit["container"]["command"] = command
-        job_name = random_str()
         job_submit["name"] = job_name
 
         url = platform_api.jobs_base_url
