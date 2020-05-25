@@ -1138,7 +1138,7 @@ class TestSaveApi:
         headers = jobs_client.headers
 
         url = monitoring_api.generate_kill_url(infinite_job)
-        url = url.with_query(signal=signal.SIGTERM)
+        url = url.with_query(signal=int(signal.SIGTERM))
         async with client.post(url, headers=headers) as response:
             assert response.status == 204, await response.text()
 
