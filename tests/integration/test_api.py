@@ -998,11 +998,11 @@ class TestSaveApi:
         job_name: str,
         named_infinite_job: str,
         regular_user_factory: Callable[..., Awaitable[_User]],
-        share_job: Callable[[_User, _User, str], Awaitable[None]],
+        share_job: Callable[..., Awaitable[None]],
         config: Config,
     ) -> None:
         user2 = await regular_user_factory()
-        await share_job(jobs_client.user, user2, job_name)
+        await share_job(jobs_client.user, user2, job_name, action="write")
 
         url = monitoring_api.generate_save_url(job_id=named_infinite_job)
         repository = f"{config.registry.host}/alpine"
@@ -1295,6 +1295,8 @@ class TestExecApi:
             data = await ws.receive_bytes()
             assert data == b"\x01abc\n"
 
+
+class TestKillApi:
     @pytest.mark.asyncio
     async def test_kill(
         self,
@@ -1332,4 +1334,29 @@ class TestExecApi:
             assert response.status == 204, await response.text()
 
         result = await jobs_client.long_polling_by_job_id(infinite_job, status="failed")
+        assert result["history"]["exit_code"] == 128 + signal.SIGKILL, result
+
+    @pytest.mark.asyncio
+    async def test_kill_shared_by_name(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        job_name: str,
+        named_infinite_job: str,
+        regular_user_factory: Callable[..., Awaitable[_User]],
+        share_job: Callable[..., Awaitable[None]],
+    ) -> None:
+        user2 = await regular_user_factory()
+        await share_job(jobs_client.user, user2, job_name, action="write")
+
+        url = monitoring_api.generate_kill_url(named_infinite_job)
+        url = url.with_query(signal=int(signal.SIGKILL))
+        async with client.post(url, headers=user2.headers) as response:
+            assert response.status == 204, await response.text()
+
+        result = await jobs_client.long_polling_by_job_id(
+            named_infinite_job, status="failed"
+        )
         assert result["history"]["exit_code"] == 128 + signal.SIGKILL, result
