@@ -33,6 +33,7 @@ from neuromation.api import (
 )
 from platform_logging import init_logging
 from platform_monitoring.user import untrusted_user
+from yarl import URL
 
 from .base import JobStats, Telemetry
 from .config import (
@@ -209,7 +210,9 @@ class MonitoringApiHandler:
         permissions = [Permission(uri=str(job.uri), action=action)]
         if job.name:
             permissions.append(
-                Permission(uri=str(job.uri.with_name(job.name)), action=action)
+                Permission(
+                    uri=str(_job_uri_with_name(job.uri, job.name)), action=action
+                )
             )
         logger.info("Checking whether %r has %r", user, permissions)
         await check_any_permissions(request, permissions)
@@ -668,3 +671,10 @@ async def check_any_permissions(
 
 def _permission_to_primitive(perm: Permission) -> Dict[str, str]:
     return {"uri": perm.uri, "action": perm.action}
+
+
+def _job_uri_with_name(uri: URL, name: str) -> URL:
+    assert name
+    assert uri.host
+    assert uri.name
+    return uri.with_name(name)
