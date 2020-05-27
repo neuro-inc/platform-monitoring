@@ -12,7 +12,7 @@ from typing import (
 import pytest
 from aiohttp.hdrs import AUTHORIZATION
 from jose import jwt
-from neuro_auth_client import AuthClient, User as AuthClientUser
+from neuro_auth_client import AuthClient, Permission, User as AuthClientUser
 from platform_monitoring.api import create_auth_client
 from platform_monitoring.config import PlatformAuthConfig
 from yarl import URL
@@ -91,3 +91,20 @@ async def regular_user_factory(
         return _User(name=user.name, token=token_factory(user.name))  # type: ignore
 
     yield _factory
+
+
+@pytest.fixture
+async def share_job(
+    auth_client: AuthClient, cluster_name: str,
+) -> AsyncIterator[Callable[[_User, _User, str], Awaitable[None]]]:
+    async def _impl(
+        owner: _User, follower: _User, job_id: str, action: str = "read"
+    ) -> None:
+        permission = Permission(
+            uri=f"job://{cluster_name}/{owner.name}/{job_id}", action=action
+        )
+        await auth_client.grant_user_permissions(
+            follower.name, [permission], token=owner.token
+        )
+
+    yield _impl

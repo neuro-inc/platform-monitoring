@@ -33,7 +33,7 @@ from yarl import URL
 
 from tests.integration.conftest_kube import MyKubeClient
 
-from .conftest import ApiAddress, create_local_app_server
+from .conftest import ApiAddress, create_local_app_server, random_str
 from .conftest_auth import _User
 
 
@@ -255,9 +255,11 @@ async def job_factory(
 ) -> AsyncIterator[Callable[[str], Awaitable[str]]]:
     jobs: List[str] = []
 
-    async def _f(command: str) -> str:
+    async def _f(command: str, name: str = "") -> str:
         request_payload = job_request_factory()
         request_payload["container"]["command"] = command
+        if name:
+            request_payload["name"] = name
         async with client.post(
             platform_api.jobs_base_url,
             headers=jobs_client.headers,
@@ -280,6 +282,18 @@ async def job_factory(
 @pytest.fixture
 async def infinite_job(job_factory: Callable[[str], Awaitable[str]]) -> str:
     return await job_factory("tail -f /dev/null")
+
+
+@pytest.fixture
+def job_name() -> str:
+    return f"test-job-{random_str()}"
+
+
+@pytest.fixture
+async def named_infinite_job(
+    job_factory: Callable[[str, str], Awaitable[str]], job_name: str
+) -> str:
+    return await job_factory("tail -f /dev/null", job_name)
 
 
 @pytest.fixture
@@ -463,6 +477,26 @@ class TestTopApi:
                 "memory": mock.ANY,
                 "timestamp": mock.ANY,
             }
+
+    @pytest.mark.asyncio
+    async def test_top_shared_by_name(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        job_name: str,
+        named_infinite_job: str,
+        regular_user_factory: Callable[..., Awaitable[_User]],
+        share_job: Callable[..., Awaitable[None]],
+    ) -> None:
+        user2 = await regular_user_factory()
+        await share_job(jobs_client.user, user2, job_name)
+
+        url = monitoring_api.generate_top_url(named_infinite_job)
+        async with client.ws_connect(url, headers=user2.headers) as ws:
+            proto = ws._writer.protocol
+            assert proto.transport is not None
+            proto.transport.close()
 
     @pytest.mark.asyncio
     async def test_top_no_permissions_unauthorized(
@@ -730,6 +764,35 @@ class TestLogApi:
             expected_payload = "\n".join(str(i) for i in range(1, 6)) + "\n"
             assert actual_payload == expected_payload.encode()
 
+    @pytest.mark.asyncio
+    async def test_log_shared_by_name(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        platform_api: PlatformApiEndpoints,
+        client: aiohttp.ClientSession,
+        job_submit: Dict[str, Any],
+        job_name: str,
+        regular_user_factory: Callable[..., Awaitable[_User]],
+        share_job: Callable[[_User, _User, str], Awaitable[None]],
+    ) -> None:
+        user1 = await regular_user_factory()
+        user2 = await regular_user_factory()
+
+        job_submit["name"] = job_name
+
+        url = platform_api.jobs_base_url
+        async with client.post(url, headers=user1.headers, json=job_submit) as resp:
+            assert resp.status == HTTPAccepted.status_code, await resp.text()
+            payload = await resp.json()
+            job_id = payload["id"]
+            assert payload["name"] == job_name
+
+        await share_job(user1, user2, job_name)
+
+        url = monitoring_api.generate_log_url(job_id)
+        async with client.get(url, headers=user2.headers) as resp:
+            assert resp.status == HTTPOk.status_code
+
 
 class TestSaveApi:
     @pytest.mark.asyncio
@@ -928,6 +991,31 @@ class TestSaveApi:
             assert chunks[-1].get("aux", {}).get("Tag") == infinite_job, debug
 
     @pytest.mark.asyncio
+    async def test_save_shared_by_name(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        job_name: str,
+        named_infinite_job: str,
+        regular_user_factory: Callable[..., Awaitable[_User]],
+        share_job: Callable[..., Awaitable[None]],
+        config: Config,
+    ) -> None:
+        user2 = await regular_user_factory()
+        await share_job(jobs_client.user, user2, job_name, action="write")
+
+        url = monitoring_api.generate_save_url(job_id=named_infinite_job)
+        repository = f"{config.registry.host}/alpine"
+        image = f"{repository}:{named_infinite_job}"
+        payload = {"container": {"image": image}}
+
+        async with client.post(url, headers=user2.headers, json=payload) as resp:
+            assert resp.status == HTTPOk.status_code, await resp.text()
+
+
+class TestAttachApi:
+    @pytest.mark.asyncio
     async def test_attach_nontty(
         self,
         platform_api: PlatformApiEndpoints,
@@ -1012,6 +1100,53 @@ class TestSaveApi:
         result = await jobs_client.long_polling_by_job_id(job_id, status="failed")
         assert result["history"]["exit_code"] == 1, result
 
+    @pytest.mark.asyncio
+    async def test_attach_nontty_shared_by_name(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        wait_for_job_docker_client: None,
+        job_submit: Dict[str, Any],
+        job_name: str,
+        regular_user_factory: Callable[..., Awaitable[_User]],
+        share_job: Callable[..., Awaitable[None]],
+    ) -> None:
+        user2 = await regular_user_factory()
+
+        command = 'bash -c "for i in {0..9}; do echo $i; sleep 1; done"'
+        job_submit["container"]["command"] = command
+        job_submit["name"] = job_name
+
+        url = platform_api.jobs_base_url
+        async with client.post(
+            url, headers=jobs_client.headers, json=job_submit
+        ) as response:
+            assert response.status == 202, await response.text()
+            result = await response.json()
+            assert result["status"] in ["pending"]
+            job_id = result["id"]
+            assert result["name"] == job_name
+
+        await share_job(jobs_client.user, user2, job_name, action="write")
+
+        await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
+
+        url1 = monitoring_api.generate_attach_url(
+            job_id=job_id, stdin=False, stdout=True, stderr=True, logs=True
+        )
+
+        content = []
+        async with client.ws_connect(url1, method="POST", headers=user2.headers) as ws:
+            async for msg in ws:
+                content.append(msg.data)
+
+        expected = b"".join(f"\x01{i}\n".encode("ascii") for i in range(10))
+        assert b"".join(content) == expected
+
+
+class TestExecApi:
     @pytest.mark.asyncio
     async def test_exec_notty_stdout(
         self,
@@ -1126,6 +1261,43 @@ class TestSaveApi:
                 assert data["exit_code"] == 1, data
 
     @pytest.mark.asyncio
+    async def test_exec_notty_stdout_shared_by_name(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        job_name: str,
+        named_infinite_job: str,
+        regular_user_factory: Callable[..., Awaitable[_User]],
+        share_job: Callable[..., Awaitable[None]],
+    ) -> None:
+        user2 = await regular_user_factory()
+        await share_job(jobs_client.user, user2, job_name, action="write")
+
+        url1 = monitoring_api.generate_exec_create_url(named_infinite_job)
+        async with client.post(
+            url1,
+            headers=user2.headers,
+            json={
+                "command": "sh -c 'sleep 5; echo abc'",
+                "stdin": False,
+                "stdout": True,
+                "stderr": True,
+                "tty": False,
+            },
+        ) as response:
+            assert response.status == 200, await response.text()
+            content = await response.json()
+            exec_id = content["exec_id"]
+
+        url2 = monitoring_api.generate_exec_start_url(named_infinite_job, exec_id)
+        async with client.ws_connect(url2, method="POST", headers=user2.headers) as ws:
+            data = await ws.receive_bytes()
+            assert data == b"\x01abc\n"
+
+
+class TestKillApi:
+    @pytest.mark.asyncio
     async def test_kill(
         self,
         platform_api: PlatformApiEndpoints,
@@ -1162,4 +1334,28 @@ class TestSaveApi:
             assert response.status == 204, await response.text()
 
         result = await jobs_client.long_polling_by_job_id(infinite_job, status="failed")
+        assert result["history"]["exit_code"] == 128 + signal.SIGKILL, result
+
+    @pytest.mark.asyncio
+    async def test_kill_shared_by_name(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        job_name: str,
+        named_infinite_job: str,
+        regular_user_factory: Callable[..., Awaitable[_User]],
+        share_job: Callable[..., Awaitable[None]],
+    ) -> None:
+        user2 = await regular_user_factory()
+        await share_job(jobs_client.user, user2, job_name, action="write")
+
+        url = monitoring_api.generate_kill_url(named_infinite_job)
+        url = url.with_query(signal=int(signal.SIGKILL))
+        async with client.post(url, headers=user2.headers) as response:
+            assert response.status == 204, await response.text()
+
+        result = await jobs_client.long_polling_by_job_id(
+            named_infinite_job, status="failed"
+        )
         assert result["history"]["exit_code"] == 128 + signal.SIGKILL, result

@@ -5,7 +5,7 @@ import shlex
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from pathlib import Path
 from tempfile import mktemp
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List
 
 import aiohttp
 import aiohttp.web
@@ -23,7 +23,8 @@ from aiohttp.web import (
     middleware,
 )
 from aiohttp_security import check_authorized
-from neuro_auth_client import AuthClient, Permission, check_permissions
+from aiohttp_security.api import AUTZ_KEY
+from neuro_auth_client import AuthClient, Permission
 from neuro_auth_client.security import AuthScheme, setup_security
 from neuromation.api import (
     Client as PlatformApiClient,
@@ -32,6 +33,7 @@ from neuromation.api import (
 )
 from platform_logging import init_logging
 from platform_monitoring.user import untrusted_user
+from yarl import URL
 
 from .base import JobStats, Telemetry
 from .config import (
@@ -118,13 +120,7 @@ class MonitoringApiHandler:
         return self._app["log_reader_factory"]
 
     async def stream_log(self, request: Request) -> StreamResponse:
-        user = await untrusted_user(request)
-        job_id = request.match_info["job_id"]
-        job = await self._get_job(job_id)
-
-        permission = Permission(uri=str(job.uri), action="read")
-        logger.info("Checking whether %r has %r", user, permission)
-        await check_permissions(request, [permission])
+        job = await self._resolve_job(request, "read")
 
         pod_name = self._kube_helper.get_job_pod_name(job)
         log_reader = await self._log_reader_factory.get_pod_log_reader(pod_name)
@@ -149,13 +145,7 @@ class MonitoringApiHandler:
         return response
 
     async def stream_top(self, request: Request) -> WebSocketResponse:
-        user = await untrusted_user(request)
-        job_id = request.match_info["job_id"]
-        job = await self._get_job(job_id)
-
-        permission = Permission(uri=str(job.uri), action="read")
-        logger.info("Checking whether %r has %r", user, permission)
-        await check_permissions(request, [permission])
+        job = await self._resolve_job(request, "read")
 
         logger.info("Websocket connection starting")
         ws = WebSocketResponse()
@@ -182,7 +172,7 @@ class MonitoringApiHandler:
                     # TODO (A Yushkovskiy 06-Jun-2019) don't make slow HTTP requests to
                     #  platform-api to check job's status every iteration: we better
                     #  retrieve this information directly form kubernetes
-                    job = await self._get_job(job_id)
+                    job = await self._get_job(job.id)
 
                     if self._jobs_helper.is_job_running(job):
                         job_stats = await telemetry.get_latest_stats()
@@ -210,6 +200,24 @@ class MonitoringApiHandler:
     async def _get_job(self, job_id: str) -> Job:
         return await self._jobs_service.get(job_id)
 
+    async def _resolve_job(self, request: Request, action: str) -> Job:
+        user = await untrusted_user(request)
+        job_id = request.match_info["job_id"]
+        job = await self._get_job(job_id)
+
+        # XXX (serhiy 23-May-2020) Maybe check permissions on the
+        # platform-api side?
+        permissions = [Permission(uri=str(job.uri), action=action)]
+        if job.name:
+            permissions.append(
+                Permission(
+                    uri=str(_job_uri_with_name(job.uri, job.name)), action=action
+                )
+            )
+        logger.info("Checking whether %r has %r", user, permissions)
+        await check_any_permissions(request, permissions)
+        return job
+
     async def _get_job_telemetry(self, job: Job) -> Telemetry:
         pod_name = self._kube_helper.get_job_pod_name(job)
         return KubeTelemetry(
@@ -233,12 +241,7 @@ class MonitoringApiHandler:
 
     async def stream_save(self, request: Request) -> StreamResponse:
         user = await untrusted_user(request)
-        job_id = request.match_info["job_id"]
-        job = await self._get_job(job_id)
-
-        permission = Permission(uri=str(job.uri), action="write")
-        logger.info("Checking whether %r has %r", user, permission)
-        await check_permissions(request, [permission])
+        job = await self._resolve_job(request, "write")
 
         container = await self._parse_save_container(request)
 
@@ -285,39 +288,23 @@ class MonitoringApiHandler:
         return Container(image=image)
 
     async def resize(self, request: Request) -> Response:
-        user = await untrusted_user(request)
-        job_id = request.match_info["job_id"]
-        job = await self._get_job(job_id)
-
         w = int(request.query.get("w", "80"))
         h = int(request.query.get("h", "25"))
 
-        permission = Permission(uri=str(job.uri), action="write")
-        logger.info("Checking whether %r has %r", user, permission)
-        await check_permissions(request, [permission])
+        job = await self._resolve_job(request, "write")
 
         await self._jobs_service.resize(job, w=w, h=h)
         return json_response(None)
 
     async def kill(self, request: Request) -> Response:
-        user = await untrusted_user(request)
-        job_id = request.match_info["job_id"]
-        job = await self._get_job(job_id)
-
         signal = request.query.get("signal", "SIGKILL")
 
-        permission = Permission(uri=str(job.uri), action="write")
-        logger.info("Checking whether %r has %r", user, permission)
-        await check_permissions(request, [permission])
+        job = await self._resolve_job(request, "write")
 
         await self._jobs_service.kill(job, signal)
         return json_response(None, status=204)
 
     async def ws_attach(self, request: Request) -> StreamResponse:
-        user = await untrusted_user(request)
-        job_id = request.match_info["job_id"]
-        job = await self._get_job(job_id)
-
         stdin = _parse_bool(request.query.get("stdin", "0"))
         stdout = _parse_bool(request.query.get("stdout", "1"))
         stderr = _parse_bool(request.query.get("stderr", "1"))
@@ -326,9 +313,7 @@ class MonitoringApiHandler:
         if not (stdin or stdout or stderr):
             raise ValueError("Required at least one of stdin, stdout or stderr")
 
-        permission = Permission(uri=str(job.uri), action="write")
-        logger.info("Checking whether %r has %r", user, permission)
-        await check_permissions(request, [permission])
+        job = await self._resolve_job(request, "write")
 
         response = WebSocketResponse()
         await response.prepare(request)
@@ -342,15 +327,9 @@ class MonitoringApiHandler:
         return response
 
     async def exec_create(self, request: Request) -> StreamResponse:
-        user = await untrusted_user(request)
-        job_id = request.match_info["job_id"]
-        job = await self._get_job(job_id)
-
         exe = await self._parse_exec_create(request)
 
-        permission = Permission(uri=str(job.uri), action="write")
-        logger.info("Checking whether %r has %r", user, permission)
-        await check_permissions(request, [permission])
+        job = await self._resolve_job(request, "write")
 
         exec_id = await self._jobs_service.exec_create(
             job,
@@ -360,7 +339,7 @@ class MonitoringApiHandler:
             stderr=exe.stderr,
             tty=exe.tty,
         )
-        return json_response({"job_id": job_id, "exec_id": exec_id})
+        return json_response({"job_id": job.id, "exec_id": exec_id})
 
     async def _parse_exec_create(self, request: Request) -> ExecCreate:
         payload = await request.json()
@@ -375,14 +354,9 @@ class MonitoringApiHandler:
         )
 
     async def exec_resize(self, request: Request) -> StreamResponse:
-        user = await untrusted_user(request)
-        job_id = request.match_info["job_id"]
-        job = await self._get_job(job_id)
         exec_id = request.match_info["exec_id"]
 
-        permission = Permission(uri=str(job.uri), action="write")
-        logger.info("Checking whether %r has %r", user, permission)
-        await check_permissions(request, [permission])
+        job = await self._resolve_job(request, "write")
 
         w = int(request.query["w"])
         h = int(request.query["h"])
@@ -391,14 +365,9 @@ class MonitoringApiHandler:
         return json_response(None)
 
     async def exec_inspect(self, request: Request) -> StreamResponse:
-        user = await untrusted_user(request)
-        job_id = request.match_info["job_id"]
-        job = await self._get_job(job_id)
         exec_id = request.match_info["exec_id"]
 
-        permission = Permission(uri=str(job.uri), action="write")
-        logger.info("Checking whether %r has %r", user, permission)
-        await check_permissions(request, [permission])
+        job = await self._resolve_job(request, "write")
 
         ret = await self._jobs_service.exec_inspect(job, exec_id)
         cmd = " ".join(shlex.quote(arg) for arg in ret["ProcessConfig"]["arguments"])
@@ -407,7 +376,7 @@ class MonitoringApiHandler:
                 "id": ret["ID"],
                 "running": ret["Running"],
                 "exit_code": ret["ExitCode"],
-                "job_id": job_id,
+                "job_id": job.id,
                 "tty": ret["ProcessConfig"]["tty"],
                 "entrypoint": ret["ProcessConfig"]["entrypoint"],
                 "command": cmd,
@@ -415,14 +384,9 @@ class MonitoringApiHandler:
         )
 
     async def exec_start(self, request: Request) -> StreamResponse:
-        user = await untrusted_user(request)
-        job_id = request.match_info["job_id"]
-        job = await self._get_job(job_id)
         exec_id = request.match_info["exec_id"]
 
-        permission = Permission(uri=str(job.uri), action="write")
-        logger.info("Checking whether %r has %r", user, permission)
-        await check_permissions(request, [permission])
+        job = await self._resolve_job(request, "write")
 
         data = await self._jobs_service.exec_inspect(job, exec_id)
 
@@ -682,3 +646,35 @@ def main() -> None:  # pragma: no coverage
     aiohttp.web.run_app(
         create_app(config), host=config.server.host, port=config.server.port
     )
+
+
+async def check_any_permissions(
+    request: aiohttp.web.Request, permissions: List[Permission]
+) -> None:
+    user_name = await check_authorized(request)
+    auth_policy = request.config_dict.get(AUTZ_KEY)
+    if not auth_policy:
+        raise RuntimeError("Auth policy not configured")
+
+    try:
+        missing = await auth_policy.get_missing_permissions(user_name, permissions)
+    except aiohttp.ClientError as e:
+        # re-wrap in order not to expose the client
+        raise RuntimeError(e) from e
+
+    if len(missing) >= len(permissions):
+        payload = {"missing": [_permission_to_primitive(p) for p in missing]}
+        raise aiohttp.web.HTTPForbidden(
+            text=json.dumps(payload), content_type="application/json"
+        )
+
+
+def _permission_to_primitive(perm: Permission) -> Dict[str, str]:
+    return {"uri": perm.uri, "action": perm.action}
+
+
+def _job_uri_with_name(uri: URL, name: str) -> URL:
+    assert name
+    assert uri.host
+    assert uri.name
+    return uri.with_name(name)
