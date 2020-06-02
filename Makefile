@@ -73,6 +73,7 @@ gke_docker_push: build
 	docker push $(IMAGE)
 
 aws_docker_push: build
+	$$(aws ecr get-login --no-include-email --region $(AWS_REGION) )
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_AWS):latest
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_AWS):$(CIRCLE_SHA1)
 	docker push $(IMAGE_AWS):latest
