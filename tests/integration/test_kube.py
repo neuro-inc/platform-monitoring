@@ -5,7 +5,9 @@ from typing import Any, AsyncIterator, Dict
 from unittest import mock
 from uuid import uuid4
 
+import aiobotocore
 import pytest
+from aiobotocore.client import AioBaseClient
 from aioelasticsearch import Elasticsearch
 from aiohttp import web
 from async_timeout import timeout
@@ -17,18 +19,51 @@ from platform_monitoring.kube_client import (
     KubeClientException,
     PodContainerStats,
 )
-from platform_monitoring.logs import ElasticsearchLogReader, PodContainerLogReader
+from platform_monitoring.logs import (
+    ElasticsearchLogReader,
+    PodContainerLogReader,
+    S3LogReader,
+)
 from platform_monitoring.utils import LogReaderFactory
 from yarl import URL
 
 from tests.integration.conftest import ApiAddress, create_local_app_server
 
+from .conftest import get_service_url
 from .conftest_kube import MyKubeClient, MyPodDescriptor
 
 
 @pytest.fixture
 def job_pod() -> MyPodDescriptor:
     return MyPodDescriptor(f"job-{uuid4()}")
+
+
+@pytest.fixture
+def s3_url() -> str:
+    return get_service_url(service_name="minio", namespace="kube-system")
+
+
+@pytest.fixture
+async def s3_client(s3_url: str) -> AsyncIterator[AioBaseClient]:
+    session = aiobotocore.get_session()
+    async with session.create_client(
+        "s3",
+        endpoint_url=s3_url,
+        region_name="region-1",
+        aws_access_key_id="access_key",
+        aws_secret_access_key="secret_key",
+    ) as client:
+        yield client
+
+
+@pytest.fixture
+def s3_bucket() -> str:
+    return "logs"
+
+
+@pytest.fixture
+def s3_prefix_format() -> str:
+    return "kube.var.log.containers.{pod_name}_{namespace_name}_{container_name}"
 
 
 @pytest.fixture
@@ -383,6 +418,40 @@ class TestLogReader:
             expected_payload=expected_payload,
         )
 
+    @pytest.mark.asyncio
+    async def test_s3_log_reader(
+        self,
+        kube_config: KubeConfig,
+        kube_client: MyKubeClient,
+        job_pod: MyPodDescriptor,
+        s3_client: AioBaseClient,
+        s3_bucket: str,
+        s3_prefix_format: str,
+    ) -> None:
+        command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
+        expected_payload = ("\n".join(str(i) for i in range(1, 6)) + "\n").encode()
+        job_pod.set_command(command)
+        await kube_client.create_pod(job_pod.payload)
+        await kube_client.wait_pod_is_terminated(job_pod.name)
+
+        await self._check_kube_logs(
+            kube_client,
+            namespace_name=kube_config.namespace,
+            pod_name=job_pod.name,
+            container_name=job_pod.name,
+            expected_payload=expected_payload,
+        )
+
+        await self._check_s3_logs(
+            s3_client,
+            bucket_name=s3_bucket,
+            prefix_format=s3_prefix_format,
+            namespace_name=kube_config.namespace,
+            pod_name=job_pod.name,
+            container_name=job_pod.name,
+            expected_payload=expected_payload,
+        )
+
     async def _check_kube_logs(
         self,
         kube_client: KubeClient,
@@ -413,6 +482,37 @@ class TestLogReader:
                 while True:
                     log_reader = ElasticsearchLogReader(
                         es_client,
+                        namespace_name=namespace_name,
+                        pod_name=pod_name,
+                        container_name=container_name,
+                    )
+                    payload = await self._consume_log_reader(log_reader, chunk_size=1)
+                    if payload == expected_payload:
+                        return
+                    await asyncio.sleep(interval_s)
+        except asyncio.TimeoutError:
+            pytest.fail(f"Pod logs did not match. Last payload: {payload!r}")
+
+    async def _check_s3_logs(
+        self,
+        s3_client: AioBaseClient,
+        bucket_name: str,
+        prefix_format: str,
+        namespace_name: str,
+        pod_name: str,
+        container_name: str,
+        expected_payload: Any,
+        timeout_s: float = 120.0,
+        interval_s: float = 1.0,
+    ) -> None:
+        payload = b""
+        try:
+            async with timeout(timeout_s):
+                while True:
+                    log_reader = S3LogReader(
+                        s3_client,
+                        bucket_name=bucket_name,
+                        prefix_format=prefix_format,
                         namespace_name=namespace_name,
                         pod_name=pod_name,
                         container_name=container_name,

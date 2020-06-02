@@ -1,9 +1,11 @@
 import io
+import json
 import logging
 import warnings
-from typing import Any, AsyncContextManager, Dict, Optional, Tuple
+from typing import Any, AsyncContextManager, Dict, Iterator, List, Optional, Tuple
 
 import aiohttp
+from aiobotocore.client import AioBaseClient
 from aioelasticsearch import Elasticsearch
 from aioelasticsearch.helpers import Scan
 
@@ -174,7 +176,7 @@ class ElasticsearchLogReader(LogReader):
     ) -> None:
         self._es_client = es_client
         self._index = "logstash-*"
-        self._doc_type = "fluentd"
+        self._doc_type = "_doc"
 
         self._namespace_name = namespace_name
         self._pod_name = pod_name
@@ -235,3 +237,65 @@ class ElasticsearchLogReader(LogReader):
             return doc["_source"]["log"].encode()
         except StopAsyncIteration:
             return b""
+
+
+class S3LogReader(LogReader):
+    def __init__(
+        self,
+        s3_client: AioBaseClient,
+        bucket_name: str,
+        prefix_format: str,
+        namespace_name: str,
+        pod_name: str,
+        container_name: str,
+    ) -> None:
+        self._s3_client = s3_client
+        self._bucket_name = bucket_name
+        self._prefix_format = prefix_format
+        self._namespace_name = namespace_name
+        self._pod_name = pod_name
+        self._container_name = container_name
+        self._buffer = LogBuffer()
+        self._key_iterator: Iterator[str] = iter(())
+
+    def _get_prefix(self) -> str:
+        return self._prefix_format.format(
+            namespace_name=self._namespace_name,
+            pod_name=self._pod_name,
+            container_name=self._container_name,
+        )
+
+    async def __aenter__(self) -> "LogReader":
+        paginator = self._s3_client.get_paginator("list_objects_v2")
+        keys: List[str] = []
+        async for page in paginator.paginate(
+            Bucket=self._bucket_name, Prefix=self._get_prefix()
+        ):
+            for obj in page.get("Contents", ()):
+                keys.append(obj["Key"])
+        keys.sort()
+        self._key_iterator = iter(keys)
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        self._buffer.close()
+        self._key_iterator = iter(())
+
+    async def read(self, size: int = -1) -> bytes:
+        chunk = self._buffer.read(size)
+        if chunk:
+            return chunk
+
+        await self._read_next_log_events()
+
+        return self._buffer.read(size)
+
+    async def _read_next_log_events(self) -> None:
+        key = next(self._key_iterator, "")
+        if not key:
+            return
+        response = await self._s3_client.get_object(Bucket=self._bucket_name, Key=key)
+        response_body = response["Body"]
+        async for line in response_body.iter_lines():
+            event = json.loads(line)
+            self._buffer.write(event["log"].encode())
