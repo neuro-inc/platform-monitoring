@@ -1249,7 +1249,7 @@ class TestExecApi:
             await ws.send_bytes(b"exit 1\n")
             assert await expect_prompt(ws) == b"exit 1\r\n"
 
-        async with timeout(15):
+        async with timeout(30):
             async with client.get(
                 monitoring_api.generate_exec_inspect_url(infinite_job, exec_id,),
                 headers=headers,
