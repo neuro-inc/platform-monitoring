@@ -72,8 +72,13 @@ gke_docker_push: build
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE):$(CIRCLE_SHA1)
 	docker push $(IMAGE)
 
-aws_docker_push: build
+gcr_login:
+	@echo $(GKE_ACCT_AUTH) | base64 --decode | docker login -u _json_key --password-stdin https://gcr.io
+
+ecr_login:
 	$$(aws ecr get-login --no-include-email --region $(AWS_REGION) )
+
+aws_docker_push: build ecr_login
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_AWS):latest
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_AWS):$(CIRCLE_SHA1)
 	docker push $(IMAGE_AWS):latest
