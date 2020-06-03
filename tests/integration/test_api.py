@@ -1408,8 +1408,7 @@ class TestPortForward:
     ) -> None:
         headers = jobs_client.headers
 
-        # command = 'nc -l -p 60002 -c "/bin/cat"'
-        command = "60002 reply-"
+        command = '60002 reply-'
         job_submit["container"]["command"] = command
         job_submit["container"]["image"] = "venilnoronha/tcp-echo-server:latest"
 
@@ -1422,7 +1421,7 @@ class TestPortForward:
 
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
 
-        url = monitoring_api.generate_port_forward_url(infinite_job, 60002)
+        url = monitoring_api.generate_port_forward_url(job_id, 60002)
         async with client.ws_connect(url, headers=headers) as ws:
             for i in range(3):
                 data = str(i).encode("ascii")
