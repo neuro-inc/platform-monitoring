@@ -2,7 +2,16 @@ import io
 import json
 import logging
 import warnings
-from typing import Any, AsyncContextManager, Dict, Iterator, List, Optional, Tuple
+from typing import (
+    Any,
+    AsyncContextManager,
+    AsyncIterator,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+)
 
 import aiohttp
 from aiobotocore.client import AioBaseClient
@@ -257,6 +266,7 @@ class S3LogReader(LogReader):
         self._container_name = container_name
         self._buffer = LogBuffer()
         self._key_iterator: Iterator[str] = iter(())
+        self._line_iterator: Optional[AsyncIterator[str]] = None
 
     def _get_prefix(self) -> str:
         return self._prefix_format.format(
@@ -280,22 +290,40 @@ class S3LogReader(LogReader):
     async def __aexit__(self, *args: Any) -> None:
         self._buffer.close()
         self._key_iterator = iter(())
+        self._line_iterator = None
 
     async def read(self, size: int = -1) -> bytes:
         chunk = self._buffer.read(size)
         if chunk:
             return chunk
 
-        await self._read_next_log_events()
+        chunk = await self._read_line()
 
+        self._buffer.write(chunk)
         return self._buffer.read(size)
 
-    async def _read_next_log_events(self) -> None:
+    async def _read_line(self) -> bytes:
+        if not self._line_iterator:
+            # read next file
+            await self._read_file()
+
+        if not self._line_iterator:
+            # all files were read
+            return b""
+
+        try:
+            line = await self._line_iterator.__anext__()
+        except StopAsyncIteration:
+            self._line_iterator = None
+            return await self._read_line()
+
+        event = json.loads(line)
+        return event["log"].encode()
+
+    async def _read_file(self) -> None:
         key = next(self._key_iterator, "")
         if not key:
             return
         response = await self._s3_client.get_object(Bucket=self._bucket_name, Key=key)
         response_body = response["Body"]
-        async for line in response_body.iter_lines():
-            event = json.loads(line)
-            self._buffer.write(event["log"].encode())
+        self._line_iterator = response_body.iter_lines()
