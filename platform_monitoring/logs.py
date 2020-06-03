@@ -176,7 +176,7 @@ class ElasticsearchLogReader(LogReader):
     ) -> None:
         self._es_client = es_client
         self._index = "logstash-*"
-        self._doc_type = "_doc"
+        self._doc_type = "fluentd"
 
         self._namespace_name = namespace_name
         self._pod_name = pod_name
