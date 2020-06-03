@@ -1409,7 +1409,7 @@ class TestPortForward:
         headers = jobs_client.headers
 
         # command = 'nc -l -p 60002 -c "/bin/cat"'
-        command = '60002 reply-'
+        command = "60002 reply-"
         job_submit["container"]["command"] = command
         job_submit["container"]["image"] = "venilnoronha/tcp-echo-server:latest"
 
