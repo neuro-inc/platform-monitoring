@@ -1410,6 +1410,7 @@ class TestPortForward:
 
         command = 'nc -l -p 60002 -c "/bin/cat"'
         job_submit["container"]["command"] = command
+        job_submit["container"]["image"] = "subfuzion/netcat"
 
         url = platform_api.jobs_base_url
         async with client.post(url, headers=headers, json=job_submit) as response:
