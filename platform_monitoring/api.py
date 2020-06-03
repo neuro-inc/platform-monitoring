@@ -415,7 +415,7 @@ class MonitoringApiHandler:
             raise aiohttp.web.HTTPBadRequest(
                 text=payload,
                 content_type="application/json",
-                headers={"X-Error": paylod},
+                headers={"X-Error": payload},
             )
 
         job = await self._resolve_job(request, "write")
@@ -431,7 +431,7 @@ class MonitoringApiHandler:
             raise aiohttp.web.HTTPBadRequest(
                 text=payload,
                 content_type="application/json",
-                headers={"X-Error": paylod},
+                headers={"X-Error": payload},
             )
 
         try:
