@@ -1409,9 +1409,9 @@ class TestPortForward:
         headers = jobs_client.headers
 
         # command = 'nc -l -p 60002 -c "/bin/cat"'
-        command = '-vl 60002"'
+        command = '60002 reply-'
         job_submit["container"]["command"] = command
-        job_submit["container"]["image"] = "subfuzion/netcat"
+        job_submit["container"]["image"] = "venilnoronha/tcp-echo-server:latest"
 
         url = platform_api.jobs_base_url
         async with client.post(url, headers=headers, json=job_submit) as response:
