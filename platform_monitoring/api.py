@@ -407,7 +407,7 @@ class MonitoringApiHandler:
         return response
 
     async def port_forward(self, request: Request) -> StreamResponse:
-        sport = request.match_info["exec_id"]
+        sport = request.match_info["port"]
         try:
             port = int(sport)
         except (TypeError, ValueError):
