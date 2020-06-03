@@ -1378,7 +1378,7 @@ class TestPortForward:
 
         # String port is invalid
         url = monitoring_api.generate_port_forward_url(infinite_job, "abc")
-        async with client.get(url, headers=headers) as response:
+        async with client.ws_connect(url, headers=headers) as response:
             assert response.status == 400, await response.text()
 
     @pytest.mark.asyncio
@@ -1394,5 +1394,36 @@ class TestPortForward:
 
         # Port 60001 is not handled
         url = monitoring_api.generate_port_forward_url(infinite_job, 60001)
-        async with client.get(url, headers=headers) as response:
+        async with client.ws_connect(url, headers=headers) as response:
             assert response.status == 400, await response.text()
+
+    @pytest.mark.asyncio
+    async def test_port_forward_ok(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+    ) -> None:
+        headers = jobs_client.headers
+
+        command = 'nc -l -p 60002 -c "/bin/cat"'
+        job_submit["container"]["command"] = command
+
+        url = platform_api.jobs_base_url
+        async with client.post(url, headers=headers, json=job_submit) as response:
+            assert response.status == HTTPAccepted.status_code
+            result = await response.json()
+            assert result["status"] in ["pending"]
+            job_id = result["id"]
+
+        await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
+
+        url = monitoring_api.generate_port_forward_url(infinite_job, 60002)
+        async with client.ws_connect(url, headers=headers) as ws:
+            for i in range(3):
+                data = str(i).encode("ascii")
+                await ws.send_bytes(data)
+                ret = await ws.receive_bytes()
+                assert ret == data
+            await ws.close()
