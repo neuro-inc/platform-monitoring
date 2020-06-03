@@ -411,9 +411,11 @@ class MonitoringApiHandler:
         try:
             port = int(sport)
         except (TypeError, ValueError):
-            payload = {"msg": f"Invalid port number {sport!r}"}
+            payload = json.dumps({"msg": f"Invalid port number {sport!r}"})
             raise aiohttp.web.HTTPBadRequest(
-                text=json.dumps(payload), content_type="application/json"
+                text=payload,
+                content_type="application/json",
+                headers={"X-Error": paylod},
             )
 
         job = await self._resolve_job(request, "write")
@@ -423,9 +425,13 @@ class MonitoringApiHandler:
         try:
             reader, writer = await self._jobs_service.port_forward(job, port)
         except OSError as exc:
-            payload = {"msg": f"Cannot connect to port {port}", "error": repr(exc)}
+            payload = json.dumps(
+                {"msg": f"Cannot connect to port {port}", "error": repr(exc)}
+            )
             raise aiohttp.web.HTTPBadRequest(
-                text=json.dumps(payload), content_type="application/json"
+                text=payload,
+                content_type="application/json",
+                headers={"X-Error": paylod},
             )
 
         try:
