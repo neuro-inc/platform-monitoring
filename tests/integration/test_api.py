@@ -5,7 +5,7 @@ import re
 import signal
 import time
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator, List
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Union
 from unittest import mock
 from uuid import uuid4
 
@@ -122,6 +122,9 @@ class MonitoringApiEndpoints:
 
     def generate_exec_start_url(self, job_id: str, exec_id: str) -> URL:
         return self.endpoint / job_id / exec_id / "exec_start"
+
+    def generate_port_forward_url(self, job_id: str, port: Union[int, str]) -> URL:
+        return self.endpoint / job_id / "port_forward" / str(port)
 
 
 @dataclass(frozen=True)
@@ -1359,3 +1362,37 @@ class TestKillApi:
             named_infinite_job, status="failed"
         )
         assert result["history"]["exit_code"] == 128 + signal.SIGKILL, result
+
+
+class TestPortForward:
+    @pytest.mark.asyncio
+    async def test_port_forward_bad_port(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        infinite_job: str,
+    ) -> None:
+        headers = jobs_client.headers
+
+        # String port is invalid
+        url = monitoring_api.generate_port_forward_url(infinite_job, "abc")
+        async with client.get(url, headers=headers) as response:
+            assert response.status == 400, await response.text()
+
+    @pytest.mark.asyncio
+    async def test_port_forward_cannot_connect(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        infinite_job: str,
+    ) -> None:
+        headers = jobs_client.headers
+
+        # Port 60001 is not handled
+        url = monitoring_api.generate_port_forward_url(infinite_job, 60001)
+        async with client.get(url, headers=headers) as response:
+            assert response.status == 400, await response.text()
