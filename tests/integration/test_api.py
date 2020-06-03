@@ -1408,7 +1408,7 @@ class TestPortForward:
     ) -> None:
         headers = jobs_client.headers
 
-        command = '60002 reply-'
+        command = "60002 reply-"
         job_submit["container"]["command"] = command
         job_submit["container"]["image"] = "venilnoronha/tcp-echo-server:latest"
 
