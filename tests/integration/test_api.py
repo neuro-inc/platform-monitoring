@@ -1378,7 +1378,7 @@ class TestPortForward:
 
         # String port is invalid
         url = monitoring_api.generate_port_forward_url(infinite_job, "abc")
-        async with client.ws_connect(url, headers=headers) as response:
+        async with client.get(url, headers=headers) as response:
             assert response.status == 400, await response.text()
 
     @pytest.mark.asyncio
@@ -1394,7 +1394,7 @@ class TestPortForward:
 
         # Port 60001 is not handled
         url = monitoring_api.generate_port_forward_url(infinite_job, 60001)
-        async with client.ws_connect(url, headers=headers) as response:
+        async with client.get(url, headers=headers) as response:
             assert response.status == 400, await response.text()
 
     @pytest.mark.asyncio
