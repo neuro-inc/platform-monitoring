@@ -411,7 +411,7 @@ class MonitoringApiHandler:
         try:
             port = int(sport)
         except (TypeError, ValueError):
-            payload = {"msg": f"Invalid port number {port!r}"}
+            payload = {"msg": f"Invalid port number {sport!r}"}
             raise aiohttp.web.HTTPBadRequest(
                 text=json.dumps(payload), content_type="application/json"
             )
