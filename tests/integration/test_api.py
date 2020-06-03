@@ -1403,6 +1403,7 @@ class TestPortForward:
         platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
+        job_submit: Dict[str, Any],
         jobs_client: JobsClient,
     ) -> None:
         headers = jobs_client.headers
