@@ -428,7 +428,7 @@ class Transfer:
 
         try:
             await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        except:  # noqa: E722
+        finally:
             await self._ws.close()
             await self._stream.close()
             for task in tasks:
