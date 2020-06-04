@@ -2,6 +2,7 @@ import io
 import json
 import logging
 import warnings
+from types import TracebackType
 from typing import (
     Any,
     AsyncContextManager,
@@ -11,10 +12,12 @@ from typing import (
     List,
     Optional,
     Tuple,
+    Type,
 )
 
 import aiohttp
 from aiobotocore.client import AioBaseClient
+from aiobotocore.response import StreamingBody
 from aioelasticsearch import Elasticsearch
 from aioelasticsearch.helpers import Scan
 
@@ -266,6 +269,7 @@ class S3LogReader(LogReader):
         self._container_name = container_name
         self._buffer = LogBuffer()
         self._key_iterator: Iterator[str] = iter(())
+        self._response_body: Optional[StreamingBody] = None
         self._line_iterator: Optional[AsyncIterator[str]] = None
 
     def _get_prefix(self) -> str:
@@ -290,7 +294,7 @@ class S3LogReader(LogReader):
     async def __aexit__(self, *args: Any) -> None:
         self._buffer.close()
         self._key_iterator = iter(())
-        self._line_iterator = None
+        await self._end_read_file(*args)
 
     async def read(self, size: int = -1) -> bytes:
         chunk = self._buffer.read(size)
@@ -305,7 +309,7 @@ class S3LogReader(LogReader):
     async def _read_line(self) -> bytes:
         if not self._line_iterator:
             # read next file
-            await self._read_file()
+            await self._start_read_file()
 
         if not self._line_iterator:
             # all files were read
@@ -314,16 +318,28 @@ class S3LogReader(LogReader):
         try:
             line = await self._line_iterator.__anext__()
         except StopAsyncIteration:
-            self._line_iterator = None
+            await self._end_read_file()
             return await self._read_line()
 
         event = json.loads(line)
         return event["log"].encode()
 
-    async def _read_file(self) -> None:
+    async def _start_read_file(self) -> None:
         key = next(self._key_iterator, "")
         if not key:
             return
         response = await self._s3_client.get_object(Bucket=self._bucket_name, Key=key)
-        response_body = response["Body"]
-        self._line_iterator = response_body.iter_lines()
+        self._response_body = response["Body"]
+        await self._response_body.__aenter__()
+        self._line_iterator = self._response_body.iter_lines()
+
+    async def _end_read_file(
+        self,
+        exc_type: Optional[Type[BaseException]] = None,
+        exc_val: Optional[BaseException] = None,
+        exc_tb: Optional[TracebackType] = None,
+    ) -> None:
+        self._line_iterator = None
+        if self._response_body:
+            await self._response_body.__aexit__(exc_type, exc_val, exc_tb)
+            self._response_body = None
