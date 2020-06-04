@@ -21,7 +21,7 @@ jobs:
 
       - restore_cache:
           keys:
-          - v1-dependencies-python_3.7.2-{{ checksum "setup.py" }}-{{ checksum "requirements/syntax.txt" }}-{{ checksum "requirements/test.txt" }}
+          - &cache_key v2-dependencies-python_3.7.2-{{ checksum "setup.py" }}-{{ checksum "requirements/syntax.txt" }}-{{ checksum "requirements/test.txt" }}
 
       - run:
           name: Configuring Docker Client
@@ -63,7 +63,9 @@ jobs:
       - run:
           name: Setting up Python Virtual Environment
           command: |
-            pyenv install 3.7.2
+            git clone git://github.com/pyenv/pyenv-update.git $(pyenv root)/plugins/pyenv-update
+            pyenv update
+            pyenv install -s 3.7.2
             pyenv global 3.7.2
             python -m venv venv
             source venv/bin/activate
@@ -71,8 +73,9 @@ jobs:
 
       - save_cache:
           paths:
+            - /opt/circleci/.pyenv/versions/3.7.2
             - venv
-          key: v1-dependencies-python_3.7.2-{{ checksum "setup.py" }}-{{ checksum "requirements/syntax.txt" }}-{{ checksum "requirements/test.txt" }}
+          key: *cache_key
 
       - run:
           name: Running Static Code Analysis
