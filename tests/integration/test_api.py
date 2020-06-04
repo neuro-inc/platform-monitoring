@@ -3,6 +3,7 @@ import json
 import logging
 import re
 import signal
+import textwrap
 import time
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Union
@@ -1408,7 +1409,8 @@ class TestPortForward:
     ) -> None:
         headers = jobs_client.headers
 
-        py = textwrap.dedent("""\
+        py = textwrap.dedent(
+            """\
             import socket
 
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -1422,6 +1424,7 @@ class TestPortForward:
                         break
                     cli.sendall(b"rep-"+data)
         """
+        )
         command = f'python -c "{py}"'
         job_submit["container"]["command"] = command
         job_submit["container"]["image"] = "python3:latest"
