@@ -1425,7 +1425,7 @@ class TestPortForward:
                     cli.sendall(b"rep-"+data)
         """
         )
-        command = f'python -c "{py}"'
+        command = f"python -c '{py}'"
         job_submit["container"]["command"] = command
         job_submit["container"]["image"] = "python:latest"
 
