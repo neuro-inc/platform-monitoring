@@ -1427,7 +1427,7 @@ class TestPortForward:
         )
         command = f'python -c "{py}"'
         job_submit["container"]["command"] = command
-        job_submit["container"]["image"] = "python3:latest"
+        job_submit["container"]["image"] = "python:latest"
 
         url = platform_api.jobs_base_url
         async with client.post(url, headers=headers, json=job_submit) as response:
