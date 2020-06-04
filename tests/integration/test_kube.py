@@ -6,6 +6,7 @@ from unittest import mock
 from uuid import uuid4
 
 import pytest
+from aiobotocore.client import AioBaseClient
 from aioelasticsearch import Elasticsearch
 from aiohttp import web
 from async_timeout import timeout
@@ -17,7 +18,11 @@ from platform_monitoring.kube_client import (
     KubeClientException,
     PodContainerStats,
 )
-from platform_monitoring.logs import ElasticsearchLogReader, PodContainerLogReader
+from platform_monitoring.logs import (
+    ElasticsearchLogReader,
+    PodContainerLogReader,
+    S3LogReader,
+)
 from platform_monitoring.utils import LogReaderFactory
 from yarl import URL
 
@@ -383,6 +388,40 @@ class TestLogReader:
             expected_payload=expected_payload,
         )
 
+    @pytest.mark.asyncio
+    async def test_s3_log_reader(
+        self,
+        kube_config: KubeConfig,
+        kube_client: MyKubeClient,
+        job_pod: MyPodDescriptor,
+        s3_client: AioBaseClient,
+        s3_logs_bucket: str,
+        s3_logs_key_prefix_format: str,
+    ) -> None:
+        command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
+        expected_payload = ("\n".join(str(i) for i in range(1, 6)) + "\n").encode()
+        job_pod.set_command(command)
+        await kube_client.create_pod(job_pod.payload)
+        await kube_client.wait_pod_is_terminated(job_pod.name)
+
+        await self._check_kube_logs(
+            kube_client,
+            namespace_name=kube_config.namespace,
+            pod_name=job_pod.name,
+            container_name=job_pod.name,
+            expected_payload=expected_payload,
+        )
+
+        await self._check_s3_logs(
+            s3_client,
+            bucket_name=s3_logs_bucket,
+            prefix_format=s3_logs_key_prefix_format,
+            namespace_name=kube_config.namespace,
+            pod_name=job_pod.name,
+            container_name=job_pod.name,
+            expected_payload=expected_payload,
+        )
+
     async def _check_kube_logs(
         self,
         kube_client: KubeClient,
@@ -413,6 +452,37 @@ class TestLogReader:
                 while True:
                     log_reader = ElasticsearchLogReader(
                         es_client,
+                        namespace_name=namespace_name,
+                        pod_name=pod_name,
+                        container_name=container_name,
+                    )
+                    payload = await self._consume_log_reader(log_reader, chunk_size=1)
+                    if payload == expected_payload:
+                        return
+                    await asyncio.sleep(interval_s)
+        except asyncio.TimeoutError:
+            pytest.fail(f"Pod logs did not match. Last payload: {payload!r}")
+
+    async def _check_s3_logs(
+        self,
+        s3_client: AioBaseClient,
+        bucket_name: str,
+        prefix_format: str,
+        namespace_name: str,
+        pod_name: str,
+        container_name: str,
+        expected_payload: Any,
+        timeout_s: float = 120.0,
+        interval_s: float = 1.0,
+    ) -> None:
+        payload = b""
+        try:
+            async with timeout(timeout_s):
+                while True:
+                    log_reader = S3LogReader(
+                        s3_client,
+                        bucket_name=bucket_name,
+                        prefix_format=prefix_format,
                         namespace_name=namespace_name,
                         pod_name=pod_name,
                         container_name=container_name,

@@ -10,9 +10,9 @@ GKE_PREFIX=$GKE_DOCKER_REGISTRY/$GKE_PROJECT_ID
 function minikube::start {
     echo "Starting minikube..."
     mkdir -p ~/.minikube/files/files
-    cp tests/k8s/fluentd/kubernetes.conf ~/.minikube/files/files/fluentd-kubernetes.conf
+    cp tests/k8s/files/* ~/.minikube/files/files/
     minikube config set WantUpdateNotification false
-    minikube start --kubernetes-version=v1.13.0
+    minikube start --kubernetes-version=v1.14.10
     minikube addons enable registry
     kubectl config use-context minikube
 }
