@@ -1423,7 +1423,7 @@ class TestPortForward:
 
         url = monitoring_api.generate_port_forward_url(job_id, 60002)
         async with client.get(url, headers=headers) as resp:
-            assert resp.status == 201
+            assert resp.status == 201, await resp.text()
 
         async with client.ws_connect(url, headers=headers) as ws:
             for i in range(3):
