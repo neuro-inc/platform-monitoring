@@ -436,7 +436,6 @@ class Transfer:
                     task.cancel()
                     with suppress(asyncio.CancelledError):
                         await task
-            raise
 
     async def _do_input(self) -> None:
         async for msg in self._ws:
