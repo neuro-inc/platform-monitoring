@@ -458,13 +458,12 @@ class Transfer:
                 raise ValueError(f"Unsupported WS message type {msg.type}")
 
     async def _do_output(self) -> None:
-        while True:
+        while not self._closing:
             data = await self._stream.read_out()
             if data is None:
                 self._closing = True
                 await self._ws.close()
-                return
-            if not self._closing:
+            elif not self._closing:
                 await self._ws.send_bytes(bytes([data.stream]) + data.data)
 
 
