@@ -5,7 +5,6 @@ from typing import Any, AsyncIterator, Dict
 from unittest import mock
 from uuid import uuid4
 
-import aiobotocore
 import pytest
 from aiobotocore.client import AioBaseClient
 from aioelasticsearch import Elasticsearch
@@ -29,41 +28,12 @@ from yarl import URL
 
 from tests.integration.conftest import ApiAddress, create_local_app_server
 
-from .conftest import get_service_url
 from .conftest_kube import MyKubeClient, MyPodDescriptor
 
 
 @pytest.fixture
 def job_pod() -> MyPodDescriptor:
     return MyPodDescriptor(f"job-{uuid4()}")
-
-
-@pytest.fixture
-def s3_url() -> str:
-    return get_service_url(service_name="minio", namespace="kube-system")
-
-
-@pytest.fixture
-async def s3_client(s3_url: str) -> AsyncIterator[AioBaseClient]:
-    session = aiobotocore.get_session()
-    async with session.create_client(
-        "s3",
-        endpoint_url=s3_url,
-        region_name="region-1",
-        aws_access_key_id="access_key",
-        aws_secret_access_key="secret_key",
-    ) as client:
-        yield client
-
-
-@pytest.fixture
-def s3_bucket() -> str:
-    return "logs"
-
-
-@pytest.fixture
-def s3_prefix_format() -> str:
-    return "kube.var.log.containers.{pod_name}_{namespace_name}_{container_name}"
 
 
 @pytest.fixture
@@ -425,8 +395,8 @@ class TestLogReader:
         kube_client: MyKubeClient,
         job_pod: MyPodDescriptor,
         s3_client: AioBaseClient,
-        s3_bucket: str,
-        s3_prefix_format: str,
+        s3_logs_bucket: str,
+        s3_logs_key_prefix_format: str,
     ) -> None:
         command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
         expected_payload = ("\n".join(str(i) for i in range(1, 6)) + "\n").encode()
@@ -444,8 +414,8 @@ class TestLogReader:
 
         await self._check_s3_logs(
             s3_client,
-            bucket_name=s3_bucket,
-            prefix_format=s3_prefix_format,
+            bucket_name=s3_logs_bucket,
+            prefix_format=s3_logs_key_prefix_format,
             namespace_name=kube_config.namespace,
             pod_name=job_pod.name,
             container_name=job_pod.name,
