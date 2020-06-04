@@ -1408,9 +1408,23 @@ class TestPortForward:
     ) -> None:
         headers = jobs_client.headers
 
-        command = "60002 reply-"
+        py = textwrap.dedent("""\
+            import socket
+
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.bind(("0.0.0.0", 60002))
+            sock.listen()
+            while True:
+                cli, addr = sock.accept()
+                while True:
+                    data = cli.recv()
+                    if not data:
+                        break
+                    cli.sendall(b"rep-"+data)
+        """
+        command = f'python -c "{py}"'
         job_submit["container"]["command"] = command
-        job_submit["container"]["image"] = "venilnoronha/tcp-echo-server:latest"
+        job_submit["container"]["image"] = "python3:latest"
 
         url = platform_api.jobs_base_url
         async with client.post(url, headers=headers, json=job_submit) as response:
