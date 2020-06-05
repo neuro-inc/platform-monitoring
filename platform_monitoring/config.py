@@ -31,6 +31,26 @@ class ElasticsearchConfig:
     hosts: Sequence[str]
 
 
+@dataclass(frozen=True)
+class S3Config:
+    region: str
+    access_key_id: str
+    secret_access_key: str
+    endpoint_url: Optional[URL] = None
+
+
+class LogsStorageType(str, enum.Enum):
+    ELASTICSEARCH = "elasticsearch"
+    S3 = "s3"
+
+
+@dataclass(frozen=True)
+class LogsConfig:
+    storage_type: LogsStorageType
+    s3_bucket_name: str = ""
+    s3_key_prefix_format: str = ""
+
+
 class KubeClientAuthType(str, enum.Enum):
     NONE = "none"
     TOKEN = "token"
@@ -80,8 +100,10 @@ class Config:
     server: ServerConfig
     platform_api: PlatformApiConfig
     platform_auth: PlatformAuthConfig
-    elasticsearch: ElasticsearchConfig
+    logs: LogsConfig
     kube: KubeConfig
     docker: DockerConfig
     registry: RegistryConfig
     cors: CORSConfig
+    elasticsearch: Optional[ElasticsearchConfig] = None
+    s3: Optional[S3Config] = None
