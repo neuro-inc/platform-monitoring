@@ -32,10 +32,12 @@ function k8s::start {
     export CHANGE_MINIKUBE_NONE_USER=true
 
     sudo -E mkdir -p ~/.minikube/files/files
-    sudo -E cp tests/k8s/fluentd/kubernetes.conf ~/.minikube/files/files/fluentd-kubernetes.conf
-    sudo -E minikube start --vm-driver=none --kubernetes-version=v1.13.0
+    sudo -E cp tests/k8s/files/* ~/.minikube/files/files/
+    sudo -E minikube start --vm-driver=none --kubernetes-version=v1.14.10
 
     sudo -E minikube addons enable registry
+    echo "Start minikube tunnel"
+    minikube tunnel &
 }
 
 function k8s::apply_all_configurations {

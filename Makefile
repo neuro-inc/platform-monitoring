@@ -2,6 +2,7 @@ IMAGE_NAME ?= platformmonitoringapi
 IMAGE_TAG ?= latest
 ARTIFACTORY_TAG ?=$(shell echo "$(CIRCLE_TAG)" | awk -F/ '{print $$2}')
 IMAGE ?= $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/$(IMAGE_NAME)
+IMAGE_AWS ?= $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com/$(IMAGE_NAME)
 
 PLATFORMAPI_TAG=6b56cbdb3ff7ce1cbbd5165bf38f1389902c8fba
 PLATFORMAUTHAPI_TAG=e4aa342b8d145abc05cb795c3c07ce90ffdc1f59
@@ -52,6 +53,10 @@ gke_login:
 	docker version
 	gcloud auth configure-docker
 
+aws_login:
+	pip install --upgrade awscli
+	aws eks --region $(AWS_REGION) update-kubeconfig --name $(AWS_CLUSTER_NAME)
+
 gke_docker_pull_test_images:
 	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:$(PLATFORMAPI_TAG)
 	docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:$(PLATFORMAUTHAPI_TAG)
@@ -67,12 +72,28 @@ gke_docker_push: build
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE):$(CIRCLE_SHA1)
 	docker push $(IMAGE)
 
+gcr_login:
+	@echo $(GKE_ACCT_AUTH) | base64 --decode | docker login -u _json_key --password-stdin https://gcr.io
+
+ecr_login:
+	$$(aws ecr get-login --no-include-email --region $(AWS_REGION) )
+
+aws_docker_push: build ecr_login
+	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_AWS):latest
+	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_AWS):$(CIRCLE_SHA1)
+	docker push $(IMAGE_AWS):latest
+	docker push $(IMAGE_AWS):$(CIRCLE_SHA1)
+
 _helm:
 	curl https://raw.githubusercontent.com/kubernetes/helm/master/scripts/get | bash -s -- -v v2.11.0
 
 gke_k8s_deploy: _helm
 	gcloud --quiet container clusters get-credentials $(GKE_CLUSTER_NAME) $(CLUSTER_ZONE_REGION)
 	helm -f deploy/platformmonitoringapi/values-$(HELM_ENV).yaml --set "IMAGE=$(IMAGE):$(CIRCLE_SHA1)" upgrade --install platformmonitoringapi deploy/platformmonitoringapi/ --wait --timeout 600
+
+aws_k8s_deploy: _helm
+	helm -f deploy/platformmonitoringapi/values-$(HELM_ENV)-aws.yaml --set "IMAGE=$(IMAGE_AWS):$(CIRCLE_SHA1)" upgrade --install platformmonitoringapi deploy/platformmonitoringapi/ --namespace platform --wait --timeout 600
+
 
 artifactory_docker_push: build
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(ARTIFACTORY_DOCKER_REPO)/$(IMAGE_NAME):$(ARTIFACTORY_TAG)
