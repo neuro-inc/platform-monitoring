@@ -15,6 +15,7 @@ function minikube::start {
     minikube start --kubernetes-version=v1.13.0
     minikube addons enable registry
     kubectl config use-context minikube
+    minikube tunnel &
 }
 
 function save_k8s_image {
