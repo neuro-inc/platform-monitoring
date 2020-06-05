@@ -88,7 +88,7 @@ async def wait_for_service(
                     async with client.get(service_ping_url) as resp:
                         assert resp.status == aiohttp.web.HTTPOk.status_code
                         return
-            except aiohttp.ClientError as e:
+            except Exception as e:
                 logging.info(
                     f"Failed to ping service '{service_name}' "
                     f"via url '{service_ping_url}': {e}"
@@ -106,7 +106,7 @@ async def platform_api_config(
     base_url = get_service_url("platformapi", namespace="default")
     assert base_url.startswith("http")
     url = URL(base_url) / "api/v1"
-    await wait_for_service("platformapi", url / "ping")
+    await wait_for_service("platformapi", url / "ping", timeout_s=120)
     yield PlatformApiConfig(
         url=url,
         token=token_factory("compute"),  # token is hard-coded in the yaml configuration
@@ -128,6 +128,14 @@ async def es_config(
     token_factory: Callable[[str], str]
 ) -> AsyncIterator[ElasticsearchConfig]:
     es_host = get_service_url("elasticsearch-logging", namespace="kube-system")
+    async with Elasticsearch(hosts=[es_host]) as client:
+        async with timeout(120):
+            while True:
+                try:
+                    await client.ping()
+                    break
+                except Exception:
+                    await asyncio.sleep(1)
     yield ElasticsearchConfig(hosts=[es_host])
 
 
