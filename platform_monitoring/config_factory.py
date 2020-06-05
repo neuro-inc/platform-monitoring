@@ -73,6 +73,10 @@ class EnvironConfigFactory:
             access_key_id=self._environ["NP_MONITORING_S3_ACCESS_KEY_ID"],
             secret_access_key=self._environ["NP_MONITORING_S3_SECRET_ACCESS_KEY"],
             endpoint_url=URL(endpoint_url) if endpoint_url else None,
+            job_logs_bucket_name=self._environ["NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME"],
+            job_logs_key_prefix_format=self._environ[
+                "NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT"
+            ],
         )
 
     def _create_logs(self) -> LogsConfig:
@@ -82,11 +86,7 @@ class EnvironConfigFactory:
                     "NP_MONITORING_LOGS_STORAGE_TYPE",
                     LogsStorageType.ELASTICSEARCH.value,
                 )
-            ),
-            s3_bucket_name=self._environ.get("NP_MONITORING_LOGS_S3_BUCKET_NAME", ""),
-            s3_key_prefix_format=self._environ.get(
-                "NP_MONITORING_LOGS_S3_KEY_PREFIX_FORMAT", ""
-            ),
+            )
         )
 
     def _create_kube(self) -> KubeConfig:

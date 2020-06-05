@@ -100,6 +100,8 @@ def test_create_with_s3(environ: Dict[str, Any]) -> None:
     environ["NP_MONITORING_S3_REGION"] = "us-east-1"
     environ["NP_MONITORING_S3_ACCESS_KEY_ID"] = "access_key"
     environ["NP_MONITORING_S3_SECRET_ACCESS_KEY"] = "secret_access_key"
+    environ["NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME"] = "logs"
+    environ["NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT"] = "format"
 
     config = EnvironConfigFactory(environ).create()
 
@@ -107,18 +109,16 @@ def test_create_with_s3(environ: Dict[str, Any]) -> None:
         region="us-east-1",
         access_key_id="access_key",
         secret_access_key="secret_access_key",
+        job_logs_bucket_name="logs",
+        job_logs_key_prefix_format="format",
     )
 
     environ["NP_MONITORING_S3_ENDPOINT_URL"] = "http://minio:9000"
 
     config = EnvironConfigFactory(environ).create()
 
-    assert config.s3 == S3Config(
-        region="us-east-1",
-        access_key_id="access_key",
-        secret_access_key="secret_access_key",
-        endpoint_url=URL("http://minio:9000"),
-    )
+    assert config.s3
+    assert config.s3.endpoint_url == URL("http://minio:9000")
 
 
 def test_create_without_es_and_s3(environ: Dict[str, Any]) -> None:
@@ -140,16 +140,10 @@ def test_create_with_es_logs(environ: Dict[str, Any]) -> None:
 
 def test_create_with_s3_logs(environ: Dict[str, Any]) -> None:
     environ["NP_MONITORING_LOGS_STORAGE_TYPE"] = "s3"
-    environ["NP_MONITORING_LOGS_S3_BUCKET_NAME"] = "logs"
-    environ["NP_MONITORING_LOGS_S3_KEY_PREFIX_FORMAT"] = "format"
 
     config = EnvironConfigFactory(environ).create()
 
-    assert config.logs == LogsConfig(
-        storage_type=LogsStorageType.S3,
-        s3_bucket_name="logs",
-        s3_key_prefix_format="format",
-    )
+    assert config.logs == LogsConfig(storage_type=LogsStorageType.S3)
 
 
 @pytest.mark.parametrize(

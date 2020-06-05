@@ -1,5 +1,5 @@
 import enum
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
 from yarl import URL
@@ -34,8 +34,10 @@ class ElasticsearchConfig:
 @dataclass(frozen=True)
 class S3Config:
     region: str
-    access_key_id: str
-    secret_access_key: str
+    access_key_id: str = field(repr=False)
+    secret_access_key: str = field(repr=False)
+    job_logs_bucket_name: str
+    job_logs_key_prefix_format: str
     endpoint_url: Optional[URL] = None
 
 
@@ -47,8 +49,6 @@ class LogsStorageType(str, enum.Enum):
 @dataclass(frozen=True)
 class LogsConfig:
     storage_type: LogsStorageType
-    s3_bucket_name: str = ""
-    s3_key_prefix_format: str = ""
 
 
 class KubeClientAuthType(str, enum.Enum):
