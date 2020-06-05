@@ -36,6 +36,8 @@ function k8s::start {
     sudo -E minikube start --vm-driver=none --kubernetes-version=v1.13.0
 
     sudo -E minikube addons enable registry
+    echo "Start minikube tunnel"
+    minikube tunnel &
 }
 
 function k8s::apply_all_configurations {
