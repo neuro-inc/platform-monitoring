@@ -1,9 +1,23 @@
 import io
+import json
 import logging
 import warnings
-from typing import Any, AsyncContextManager, Dict, Optional, Tuple
+from types import TracebackType
+from typing import (
+    Any,
+    AsyncContextManager,
+    AsyncIterator,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Type,
+)
 
 import aiohttp
+from aiobotocore.client import AioBaseClient
+from aiobotocore.response import StreamingBody
 from aioelasticsearch import Elasticsearch
 from aioelasticsearch.helpers import Scan
 
@@ -235,3 +249,97 @@ class ElasticsearchLogReader(LogReader):
             return doc["_source"]["log"].encode()
         except StopAsyncIteration:
             return b""
+
+
+class S3LogReader(LogReader):
+    def __init__(
+        self,
+        s3_client: AioBaseClient,
+        bucket_name: str,
+        prefix_format: str,
+        namespace_name: str,
+        pod_name: str,
+        container_name: str,
+    ) -> None:
+        self._s3_client = s3_client
+        self._bucket_name = bucket_name
+        self._prefix_format = prefix_format
+        self._namespace_name = namespace_name
+        self._pod_name = pod_name
+        self._container_name = container_name
+        self._buffer = LogBuffer()
+        self._key_iterator: Iterator[str] = iter(())
+        self._response_body: Optional[StreamingBody] = None
+        self._line_iterator: Optional[AsyncIterator[str]] = None
+
+    def _get_prefix(self) -> str:
+        return self._prefix_format.format(
+            namespace_name=self._namespace_name,
+            pod_name=self._pod_name,
+            container_name=self._container_name,
+        )
+
+    async def __aenter__(self) -> "LogReader":
+        paginator = self._s3_client.get_paginator("list_objects_v2")
+        keys: List[str] = []
+        async for page in paginator.paginate(
+            Bucket=self._bucket_name, Prefix=self._get_prefix()
+        ):
+            for obj in page.get("Contents", ()):
+                keys.append(obj["Key"])
+        keys.sort()
+        self._key_iterator = iter(keys)
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        self._buffer.close()
+        self._key_iterator = iter(())
+        await self._end_read_file(*args)
+
+    async def read(self, size: int = -1) -> bytes:
+        chunk = self._buffer.read(size)
+        if chunk:
+            return chunk
+
+        chunk = await self._read_line()
+
+        self._buffer.write(chunk)
+        return self._buffer.read(size)
+
+    async def _read_line(self) -> bytes:
+        if not self._line_iterator:
+            # read next file
+            await self._start_read_file()
+
+        if not self._line_iterator:
+            # all files were read
+            return b""
+
+        try:
+            line = await self._line_iterator.__anext__()
+        except StopAsyncIteration:
+            await self._end_read_file()
+            return await self._read_line()
+
+        event = json.loads(line)
+        return event["log"].encode()
+
+    async def _start_read_file(self) -> None:
+        key = next(self._key_iterator, "")
+        if not key:
+            return
+        response = await self._s3_client.get_object(Bucket=self._bucket_name, Key=key)
+        self._response_body = response["Body"]
+        await self._response_body.__aenter__()
+        self._line_iterator = self._response_body.iter_lines()
+
+    async def _end_read_file(
+        self,
+        exc_type: Optional[Type[BaseException]] = None,
+        exc_val: Optional[BaseException] = None,
+        exc_tb: Optional[TracebackType] = None,
+    ) -> None:
+        self._line_iterator = None
+        if self._response_body:
+            await self._response_body.__aexit__(exc_type, exc_val, exc_tb)
+            self._response_body = None

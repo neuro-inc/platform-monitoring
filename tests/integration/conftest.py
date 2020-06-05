@@ -7,9 +7,11 @@ from dataclasses import dataclass
 from typing import Any, AsyncIterator, Callable, Iterator
 from uuid import uuid1
 
+import aiobotocore
 import aiohttp
 import aiohttp.web
 import pytest
+from aiobotocore.client import AioBaseClient
 from aioelasticsearch import Elasticsearch
 from async_timeout import timeout
 from neuromation.api import Client as PlatformApiClient
@@ -136,6 +138,30 @@ async def es_client(es_config: ElasticsearchConfig) -> AsyncIterator[Elasticsear
     """
     async with create_elasticsearch_client(es_config) as es_client:
         yield es_client
+
+
+@pytest.fixture
+async def s3_client() -> AsyncIterator[AioBaseClient]:
+    s3_url = get_service_url(service_name="minio", namespace="kube-system")
+    session = aiobotocore.get_session()
+    async with session.create_client(
+        "s3",
+        endpoint_url=s3_url,
+        region_name="region-1",
+        aws_access_key_id="access_key",
+        aws_secret_access_key="secret_key",
+    ) as client:
+        yield client
+
+
+@pytest.fixture
+def s3_logs_bucket() -> str:
+    return "logs"
+
+
+@pytest.fixture
+def s3_logs_key_prefix_format() -> str:
+    return "kube.var.log.containers.{pod_name}_{namespace_name}_{container_name}"
 
 
 @pytest.fixture
