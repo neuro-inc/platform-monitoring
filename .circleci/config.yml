@@ -93,7 +93,7 @@ jobs:
       - run:
           name: Running Integration Tests
           command: |
-            minikube tunnel 2>&1 &
+            # minikube tunnel 2>&1 &
             source venv/bin/activate
             make test_integration
 
