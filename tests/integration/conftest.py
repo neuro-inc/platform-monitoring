@@ -30,6 +30,7 @@ from platform_monitoring.config import (
     PlatformApiConfig,
     PlatformAuthConfig,
     RegistryConfig,
+    S3Config,
     ServerConfig,
 )
 from yarl import URL
@@ -151,15 +152,27 @@ async def es_client(es_config: ElasticsearchConfig) -> AsyncIterator[Elasticsear
 
 
 @pytest.fixture
-async def s3_client() -> AsyncIterator[AioBaseClient]:
+def s3_config(s3_logs_bucket: str, s3_logs_key_prefix_format: str) -> S3Config:
     s3_url = get_service_url(service_name="minio", namespace="kube-system")
+    return S3Config(
+        region="region-1",
+        access_key_id="access_key",
+        secret_access_key="secret_key",
+        endpoint_url=URL(s3_url),
+        job_logs_bucket_name=s3_logs_bucket,
+        job_logs_key_prefix_format=s3_logs_key_prefix_format,
+    )
+
+
+@pytest.fixture
+async def s3_client(s3_config: S3Config) -> AsyncIterator[AioBaseClient]:
     session = aiobotocore.get_session()
     async with session.create_client(
         "s3",
-        endpoint_url=s3_url,
-        region_name="region-1",
-        aws_access_key_id="access_key",
-        aws_secret_access_key="secret_key",
+        endpoint_url=str(s3_config.endpoint_url),
+        region_name=s3_config.region,
+        aws_access_key_id=s3_config.access_key_id,
+        aws_secret_access_key=s3_config.secret_access_key,
     ) as client:
         yield client
 
