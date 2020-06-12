@@ -27,9 +27,6 @@ jobs:
           name: Configuring Docker Client
           command: |
             make -s gcr_login
-            # docker-credential-gcloud still relies on Python 2.7,
-            # thus we'd better pull testing images before we set up Python 3
-            make gke_docker_pull_test_images
 
       - run:
           name: Running Kubernetes
@@ -57,6 +54,9 @@ jobs:
 
             make install_k8s
             make start_k8s
+            # docker-credential-gcloud still relies on Python 2.7,
+            # thus we'd better pull testing images before we set up Python 3
+            make gke_docker_pull_test_images
             make apply_configuration_k8s
             make test_k8s
 
