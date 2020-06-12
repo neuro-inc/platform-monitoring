@@ -4,8 +4,6 @@ set -o verbose
 export GKE_DOCKER_REGISTRY=gcr.io
 export GKE_PROJECT_ID=light-reality-205619
 
-GKE_PREFIX=$GKE_DOCKER_REGISTRY/$GKE_PROJECT_ID
-
 
 function minikube::start {
     echo "Starting minikube..."
@@ -15,7 +13,6 @@ function minikube::start {
     minikube start --kubernetes-version=v1.14.10
     minikube addons enable registry
     kubectl config use-context minikube
-    # minikube tunnel &
 }
 
 function minikube::load_images {
