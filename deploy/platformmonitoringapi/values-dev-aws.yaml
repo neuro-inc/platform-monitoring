@@ -59,7 +59,13 @@ minio:
 
 logs:
   persistence:
-    type: aws
-    aws:
+    # type: aws
+    # aws:
+    #   region: us-east-1
+    #   bucket: neuro-job-logs-dev
+    type: gcp
+    gcp:
+      project: us-east-1
       region: us-east-1
       bucket: neuro-job-logs-dev
+      serviceAccountKeyBase64: 123a

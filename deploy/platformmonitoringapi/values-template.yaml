@@ -61,6 +61,18 @@ minio:
     requests:
       cpu: 100m
       memory: 128Mi
+  # livenessProbe:
+  #   initialDelaySeconds: 5
+  #   periodSeconds: 10
+  #   timeoutSeconds: 1
+  #   successThreshold: 1
+  #   failureThreshold: 3
+  # readinessProbe:
+  #   initialDelaySeconds: 5
+  #   periodSeconds: 10
+  #   timeoutSeconds: 1
+  #   successThreshold: 1
+  #   failureThreshold: 3
 
 logs:
   persistence:
