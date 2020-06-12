@@ -6,9 +6,14 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Dict, Optional
 
 import pytest
+from _pytest.fixtures import FixtureRequest
 from async_timeout import timeout
 from platform_monitoring.config import KubeConfig
-from platform_monitoring.kube_client import JobNotFoundException, KubeClient
+from platform_monitoring.kube_client import (
+    JobNotFoundException,
+    KubeClient,
+    KubeClientAuthType,
+)
 
 
 class MyKubeClient(KubeClient):
@@ -152,16 +157,25 @@ def cert_authority_data_pem(
 
 
 @pytest.fixture
-async def kube_config(
-    kube_config_cluster_payload: Dict[str, Any],
-    kube_config_user_payload: Dict[str, Any],
-    cert_authority_data_pem: Optional[str],
-) -> KubeConfig:
-    cluster = kube_config_cluster_payload
-    user = kube_config_user_payload
+async def kube_config(request: FixtureRequest, in_minikube: bool,) -> KubeConfig:
+    if in_minikube:
+        return KubeConfig(
+            endpoint_url="https://kubernetes.default:443",
+            cert_authority_data_pem=Path(
+                "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+            ).read_text(),
+            auth_type=KubeClientAuthType.TOKEN,
+            token=Path(
+                "/var/run/secrets/kubernetes.io/serviceaccount/token"
+            ).read_text(),
+            namespace="default",
+        )
+    cluster = request.getfixturevalue("kube_config_cluster_payload")
+    user = request.getfixturevalue("kube_config_user_payload")
+    ca_data_pem = request.getfixturevalue("cert_authority_data_pem")
     kube_config = KubeConfig(
         endpoint_url=cluster["server"],
-        cert_authority_data_pem=cert_authority_data_pem,
+        cert_authority_data_pem=ca_data_pem,
         auth_cert_path=user["client-certificate"],
         auth_cert_key_path=user["client-key"],
         namespace="default",

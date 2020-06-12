@@ -1399,7 +1399,7 @@ class TestPortForward:
             assert response.status == 400, await response.text()
 
     @pytest.mark.asyncio
-    async def xtest_port_forward_ok(
+    async def test_port_forward_ok(
         self,
         platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,

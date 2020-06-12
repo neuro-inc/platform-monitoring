@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import subprocess
 import time
 from contextlib import asynccontextmanager
@@ -11,6 +12,7 @@ import aiobotocore
 import aiohttp
 import aiohttp.web
 import pytest
+from _pytest.fixtures import FixtureRequest
 from aiobotocore.client import AioBaseClient
 from aioelasticsearch import Elasticsearch
 from async_timeout import timeout
@@ -41,6 +43,16 @@ pytest_plugins = [
     "tests.integration.conftest_config",
     "tests.integration.conftest_kube",
 ]
+
+
+@pytest.fixture(scope="session")
+def in_docker() -> bool:
+    return os.path.isfile("/.dockerenv")
+
+
+@pytest.fixture(scope="session")
+def in_minikube(in_docker: bool) -> bool:
+    return in_docker
 
 
 @pytest.fixture(scope="session")
@@ -101,9 +113,12 @@ async def wait_for_service(
 # TODO (A Yushkovskiy, 05-May-2019) This fixture should have scope="session" in order
 #  to be faster, but it causes mysterious errors `RuntimeError: Event loop is closed`
 async def platform_api_config(
-    token_factory: Callable[[str], str],
+    request: FixtureRequest, in_minikube: bool, token_factory: Callable[[str], str],
 ) -> AsyncIterator[PlatformApiConfig]:
-    base_url = get_service_url("platformapi", namespace="default")
+    if in_minikube:
+        base_url = "http://platformapi:8080"
+    else:
+        base_url = get_service_url("platformapi", namespace="default")
     assert base_url.startswith("http")
     url = URL(base_url) / "api/v1"
     await wait_for_service("platformapi", url / "ping", timeout_s=120)
@@ -125,9 +140,12 @@ async def platform_api_client(
 # TODO (A Yushkovskiy, 05-May-2019) This fixture should have scope="session" in order
 #  to be faster, but it causes mysterious errors `RuntimeError: Event loop is closed`
 async def es_config(
-    token_factory: Callable[[str], str]
+    request: FixtureRequest, in_minikube: bool, token_factory: Callable[[str], str]
 ) -> AsyncIterator[ElasticsearchConfig]:
-    es_host = get_service_url("elasticsearch-logging", namespace="kube-system")
+    if in_minikube:
+        es_host = "http://elasticsearch-logging.kube-system:9200"
+    else:
+        es_host = get_service_url("elasticsearch-logging", namespace="kube-system")
     async with Elasticsearch(hosts=[es_host]) as client:
         async with timeout(120):
             while True:
@@ -173,8 +191,12 @@ def s3_logs_key_prefix_format() -> str:
 
 
 @pytest.fixture
-async def registry_config(minikube_ip: str) -> RegistryConfig:
-    external_url = URL(f"http://{minikube_ip}:5000")
+async def registry_config(request: FixtureRequest, in_minikube: bool) -> RegistryConfig:
+    if in_minikube:
+        external_url = URL("http://registry.kube-system")
+    else:
+        minikube_ip = request.getfixturevalue("minikube_ip")
+        external_url = URL(f"http://{minikube_ip}:5000")
     await wait_for_service("docker registry", external_url / "v2/", timeout_s=120)
     # localhost will be insecure by default, so use that
     return RegistryConfig(URL("http://localhost:5000"))
