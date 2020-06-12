@@ -105,7 +105,7 @@ logs:
     ##
     # minio:
     #   url: http://minio:9000
-    #   access_key: access_key
-    #   secret_key: secret_key
+    #   accessKey: access_key
+    #   secretKey: secret_key
     #   region: region
     #   bucket: logs
