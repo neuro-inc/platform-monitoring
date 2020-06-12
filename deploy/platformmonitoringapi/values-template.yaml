@@ -6,8 +6,94 @@ NP_MONITORING_LIMITS_MEMORY: "100Mi"
 NP_MONITORING_REPLICAS: "2"
 NP_MONITORING_PLATFORM_API_URL: http://platformapi:8080/api/v1
 NP_MONITORING_PLATFORM_AUTH_URL: http://platformauthapi:8080
-NP_MONITORING_ES_HOSTS: http://logging-elasticsearch:9200
 NP_MONITORING_K8S_NS: default
 NP_MONITORING_REGISTRY_URL: https://
 DOCKER_LOGIN_ARTIFACTORY_SECRET_NAME: "artifactory-regcred"
 NP_MONITORING_K8S_KUBELET_PORT: ""
+
+monitoring:
+  podAnnotations: {}
+
+fluentbit:
+  resources:
+    requests:
+      cpu: 5m
+      memory: 32Mi
+    limits:
+      cpu: 50m
+      memory: 128Mi
+  nodeSelector:
+    platform.neuromation.io/job: "true"
+  tolerations:
+  - effect: NoSchedule
+    key: platform.neuromation.io/job
+    operator: Exists
+  taildb:
+    directory: /var/lib/platform-monitoring-fluent-bit
+
+fluentd:
+  forwardPort: 24224
+  podAnnotations: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 200Mi
+  persistence:
+    enabled: false
+    ## If defined, storageClassName: <storageClassName>
+    ## If set to "-", storageClassName: "", which disables dynamic provisioning
+    ## If undefined (the default) or set to null, no storageClassName spec is
+    ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
+    ##   GKE, AWS & OpenStack)
+    ##
+    # storageClassName:
+    accessMode: ReadWriteOnce
+    size: 10Gi
+  s3:
+    buffer:
+      chunkLimitSize: 8M
+      timeKey: 1m # chunks will be flushed every minute
+
+minio:
+  image: minio/minio:RELEASE.2020-03-05T01-04-19Z
+  port: 9000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+logs:
+  persistence:
+    type: es
+
+    es:
+      host: elasticsearch
+      port: 9200
+
+    # aws:
+    #   access_key_id: access_key # optional
+    #   secret_access_key: access_key # optional
+    #   region: us-east-1
+    #   bucket: logs
+
+    # gcp:
+    #   serviceAccountKeyBase64:
+    #   project: project
+    #   region: us-central1
+    #   bucket: logs
+
+    # azure:
+    #   storageAccountName: account_name
+    #   storageAccountKey: account_key
+    #   region: eastus
+    #   bucket: logs
+
+    ## minio is for on_prem clusters which do not have
+    ## any object storage service.
+    ##
+    # minio:
+    #   url: http://minio:9000
+    #   access_key: access_key
+    #   secret_key: secret_key
+    #   region: region
+    #   bucket: logs

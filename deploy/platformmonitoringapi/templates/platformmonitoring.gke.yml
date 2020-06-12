@@ -2,6 +2,8 @@ apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   name: platformmonitoringapi
+  labels:
+{{ include "platform-monitoring.labels.standard" . | indent 4 }}
 spec:
   replicas: {{ .Values.NP_MONITORING_REPLICAS }}
   selector:
@@ -16,6 +18,10 @@ spec:
     metadata:
       labels:
         service: platformmonitoringapi
+{{- if .Values.monitoring.podAnnotations }}
+      annotations:
+{{ toYaml .Values.monitoring.podAnnotations | indent 8 }}
+{{- end }}
     spec:
       containers:
       - name: platformmonitoringapi
@@ -51,8 +57,6 @@ spec:
           value: {{ .Values.NP_MONITORING_PLATFORM_API_URL }}
         - name: NP_MONITORING_PLATFORM_AUTH_URL
           value: {{ .Values.NP_MONITORING_PLATFORM_AUTH_URL }}
-        - name: NP_MONITORING_ES_HOSTS
-          value: {{ .Values.NP_MONITORING_ES_HOSTS }}
         - name: NP_MONITORING_K8S_NS
           value: {{ .Values.NP_MONITORING_K8S_NS }}
         - name: NP_MONITORING_REGISTRY_URL
@@ -61,6 +65,141 @@ spec:
           value: {{ .Values.NP_MONITORING_K8S_KUBELET_PORT | quote }}
         - name: NP_CORS_ORIGINS
           value: {{ .Values.NP_CORS_ORIGINS }}
+
+{{- if eq .Values.logs.persistence.type "aws" }}
+        - name: NP_MONITORING_LOGS_STORAGE_TYPE
+          value: s3
+        - name: NP_MONITORING_S3_REGION
+          value: {{ .Values.logs.persistence.aws.region | quote }}
+        - name: NP_MONITORING_S3_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "platform-monitoring.logs.storage.key" . }}
+              key: access_key_id
+        - name: NP_MONITORING_S3_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "platform-monitoring.logs.storage.key" . }}
+              key: secret_access_key
+        - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
+          value: {{ .Values.logs.persistence.aws.bucket | quote }}
+        - name: NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT
+          value: {{ include "platform-monitoring.logs.storage.s3.keyPrefixFormat" . | quote }}
+{{- end }}
+
+{{- if eq .Values.logs.persistence.type "gcp" }}
+        - name: NP_MONITORING_LOGS_STORAGE_TYPE
+          value: s3
+        - name: NP_MONITORING_S3_REGION
+          value: {{ .Values.logs.persistence.gcp.region | quote }}
+        - name: NP_MONITORING_S3_ACCESS_KEY_ID
+          value: minio_access_key
+        - name: NP_MONITORING_S3_SECRET_ACCESS_KEY
+          value: minio_secret_key
+        - name: NP_MONITORING_S3_ENDPOINT_URL
+          value: "http://localhost:{{ .Values.minio.port }}"
+        - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
+          value: {{ .Values.logs.persistence.gcp.bucket | quote }}
+        - name: NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT
+          value: {{ include "platform-monitoring.logs.storage.s3.keyPrefixFormat" . | quote }}
+
+      - name: minio
+        image: {{ .Values.minio.image | quote }}
+        args:
+        - gateway
+        - gcs
+        - {{ .Values.logs.persistence.gcp.project }}
+        env:
+        - name: MINIO_ACCESS_KEY
+          value: minio_access_key
+        - name: MINIO_SECRET_KEY
+          value: mino_secret_key
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: /accounts/key.json
+        volumeMounts:
+        - name: gcs-credentials
+          mountPath: /accounts
+          readOnly: true
+{{ include "platform-monitoring.minio.resources" . | indent 8 }}
+{{ include "platform-monitoring.minio.probes" . | indent 8 }}
+      volumes:
+      - name: gcs-credentials
+        secret:
+          secretName: {{ include "platform-monitoring.logs.storage.key" . }}
+{{- end }}
+
+{{- if eq .Values.logs.persistence.type "azure" }}
+        - name: NP_MONITORING_LOGS_STORAGE_TYPE
+          value: s3
+        - name: NP_MONITORING_S3_REGION
+          value: {{ .Values.logs.persistence.azure.region | quote }}
+        - name: NP_MONITORING_S3_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "platform-monitoring.logs.storage.key" . }}
+              key: account_name
+        - name: NP_MONITORING_S3_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "platform-monitoring.logs.storage.key" . }}
+              key: account_key
+        - name: NP_MONITORING_S3_ENDPOINT_URL
+          value: "http://localhost:{{ .Values.minio.port }}"
+        - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
+          value: {{ .Values.logs.persistence.azure.bucket | quote }}
+        - name: NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT
+          value: {{ include "platform-monitoring.logs.storage.s3.keyPrefixFormat" . | quote }}
+
+      - name: minio
+        image: {{ .Values.minio.image | quote }}
+        args:
+        - gateway
+        - azure
+        env:
+        - name: MINIO_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "platform-monitoring.logs.storage.key" . }}
+              key: account_name
+        - name: MINIO_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "platform-monitoring.logs.storage.key" . }}
+              key: account_key
+{{ include "platform-monitoring.minio.resources" . | indent 8 }}
+{{ include "platform-monitoring.minio.probes" . | indent 8 }}
+{{- end }}
+
+{{- if eq .Values.logs.persistence.type "minio" }}
+        - name: NP_MONITORING_LOGS_STORAGE_TYPE
+          value: s3
+        - name: NP_MONITORING_S3_REGION
+          value: {{ .Values.logs.persistence.minio.region | quote }}
+        - name: NP_MONITORING_S3_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "platform-monitoring.logs.storage.key" . }}
+              key: access_key
+        - name: NP_MONITORING_S3_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "platform-monitoring.logs.storage.key" . }}
+              key: secret_key
+        - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
+          value: {{ .Values.logs.persistence.minio.bucket | quote }}
+        - name: NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT
+          value: {{ include "platform-monitoring.logs.storage.s3.keyPrefixFormat" . | quote }}
+{{- end }}
+
+{{- if eq .Values.logs.persistence.type "es" }}
+        - name: NP_MONITORING_LOGS_STORAGE_TYPE
+          value: elasticsearch
+        - name: NP_MONITORING_ES_HOSTS
+{{- with .Values.logs.persistence.es }}
+          value: "http://{{ .host }}:{{ .port }}"
+{{- end }}
+{{- end }}
+
       {{- if .Values.DOCKER_LOGIN_ARTIFACTORY_SECRET_NAME }}
       imagePullSecrets:
         - name: {{ .Values.DOCKER_LOGIN_ARTIFACTORY_SECRET_NAME }}
