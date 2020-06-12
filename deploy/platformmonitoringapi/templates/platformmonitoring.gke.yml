@@ -113,7 +113,7 @@ spec:
         - name: MINIO_ACCESS_KEY
           value: minio_access_key
         - name: MINIO_SECRET_KEY
-          value: mino_secret_key
+          value: minio_secret_key
         - name: GOOGLE_APPLICATION_CREDENTIALS
           value: /accounts/key.json
         volumeMounts:
