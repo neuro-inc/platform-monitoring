@@ -121,7 +121,6 @@ spec:
       containers:
       - name: fluentd
         image: docker.io/bitnami/fluentd:1.10.4-debian-10-r2
-        command:
         env:
           - name: FLUENTD_CONF
             value: fluentd.conf
