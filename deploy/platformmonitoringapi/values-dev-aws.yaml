@@ -6,8 +6,60 @@ NP_MONITORING_LIMITS_MEMORY: "100Mi"
 NP_MONITORING_REPLICAS: "2"
 NP_MONITORING_PLATFORM_API_URL: http://platformapi:8080/api/v1
 NP_MONITORING_PLATFORM_AUTH_URL: http://platformauthapi:8080
-NP_MONITORING_ES_HOSTS: http://elasticsearch-client:9200
 NP_MONITORING_K8S_NS: default
 NP_MONITORING_REGISTRY_URL: https://registry-dev.neu.ro
 NP_MONITORING_K8S_KUBELET_PORT: ""
 NP_CORS_ORIGINS: http://localhost:8000,https://master--neuro-web.netlify.com,https://master--neuro-web.netlify.app
+
+monitoring:
+  podAnnotations:
+    iam.amazonaws.com/role: arn:aws:iam::771188043543:role/s3-d04bce531282b98cb801932de6c118c7
+
+fluentbit:
+  resources:
+    requests:
+      cpu: 5m
+      memory: 32Mi
+    limits:
+      cpu: 50m
+      memory: 128Mi
+  nodeSelector:
+    platform.neuromation.io/job: "true"
+  tolerations:
+  - effect: NoSchedule
+    key: platform.neuromation.io/job
+    operator: Exists
+  taildb:
+    directory: /var/lib/platform-monitoring-fluent-bit
+
+fluentd:
+  forwardPort: 24224
+  podAnnotations:
+    iam.amazonaws.com/role: arn:aws:iam::771188043543:role/s3-d04bce531282b98cb801932de6c118c7
+  resources:
+    requests:
+      cpu: 100m
+      memory: 200Mi
+  persistence:
+    enabled: true
+    accessMode: ReadWriteOnce
+    size: 10Gi
+  s3:
+    buffer:
+      chunkLimitSize: 8M
+      timeKey: 1m # chunks will be flushed every minute
+
+minio:
+  image: minio/minio:RELEASE.2020-03-05T01-04-19Z
+  port: 9000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+logs:
+  persistence:
+    type: aws
+    aws:
+      region: us-east-1
+      bucket: neuro-job-logs-dev
