@@ -1,4 +1,5 @@
-{{- $config := tpl (.Files.Glob "files/fluent-bit/*").AsConfig . }}
+{{- $configPattern := "files/fluent-bit/*" }}
+{{- $config := tpl (.Files.Glob $configPattern).AsConfig . }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -36,19 +37,19 @@ spec:
       containers:
       - image: fluent/fluent-bit:1.3.7
         name: fluent-bit
-        command:
-        - /fluent-bit/bin/fluent-bit
-        - -c
-        - /fluent-bit/etc/custom/fluent-bit.conf
         volumeMounts:
         - mountPath: /var/log
           name: varlog
         - mountPath: /var/lib/docker/containers
           name: varlibdockercontainers
           readOnly: true
+        - name: tail-db
+          mountPath: /tail-db
+{{- range $path, $_ := .Files.Glob $configPattern }}
         - name: config
-          mountPath: /fluent-bit/etc/custom
-          readOnly: true
+          mountPath: /fluent-bit/etc/{{ base $path }}
+          subPath: {{ base $path }}
+{{- end }}
 {{- if .Values.fluentbit.resources }}
         resources:
 {{ toYaml .Values.fluentbit.resources | indent 10 }}
