@@ -475,8 +475,9 @@ async def _forward_reading(ws: WebSocketResponse, reader: asyncio.StreamReader) 
             if not data:
                 break
             await ws.send_bytes(data)
-    except:
+    except Exception:
         logger.exception("Error in reader")
+        raise
     finally:
         logger.debug("Done reading")
 
@@ -487,8 +488,9 @@ async def _forward_writing(ws: WebSocketResponse, writer: asyncio.StreamWriter) 
             assert msg.type == aiohttp.WSMsgType.BINARY
             writer.write(msg.data)
             await writer.drain()
-    except:
+    except Exception:
         logger.exception("Error in writer")
+        raise
     finally:
         logger.debug("Done writing")
 
