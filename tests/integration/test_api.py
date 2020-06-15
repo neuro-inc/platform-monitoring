@@ -1419,13 +1419,12 @@ class TestPortForward:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.bind(("0.0.0.0", 60002))
             sock.listen()
+            cli, addr = sock.accept()
             while True:
-                cli, addr = sock.accept()
-                while True:
-                    data = cli.recv()
-                    if not data:
-                        break
-                    cli.sendall(b"rep-"+data)
+                data = cli.recv(1024)
+                if not data:
+                    break
+                cli.sendall(b"rep-"+data)
         """
         )
         command = f"python -c '{py}'"
