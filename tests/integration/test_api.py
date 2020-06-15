@@ -1252,6 +1252,8 @@ class TestExecApi:
             assert await expect_prompt(ws) == b"echo 'abc'\r\nabc\r\n# "
             await ws.send_bytes(b"exit 1\n")
             assert await expect_prompt(ws) == b"exit 1\r\n"
+            # give a time to finish exec session
+            await sleep(5)
 
         async with timeout(90):
             async with client.get(
