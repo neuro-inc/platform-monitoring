@@ -104,6 +104,10 @@ jobs:
           file: .coverage-integration.xml
           flags: integration
 
+      - codecov/upload:
+          file: .coverage-integration-minikube.xml
+          flags: integration
+
       - run:
           name: Stopping Kubernetes
           command: |

@@ -41,7 +41,7 @@ test_integration:
 	pytest -vv --maxfail=3 --cov=platform_monitoring --cov-report xml:.coverage-integration.xml tests/integration -m "not minikube"
 
 test_integration_minikube: build_tests
-	kubectl run --restart=Never --image-pull-policy=Never -it --rm --image=platformmonitoringapi-tests:latest tests -- pytest -vv --log-cli-level=debug -s tests/integration/ -m minikube
+	kubectl run --restart=Never --image-pull-policy=Never -it --rm --image=platformmonitoringapi-tests:latest tests -- pytest -vv --log-cli-level=debug --cov=platform_monitoring --cov-report xml:.coverage-integration-minikube.xml -s tests/integration/ -m minikube
 
 build:
 	docker build -f Dockerfile.k8s -t $(IMAGE_NAME):$(IMAGE_TAG) --build-arg PIP_EXTRA_INDEX_URL="$(PIP_EXTRA_INDEX_URL)" .
