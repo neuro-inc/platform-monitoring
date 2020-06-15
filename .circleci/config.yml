@@ -97,7 +97,7 @@ jobs:
           name: Running Integration Tests
           command: |
             source venv/bin/activate
-            # make test_integration
+            make test_integration
             make test_integration_minikube
 
       - codecov/upload:
