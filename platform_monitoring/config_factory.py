@@ -12,9 +12,12 @@ from .config import (
     ElasticsearchConfig,
     KubeClientAuthType,
     KubeConfig,
+    LogsConfig,
+    LogsStorageType,
     PlatformApiConfig,
     PlatformAuthConfig,
     RegistryConfig,
+    S3Config,
     ServerConfig,
 )
 
@@ -32,6 +35,8 @@ class EnvironConfigFactory:
             platform_api=self._create_platform_api(),
             platform_auth=self._create_platform_auth(),
             elasticsearch=self._create_elasticsearch(),
+            s3=self._create_s3(),
+            logs=self._create_logs(),
             kube=self._create_kube(),
             registry=self._create_registry(),
             docker=self._create_docker(),
@@ -53,9 +58,36 @@ class EnvironConfigFactory:
         token = self._environ["NP_MONITORING_PLATFORM_AUTH_TOKEN"]
         return PlatformAuthConfig(url=url, token=token)
 
-    def _create_elasticsearch(self) -> ElasticsearchConfig:
+    def _create_elasticsearch(self) -> Optional[ElasticsearchConfig]:
+        if not any(key.startswith("NP_MONITORING_ES") for key in self._environ.keys()):
+            return None
         hosts = self._environ["NP_MONITORING_ES_HOSTS"].split(",")
         return ElasticsearchConfig(hosts=hosts)
+
+    def _create_s3(self) -> Optional[S3Config]:
+        if not any(key.startswith("NP_MONITORING_S3") for key in self._environ.keys()):
+            return None
+        endpoint_url = self._environ.get("NP_MONITORING_S3_ENDPOINT_URL", "")
+        return S3Config(
+            region=self._environ["NP_MONITORING_S3_REGION"],
+            access_key_id=self._environ["NP_MONITORING_S3_ACCESS_KEY_ID"],
+            secret_access_key=self._environ["NP_MONITORING_S3_SECRET_ACCESS_KEY"],
+            endpoint_url=URL(endpoint_url) if endpoint_url else None,
+            job_logs_bucket_name=self._environ["NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME"],
+            job_logs_key_prefix_format=self._environ[
+                "NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT"
+            ],
+        )
+
+    def _create_logs(self) -> LogsConfig:
+        return LogsConfig(
+            storage_type=LogsStorageType(
+                self._environ.get(
+                    "NP_MONITORING_LOGS_STORAGE_TYPE",
+                    LogsStorageType.ELASTICSEARCH.value,
+                )
+            )
+        )
 
     def _create_kube(self) -> KubeConfig:
         endpoint_url = self._environ["NP_MONITORING_K8S_API_URL"]

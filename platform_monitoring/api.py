@@ -5,11 +5,13 @@ import shlex
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from pathlib import Path
 from tempfile import mktemp
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional
 
+import aiobotocore
 import aiohttp
 import aiohttp.web
 import aiohttp_cors
+from aiobotocore.client import AioBaseClient
 from aiodocker.stream import Stream
 from aioelasticsearch import Elasticsearch
 from aiohttp.web import (
@@ -41,13 +43,21 @@ from .config import (
     CORSConfig,
     ElasticsearchConfig,
     KubeConfig,
+    LogsStorageType,
     PlatformApiConfig,
     PlatformAuthConfig,
+    S3Config,
 )
 from .config_factory import EnvironConfigFactory
 from .jobs_service import Container, ExecCreate, JobException, JobsService
 from .kube_client import JobError, KubeClient, KubeTelemetry
-from .utils import JobsHelper, KubeHelper, LogReaderFactory
+from .utils import (
+    ElasticsearchLogReaderFactory,
+    JobsHelper,
+    KubeHelper,
+    LogReaderFactory,
+    S3LogReaderFactory,
+)
 from .validators import (
     create_exec_create_request_payload_validator,
     create_save_request_payload_validator,
@@ -623,6 +633,43 @@ async def create_elasticsearch_client(
         yield client
 
 
+def create_s3_client(config: S3Config) -> AioBaseClient:
+    kwargs: Dict[str, str] = {}
+    if config.access_key_id:
+        kwargs["aws_access_key_id"] = config.access_key_id
+    if config.secret_access_key:
+        kwargs["aws_secret_access_key"] = config.secret_access_key
+    if config.endpoint_url:
+        kwargs["endpoint_url"] = str(config.endpoint_url)
+    session = aiobotocore.get_session()
+    return session.create_client("s3", region_name=config.region, **kwargs)
+
+
+def create_log_reader_factory(
+    config: Config,
+    kube_client: KubeClient,
+    es_client: Optional[Elasticsearch] = None,
+    s3_client: Optional[AioBaseClient] = None,
+) -> LogReaderFactory:
+    if config.logs.storage_type == LogsStorageType.ELASTICSEARCH:
+        assert es_client
+        return ElasticsearchLogReaderFactory(kube_client, es_client)
+
+    if config.logs.storage_type == LogsStorageType.S3:
+        assert config.s3
+        assert s3_client
+        return S3LogReaderFactory(
+            kube_client,
+            s3_client,
+            bucket_name=config.s3.job_logs_bucket_name,
+            key_prefix_format=config.s3.job_logs_key_prefix_format,
+        )
+
+    raise ValueError(
+        f"{config.logs.storage_type} storage is not supported"
+    )  # pragma: nocover
+
+
 def _setup_cors(app: aiohttp.web.Application, config: CORSConfig) -> None:
     if not config.allowed_origins:
         return
@@ -659,10 +706,19 @@ async def create_app(config: Config) -> aiohttp.web.Application:
                 app=app, auth_client=auth_client, auth_scheme=AuthScheme.BEARER
             )
 
-            logger.info("Initializing Elasticsearch client")
-            es_client = await exit_stack.enter_async_context(
-                create_elasticsearch_client(config.elasticsearch)
-            )
+            es_client: Optional[Elasticsearch] = None
+            if config.elasticsearch:
+                logger.info("Initializing Elasticsearch client")
+                es_client = await exit_stack.enter_async_context(
+                    create_elasticsearch_client(config.elasticsearch)
+                )
+
+            s3_client: Optional[AioBaseClient] = None
+            if config.s3:
+                logger.info("Initializing S3 client")
+                s3_client = await exit_stack.enter_async_context(
+                    create_s3_client(config.s3)
+                )
 
             logger.info("Initializing Kubernetes client")
             kube_client = await exit_stack.enter_async_context(
@@ -670,8 +726,9 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             )
             app["monitoring_app"]["kube_client"] = kube_client
 
-            log_reader_factory = LogReaderFactory(kube_client, es_client)
-            app["monitoring_app"]["log_reader_factory"] = log_reader_factory
+            app["monitoring_app"]["log_reader_factory"] = create_log_reader_factory(
+                config, kube_client, es_client, s3_client
+            )
 
             app["monitoring_app"]["jobs_service"] = JobsService(
                 jobs_client=platform_client.jobs,

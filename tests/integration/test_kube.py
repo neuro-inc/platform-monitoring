@@ -23,7 +23,7 @@ from platform_monitoring.logs import (
     PodContainerLogReader,
     S3LogReader,
 )
-from platform_monitoring.utils import LogReaderFactory
+from platform_monitoring.utils import ElasticsearchLogReaderFactory, S3LogReaderFactory
 from yarl import URL
 
 from tests.integration.conftest import ApiAddress, create_local_app_server
@@ -509,41 +509,79 @@ class TestLogReader:
         assert payload == b""
 
     @pytest.mark.asyncio
-    async def test_get_job_log_reader(
+    async def test_s3_log_reader_empty(
+        self,
+        s3_client: AioBaseClient,
+        s3_logs_bucket: str,
+        s3_logs_key_prefix_format: str,
+    ) -> None:
+        namespace_name = pod_name = container_name = str(uuid.uuid4())
+        log_reader = S3LogReader(
+            s3_client,
+            bucket_name=s3_logs_bucket,
+            prefix_format=s3_logs_key_prefix_format,
+            namespace_name=namespace_name,
+            pod_name=pod_name,
+            container_name=container_name,
+        )
+        payload = await self._consume_log_reader(log_reader, chunk_size=1)
+        assert payload == b""
+
+    @pytest.mark.asyncio
+    async def test_get_job_elasticsearch_log_reader(
         self,
         kube_config: KubeConfig,
         kube_client: MyKubeClient,
         es_client: Elasticsearch,
         job_pod: MyPodDescriptor,
     ) -> None:
-        command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
+        command = 'bash -c "echo hello"'
         job_pod.set_command(command)
         await kube_client.create_pod(job_pod.payload)
-
-        expected_payload = ("\n".join(str(i) for i in range(1, 6)) + "\n").encode()
 
         pod_name = job_pod.name
 
         await kube_client.wait_pod_is_terminated(pod_name)
 
-        factory = LogReaderFactory(kube_client, es_client)
+        factory = ElasticsearchLogReaderFactory(kube_client, es_client)
 
         log_reader = await factory.get_pod_log_reader(pod_name)
         assert isinstance(log_reader, PodContainerLogReader)
 
         await kube_client.delete_pod(job_pod.name)
 
-        timeout_s = 120.0
-        interval_s = 1.0
-        payload = b""
-        try:
-            async with timeout(timeout_s):
-                while True:
-                    log_reader = await factory.get_pod_log_reader(pod_name)
-                    assert isinstance(log_reader, ElasticsearchLogReader)
-                    payload = await self._consume_log_reader(log_reader, chunk_size=1)
-                    if payload == expected_payload:
-                        break
-                    await asyncio.sleep(interval_s)
-        except asyncio.TimeoutError:
-            pytest.fail(f"Pod logs did not match. Last payload: {payload!r}")
+        log_reader = await factory.get_pod_log_reader(pod_name)
+        assert isinstance(log_reader, ElasticsearchLogReader)
+
+    @pytest.mark.asyncio
+    async def test_get_job_s3_log_reader(
+        self,
+        kube_config: KubeConfig,
+        kube_client: MyKubeClient,
+        s3_client: AioBaseClient,
+        s3_logs_bucket: str,
+        s3_logs_key_prefix_format: str,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        command = 'bash -c "echo hello"'
+        job_pod.set_command(command)
+        await kube_client.create_pod(job_pod.payload)
+
+        pod_name = job_pod.name
+
+        await kube_client.wait_pod_is_terminated(pod_name)
+
+        factory = S3LogReaderFactory(
+            kube_client,
+            s3_client,
+            bucket_name=s3_logs_bucket,
+            key_prefix_format=s3_logs_key_prefix_format,
+        )
+
+        log_reader = await factory.get_pod_log_reader(pod_name)
+        assert isinstance(log_reader, PodContainerLogReader)
+
+        await kube_client.delete_pod(job_pod.name)
+
+        log_reader = await factory.get_pod_log_reader(pod_name)
+        assert isinstance(log_reader, S3LogReader)

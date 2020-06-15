@@ -9,9 +9,12 @@ from platform_monitoring.config import (
     ElasticsearchConfig,
     KubeClientAuthType,
     KubeConfig,
+    LogsConfig,
+    LogsStorageType,
     PlatformApiConfig,
     PlatformAuthConfig,
     RegistryConfig,
+    S3Config,
     ServerConfig,
 )
 from platform_monitoring.config_factory import EnvironConfigFactory
@@ -36,8 +39,9 @@ def token_path(tmp_path: Path) -> str:
     return str(token_path)
 
 
-def test_create(cert_authority_path: str, token_path: str) -> None:
-    environ: Dict[str, Any] = {
+@pytest.fixture
+def environ(cert_authority_path: str, token_path: str) -> Dict[str, Any]:
+    return {
         "NP_MONITORING_API_HOST": "0.0.0.0",
         "NP_MONITORING_API_PORT": 8080,
         "NP_MONITORING_PLATFORM_API_URL": "http://platformapi/api/v1",
@@ -45,8 +49,6 @@ def test_create(cert_authority_path: str, token_path: str) -> None:
         "NP_MONITORING_PLATFORM_AUTH_URL": "http://platformauthapi/api/v1",
         "NP_MONITORING_PLATFORM_AUTH_TOKEN": "platform-auth-token",
         "NP_MONITORING_ES_HOSTS": "http://es1,http://es2",
-        "NP_MONITORING_ES_AUTH_USER": "test-user",
-        "NP_MONITORING_ES_AUTH_PASSWORD": "test-password",
         "NP_MONITORING_K8S_API_URL": "https://localhost:8443",
         "NP_MONITORING_K8S_AUTH_TYPE": "token",
         "NP_MONITORING_K8S_CA_PATH": cert_authority_path,
@@ -61,6 +63,9 @@ def test_create(cert_authority_path: str, token_path: str) -> None:
         "NP_MONITORING_K8S_KUBELET_PORT": "12321",
         "NP_CORS_ORIGINS": "https://domain1.com,http://do.main",
     }
+
+
+def test_create(environ: Dict[str, Any]) -> None:
     config = EnvironConfigFactory(environ).create()
     assert config == Config(
         server=ServerConfig(host="0.0.0.0", port=8080),
@@ -71,6 +76,7 @@ def test_create(cert_authority_path: str, token_path: str) -> None:
             url=URL("http://platformauthapi/api/v1"), token="platform-auth-token"
         ),
         elasticsearch=ElasticsearchConfig(hosts=["http://es1", "http://es2"]),
+        logs=LogsConfig(storage_type=LogsStorageType.ELASTICSEARCH),
         kube=KubeConfig(
             endpoint_url="https://localhost:8443",
             cert_authority_data_pem=CA_DATA_PEM,
@@ -88,6 +94,56 @@ def test_create(cert_authority_path: str, token_path: str) -> None:
         docker=DockerConfig(),
         cors=CORSConfig(["https://domain1.com", "http://do.main"]),
     )
+
+
+def test_create_with_s3(environ: Dict[str, Any]) -> None:
+    environ["NP_MONITORING_S3_REGION"] = "us-east-1"
+    environ["NP_MONITORING_S3_ACCESS_KEY_ID"] = "access_key"
+    environ["NP_MONITORING_S3_SECRET_ACCESS_KEY"] = "secret_access_key"
+    environ["NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME"] = "logs"
+    environ["NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT"] = "format"
+
+    config = EnvironConfigFactory(environ).create()
+
+    assert config.s3 == S3Config(
+        region="us-east-1",
+        access_key_id="access_key",
+        secret_access_key="secret_access_key",
+        job_logs_bucket_name="logs",
+        job_logs_key_prefix_format="format",
+    )
+
+    environ["NP_MONITORING_S3_ENDPOINT_URL"] = "http://minio:9000"
+
+    config = EnvironConfigFactory(environ).create()
+
+    assert config.s3
+    assert config.s3.endpoint_url == URL("http://minio:9000")
+
+
+def test_create_without_es_and_s3(environ: Dict[str, Any]) -> None:
+    del environ["NP_MONITORING_ES_HOSTS"]
+
+    config = EnvironConfigFactory(environ).create()
+
+    assert config.elasticsearch is None
+    assert config.s3 is None
+
+
+def test_create_with_es_logs(environ: Dict[str, Any]) -> None:
+    environ["NP_MONITORING_LOGS_STORAGE_TYPE"] = "elasticsearch"
+
+    config = EnvironConfigFactory(environ).create()
+
+    assert config.logs == LogsConfig(storage_type=LogsStorageType.ELASTICSEARCH)
+
+
+def test_create_with_s3_logs(environ: Dict[str, Any]) -> None:
+    environ["NP_MONITORING_LOGS_STORAGE_TYPE"] = "s3"
+
+    config = EnvironConfigFactory(environ).create()
+
+    assert config.logs == LogsConfig(storage_type=LogsStorageType.S3)
 
 
 @pytest.mark.parametrize(

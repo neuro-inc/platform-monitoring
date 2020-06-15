@@ -121,7 +121,6 @@ spec:
       containers:
       - name: fluentd
         image: docker.io/bitnami/fluentd:1.10.4-debian-10-r2
-        command:
         env:
           - name: FLUENTD_CONF
             value: fluentd.conf
@@ -194,10 +193,6 @@ spec:
       containers:
       - image: fluent/fluent-bit:1.3.7
         name: fluent-bit
-        command:
-        - /fluent-bit/bin/fluent-bit
-        - -c
-        - /fluent-bit/etc/main.conf
         volumeMounts:
         - mountPath: /var/log
           name: varlog
@@ -205,7 +200,7 @@ spec:
           name: varlibdockercontainers
           readOnly: true
         - name: config
-          mountPath: /fluent-bit/etc/main.conf
+          mountPath: /fluent-bit/etc/fluent-bit.conf
           readOnly: true
         - mountPath: /mnt
           name: mnt
