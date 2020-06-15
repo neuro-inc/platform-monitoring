@@ -1444,8 +1444,11 @@ class TestPortForward:
 
         async with client.ws_connect(url, headers=headers) as ws:
             for i in range(3):
+                print(f"Iteration {i}")
                 data = str(i).encode("ascii")
                 await ws.send_bytes(data)
                 ret = await ws.receive_bytes()
                 assert ret == data
+            print("Before closing")
             await ws.close()
+            print("After closing")
