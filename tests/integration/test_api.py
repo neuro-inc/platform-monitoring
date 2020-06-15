@@ -1259,9 +1259,9 @@ class TestExecApi:
                 headers=headers,
             ) as resp:
                 data = await resp.json()
-                while data["running"]:
+                while data["running"] and data["exit_code"] is not None:
                     data = await resp.json()
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(1)
                 assert data["exit_code"] == 1, data
 
     @pytest.mark.asyncio
