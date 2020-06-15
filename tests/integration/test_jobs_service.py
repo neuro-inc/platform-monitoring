@@ -501,7 +501,7 @@ class TestJobsService:
             if val == b"\r/ # ":
                 val = await expect_prompt(stream)
             val = val.strip()
-            if val.startswith("/ # "):
+            if val.startswith(b"/ # "):
                 val = val[4:]
             assert val == b"echo 'abc'\r\nabc\r\n/ #"
             await stream.write_in(b"exit 1\n")
