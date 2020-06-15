@@ -472,7 +472,8 @@ async def _forward_reading(ws: WebSocketResponse, reader: asyncio.StreamReader) 
     try:
         while True:
             logger.info("Reader: Before read")
-            data = await reader.read()
+            # 4-6 MB is the typical default socket receive buffer size of Lunix
+            data = await reader.read(4 * 1024 * 1024)
             logger.info("Reader: After read (%r)", data)
             if not data:
                 break
