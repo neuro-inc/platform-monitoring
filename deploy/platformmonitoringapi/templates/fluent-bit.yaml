@@ -1,0 +1,80 @@
+{{- $configPattern := "files/fluent-bit/*" }}
+{{- $config := tpl (.Files.Glob $configPattern).AsConfig . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-config
+  labels:
+{{ include "platform-monitoring.labels.standard" . | indent 4 }}
+    component: fluent-bit
+data:
+{{ $config | indent 2 }}
+---
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: fluent-bit
+  labels:
+{{ include "platform-monitoring.labels.standard" . | indent 4 }}
+    component: fluent-bit
+spec:
+  selector:
+    matchLabels:
+      app: {{ include "platform-monitoring.name" . }}
+      release: {{ .Release.Name | quote }}
+      component: fluent-bit
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ include "platform-monitoring.name" . }}
+        release: {{ .Release.Name | quote }}
+        component: fluent-bit
+      annotations:
+        checksum/config: {{ $config | sha256sum }}
+    spec:
+      containers:
+      - image: fluent/fluent-bit:1.3.7
+        name: fluent-bit
+        volumeMounts:
+        - mountPath: /var/log
+          name: varlog
+        - mountPath: /var/lib/docker/containers
+          name: varlibdockercontainers
+          readOnly: true
+        - name: tail-db
+          mountPath: /tail-db
+{{- range $path, $_ := .Files.Glob $configPattern }}
+        - name: config
+          mountPath: /fluent-bit/etc/{{ base $path }}
+          subPath: {{ base $path }}
+{{- end }}
+{{- if .Values.fluentbit.resources }}
+        resources:
+{{ toYaml .Values.fluentbit.resources | indent 10 }}
+{{- end }}
+      volumes:
+      - name: tail-db
+        hostPath:
+          path: {{ .Values.fluentbit.taildb.directory }}
+          type: DirectoryOrCreate
+      - name: varlog
+        hostPath:
+          path: /var/log
+          type: ""
+      - name: varlibdockercontainers
+        hostPath:
+          path: /var/lib/docker/containers
+          type: ""
+      - name: config
+        configMap:
+          name: fluent-bit-config
+{{- if .Values.fluentbit.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.fluentbit.nodeSelector | indent 8 }}
+{{- end }}
+{{- if .Values.fluentbit.tolerations }}
+      tolerations:
+{{ toYaml .Values.fluentbit.tolerations | indent 8 }}
+{{- end }}
