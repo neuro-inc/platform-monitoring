@@ -1451,7 +1451,7 @@ class TestPortForward:
                 print("Sent, before receive")
                 ret = await ws.receive_bytes()
                 print("After send")
-                assert ret == b'rep-' + data
+                assert ret == b"rep-" + data
             print("Before closing")
             await ws.close()
             print("After closing")
