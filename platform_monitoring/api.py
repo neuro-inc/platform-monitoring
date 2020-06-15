@@ -469,37 +469,19 @@ class MonitoringApiHandler:
 
 
 async def _forward_reading(ws: WebSocketResponse, reader: asyncio.StreamReader) -> None:
-    try:
-        while True:
-            logger.info("Reader: Before read")
-            # 4-6 MB is the typical default socket receive buffer size of Lunix
-            data = await reader.read(4 * 1024 * 1024)
-            logger.info("Reader: After read (%r)", data)
-            if not data:
-                break
-            logger.info("Reader: Before send_bytes")
-            await ws.send_bytes(data)
-            logger.info("Reader: After send_bytes")
-    except Exception:
-        logger.exception("Error in reader")
-        raise
-    finally:
-        logger.debug("Done reading")
+    while True:
+        # 4-6 MB is the typical default socket receive buffer size of Lunix
+        data = await reader.read(4 * 1024 * 1024)
+        if not data:
+            break
+        await ws.send_bytes(data)
 
 
 async def _forward_writing(ws: WebSocketResponse, writer: asyncio.StreamWriter) -> None:
-    try:
-        async for msg in ws:
-            assert msg.type == aiohttp.WSMsgType.BINARY
-            logger.info("Writer: has data (%r)", msg.data)
-            writer.write(msg.data)
-            await writer.drain()
-            logger.info("Writer: sent data")
-    except Exception:
-        logger.exception("Error in writer")
-        raise
-    finally:
-        logger.debug("Done writing")
+    async for msg in ws:
+        assert msg.type == aiohttp.WSMsgType.BINARY
+        writer.write(msg.data)
+        await writer.drain()
 
 
 class Transfer:
