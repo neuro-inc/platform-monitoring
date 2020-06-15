@@ -2,6 +2,7 @@ from typing import Any, AsyncIterator, Callable, Dict
 
 import aiohttp
 import pytest
+from _pytest.fixtures import FixtureRequest
 from aiohttp.web_exceptions import HTTPCreated, HTTPNoContent
 from yarl import URL
 
@@ -51,10 +52,19 @@ def _cluster_payload() -> Dict[str, Any]:
 
 @pytest.fixture
 async def _cluster(
-    client: aiohttp.ClientSession, cluster_token: str, _cluster_payload: Dict[str, Any]
+    request: FixtureRequest,
+    in_minikube: bool,
+    client: aiohttp.ClientSession,
+    cluster_token: str,
+    _cluster_payload: Dict[str, Any],
 ) -> AsyncIterator[str]:
     cluster_name = _cluster_payload["name"]
-    platform_config_url = URL(get_service_url("platformconfig", namespace="default"))
+    if in_minikube:
+        platform_config_url = URL("http://platformconfig.default:8080")
+    else:
+        platform_config_url = URL(
+            get_service_url("platformconfig", namespace="default")
+        )
 
     try:
         response = await client.post(

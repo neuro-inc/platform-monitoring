@@ -169,7 +169,7 @@ class JobsService:
     ) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         pod_name = self._kube_helper.get_job_pod_name(job)
         pod = await self._get_running_jobs_pod(pod_name)
-        reader, writer = await asyncio.open_connection(pod.host_ip, port)
+        reader, writer = await asyncio.open_connection(pod.pod_ip, port)
         return reader, writer
 
     async def _get_running_jobs_pod(self, job_id: str) -> Pod:

@@ -40,8 +40,13 @@ def compute_token(token_factory: Callable[[str], str]) -> str:
 
 
 @pytest.fixture(scope="session")
-def auth_config(token_factory: Callable[[str], str]) -> Iterator[PlatformAuthConfig]:
-    platform_auth = get_service_url("platformauthapi", namespace="default")
+def auth_config(
+    token_factory: Callable[[str], str], in_minikube: bool
+) -> Iterator[PlatformAuthConfig]:
+    if in_minikube:
+        platform_auth = "http://platformauthapi:8080"
+    else:
+        platform_auth = get_service_url("platformauthapi", namespace="default")
     yield PlatformAuthConfig(
         url=URL(platform_auth),
         token=token_factory("compute"),  # token is hard-coded in the yaml configuration
