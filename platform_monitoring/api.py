@@ -469,18 +469,28 @@ class MonitoringApiHandler:
 
 
 async def _forward_reading(ws: WebSocketResponse, reader: asyncio.StreamReader) -> None:
-    while True:
-        data = await reader.read()
-        if not data:
-            break
-        await ws.send_bytes(data)
+    try:
+        while True:
+            data = await reader.read()
+            if not data:
+                break
+            await ws.send_bytes(data)
+    except:
+        logger.exception("Error in reader")
+    finally:
+        logger.debug("Done reading")
 
 
 async def _forward_writing(ws: WebSocketResponse, writer: asyncio.StreamWriter) -> None:
-    async for msg in ws:
-        assert msg.type == aiohttp.WSMsgType.BINARY
-        writer.write(msg.data)
-        await writer.drain()
+    try:
+        async for msg in ws:
+            assert msg.type == aiohttp.WSMsgType.BINARY
+            writer.write(msg.data)
+            await writer.drain()
+    except:
+        logger.exception("Error in writer")
+    finally:
+        logger.debug("Done writing")
 
 
 class Transfer:
