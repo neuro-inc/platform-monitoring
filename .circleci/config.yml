@@ -98,9 +98,14 @@ jobs:
           command: |
             source venv/bin/activate
             make test_integration
+            make test_integration_minikube
 
       - codecov/upload:
           file: .coverage-integration.xml
+          flags: integration
+
+      - codecov/upload:
+          file: .coverage-integration-minikube.xml
           flags: integration
 
       - run:

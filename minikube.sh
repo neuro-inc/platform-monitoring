@@ -4,8 +4,6 @@ set -o verbose
 export GKE_DOCKER_REGISTRY=gcr.io
 export GKE_PROJECT_ID=light-reality-205619
 
-GKE_PREFIX=$GKE_DOCKER_REGISTRY/$GKE_PROJECT_ID
-
 
 function minikube::start {
     echo "Starting minikube..."

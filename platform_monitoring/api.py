@@ -81,7 +81,7 @@ class ApiHandler:
 
     async def handle_secured_ping(self, request: Request) -> Response:
         await check_authorized(request)
-        return Response(text=f"Secured Pong")
+        return Response(text="Secured Pong")
 
 
 class MonitoringApiHandler:
@@ -110,6 +110,8 @@ class MonitoringApiHandler:
                 aiohttp.web.post("/{job_id}/resize", self.resize),
                 aiohttp.web.post("/{job_id}/kill", self.kill),
                 aiohttp.web.post("/{job_id}/exec_create", self.exec_create),
+                aiohttp.web.post("/{job_id}/port_forward/{port}", self.port_forward),
+                aiohttp.web.get("/{job_id}/port_forward/{port}", self.port_forward),
                 aiohttp.web.post("/{job_id}/{exec_id}/exec_resize", self.exec_resize),
                 aiohttp.web.get("/{job_id}/{exec_id}/exec_inspect", self.exec_inspect),
                 aiohttp.web.post("/{job_id}/{exec_id}/exec_start", self.exec_start),
@@ -413,6 +415,73 @@ class MonitoringApiHandler:
             await transfer.transfer()
 
         return response
+
+    async def port_forward(self, request: Request) -> StreamResponse:
+        sport = request.match_info["port"]
+        try:
+            port = int(sport)
+        except (TypeError, ValueError):
+            payload = json.dumps({"msg": f"Invalid port number {sport!r}"})
+            raise aiohttp.web.HTTPBadRequest(
+                text=payload,
+                content_type="application/json",
+                headers={"X-Error": payload},
+            )
+
+        job = await self._resolve_job(request, "write")
+
+        # Connect before web socket handshake,
+        # it allows returning 400 Bad Request
+        try:
+            reader, writer = await self._jobs_service.port_forward(job, port)
+        except OSError as exc:
+            payload = json.dumps(
+                {"msg": f"Cannot connect to port {port}", "error": repr(exc)}
+            )
+            raise aiohttp.web.HTTPBadRequest(
+                text=payload,
+                content_type="application/json",
+                headers={"X-Error": payload},
+            )
+
+        try:
+            response = WebSocketResponse()
+            await response.prepare(request)
+
+            tasks = []
+            try:
+                tasks.append(asyncio.create_task(_forward_reading(response, reader)))
+                tasks.append(asyncio.create_task(_forward_writing(response, writer)))
+
+                await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+
+                return response
+            finally:
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                        with suppress(asyncio.CancelledError):
+                            await task
+
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+
+async def _forward_reading(ws: WebSocketResponse, reader: asyncio.StreamReader) -> None:
+    while True:
+        # 4-6 MB is the typical default socket receive buffer size of Lunix
+        data = await reader.read(4 * 1024 * 1024)
+        if not data:
+            break
+        await ws.send_bytes(data)
+
+
+async def _forward_writing(ws: WebSocketResponse, writer: asyncio.StreamWriter) -> None:
+    async for msg in ws:
+        assert msg.type == aiohttp.WSMsgType.BINARY
+        writer.write(msg.data)
+        await writer.drain()
 
 
 class Transfer:

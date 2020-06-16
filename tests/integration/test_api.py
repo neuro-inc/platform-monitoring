@@ -3,9 +3,10 @@ import json
 import logging
 import re
 import signal
+import textwrap
 import time
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator, List
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Union
 from unittest import mock
 from uuid import uuid4
 
@@ -122,6 +123,9 @@ class MonitoringApiEndpoints:
 
     def generate_exec_start_url(self, job_id: str, exec_id: str) -> URL:
         return self.endpoint / job_id / exec_id / "exec_start"
+
+    def generate_port_forward_url(self, job_id: str, port: Union[int, str]) -> URL:
+        return self.endpoint / job_id / "port_forward" / str(port)
 
 
 @dataclass(frozen=True)
@@ -1248,16 +1252,18 @@ class TestExecApi:
             assert await expect_prompt(ws) == b"echo 'abc'\r\nabc\r\n# "
             await ws.send_bytes(b"exit 1\n")
             assert await expect_prompt(ws) == b"exit 1\r\n"
+            # give a time to finish exec session
+            await asyncio.sleep(5)
 
-        async with timeout(30):
+        async with timeout(90):
             async with client.get(
-                monitoring_api.generate_exec_inspect_url(infinite_job, exec_id,),
+                monitoring_api.generate_exec_inspect_url(infinite_job, exec_id),
                 headers=headers,
             ) as resp:
                 data = await resp.json()
-                while data["running"]:
+                while data["running"] and data["exit_code"] is not None:
                     data = await resp.json()
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(1)
                 assert data["exit_code"] == 1, data
 
     @pytest.mark.asyncio
@@ -1359,3 +1365,89 @@ class TestKillApi:
             named_infinite_job, status="failed"
         )
         assert result["history"]["exit_code"] == 128 + signal.SIGKILL, result
+
+
+class TestPortForward:
+    @pytest.mark.minikube
+    @pytest.mark.asyncio
+    async def test_port_forward_bad_port(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        infinite_job: str,
+    ) -> None:
+        headers = jobs_client.headers
+
+        # String port is invalid
+        url = monitoring_api.generate_port_forward_url(infinite_job, "abc")
+        async with client.get(url, headers=headers) as response:
+            assert response.status == 400, await response.text()
+
+    @pytest.mark.minikube
+    @pytest.mark.asyncio
+    async def test_port_forward_cannot_connect(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        infinite_job: str,
+    ) -> None:
+        headers = jobs_client.headers
+
+        # Port 60001 is not handled
+        url = monitoring_api.generate_port_forward_url(infinite_job, 60001)
+        async with client.get(url, headers=headers) as response:
+            assert response.status == 400, await response.text()
+
+    @pytest.mark.minikube
+    @pytest.mark.asyncio
+    async def test_port_forward_ok(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        job_submit: Dict[str, Any],
+        jobs_client: JobsClient,
+    ) -> None:
+        headers = jobs_client.headers
+
+        py = textwrap.dedent(
+            """\
+            import socket
+
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.bind(("0.0.0.0", 60002))
+            sock.listen()
+            cli, addr = sock.accept()
+            while True:
+                data = cli.recv(1024)
+                if not data:
+                    break
+                cli.sendall(b"rep-"+data)
+        """
+        )
+        command = f"python -c '{py}'"
+        job_submit["container"]["command"] = command
+        job_submit["container"]["image"] = "python:latest"
+
+        url = platform_api.jobs_base_url
+        async with client.post(url, headers=headers, json=job_submit) as response:
+            assert response.status == HTTPAccepted.status_code
+            result = await response.json()
+            assert result["status"] in ["pending"]
+            job_id = result["id"]
+
+        await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
+
+        url = monitoring_api.generate_port_forward_url(job_id, 60002)
+
+        async with client.ws_connect(url, headers=headers) as ws:
+            for i in range(3):
+                data = str(i).encode("ascii")
+                await ws.send_bytes(data)
+                ret = await ws.receive_bytes()
+                assert ret == b"rep-" + data
+            await ws.close()

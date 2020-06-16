@@ -500,7 +500,10 @@ class TestJobsService:
             # for some reason the prompt is missed sometimes
             if val == b"\r/ # ":
                 val = await expect_prompt(stream)
-            assert val == b"echo 'abc'\r\nabc\r\n/ # "
+            val = val.strip()
+            if val.startswith(b"/ # "):
+                val = val[4:]
+            assert val == b"echo 'abc'\r\nabc\r\n/ #"
             await stream.write_in(b"exit 1\n")
             assert await expect_prompt(stream) == b"exit 1\r\n"
 

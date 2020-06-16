@@ -1,6 +1,7 @@
+import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict, Optional, Union, cast
+from typing import Any, AsyncIterator, Dict, Optional, Tuple, Union, cast
 
 from aiodocker.exceptions import DockerError
 from aiodocker.stream import Stream
@@ -155,13 +156,21 @@ class JobsService:
             return await exe.inspect()
 
     @asynccontextmanager
-    async def exec_start(self, job: Job, exec_id: str,) -> AsyncIterator[Stream]:
+    async def exec_start(self, job: Job, exec_id: str) -> AsyncIterator[Stream]:
         pod_name = self._kube_helper.get_job_pod_name(job)
         pod = await self._get_running_jobs_pod(pod_name)
         async with self._get_docker_client(pod) as docker:
             exe = docker.containers.exec(exec_id)
             async with exe.start(detach=False) as stream:
                 yield stream
+
+    async def port_forward(
+        self, job: Job, port: int
+    ) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        pod_name = self._kube_helper.get_job_pod_name(job)
+        pod = await self._get_running_jobs_pod(pod_name)
+        reader, writer = await asyncio.open_connection(pod.pod_ip, port)
+        return reader, writer
 
     async def _get_running_jobs_pod(self, job_id: str) -> Pod:
         pod: Optional[Pod]
