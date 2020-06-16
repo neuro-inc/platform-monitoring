@@ -135,7 +135,7 @@ endif
 	mkdir -p temp_deploy/platformmonitoringapi
 	cp -Rf deploy/platformmonitoringapi/. temp_deploy/platformmonitoringapi
 	cp temp_deploy/platformmonitoringapi/values-template.yaml temp_deploy/platformmonitoringapi/values.yaml
-	sed -i '' "s/IMAGE_TAG/$(ARTIFACTORY_TAG)/g" temp_deploy/platformmonitoringapi/values.yaml
+	sed -i "s/IMAGE_TAG/$(ARTIFACTORY_TAG)/g" temp_deploy/platformmonitoringapi/values.yaml
 	find temp_deploy/platformmonitoringapi -type f -name 'values-*' -delete
 	helm package --app-version=$(ARTIFACTORY_TAG) --version=$(ARTIFACTORY_TAG) temp_deploy/platformmonitoringapi/
 	helm push-artifactory $(IMAGE_NAME)-$(ARTIFACTORY_TAG).tgz neuro-local-public
