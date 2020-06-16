@@ -131,6 +131,7 @@ artifactory_helm_push:
 ifeq ($(ARTIFACTORY_TAG),)
 	$(error ARTIFACTORY_TAG is not set)
 endif
+	helm init --client-only
 	mkdir -p temp_deploy/platformmonitoringapi
 	cp -Rf deploy/platformmonitoringapi/. temp_deploy/platformmonitoringapi
 	cp temp_deploy/platformmonitoringapi/values-template.yaml temp_deploy/platformmonitoringapi/values.yaml
