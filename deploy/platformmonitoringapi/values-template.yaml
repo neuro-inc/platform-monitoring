@@ -52,7 +52,9 @@ fluentd:
   s3:
     buffer:
       chunkLimitSize: 8M
+      flushThreadCount: 16 # number of thread that write files to S3
       timeKey: 1m # chunks will be flushed every minute
+      timeKeyWait: 1m # time to wait before flushing chunk to S3
 
 minio:
   image: minio/minio:RELEASE.2020-03-05T01-04-19Z
