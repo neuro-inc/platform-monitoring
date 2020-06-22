@@ -10,4 +10,4 @@ NP_MONITORING_ES_HOSTS: http://logging-elasticsearch:9200
 NP_MONITORING_K8S_NS: default
 NP_MONITORING_REGISTRY_URL: https://registry-dev.neu.ro
 NP_MONITORING_K8S_KUBELET_PORT: ""
-NP_CORS_ORIGINS: http://localhost:8000,https://master--neuro-web.netlify.com,https://master--neuro-web.netlify.app
+NP_CORS_ORIGINS: http://localhost:8000,https://master--neuro-web.netlify.com,https://master--neuro-web.netlify.app,https://master--megafon-neuro.netlify.app
