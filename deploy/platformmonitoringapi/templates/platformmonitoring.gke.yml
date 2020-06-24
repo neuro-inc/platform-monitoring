@@ -209,6 +209,9 @@ apiVersion: v1
 kind: Service
 metadata:
   name: platformmonitoringapi
+  annotations:
+    traefik.ingress.kubernetes.io/affinity: "true"
+    traefik.ingress.kubernetes.io/session-cookie-name: NEURO_MONITORINGAPI_SESSION
 spec:
   type: ClusterIP
   ports:
