@@ -42,7 +42,7 @@ docker_build:
 
 docker_build_tests:
 	@eval $$(minikube docker-env); \
-	    make build; \
+	    make docker_build; \
 	    docker build -f tests.Dockerfile -t $(IMAGE_NAME)-tests:latest .
 
 gke_login:

@@ -53,10 +53,8 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           export RELEASE=$(lsb_release -cs)
           curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-          sudo add-apt-repository \
-            "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
-            $RELEASE \
-            stable"
+          sudo add-apt-repository -y \
+            "deb [arch=amd64] https://download.docker.com/linux/ubuntu $RELEASE stable"
           sudo apt-get -q update
           sudo apt-get -q install -y \
             docker-ce=5:18.09.4~3-0~ubuntu-$RELEASE \
@@ -65,7 +63,10 @@ jobs:
 
           make install_k8s
           make start_k8s
-          make docker_pull_test_images
+      - name: Pull test images
+        run: make docker_pull_test_images
+      - name: Setup platform services in minikube
+        run: |
           make apply_configuration_k8s
           make test_k8s
       - name: Run integration tests
@@ -101,9 +102,9 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
       - name: Login to AWS ECR
         uses: aws-actions/amazon-ecr-login@v1
-      - name: Build images
+      - name: Build image
         run: make docker_build
-      - name: Push images to ECR
+      - name: Push image to ECR
         run: make aws_docker_push
       - name: Update kube config
         run: make eks_login
