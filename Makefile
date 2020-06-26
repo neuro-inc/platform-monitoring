@@ -70,18 +70,13 @@ docker_pull_test_images:
 	    docker tag $(PLATFORMCONFIG_IMAGE) platformconfig:latest; \
 	    docker tag $(PLATFORMCONFIGMIGRATIONS_IMAGE) platformconfig-migrations:latest
 
-gke_docker_push: build
-	docker tag $(IMAGE_NAME):latest $(IMAGE):latest
-	docker tag $(IMAGE_NAME):latest $(IMAGE):$(IMAGE_TAG)
-	docker push $(IMAGE)
-
 gcr_login:
 	@echo $(GKE_ACCT_AUTH) | base64 --decode | docker login -u _json_key --password-stdin https://gcr.io
 
 ecr_login:
 	$$(aws ecr get-login --no-include-email --region $(AWS_REGION))
 
-aws_docker_push: build ecr_login
+docker_push: docker_build
 	docker tag $(IMAGE_NAME):latest $(IMAGE_AWS):latest
 	docker tag $(IMAGE_NAME):latest $(IMAGE_AWS):$(IMAGE_TAG)
 	docker push $(IMAGE_AWS):latest
@@ -99,7 +94,7 @@ artifactory_docker_login:
 		--username=$(ARTIFACTORY_USERNAME) \
 		--password=$(ARTIFACTORY_PASSWORD)
 
-artifactory_docker_push: build
+artifactory_docker_push: docker_build
 ifeq ($(ARTIFACTORY_TAG),)
 	$(error ARTIFACTORY_TAG is not set)
 endif
