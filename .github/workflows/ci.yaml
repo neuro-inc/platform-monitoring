@@ -66,7 +66,7 @@ jobs:
           make start_k8s
       - name: Pull test images
         run: make docker_pull_test_images
-      - name: Setup platform services in minikube
+      - name: Setup services in minikube
         run: |
           make apply_configuration_k8s
           make test_k8s
