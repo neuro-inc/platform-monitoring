@@ -51,14 +51,16 @@ jobs:
           # without containerd, tests TestTopApi won't work
           # see https://github.com/neuromation/platform-api/pull/928/files#diff-1d37e48f9ceff6d8030570cd36286a61R76
           export DEBIAN_FRONTEND=noninteractive
+          export RELEASE=$(lsb_release -cs)
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
           sudo add-apt-repository \
             "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
-            $(lsb_release -cs) \
+            $RELEASE \
             stable"
           sudo apt-get -q update
           sudo apt-get -q install -y \
-            docker-ce=5:18.09.4~3-0~ubuntu-xenial \
-            docker-ce-cli=5:18.09.4~3-0~ubuntu-xenial \
+            docker-ce=5:18.09.4~3-0~ubuntu-$RELEASE \
+            docker-ce-cli=5:18.09.4~3-0~ubuntu-$RELEASE \
             containerd.io=1.2.5-1
 
           make install_k8s
