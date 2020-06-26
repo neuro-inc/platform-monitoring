@@ -46,7 +46,7 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
       - name: Login to AWS ECR
         uses: aws-actions/amazon-ecr-login@v1
-      - name: Start minikube
+      - name: Install containerd
         run: |
           # without containerd, tests TestTopApi won't work
           # see https://github.com/neuromation/platform-api/pull/928/files#diff-1d37e48f9ceff6d8030570cd36286a61R76
@@ -60,7 +60,8 @@ jobs:
             docker-ce=5:18.09.4~3-0~ubuntu-$RELEASE \
             docker-ce-cli=5:18.09.4~3-0~ubuntu-$RELEASE \
             containerd.io=1.2.5-1
-
+      - name: Start minikube
+        run: |
           make install_k8s
           make start_k8s
       - name: Pull test images
