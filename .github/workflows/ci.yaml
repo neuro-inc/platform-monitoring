@@ -48,21 +48,6 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v1
       - name: Start minikube
         run: |
-          # https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG-1.10.md#before-upgrading
-          #
-          # MountPropagation feature is now beta. As a consequence, all
-          # volume mounts in containers are now rslave on Linux by default.
-          # To make this default work in all Linux environments the entire
-          # mount tree should be marked as shareable, e.g. via mount
-          # --make-rshared /. All Linux distributions that use systemd
-          # already have the root directory mounted as rshared and hence
-          # they need not do anything. In Linux environments without systemd
-          # we recommend running mount --make-rshared / during boot before
-          # docker is started.
-          sudo mount --make-rshared /
-          sudo mount --make-rshared /run
-          sudo mount --make-rshared /var/lib/docker
-
           # without containerd, tests TestTopApi won't work
           # see https://github.com/neuromation/platform-api/pull/928/files#diff-1d37e48f9ceff6d8030570cd36286a61R76
           export DEBIAN_FRONTEND=noninteractive
