@@ -107,9 +107,9 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
       - name: Login to AWS ECR
         uses: aws-actions/amazon-ecr-login@v1
-      - name: Building images
+      - name: Build images
         run: make docker_build
-      - name: Pushing images to ECR
+      - name: Push images to ECR
         run: make aws_docker_push
       - name: Update kube config
         run: make eks_login
