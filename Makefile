@@ -118,7 +118,7 @@ ifeq ($(ARTIFACTORY_PASSWORD),)
 endif
 	helm init --client-only
 	helm repo add neuro-local-public \
-		ARTIFACTORY_HELM_REPO \
+		$(ARTIFACTORY_HELM_REPO) \
 		--username ${ARTIFACTORY_USERNAME} \
 		--password ${ARTIFACTORY_PASSWORD}
 
