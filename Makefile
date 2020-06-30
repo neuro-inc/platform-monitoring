@@ -1,23 +1,17 @@
 IMAGE_NAME ?= platformmonitoringapi
-IMAGE_TAG ?= latest
-ARTIFACTORY_TAG ?=$(shell echo "$(CIRCLE_TAG)" | awk -F/ '{print $$2}')
+IMAGE_TAG ?= $(GITHUB_SHA)
 IMAGE ?= $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/$(IMAGE_NAME)
 IMAGE_AWS ?= $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com/$(IMAGE_NAME)
 
-PLATFORMAPI_TAG=6b56cbdb3ff7ce1cbbd5165bf38f1389902c8fba
-PLATFORMAUTHAPI_TAG=1deed1143a3cdf00a7522ad7d40d7794dcfe7ef1
-PLATFORMCONFIG_TAG=cdbcae372da044f08fbbc9a2548049875ea9a479
-PLATFORMCONFIGMIGRATIONS_TAG=cdbcae372da044f08fbbc9a2548049875ea9a479
+PLATFORMAPI_IMAGE = $(shell cat PLATFORMAPI_IMAGE)
+PLATFORMAUTHAPI_IMAGE = $(shell cat PLATFORMAUTHAPI_IMAGE)
+PLATFORMCONFIG_IMAGE = $(shell cat PLATFORMCONFIG_IMAGE)
+PLATFORMCONFIGMIGRATIONS_IMAGE = $(shell cat PLATFORMCONFIGMIGRATIONS_IMAGE)
 
 ARTIFACTORY_DOCKER_REPO ?= neuro-docker-local-public.jfrog.io
+ARTIFACTORY_HELM_REPO ?= https://neuro.jfrog.io/artifactory/helm-local-public
 
-ifdef CIRCLECI
-    PIP_EXTRA_INDEX_URL ?= https://$(DEVPI_USER):$(DEVPI_PASS)@$(DEVPI_HOST)/$(DEVPI_USER)/$(DEVPI_INDEX)
-else
-    PIP_EXTRA_INDEX_URL ?= $(shell python pip_extra_index_url.py)
-    MINIKUBE_SCRIPT="./minikube.sh"
-endif
-export PIP_EXTRA_INDEX_URL
+export PIP_EXTRA_INDEX_URL ?= $(shell python pip_extra_index_url.py)
 
 include k8s.mk
 
@@ -40,16 +34,16 @@ test_unit:
 test_integration:
 	pytest -vv --maxfail=3 --cov=platform_monitoring --cov-report xml:.coverage-integration.xml tests/integration -m "not minikube"
 
-test_integration_minikube: build_tests
+test_integration_minikube: docker_build_tests
 	kubectl run --restart=Never --image-pull-policy=Never -it --rm --image=platformmonitoringapi-tests:latest tests -- pytest -vv --log-cli-level=debug -s tests/integration/ -m minikube
 
-build:
-	docker build -f Dockerfile.k8s -t $(IMAGE_NAME):$(IMAGE_TAG) --build-arg PIP_EXTRA_INDEX_URL="$(PIP_EXTRA_INDEX_URL)" .
+docker_build:
+	docker build -f Dockerfile.k8s -t $(IMAGE_NAME):latest --build-arg PIP_EXTRA_INDEX_URL .
 
-build_tests:
+docker_build_tests:
 	@eval $$(minikube docker-env); \
-	    make build; \
-	    docker build -f tests.Dockerfile -t $(IMAGE_NAME)-tests:$(IMAGE_TAG) .
+	    make docker_build; \
+	    docker build -f tests.Dockerfile -t $(IMAGE_NAME)-tests:latest .
 
 gke_login:
 	sudo chown circleci:circleci -R $$HOME
@@ -62,54 +56,49 @@ gke_login:
 	docker version
 	gcloud auth configure-docker
 
-aws_login:
-	pip install --upgrade awscli
+eks_login:
 	aws eks --region $(AWS_REGION) update-kubeconfig --name $(AWS_CLUSTER_NAME)
 
-gke_docker_pull_test_images:
+docker_pull_test_images:
 	@eval $$(minikube docker-env); \
-	    docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:$(PLATFORMAPI_TAG); \
-	    docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:$(PLATFORMAUTHAPI_TAG); \
-	    docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:$(PLATFORMCONFIG_TAG); \
-	    docker pull $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig-migrations:$(PLATFORMCONFIGMIGRATIONS_TAG); \
-	    docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformapi:$(PLATFORMAPI_TAG) platformapi:latest; \
-	    docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformauthapi:$(PLATFORMAUTHAPI_TAG) platformauthapi:latest; \
-	    docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig:$(PLATFORMCONFIG_TAG) platformconfig:latest; \
-	    docker tag $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/platformconfig-migrations:$(PLATFORMCONFIG_TAG) platformconfig-migrations:latest
-
-gke_docker_push: build
-	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE):latest
-	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE):$(CIRCLE_SHA1)
-	docker push $(IMAGE)
+	    docker pull $(PLATFORMAPI_IMAGE); \
+	    docker pull $(PLATFORMAUTHAPI_IMAGE); \
+	    docker pull $(PLATFORMCONFIG_IMAGE); \
+	    docker pull $(PLATFORMCONFIGMIGRATIONS_IMAGE); \
+	    docker tag $(PLATFORMAPI_IMAGE) platformapi:latest; \
+	    docker tag $(PLATFORMAUTHAPI_IMAGE) platformauthapi:latest; \
+	    docker tag $(PLATFORMCONFIG_IMAGE) platformconfig:latest; \
+	    docker tag $(PLATFORMCONFIGMIGRATIONS_IMAGE) platformconfig-migrations:latest
 
 gcr_login:
 	@echo $(GKE_ACCT_AUTH) | base64 --decode | docker login -u _json_key --password-stdin https://gcr.io
 
 ecr_login:
-	$$(aws ecr get-login --no-include-email --region $(AWS_REGION) )
+	$$(aws ecr get-login --no-include-email --region $(AWS_REGION))
 
-aws_docker_push: build ecr_login
-	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_AWS):latest
-	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_AWS):$(CIRCLE_SHA1)
+docker_push: docker_build
+	docker tag $(IMAGE_NAME):latest $(IMAGE_AWS):latest
+	docker tag $(IMAGE_NAME):latest $(IMAGE_AWS):$(IMAGE_TAG)
 	docker push $(IMAGE_AWS):latest
-	docker push $(IMAGE_AWS):$(CIRCLE_SHA1)
+	docker push $(IMAGE_AWS):$(IMAGE_TAG)
 
 helm_install:
 	curl https://raw.githubusercontent.com/kubernetes/helm/master/scripts/get | bash -s -- -v v2.11.0
+	helm init --wait
 
-gke_k8s_deploy: helm_install
-	gcloud --quiet container clusters get-credentials $(GKE_CLUSTER_NAME) $(CLUSTER_ZONE_REGION)
-	helm -f deploy/platformmonitoringapi/values-$(HELM_ENV).yaml --set "IMAGE=$(IMAGE):$(CIRCLE_SHA1)" upgrade --install platformmonitoringapi deploy/platformmonitoringapi/ --wait --timeout 600
+helm_deploy:
+	helm -f deploy/platformmonitoringapi/values-$(HELM_ENV)-aws.yaml --set "IMAGE=$(IMAGE_AWS):$(IMAGE_TAG)" upgrade --install platformmonitoringapi deploy/platformmonitoringapi/ --namespace platform --wait --timeout 600
 
-aws_k8s_deploy: helm_install
-	helm -f deploy/platformmonitoringapi/values-$(HELM_ENV)-aws.yaml --set "IMAGE=$(IMAGE_AWS):$(CIRCLE_SHA1)" upgrade --install platformmonitoringapi deploy/platformmonitoringapi/ --namespace platform --wait --timeout 600
+artifactory_docker_login:
+	@docker login $(ARTIFACTORY_DOCKER_REPO) \
+		--username=$(ARTIFACTORY_USERNAME) \
+		--password=$(ARTIFACTORY_PASSWORD)
 
-artifactory_docker_push: build
+artifactory_docker_push: docker_build
 ifeq ($(ARTIFACTORY_TAG),)
 	$(error ARTIFACTORY_TAG is not set)
 endif
-	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(ARTIFACTORY_DOCKER_REPO)/$(IMAGE_NAME):$(ARTIFACTORY_TAG)
-	docker login $(ARTIFACTORY_DOCKER_REPO) --username=$(ARTIFACTORY_USERNAME) --password=$(ARTIFACTORY_PASSWORD)
+	docker tag $(IMAGE_NAME):latest $(ARTIFACTORY_DOCKER_REPO)/$(IMAGE_NAME):$(ARTIFACTORY_TAG)
 	docker push $(ARTIFACTORY_DOCKER_REPO)/$(IMAGE_NAME):$(ARTIFACTORY_TAG)
 
 artifactory_helm_plugin_install:
@@ -124,7 +113,7 @@ ifeq ($(ARTIFACTORY_PASSWORD),)
 endif
 	helm init --client-only
 	helm repo add neuro-local-public \
-		https://neuro.jfrog.io/artifactory/helm-local-public \
+		$(ARTIFACTORY_HELM_REPO) \
 		--username ${ARTIFACTORY_USERNAME} \
 		--password ${ARTIFACTORY_PASSWORD}
 
