@@ -104,7 +104,7 @@ jobs:
       - name: Login to AWS ECR
         uses: aws-actions/amazon-ecr-login@v1
       - name: Push image to ECR
-        run: make aws_docker_push
+        run: make docker_push
       - name: Update kube config
         run: make eks_login
       - name: Install helm
