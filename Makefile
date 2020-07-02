@@ -84,7 +84,7 @@ docker_push: docker_build
 
 helm_install:
 	curl https://raw.githubusercontent.com/kubernetes/helm/master/scripts/get | bash -s -- -v v2.11.0
-	helm init --wait
+	helm init --client-only
 
 helm_deploy:
 	helm -f deploy/platformmonitoringapi/values-$(HELM_ENV)-aws.yaml --set "IMAGE=$(IMAGE_AWS):$(IMAGE_TAG)" upgrade --install platformmonitoringapi deploy/platformmonitoringapi/ --namespace platform --wait --timeout 600
