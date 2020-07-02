@@ -127,8 +127,6 @@ jobs:
         uses: actions/checkout@v2
       - name: Set env
         run: echo ::set-env name=ARTIFACTORY_TAG::${GITHUB_REF#refs/tags/artifactory/}
-      - name: Build image
-        run: make docker_build
       - name: Push image to Artifactory
         run: |
           make artifactory_docker_login
@@ -138,4 +136,4 @@ jobs:
           make helm_install
           make artifactory_helm_plugin_install
       - name: Push helm package to Artifactory
-        run: make helm_deploy
+        run: make artifactory_helm_push
