@@ -10,8 +10,12 @@ function minikube::start {
     mkdir -p ~/.minikube/files/files
     cp tests/k8s/files/* ~/.minikube/files/files/
     minikube config set WantUpdateNotification false
-    minikube start --kubernetes-version=v1.14.10
-    minikube addons enable registry
+    minikube start \
+        --kubernetes-version=v1.14.10 \
+        --install-addons=true \
+        --addons=registry \
+        --wait=all \
+        --wait-timeout=5m
     kubectl config use-context minikube
 }
 
