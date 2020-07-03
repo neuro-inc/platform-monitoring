@@ -16,6 +16,7 @@ function minikube::start {
         --addons=registry \
         --wait=all \
         --wait-timeout=5m
+    kubectl config use-context minikube
 }
 
 function minikube::load_images {
