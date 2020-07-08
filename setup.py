@@ -7,7 +7,7 @@ install_requires = (
     "neuro_auth_client==19.10.5",
     "neuromation==20.6.23",
     "aioelasticsearch==0.6.0",
-    "aiodocker==0.18.8",
+    "aiodocker==0.19.0",
     "docker-image-py==0.1.10",
     "trafaret==2.0.2",
     "platform-logging==0.3",
