@@ -173,6 +173,8 @@ spec:
 {{- if eq .Values.logs.persistence.type "minio" }}
         - name: NP_MONITORING_LOGS_STORAGE_TYPE
           value: s3
+        - name: NP_MONITORING_S3_ENDPOINT_URL
+          value: {{ .Values.logs.persistence.minio.url | quote }}
         - name: NP_MONITORING_S3_REGION
           value: {{ .Values.logs.persistence.minio.region | quote }}
         - name: NP_MONITORING_S3_ACCESS_KEY_ID
