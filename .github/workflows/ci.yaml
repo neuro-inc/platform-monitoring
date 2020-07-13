@@ -135,5 +135,6 @@ jobs:
         run: |
           make helm_install
           make artifactory_helm_plugin_install
+          make artifactory_helm_repo_add
       - name: Push helm package to Artifactory
         run: make artifactory_helm_push
