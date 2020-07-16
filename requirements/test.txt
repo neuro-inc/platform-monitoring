@@ -2,7 +2,7 @@
 -r syntax.txt
 pytest==5.3.5
 pytest-cov==2.10.0
-pytest-asyncio==0.10.0
+pytest-asyncio==0.14.0
 codecov==2.1.8
 async-generator==1.10
 python-jose==3.1.0
