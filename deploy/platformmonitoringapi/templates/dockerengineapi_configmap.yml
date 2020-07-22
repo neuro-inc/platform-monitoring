@@ -25,7 +25,7 @@ data:
                 proxy_buffering off;
                 proxy_cache off;
                 # increase timeout if `neuro exec` connections are closed unexpectedly
-                proxy_read_timeout 24h;
+                proxy_read_timeout 7d;
                 proxy_http_version 1.1;
                 proxy_set_header Upgrade $http_upgrade;
                 proxy_set_header Connection $connection_upgrade;
