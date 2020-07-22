@@ -24,7 +24,8 @@ data:
                 proxy_pass http://unix:/var/run/docker.sock:/;
                 proxy_buffering off;
                 proxy_cache off;
-                proxy_read_timeout 300s;  # 60s by default
+                # increase timeout if `neuro exec` connections are closed unexpectedly
+                proxy_read_timeout 24h;
                 proxy_http_version 1.1;
                 proxy_set_header Upgrade $http_upgrade;
                 proxy_set_header Connection $connection_upgrade;
