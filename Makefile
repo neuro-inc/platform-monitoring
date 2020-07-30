@@ -83,7 +83,7 @@ docker_push: docker_build
 	docker push $(IMAGE_AWS):$(IMAGE_TAG)
 
 helm_install:
-	curl https://raw.githubusercontent.com/kubernetes/helm/master/scripts/get | bash -s -- -v v2.11.0
+	curl https://raw.githubusercontent.com/kubernetes/helm/master/scripts/get | bash -s -- -v $(HELM_VERSION)
 	helm init --client-only
 
 helm_deploy:
