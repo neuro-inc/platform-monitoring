@@ -7,7 +7,7 @@ from neuromation.api.jobs import Jobs as JobsClient
 
 from platform_monitoring.config import DockerConfig
 from platform_monitoring.config_client import Cluster, ConfigClient
-from platform_monitoring.jobs_service import JobsService, Preset
+from platform_monitoring.jobs_service import JobsService, NodeNotFoundException, Preset
 from platform_monitoring.kube_client import KubeClient, Node, Pod, PodPhase
 
 
@@ -26,6 +26,13 @@ class TestJobsService:
                                 "max_size": 1,
                                 "available_cpu": 1,
                                 "available_memory_mb": 1024,
+                            },
+                            {
+                                "name": "minikube-cpu-p",
+                                "max_size": 1,
+                                "available_cpu": 1,
+                                "available_memory_mb": 1024,
+                                "is_preemptible": True,
                             },
                             {
                                 "name": "minikube-gpu",
@@ -92,6 +99,7 @@ class TestJobsService:
             return [
                 self._create_node("minikube-cpu", "minikube-cpu-1"),
                 self._create_node("minikube-cpu", "minikube-cpu-2"),
+                self._create_node("minikube-cpu-p", "minikube-cpu-p-1"),
                 self._create_node("minikube-gpu", "minikube-gpu-1"),
                 self._create_node("minikube-gpu", "minikube-gpu-2"),
             ]
@@ -142,6 +150,7 @@ class TestJobsService:
         result = await service.get_available_jobs_counts(
             {
                 "cpu": Preset(cpu=0.2, memory_mb=100),
+                "cpu-p": Preset(cpu=0.2, memory_mb=100, is_preemptible=True),
                 "gpu": Preset(
                     cpu=0.2, memory_mb=100, gpu=1, gpu_model="nvidia-tesla-k80"
                 ),
@@ -150,24 +159,25 @@ class TestJobsService:
                 ),
             }
         )
-        assert result == {"cpu": 9, "gpu": 1, "gpu-unknown": 0}
+        assert result == {"cpu": 9, "cpu-p": 19, "gpu": 1, "gpu-unknown": 0}
 
     @pytest.mark.asyncio
-    async def test_get_available_jobs_count_empty_nodes(
+    async def test_get_available_jobs_count_free_nodes(
         self, service: JobsService, kube_client: mock.Mock
     ) -> None:
         result = await service.get_available_jobs_counts(
             {
                 "cpu": Preset(cpu=0.2, memory_mb=100),
+                "cpu-p": Preset(cpu=0.2, memory_mb=100, is_preemptible=True),
                 "gpu": Preset(
                     cpu=0.2, memory_mb=100, gpu=1, gpu_model="nvidia-tesla-k80"
                 ),
             }
         )
-        assert result == {"cpu": 10, "gpu": 2}
+        assert result == {"cpu": 10, "cpu-p": 20, "gpu": 2}
 
     @pytest.mark.asyncio
-    async def test_get_available_jobs_count_full_nodes(
+    async def test_get_available_jobs_count_busy_nodes(
         self, service: JobsService, kube_client: mock.Mock
     ) -> None:
         async def get_pods(
@@ -193,3 +203,23 @@ class TestJobsService:
             }
         )
         assert result == {"cpu": 0, "gpu": 0}
+
+    @pytest.mark.asyncio
+    async def test_get_available_jobs_count_node_not_found(
+        self, service: JobsService, kube_client: mock.Mock
+    ) -> None:
+        async def get_pods(
+            label_selector: str = "", phases: Sequence[PodPhase] = ()
+        ) -> Sequence[Pod]:
+            assert label_selector == "platform.neuromation.io/job"
+            assert phases == (PodPhase.PENDING, PodPhase.RUNNING)
+            return [
+                self._create_pod("unknown", cpu_m=1000, memory_mb=1024),
+            ]
+
+        kube_client.get_pods.side_effect = get_pods
+
+        with pytest.raises(NodeNotFoundException, match="Node 'unknown' was not found"):
+            await service.get_available_jobs_counts(
+                {"cpu": Preset(cpu=0.2, memory_mb=100)}
+            )

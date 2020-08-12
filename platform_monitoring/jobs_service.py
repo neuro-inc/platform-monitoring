@@ -42,6 +42,11 @@ class JobException(Exception):
     pass
 
 
+class NodeNotFoundException(Exception):
+    def __init__(self, name: str) -> None:
+        super().__init__(f"Node {name!r} was not found")
+
+
 @dataclass(frozen=True)
 class Preset:
     cpu: float
@@ -278,9 +283,14 @@ class JobsService:
         )
         nodes = await self._kube_client.get_nodes(label_selector=JOB_LABEL)
         for node_name, node_pods in groupby(pods, lambda p: p.node_name):
-            node = next(iter(n for n in nodes if n.name == node_name))
+            if not node_name:  # pragma: no coverage
+                continue
+            try:
+                node = next(iter(n for n in nodes if n.name == node_name))
+            except StopIteration:
+                raise NodeNotFoundException(node_name)
             node_pool_name = node.get_label(NODE_POOL_LABEL)
-            if not node_pool_name:
+            if not node_pool_name:  # pragma: no coverage
                 continue
             pod_resources = [p.resource_requests for p in node_pods]
             node_resources = reduce(Resources.add, pod_resources, Resources())
