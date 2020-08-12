@@ -44,7 +44,7 @@ class Cluster:
         self._payload = payload
 
     @property
-    def zones(self) -> str:
+    def zones(self) -> Sequence[str]:
         return self._payload["cloud_provider"].get("zones", [])
 
     @property
@@ -83,14 +83,10 @@ class ConfigClient:
         await self.aclose()
 
     async def aclose(self) -> None:
-        if not self._client:
-            return
+        assert self._client
         await self._client.close()
-        del self._client
 
     async def _init(self) -> None:
-        if self._client:
-            return
         if self._trace_config:
             trace_configs = [self._trace_config]
         else:

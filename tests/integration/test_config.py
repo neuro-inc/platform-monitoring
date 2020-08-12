@@ -3,7 +3,6 @@ from platform_monitoring.config_client import ConfigClient
 
 
 class TestConfigClient:
-    @pytest.mark.minikube
     @pytest.mark.asyncio
     async def test_get_cluster(
         self, platform_config_client: ConfigClient, cluster_name: str
