@@ -49,6 +49,7 @@ from .config import (
     PlatformAuthConfig,
     S3Config,
 )
+from .config_client import ConfigClient
 from .config_factory import EnvironConfigFactory
 from .jobs_service import Container, ExecCreate, JobException, JobsService
 from .kube_client import JobError, KubeClient, KubeTelemetry
@@ -575,9 +576,16 @@ async def create_api_v1_app() -> aiohttp.web.Application:
 
 async def create_monitoring_app(config: Config) -> aiohttp.web.Application:
     monitoring_app = aiohttp.web.Application()
-    notifications_handler = MonitoringApiHandler(monitoring_app, config)
-    notifications_handler.register(monitoring_app)
+    monitoring_handler = MonitoringApiHandler(monitoring_app, config)
+    monitoring_handler.register(monitoring_app)
     return monitoring_app
+
+
+@asynccontextmanager
+async def create_config_client(config: Config) -> AsyncIterator[ConfigClient]:
+    url = config.platform_api.url / "clusters" / config.cluster_name
+    async with ConfigClient(url, config.platform_api.token) as client:
+        yield client
 
 
 @asynccontextmanager
@@ -728,14 +736,22 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             )
             app["monitoring_app"]["kube_client"] = kube_client
 
+            logger.info("Initializing Platform Config client")
+            config_client = await exit_stack.enter_async_context(
+                create_config_client(config)
+            )
+            app["monitoring_app"]["config_client"] = config_client
+
             app["monitoring_app"]["log_reader_factory"] = create_log_reader_factory(
                 config, kube_client, es_client, s3_client
             )
 
             app["monitoring_app"]["jobs_service"] = JobsService(
+                config_client=config_client,
                 jobs_client=platform_client.jobs,
                 kube_client=kube_client,
                 docker_config=config.docker,
+                cluster_name=config.cluster_name,
             )
 
             yield

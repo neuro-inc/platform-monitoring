@@ -34,3 +34,8 @@ class TestCluster:
         assert cluster.zones == ["us-east-1a"]
         assert cluster.zones_count == 1
         assert cluster.node_pools
+
+    def test_cluster_without_zones(self) -> None:
+        cluster = Cluster({"cloud_provider": {"node_pools": [{}]}})
+        assert cluster.zones_count == 1
+        assert cluster.node_pools

@@ -48,6 +48,8 @@ def _cluster_payload() -> Dict[str, Any]:
         },
         "ssh": {"server": "ssh.platform.dev.neuromation.io"},
         "monitoring": {"url": "http://platformapi/api/v1/jobs"},
+        "secrets": {"url": "http://platformapi/api/v1/secrets"},
+        "metrics": {"url": "http://platformapi/api/v1/metrics"},
     }
 
 
