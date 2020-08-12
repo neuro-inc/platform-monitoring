@@ -4,9 +4,9 @@ import aiohttp
 import pytest
 from _pytest.fixtures import FixtureRequest
 from aiohttp.web_exceptions import HTTPCreated, HTTPNoContent
-from platform_monitoring.config_client import ConfigClient
 from yarl import URL
 
+from platform_monitoring.config_client import ConfigClient
 from tests.integration.conftest import get_service_url
 
 

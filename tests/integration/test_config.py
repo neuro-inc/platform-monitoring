@@ -1,4 +1,5 @@
 import pytest
+
 from platform_monitoring.config_client import ConfigClient
 
 
