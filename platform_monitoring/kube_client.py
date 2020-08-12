@@ -1,10 +1,11 @@
 import asyncio
+import enum
 import logging
 import ssl
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, AsyncIterator, Dict, NoReturn, Optional
+from typing import Any, AsyncIterator, Dict, List, NoReturn, Optional, Sequence
 from urllib.parse import urlsplit
 
 import aiohttp
@@ -17,6 +18,8 @@ from .config import KubeClientAuthType, KubeConfig
 
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_MAX_PODS_PER_NODE = 110
 
 
 class KubeClientException(Exception):
@@ -35,6 +38,58 @@ class JobNotFoundException(JobException):
     pass
 
 
+class PodPhase(str, enum.Enum):
+    PENDING = "Pending"
+    RUNNING = "Running"
+    SUCCEEDED = "Succeeded"
+    FAILED = "Failed"
+    UNKNOWN = "Unknown"
+
+
+@dataclass(frozen=True)
+class Resources:
+    cpu_m: int = 0
+    memory_mb: int = 0
+    gpu: int = 0
+
+    def add(self, other: "Resources") -> "Resources":
+        return self.__class__(
+            cpu_m=self.cpu_m + other.cpu_m,
+            memory_mb=self.memory_mb + other.memory_mb,
+            gpu=self.gpu + other.gpu,
+        )
+
+    def available(self, used: "Resources") -> "Resources":
+        """Get amount of unused resources.
+
+        Returns:
+            Resources: the difference between resources in {self} and {used}
+        """
+        return self.__class__(
+            cpu_m=max(0, self.cpu_m - used.cpu_m),
+            memory_mb=max(0, self.memory_mb - used.memory_mb),
+            gpu=max(0, self.gpu - used.gpu),
+        )
+
+    def count(self, resources: "Resources") -> int:
+        """Get the number of times a client can be provided
+        with the specified resources.
+
+        Returns:
+            int: count
+        """
+        if self.cpu_m == 0 and self.memory_mb == 0 and self.gpu == 0:
+            return 0
+        result = DEFAULT_MAX_PODS_PER_NODE
+        if resources.cpu_m:
+            result = min(result, self.cpu_m // resources.cpu_m)
+        if resources.memory_mb:
+            result = min(result, self.memory_mb // resources.memory_mb)
+        if resources.gpu:
+            result = min(result, self.gpu // resources.gpu)
+        return result
+
+
 @dataclass(frozen=True)
 class ProxyClient:
     url: URL
@@ -44,6 +99,10 @@ class ProxyClient:
 class Pod:
     def __init__(self, payload: Dict[str, Any]) -> None:
         self._payload = payload
+
+    @property
+    def name(self) -> str:
+        return self._payload["metadata"]["name"]
 
     @property
     def node_name(self) -> Optional[str]:
@@ -68,6 +127,10 @@ class Pod:
         return id_.replace("docker://", "") or None
 
     @property
+    def phase(self) -> PodPhase:
+        return PodPhase(self._status_payload.get("phase", PodPhase.PENDING.value))
+
+    @property
     def is_phase_running(self) -> bool:
         return self._status_payload.get("phase") == "Running"
 
@@ -78,6 +141,43 @@ class Pod:
     @property
     def host_ip(self) -> str:
         return self._status_payload["hostIP"]
+
+    @property
+    def resource_requests(self) -> Resources:
+        cpu_m = 0
+        memory_mb = 0
+        gpu = 0
+        for container in self._payload["spec"]["containers"]:
+            requests = container.get("resources", {}).get("requests")
+            if requests:
+                cpu_m += self._parse_cpu_m(requests.get("cpu", "0"))
+                memory_mb += self._parse_memory_mb(requests.get("memory", "0Mi"))
+                gpu += int(requests.get("nvidia.com/gpu", 0))
+        return Resources(cpu_m=cpu_m, memory_mb=memory_mb, gpu=gpu)
+
+    def _parse_cpu_m(self, value: str) -> int:
+        if value.endswith("m"):
+            return int(value[:-1])
+        return int(float(value) * 1000)
+
+    def _parse_memory_mb(self, value: str) -> int:
+        if value.endswith("Gi"):
+            return int(value[:-2]) * 1024
+        if value.endswith("Mi"):
+            return int(value[:-2])
+        raise KubeClientException("Memory unit is not supported")
+
+
+class Node:
+    def __init__(self, payload: Dict[str, Any]) -> None:
+        self._payload = payload
+
+    @property
+    def name(self) -> str:
+        return self._payload["metadata"]["name"]
+
+    def get_label(self, key: str) -> Optional[str]:
+        return self._payload["metadata"].get("labels", {}).get(key)
 
 
 class KubeClient:
@@ -179,6 +279,10 @@ class KubeClient:
     @property
     def _api_v1_url(self) -> str:
         return f"{self._base_url}/api/v1"
+
+    @property
+    def _nodes_url(self) -> str:
+        return f"{self._api_v1_url}/nodes"
 
     def _generate_namespace_url(self, namespace_name: str) -> str:
         return f"{self._api_v1_url}/namespaces/{namespace_name}"
@@ -305,6 +409,35 @@ class KubeClient:
         ) as response:
             await self._check_response_status(response)
             yield response.content
+
+    async def get_pods(
+        self, label_selector: str = "", phases: Sequence[PodPhase] = ()
+    ) -> Sequence[Pod]:
+        assert self._client
+        params = None
+        if label_selector:
+            params = {"labelSelector": label_selector}
+        async with self._client.get(self._pods_url, params=params) as response:
+            await self._check_response_status(response)
+            payload = await response.json()
+            self._assert_resource_kind("PodList", payload)
+            result: List[Pod] = []
+            for item in payload["items"]:
+                pod = Pod(item)
+                if not phases or pod.phase in phases:
+                    result.append(pod)
+            return result
+
+    async def get_nodes(self, label_selector: str = "") -> Sequence[Node]:
+        assert self._client
+        params = None
+        if label_selector:
+            params = {"labelSelector": label_selector}
+        async with self._client.get(self._nodes_url, params=params) as response:
+            await self._check_response_status(response)
+            payload = await response.json()
+            self._assert_resource_kind("NodeList", payload)
+            return [Node(item) for item in payload["items"]]
 
     async def _check_response_status(self, response: aiohttp.ClientResponse) -> None:
         if response.status != 200:
