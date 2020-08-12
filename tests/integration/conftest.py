@@ -235,6 +235,7 @@ def config_factory(
 ) -> Callable[..., Config]:
     def _f(**kwargs: Any) -> Config:
         defaults = dict(
+            cluster_name=cluster_name,
             server=ServerConfig(host="0.0.0.0", port=8080),
             platform_auth=auth_config,
             platform_api=platform_api_config,

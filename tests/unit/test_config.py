@@ -43,6 +43,7 @@ def token_path(tmp_path: Path) -> str:
 @pytest.fixture
 def environ(cert_authority_path: str, token_path: str) -> Dict[str, Any]:
     return {
+        "NP_MONITORING_CLUSTER_NAME": "default",
         "NP_MONITORING_API_HOST": "0.0.0.0",
         "NP_MONITORING_API_PORT": 8080,
         "NP_MONITORING_PLATFORM_API_URL": "http://platformapi/api/v1",
@@ -69,6 +70,7 @@ def environ(cert_authority_path: str, token_path: str) -> Dict[str, Any]:
 def test_create(environ: Dict[str, Any]) -> None:
     config = EnvironConfigFactory(environ).create()
     assert config == Config(
+        cluster_name="default",
         server=ServerConfig(host="0.0.0.0", port=8080),
         platform_api=PlatformApiConfig(
             url=URL("http://platformapi/api/v1"), token="platform-api-token"

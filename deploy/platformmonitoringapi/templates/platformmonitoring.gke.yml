@@ -35,6 +35,8 @@ spec:
             cpu: {{ .Values.NP_MONITORING_LIMITS_CPU }}
             memory: {{ .Values.NP_MONITORING_LIMITS_MEMORY }}
         env:
+        - name: NP_MONITORING_CLUSTER_NAME
+          value: {{ .Values.NP_MONITORING_CLUSTER_NAME }}
         - name: NP_MONITORING_PLATFORM_API_TOKEN
           valueFrom:
             secretKeyRef:

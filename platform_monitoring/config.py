@@ -97,6 +97,7 @@ class DockerConfig:
 
 @dataclass(frozen=True)
 class Config:
+    cluster_name: str
     server: ServerConfig
     platform_api: PlatformApiConfig
     platform_auth: PlatformAuthConfig
