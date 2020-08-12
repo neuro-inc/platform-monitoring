@@ -19,6 +19,7 @@ def kube_client() -> mock.Mock:
 def config_factory() -> Callable[[LogsStorageType], Config]:
     def _factory(storage_type: LogsStorageType) -> Config:
         return Config(
+            cluster_name="default",
             server=None,  # type: ignore
             platform_api=None,  # type: ignore
             platform_auth=None,  # type: ignore

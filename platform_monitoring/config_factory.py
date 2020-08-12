@@ -31,6 +31,7 @@ class EnvironConfigFactory:
 
     def create(self) -> Config:
         return Config(
+            cluster_name=self._environ["NP_MONITORING_CLUSTER_NAME"],
             server=self._create_server(),
             platform_api=self._create_platform_api(),
             platform_auth=self._create_platform_auth(),
