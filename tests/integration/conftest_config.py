@@ -108,7 +108,7 @@ async def _cluster(
             headers={"Authorization": f"Bearer {cluster_token}"},
             json=_cloud_provider_payload,
         )
-        assert response.status == HTTPCreated.status_code, await response.text()
+        assert response.status == HTTPNoContent.status_code, await response.text()
         yield cluster_name
     finally:
         response = await client.delete(
