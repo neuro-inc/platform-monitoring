@@ -1,5 +1,6 @@
 import pytest
 import trafaret as t
+
 from platform_monitoring.jobs_service import ImageReference
 from platform_monitoring.validators import create_save_request_payload_validator
 

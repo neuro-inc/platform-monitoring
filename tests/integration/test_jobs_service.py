@@ -15,6 +15,7 @@ from neuromation.api import (
     JobStatus,
     Resources,
 )
+
 from platform_monitoring.config import DOCKER_API_VERSION, DockerConfig
 from platform_monitoring.jobs_service import (
     Container,

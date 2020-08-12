@@ -10,6 +10,8 @@ from aiobotocore.client import AioBaseClient
 from aioelasticsearch import Elasticsearch
 from aiohttp import web
 from async_timeout import timeout
+from yarl import URL
+
 from platform_monitoring.base import LogReader
 from platform_monitoring.config import KubeConfig
 from platform_monitoring.kube_client import (
@@ -24,8 +26,6 @@ from platform_monitoring.logs import (
     S3LogReader,
 )
 from platform_monitoring.utils import ElasticsearchLogReaderFactory, S3LogReaderFactory
-from yarl import URL
-
 from tests.integration.conftest import ApiAddress, create_local_app_server
 
 from .conftest_kube import MyKubeClient, MyPodDescriptor

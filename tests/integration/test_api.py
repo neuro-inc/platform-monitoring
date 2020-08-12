@@ -22,6 +22,8 @@ from aiohttp.web_exceptions import (
     HTTPUnauthorized,
 )
 from async_timeout import timeout
+from yarl import URL
+
 from platform_monitoring.api import create_app
 from platform_monitoring.config import (
     DOCKER_API_VERSION,
@@ -30,8 +32,6 @@ from platform_monitoring.config import (
     PlatformApiConfig,
 )
 from platform_monitoring.docker_client import Docker
-from yarl import URL
-
 from tests.integration.conftest_kube import MyKubeClient
 
 from .conftest import ApiAddress, create_local_app_server, random_str

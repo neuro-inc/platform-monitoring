@@ -34,8 +34,9 @@ from neuromation.api import (
     JobDescription as Job,
 )
 from platform_logging import init_logging
-from platform_monitoring.user import untrusted_user
 from yarl import URL
+
+from platform_monitoring.user import untrusted_user
 
 from .base import JobStats, Telemetry
 from .config import (

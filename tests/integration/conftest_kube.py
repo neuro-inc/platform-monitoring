@@ -8,6 +8,7 @@ from typing import Any, AsyncIterator, Dict, Optional
 import pytest
 from _pytest.fixtures import FixtureRequest
 from async_timeout import timeout
+
 from platform_monitoring.config import KubeConfig
 from platform_monitoring.kube_client import (
     JobNotFoundException,

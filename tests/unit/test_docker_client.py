@@ -1,4 +1,5 @@
 import pytest
+
 from platform_monitoring.docker_client import ImageReference, ImageReferenceError
 
 
