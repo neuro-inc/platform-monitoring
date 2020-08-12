@@ -4,6 +4,7 @@ import aiohttp
 import pytest
 from _pytest.fixtures import FixtureRequest
 from aiohttp.web_exceptions import HTTPCreated, HTTPNoContent
+from platform_monitoring.config_client import ConfigClient
 from yarl import URL
 
 from tests.integration.conftest import get_service_url
@@ -51,29 +52,63 @@ def _cluster_payload() -> Dict[str, Any]:
 
 
 @pytest.fixture
+def _cloud_provider_payload() -> Dict[str, Any]:
+    return {
+        "type": "on_prem",
+        "node_pools": [
+            {
+                "machine_type": "minikube",
+                "min_size": 1,
+                "max_size": 1,
+                "cpu": 1.0,
+                "available_cpu": 1.0,
+                "memory_mb": 1024,
+                "available_memory_mb": 1024,
+            },
+        ],
+    }
+
+
+@pytest.fixture
+def platform_config_url(in_minikube: bool) -> URL:
+    if in_minikube:
+        return URL("http://platformconfig.default:8080")
+    return URL(get_service_url("platformconfig", namespace="default"))
+
+
+@pytest.fixture
+async def platform_config_client(
+    platform_config_url: URL, cluster_name: str
+) -> AsyncIterator[ConfigClient]:
+    async with ConfigClient(
+        platform_config_client / "api/v1/clusters" / cluster_name
+    ) as client:
+        yield client
+
+
+@pytest.fixture
 async def _cluster(
     request: FixtureRequest,
-    in_minikube: bool,
     client: aiohttp.ClientSession,
+    platform_config_url: URL,
     cluster_token: str,
     _cluster_payload: Dict[str, Any],
+    _cloud_provider_payload: Dict[str, Any],
 ) -> AsyncIterator[str]:
     cluster_name = _cluster_payload["name"]
-    if in_minikube:
-        platform_config_url = URL("http://platformconfig.default:8080")
-    else:
-        platform_config_url = URL(
-            get_service_url("platformconfig", namespace="default")
-        )
-
     try:
         response = await client.post(
             platform_config_url / "api/v1/clusters",
             headers={"Authorization": f"Bearer {cluster_token}"},
             json=_cluster_payload,
         )
-        response_text = await response.text()
-        assert response.status == HTTPCreated.status_code, response_text
+        assert response.status == HTTPCreated.status_code, await response.text()
+        response = await client.put(
+            platform_config_url / "api/v1/clusters" / cluster_name / "cloud_provider",
+            headers={"Authorization": f"Bearer {cluster_token}"},
+            json=_cloud_provider_payload,
+        )
+        assert response.status == HTTPCreated.status_code, await response.text()
         yield cluster_name
     finally:
         response = await client.delete(
