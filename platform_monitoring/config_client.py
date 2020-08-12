@@ -59,12 +59,12 @@ class Cluster:
 class ConfigClient:
     def __init__(
         self,
-        cluster_url: URL,
+        api_url: URL,
         token: Optional[str] = None,
         timeout: aiohttp.ClientTimeout = aiohttp.client.DEFAULT_TIMEOUT,
         trace_config: Optional[aiohttp.TraceConfig] = None,
     ):
-        self._cluster_url = cluster_url
+        self._clusters_url = api_url / "clusters"
         self._token = token
         self._timeout = timeout
         self._trace_config = trace_config
@@ -108,10 +108,11 @@ class ConfigClient:
             headers["Authorization"] = f"Bearer {token}"
         return headers
 
-    async def get_cluster(self) -> Cluster:
+    async def get_cluster(self, cluster_name: str) -> Cluster:
         assert self._client
         async with self._client.get(
-            self._cluster_url, params={"include": "cloud_provider_infra"},
+            self._clusters_url / cluster_name,
+            params={"include": "cloud_provider_infra"},
         ) as response:
             response.raise_for_status()
             payload = await response.json()
