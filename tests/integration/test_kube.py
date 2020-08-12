@@ -17,6 +17,7 @@ from platform_monitoring.kube_client import (
     KubeClient,
     KubeClientException,
     PodContainerStats,
+    PodPhase,
 )
 from platform_monitoring.logs import (
     ElasticsearchLogReader,
@@ -250,6 +251,40 @@ class TestKubeClient:
                 assert resp.status == 200, await resp.text()
                 payload = await resp.json()
                 assert "node" in payload
+
+    @pytest.mark.asyncio
+    async def test_get_nodes(self, kube_client: MyKubeClient) -> None:
+        nodes = await kube_client.get_nodes()
+        assert nodes
+
+        nodes = await kube_client.get_nodes(label_selector="kubernetes.io/os=linux")
+        assert nodes
+        assert all(node.get_label("kubernetes.io/os") == "linux" for node in nodes)
+
+    @pytest.mark.asyncio
+    async def test_get_pods(
+        self, kube_client: MyKubeClient, job_pod: MyPodDescriptor
+    ) -> None:
+        try:
+            await kube_client.create_pod(job_pod.payload)
+
+            pods = await kube_client.get_pods()
+            assert pods
+            assert any(pod.name == job_pod.name for pod in pods)
+
+            pods = await kube_client.get_pods(label_selector=f"job={job_pod.name}")
+            assert len(pods) == 1
+            assert pods[0].name == job_pod.name
+
+            pods = await kube_client.get_pods(
+                phases=(PodPhase.PENDING, PodPhase.RUNNING)
+            )
+            assert pods
+            assert all(
+                pod.phase in (PodPhase.PENDING, PodPhase.RUNNING) for pod in pods
+            )
+        finally:
+            await kube_client.delete_pod(job_pod.name)
 
 
 class TestLogReader:
