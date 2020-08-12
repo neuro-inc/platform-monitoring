@@ -20,12 +20,13 @@ setup:
 	pip install -r requirements/test.txt
 
 lint:
+	isort --check-only --diff platform_monitoring tests setup.py
 	black --check platform_monitoring tests setup.py
 	flake8 platform_monitoring tests setup.py
 	mypy platform_monitoring tests setup.py
 
 format:
-	isort -rc platform_monitoring tests setup.py
+	isort platform_monitoring tests setup.py
 	black platform_monitoring tests setup.py
 
 test_unit:

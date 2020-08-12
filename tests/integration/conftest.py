@@ -17,6 +17,8 @@ from aiobotocore.client import AioBaseClient
 from aioelasticsearch import Elasticsearch
 from async_timeout import timeout
 from neuromation.api import Client as PlatformApiClient
+from yarl import URL
+
 from platform_monitoring.api import (
     create_elasticsearch_client,
     create_platform_api_client,
@@ -35,7 +37,6 @@ from platform_monitoring.config import (
     S3Config,
     ServerConfig,
 )
-from yarl import URL
 
 
 logger = logging.getLogger(__name__)

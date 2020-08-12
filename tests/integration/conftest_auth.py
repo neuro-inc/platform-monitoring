@@ -13,10 +13,10 @@ import pytest
 from aiohttp.hdrs import AUTHORIZATION
 from jose import jwt
 from neuro_auth_client import AuthClient, Permission, User as AuthClientUser
-from platform_monitoring.api import create_auth_client
-from platform_monitoring.config import PlatformAuthConfig
 from yarl import URL
 
+from platform_monitoring.api import create_auth_client
+from platform_monitoring.config import PlatformAuthConfig
 from tests.integration.conftest import get_service_url, random_str
 
 

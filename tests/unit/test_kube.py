@@ -4,6 +4,7 @@ from unittest import mock
 
 import aiohttp
 import pytest
+
 from platform_monitoring.kube_client import (
     JobError,
     Pod,

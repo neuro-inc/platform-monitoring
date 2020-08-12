@@ -4,6 +4,7 @@ from unittest import mock
 import pytest
 from aiobotocore.client import AioBaseClient
 from aioelasticsearch import Elasticsearch
+
 from platform_monitoring.api import create_log_reader_factory
 from platform_monitoring.config import Config, LogsConfig, LogsStorageType, S3Config
 from platform_monitoring.kube_client import KubeClient
