@@ -60,6 +60,11 @@ class Resources:
         )
 
     def available(self, used: "Resources") -> "Resources":
+        """Get amount of unused resources.
+
+        Returns:
+            Resources: the difference between resources in {self} and {used}
+        """
         return self.__class__(
             cpu_m=max(0, self.cpu_m - used.cpu_m),
             memory_mb=max(0, self.memory_mb - used.memory_mb),
@@ -67,6 +72,12 @@ class Resources:
         )
 
     def count(self, resources: "Resources") -> int:
+        """Get the number of times a client can be provided
+        with the specified resources.
+
+        Returns:
+            int: count
+        """
         if self.cpu_m == 0 and self.memory_mb == 0 and self.gpu == 0:
             return 0
         result = DEFAULT_MAX_PODS_PER_NODE
