@@ -1,5 +1,5 @@
 import uuid
-from typing import Any, Awaitable, Callable, Dict, Sequence
+from typing import Any, Awaitable, Callable, Dict, Optional, Sequence
 from unittest import mock
 
 import pytest
@@ -38,7 +38,9 @@ def get_pods_factory(
     return _get_pods
 
 
-def create_pod(node_name: str, cpu_m: int, memory_mb: int, gpu: int = 0) -> Pod:
+def create_pod(
+    node_name: Optional[str], cpu_m: int, memory_mb: int, gpu: int = 0
+) -> Pod:
     job_id = f"job-{uuid.uuid4()}"
     resources = {
         "cpu": f"{cpu_m}m",
@@ -46,19 +48,17 @@ def create_pod(node_name: str, cpu_m: int, memory_mb: int, gpu: int = 0) -> Pod:
     }
     if gpu:
         resources["nvidia.com/gpu"] = str(gpu)
-    return Pod(
-        {
-            "metadata": {
-                "name": job_id,
-                "labels": {"job": job_id, "platform.neuromation.io/job": job_id},
-            },
-            "spec": {
-                "nodeName": node_name,
-                "containers": [{"resources": {"requests": resources}}],
-            },
-            "status": {"phase": "Running"},
-        }
-    )
+    payload: Dict[str, Any] = {
+        "metadata": {
+            "name": job_id,
+            "labels": {"job": job_id, "platform.neuromation.io/job": job_id},
+        },
+        "spec": {"containers": [{"resources": {"requests": resources}}]},
+        "status": {"phase": "Running"},
+    }
+    if node_name:
+        payload["spec"]["nodeName"] = node_name
+    return Pod(payload)
 
 
 @pytest.fixture
@@ -152,8 +152,9 @@ class TestJobsService:
         self, service: JobsService, kube_client: mock.Mock
     ) -> None:
         kube_client.get_pods.side_effect = get_pods_factory(
-            create_pod("minikube-cpu-1", cpu_m=100, memory_mb=256),
+            create_pod("minikube-cpu-1", cpu_m=50, memory_mb=128),
             create_pod("minikube-gpu-1", cpu_m=100, memory_mb=256, gpu=1),
+            create_pod("minikube-cpu-1", cpu_m=50, memory_mb=128),
         )
 
         result = await service.get_available_jobs_counts(
@@ -235,6 +236,19 @@ class TestJobsService:
             }
         )
         assert result == {"cpu": 0, "gpu": 0}
+
+    @pytest.mark.asyncio
+    async def test_get_available_jobs_count_for_pods_without_nodes(
+        self, service: JobsService, kube_client: mock.Mock
+    ) -> None:
+        kube_client.get_pods.side_effect = get_pods_factory(
+            create_pod(None, cpu_m=1000, memory_mb=1024)
+        )
+
+        result = await service.get_available_jobs_counts(
+            {"cpu": Preset(cpu=0.2, memory_mb=100)}
+        )
+        assert result == {"cpu": 10}
 
     @pytest.mark.asyncio
     async def test_get_available_jobs_count_node_not_found(

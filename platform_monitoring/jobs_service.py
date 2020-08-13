@@ -2,8 +2,18 @@ import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import reduce
-from itertools import groupby
-from typing import Any, AsyncIterator, Dict, List, Mapping, Optional, Tuple, Union, cast
+from typing import (
+    Any,
+    AsyncIterator,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    cast,
+)
 
 from aiodocker.exceptions import DockerError
 from aiodocker.stream import Stream
@@ -282,8 +292,8 @@ class JobsService:
             label_selector=JOB_LABEL, phases=(PodPhase.PENDING, PodPhase.RUNNING)
         )
         nodes = await self._kube_client.get_nodes(label_selector=JOB_LABEL)
-        for node_name, node_pods in groupby(pods, lambda p: p.node_name):
-            if not node_name:  # pragma: no coverage
+        for node_name, node_pods in self._group_pods_by_node(pods).items():
+            if not node_name:
                 continue
             for node in nodes:
                 if node.name == node_name:
@@ -296,6 +306,18 @@ class JobsService:
             pod_resources = [p.resource_requests for p in node_pods]
             node_resources = reduce(Resources.add, pod_resources, Resources())
             result.setdefault(node_pool_name, []).append(node_resources)
+        return result
+
+    def _group_pods_by_node(
+        self, pods: Sequence[Pod]
+    ) -> Dict[Optional[str], List[Pod]]:
+        result: Dict[Optional[str], List[Pod]] = {}
+        for pod in pods:
+            group = result.get(pod.node_name)
+            if not group:
+                group = []
+                result[pod.node_name] = group
+            group.append(pod)
         return result
 
     def _get_max_nodes_count(self, cluster: Cluster, node_pool: NodePool) -> int:
