@@ -139,6 +139,7 @@ class MonitoringApiHandler:
         return self._app["log_reader_factory"]
 
     async def get_available(self, request: Request) -> Response:
+        # Check that user has access to the cluster
         user = await untrusted_user(request)
         await check_any_permissions(
             request,
