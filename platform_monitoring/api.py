@@ -583,8 +583,9 @@ async def create_monitoring_app(config: Config) -> aiohttp.web.Application:
 
 @asynccontextmanager
 async def create_config_client(config: Config) -> AsyncIterator[ConfigClient]:
-    url = config.platform_api.url / "clusters" / config.cluster_name
-    async with ConfigClient(url, config.platform_api.token) as client:
+    async with ConfigClient(
+        config.platform_api.url, config.platform_api.token
+    ) as client:
         yield client
 
 
