@@ -13,7 +13,7 @@ from neuromation.api.jobs import Jobs as JobsClient
 from platform_monitoring.config import DockerConfig
 
 from .config import DOCKER_API_VERSION
-from .config_client import ConfigClient, NodePool
+from .config_client import Cluster, ConfigClient, NodePool
 from .docker_client import Docker, ImageReference
 from .kube_client import JobNotFoundException, KubeClient, Pod, PodPhase, Resources
 from .user import User
@@ -260,7 +260,7 @@ class JobsService:
                 node_resource_requests = resource_requests.get(node_pool.name, [])
                 running_nodes_count = len(node_resource_requests)
                 free_nodes_count = (
-                    cluster.zones_count * node_pool.max_size - running_nodes_count
+                    self._get_max_nodes_count(cluster, node_pool) - running_nodes_count
                 )
                 # get number of jobs that can be scheduled on running nodes
                 # in the current node pool
@@ -296,6 +296,9 @@ class JobsService:
             node_resources = reduce(Resources.add, pod_resources, Resources())
             result.setdefault(node_pool_name, []).append(node_resources)
         return result
+
+    def _get_max_nodes_count(self, cluster: Cluster, node_pool: NodePool) -> int:
+        return max(1, cluster.zones_count) * node_pool.max_size
 
     def _get_node_resource_limit(self, node_pool: NodePool) -> Resources:
         return Resources(

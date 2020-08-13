@@ -49,7 +49,7 @@ class Cluster:
 
     @property
     def zones_count(self) -> int:
-        return len(self.zones) or 1
+        return len(self.zones)
 
     @property
     def node_pools(self) -> Sequence[NodePool]:
