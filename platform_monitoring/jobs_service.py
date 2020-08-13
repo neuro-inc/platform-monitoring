@@ -285,9 +285,10 @@ class JobsService:
         for node_name, node_pods in groupby(pods, lambda p: p.node_name):
             if not node_name:  # pragma: no coverage
                 continue
-            try:
-                node = next(iter(n for n in nodes if n.name == node_name))
-            except StopIteration:
+            for node in nodes:
+                if node.name == node_name:
+                    break
+            else:
                 raise NodeNotFoundException(node_name)
             node_pool_name = node.get_label(NODE_POOL_LABEL)
             if not node_pool_name:  # pragma: no coverage
