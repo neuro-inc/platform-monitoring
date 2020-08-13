@@ -79,6 +79,10 @@ class MonitoringApiEndpoints:
     def endpoint(self) -> URL:
         return self.api_v1_endpoint / "jobs"
 
+    @property
+    def jobs_available_url(self) -> URL:
+        return self.endpoint / "available"
+
     def generate_top_url(self, job_id: str) -> URL:
         return self.endpoint / job_id / "top"
 
@@ -442,6 +446,50 @@ class TestApi:
             assert resp.headers["Access-Control-Allow-Origin"] == "https://neu.ro"
             assert resp.headers["Access-Control-Allow-Credentials"] == "true"
             assert resp.headers["Access-Control-Allow-Methods"] == "GET"
+
+    @pytest.mark.asyncio
+    async def test_get_available(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        regular_user_factory: Callable[..., Awaitable[_User]],
+        client: aiohttp.ClientSession,
+    ) -> None:
+        user = await regular_user_factory()
+        async with client.post(
+            monitoring_api.jobs_available_url,
+            headers=user.headers,
+            json={"cpu-small": {"cpu": 0.1, "memory_mb": 128}},
+        ) as resp:
+            assert resp.status == HTTPOk.status_code, await resp.text()
+            result = await resp.json()
+            assert "cpu-small" in result
+
+    @pytest.mark.asyncio
+    async def test_get_available_unauthorized(
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession,
+    ) -> None:
+        async with client.post(monitoring_api.jobs_available_url) as resp:
+            assert resp.status == HTTPUnauthorized.status_code, await resp.text()
+
+    @pytest.mark.asyncio
+    async def test_get_available_forbidden(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        regular_user_factory: Callable[..., Awaitable[_User]],
+        client: aiohttp.ClientSession,
+        cluster_name: str,
+    ) -> None:
+        user = await regular_user_factory(cluster_name="other-cluster")
+        async with client.post(
+            monitoring_api.jobs_available_url, headers=user.headers
+        ) as resp:
+            assert resp.status == HTTPForbidden.status_code, await resp.text()
+            result = await resp.json()
+            assert result == {
+                "missing": [
+                    {"uri": f"job://{cluster_name}/{user.name}", "action": "read"}
+                ]
+            }
 
 
 class TestTopApi:

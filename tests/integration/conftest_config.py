@@ -1,4 +1,4 @@
-from typing import Any, AsyncIterator, Callable, Dict
+from typing import Any, AsyncIterator, Callable, Dict, Iterator
 
 import aiohttp
 import pytest
@@ -6,6 +6,7 @@ from _pytest.fixtures import FixtureRequest
 from aiohttp.web_exceptions import HTTPCreated, HTTPNoContent
 from yarl import URL
 
+from platform_monitoring.config import PlatformConfig
 from platform_monitoring.config_client import ConfigClient
 from tests.integration.conftest import get_service_url
 
@@ -76,6 +77,15 @@ def platform_config_url(in_minikube: bool) -> URL:
     if in_minikube:
         return URL("http://platformconfig.default:8080")
     return URL(get_service_url("platformconfig", namespace="default"))
+
+
+@pytest.fixture
+def platform_config(
+    platform_config_url: URL, token_factory: Callable[[str], str]
+) -> PlatformConfig:
+    return PlatformConfig(
+        url=platform_config_url / "api/v1", token=token_factory("cluster")
+    )
 
 
 @pytest.fixture

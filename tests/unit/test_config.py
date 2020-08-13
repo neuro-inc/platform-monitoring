@@ -15,6 +15,7 @@ from platform_monitoring.config import (
     LogsStorageType,
     PlatformApiConfig,
     PlatformAuthConfig,
+    PlatformConfig,
     RegistryConfig,
     S3Config,
     ServerConfig,
@@ -50,6 +51,8 @@ def environ(cert_authority_path: str, token_path: str) -> Dict[str, Any]:
         "NP_MONITORING_PLATFORM_API_TOKEN": "platform-api-token",
         "NP_MONITORING_PLATFORM_AUTH_URL": "http://platformauthapi/api/v1",
         "NP_MONITORING_PLATFORM_AUTH_TOKEN": "platform-auth-token",
+        "NP_MONITORING_PLATFORM_CONFIG_URL": "http://platformconfig/api/v1",
+        "NP_MONITORING_PLATFORM_CONFIG_TOKEN": "platform-config-token",
         "NP_MONITORING_ES_HOSTS": "http://es1,http://es2",
         "NP_MONITORING_K8S_API_URL": "https://localhost:8443",
         "NP_MONITORING_K8S_AUTH_TYPE": "token",
@@ -77,6 +80,9 @@ def test_create(environ: Dict[str, Any]) -> None:
         ),
         platform_auth=PlatformAuthConfig(
             url=URL("http://platformauthapi/api/v1"), token="platform-auth-token"
+        ),
+        platform_config=PlatformConfig(
+            url=URL("http://platformconfig/api/v1"), token="platform-config-token"
         ),
         elasticsearch=ElasticsearchConfig(hosts=["http://es1", "http://es2"]),
         logs=LogsConfig(storage_type=LogsStorageType.ELASTICSEARCH),
