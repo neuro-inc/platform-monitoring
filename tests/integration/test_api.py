@@ -465,11 +465,17 @@ class TestApi:
             assert "cpu-small" in result
 
     @pytest.mark.asyncio
-    async def test_get_available_unauthorized(
-        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession,
+    async def test_get_available_bad_request(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        regular_user_factory: Callable[..., Awaitable[_User]],
+        client: aiohttp.ClientSession,
     ) -> None:
-        async with client.post(monitoring_api.jobs_available_url) as resp:
-            assert resp.status == HTTPUnauthorized.status_code, await resp.text()
+        user = await regular_user_factory()
+        async with client.post(
+            monitoring_api.jobs_available_url, headers=user.headers
+        ) as resp:
+            assert resp.status == HTTPBadRequest.status_code, await resp.text()
 
     @pytest.mark.asyncio
     async def test_get_available_forbidden(
