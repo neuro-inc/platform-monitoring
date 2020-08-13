@@ -381,5 +381,6 @@ class TestResources:
         assert total.count(Resources(cpu_m=100, memory_mb=128, gpu=1)) == 2
         assert total.count(Resources(cpu_m=100, memory_mb=128)) == 8
         assert total.count(Resources(cpu_m=100)) == 10
+        assert total.count(Resources(cpu_m=1100)) == 0
         assert total.count(Resources()) == 110
         assert Resources().count(Resources()) == 0
