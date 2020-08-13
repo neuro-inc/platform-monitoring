@@ -1,4 +1,4 @@
-from typing import Any, AsyncIterator, Callable, Dict, Iterator
+from typing import Any, AsyncIterator, Callable, Dict
 
 import aiohttp
 import pytest
