@@ -24,6 +24,7 @@ def config_factory() -> Callable[[LogsStorageType], Config]:
             server=None,  # type: ignore
             platform_api=None,  # type: ignore
             platform_auth=None,  # type: ignore
+            platform_config=None,  # type: ignore
             kube=None,  # type: ignore
             docker=None,  # type: ignore
             registry=None,  # type: ignore

@@ -33,6 +33,7 @@ from platform_monitoring.config import (
     LogsStorageType,
     PlatformApiConfig,
     PlatformAuthConfig,
+    PlatformConfig,
     RegistryConfig,
     S3Config,
     ServerConfig,
@@ -227,6 +228,7 @@ def docker_config() -> DockerConfig:
 def config_factory(
     auth_config: PlatformAuthConfig,
     platform_api_config: PlatformApiConfig,
+    platform_config: PlatformConfig,
     es_config: ElasticsearchConfig,
     kube_config: KubeConfig,
     registry_config: RegistryConfig,
@@ -239,6 +241,7 @@ def config_factory(
             server=ServerConfig(host="0.0.0.0", port=8080),
             platform_auth=auth_config,
             platform_api=platform_api_config,
+            platform_config=platform_config,
             elasticsearch=es_config,
             logs=LogsConfig(storage_type=LogsStorageType.ELASTICSEARCH),
             kube=kube_config,

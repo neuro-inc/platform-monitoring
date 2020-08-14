@@ -47,11 +47,12 @@ from .config import (
     LogsStorageType,
     PlatformApiConfig,
     PlatformAuthConfig,
+    PlatformConfig,
     S3Config,
 )
 from .config_client import ConfigClient
 from .config_factory import EnvironConfigFactory
-from .jobs_service import Container, ExecCreate, JobException, JobsService
+from .jobs_service import Container, ExecCreate, JobException, JobsService, Preset
 from .kube_client import JobError, KubeClient, KubeTelemetry
 from .utils import (
     ElasticsearchLogReaderFactory,
@@ -62,6 +63,7 @@ from .utils import (
 )
 from .validators import (
     create_exec_create_request_payload_validator,
+    create_presets_validator,
     create_save_request_payload_validator,
 )
 
@@ -101,9 +103,12 @@ class MonitoringApiHandler:
             create_exec_create_request_payload_validator()
         )
 
+        self._presets_validator = create_presets_validator()
+
     def register(self, app: aiohttp.web.Application) -> None:
         app.add_routes(
             [
+                aiohttp.web.post("/available", self.get_available),
                 aiohttp.web.get("/{job_id}/log", self.stream_log),
                 aiohttp.web.get("/{job_id}/top", self.stream_top),
                 aiohttp.web.post("/{job_id}/save", self.stream_save),
@@ -132,6 +137,31 @@ class MonitoringApiHandler:
     @property
     def _log_reader_factory(self) -> LogReaderFactory:
         return self._app["log_reader_factory"]
+
+    async def get_available(self, request: Request) -> Response:
+        # Check that user has access to the cluster
+        user = await untrusted_user(request)
+        await check_any_permissions(
+            request,
+            [
+                Permission(
+                    uri=f"job://{self._config.cluster_name}/{user.name}", action="read"
+                )
+            ],
+        )
+        payload = await request.json()
+        payload = self._presets_validator.check(payload)
+        presets: Dict[str, Preset] = {}
+        for name, p in payload.items():
+            presets[name] = Preset(
+                cpu=p["cpu"],
+                memory_mb=p["memory_mb"],
+                gpu=p["gpu"],
+                gpu_model=p["gpu_model"],
+                is_preemptible=p["is_preemptible"],
+            )
+        result = await self._jobs_service.get_available_jobs_counts(presets)
+        return json_response(result)
 
     async def stream_log(self, request: Request) -> StreamResponse:
         job = await self._resolve_job(request, "read")
@@ -582,10 +612,8 @@ async def create_monitoring_app(config: Config) -> aiohttp.web.Application:
 
 
 @asynccontextmanager
-async def create_config_client(config: Config) -> AsyncIterator[ConfigClient]:
-    async with ConfigClient(
-        config.platform_api.url, config.platform_api.token
-    ) as client:
+async def create_config_client(config: PlatformConfig) -> AsyncIterator[ConfigClient]:
+    async with ConfigClient(config.url, config.token) as client:
         yield client
 
 
@@ -739,7 +767,7 @@ async def create_app(config: Config) -> aiohttp.web.Application:
 
             logger.info("Initializing Platform Config client")
             config_client = await exit_stack.enter_async_context(
-                create_config_client(config)
+                create_config_client(config.platform_config)
             )
             app["monitoring_app"]["config_client"] = config_client
 

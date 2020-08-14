@@ -16,6 +16,7 @@ from .config import (
     LogsStorageType,
     PlatformApiConfig,
     PlatformAuthConfig,
+    PlatformConfig,
     RegistryConfig,
     S3Config,
     ServerConfig,
@@ -35,6 +36,7 @@ class EnvironConfigFactory:
             server=self._create_server(),
             platform_api=self._create_platform_api(),
             platform_auth=self._create_platform_auth(),
+            platform_config=self._create_platform_config(),
             elasticsearch=self._create_elasticsearch(),
             s3=self._create_s3(),
             logs=self._create_logs(),
@@ -58,6 +60,11 @@ class EnvironConfigFactory:
         url = URL(self._environ["NP_MONITORING_PLATFORM_AUTH_URL"])
         token = self._environ["NP_MONITORING_PLATFORM_AUTH_TOKEN"]
         return PlatformAuthConfig(url=url, token=token)
+
+    def _create_platform_config(self) -> PlatformConfig:
+        url = URL(self._environ["NP_MONITORING_PLATFORM_CONFIG_URL"])
+        token = self._environ["NP_MONITORING_PLATFORM_CONFIG_TOKEN"]
+        return PlatformConfig(url=url, token=token)
 
     def _create_elasticsearch(self) -> Optional[ElasticsearchConfig]:
         if not any(key.startswith("NP_MONITORING_ES") for key in self._environ.keys()):

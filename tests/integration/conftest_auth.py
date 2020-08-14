@@ -78,10 +78,16 @@ async def regular_user_factory(
     admin_token: str,
     compute_token: str,
     cluster_name: str,
-) -> AsyncIterator[Callable[[Optional[str]], Awaitable[_User]]]:
-    async def _factory(name: Optional[str] = None) -> _User:
+) -> AsyncIterator[Callable[[Optional[str], Optional[str]], Awaitable[_User]]]:
+    default_cluster_name = cluster_name
+
+    async def _factory(
+        name: Optional[str] = None, cluster_name: Optional[str] = None
+    ) -> _User:
         if not name:
             name = f"user-{random_str(8)}"
+        if not cluster_name:
+            cluster_name = default_cluster_name
         user = AuthClientUser(name=name, cluster_name=cluster_name)
         await auth_client.add_user(user, token=admin_token)
         # Grant permissions to the user home directory
