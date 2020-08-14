@@ -16,7 +16,7 @@ data:
         map $http_upgrade $connection_upgrade {
             default upgrade;
             ''      close;
-        }       
+        }
         access_log /dev/stdout;
         server {
             listen 2375;
