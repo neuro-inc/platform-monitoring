@@ -282,9 +282,7 @@ async def create_local_app_server(
         await runner.cleanup()
 
 
-def get_service_url(  # type: ignore
-    service_name: str, namespace: str = "default"
-) -> str:
+def get_service_url(service_name: str, namespace: str = "default") -> str:
     # ignore type because the linter does not know that `pytest.fail` throws an
     # exception, so it requires to `return None` explicitly, so that the method
     # will return `Optional[List[str]]` which is incorrect
