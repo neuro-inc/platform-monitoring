@@ -34,8 +34,9 @@ from neuromation.api import (
     JobDescription as Job,
 )
 from platform_logging import init_logging
-from platform_monitoring.user import untrusted_user
 from yarl import URL
+
+from platform_monitoring.user import untrusted_user
 
 from .base import JobStats, Telemetry
 from .config import (
@@ -46,10 +47,12 @@ from .config import (
     LogsStorageType,
     PlatformApiConfig,
     PlatformAuthConfig,
+    PlatformConfig,
     S3Config,
 )
+from .config_client import ConfigClient
 from .config_factory import EnvironConfigFactory
-from .jobs_service import Container, ExecCreate, JobException, JobsService
+from .jobs_service import Container, ExecCreate, JobException, JobsService, Preset
 from .kube_client import JobError, KubeClient, KubeTelemetry
 from .utils import (
     ElasticsearchLogReaderFactory,
@@ -60,6 +63,7 @@ from .utils import (
 )
 from .validators import (
     create_exec_create_request_payload_validator,
+    create_presets_validator,
     create_save_request_payload_validator,
 )
 
@@ -99,9 +103,12 @@ class MonitoringApiHandler:
             create_exec_create_request_payload_validator()
         )
 
+        self._presets_validator = create_presets_validator()
+
     def register(self, app: aiohttp.web.Application) -> None:
         app.add_routes(
             [
+                aiohttp.web.post("/available", self.get_available),
                 aiohttp.web.get("/{job_id}/log", self.stream_log),
                 aiohttp.web.get("/{job_id}/top", self.stream_top),
                 aiohttp.web.post("/{job_id}/save", self.stream_save),
@@ -130,6 +137,31 @@ class MonitoringApiHandler:
     @property
     def _log_reader_factory(self) -> LogReaderFactory:
         return self._app["log_reader_factory"]
+
+    async def get_available(self, request: Request) -> Response:
+        # Check that user has access to the cluster
+        user = await untrusted_user(request)
+        await check_any_permissions(
+            request,
+            [
+                Permission(
+                    uri=f"job://{self._config.cluster_name}/{user.name}", action="read"
+                )
+            ],
+        )
+        payload = await request.json()
+        payload = self._presets_validator.check(payload)
+        presets: Dict[str, Preset] = {}
+        for name, p in payload.items():
+            presets[name] = Preset(
+                cpu=p["cpu"],
+                memory_mb=p["memory_mb"],
+                gpu=p["gpu"],
+                gpu_model=p["gpu_model"],
+                is_preemptible=p["is_preemptible"],
+            )
+        result = await self._jobs_service.get_available_jobs_counts(presets)
+        return json_response(result)
 
     async def stream_log(self, request: Request) -> StreamResponse:
         job = await self._resolve_job(request, "read")
@@ -574,9 +606,15 @@ async def create_api_v1_app() -> aiohttp.web.Application:
 
 async def create_monitoring_app(config: Config) -> aiohttp.web.Application:
     monitoring_app = aiohttp.web.Application()
-    notifications_handler = MonitoringApiHandler(monitoring_app, config)
-    notifications_handler.register(monitoring_app)
+    monitoring_handler = MonitoringApiHandler(monitoring_app, config)
+    monitoring_handler.register(monitoring_app)
     return monitoring_app
+
+
+@asynccontextmanager
+async def create_config_client(config: PlatformConfig) -> AsyncIterator[ConfigClient]:
+    async with ConfigClient(config.url, config.token) as client:
+        yield client
 
 
 @asynccontextmanager
@@ -727,14 +765,22 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             )
             app["monitoring_app"]["kube_client"] = kube_client
 
+            logger.info("Initializing Platform Config client")
+            config_client = await exit_stack.enter_async_context(
+                create_config_client(config.platform_config)
+            )
+            app["monitoring_app"]["config_client"] = config_client
+
             app["monitoring_app"]["log_reader_factory"] = create_log_reader_factory(
                 config, kube_client, es_client, s3_client
             )
 
             app["monitoring_app"]["jobs_service"] = JobsService(
+                config_client=config_client,
                 jobs_client=platform_client.jobs,
                 kube_client=kube_client,
                 docker_config=config.docker,
+                cluster_name=config.cluster_name,
             )
 
             yield

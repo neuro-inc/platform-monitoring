@@ -4,6 +4,7 @@ from unittest import mock
 import pytest
 from aiobotocore.client import AioBaseClient
 from aioelasticsearch import Elasticsearch
+
 from platform_monitoring.api import create_log_reader_factory
 from platform_monitoring.config import Config, LogsConfig, LogsStorageType, S3Config
 from platform_monitoring.kube_client import KubeClient
@@ -19,9 +20,11 @@ def kube_client() -> mock.Mock:
 def config_factory() -> Callable[[LogsStorageType], Config]:
     def _factory(storage_type: LogsStorageType) -> Config:
         return Config(
+            cluster_name="default",
             server=None,  # type: ignore
             platform_api=None,  # type: ignore
             platform_auth=None,  # type: ignore
+            platform_config=None,  # type: ignore
             kube=None,  # type: ignore
             docker=None,  # type: ignore
             registry=None,  # type: ignore

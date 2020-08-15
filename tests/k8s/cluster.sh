@@ -33,6 +33,10 @@ function k8s::start {
         --addons=registry \
         --wait=all \
         --wait-timeout=5m
+    kubectl config use-context minikube
+    kubectl get nodes -o name | xargs -I {} kubectl label {} --overwrite \
+        platform.neuromation.io/job=true \
+        platform.neuromation.io/nodepool=minikube
 }
 
 function k8s::apply_all_configurations {

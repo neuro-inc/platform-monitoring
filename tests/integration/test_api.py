@@ -22,6 +22,8 @@ from aiohttp.web_exceptions import (
     HTTPUnauthorized,
 )
 from async_timeout import timeout
+from yarl import URL
+
 from platform_monitoring.api import create_app
 from platform_monitoring.config import (
     DOCKER_API_VERSION,
@@ -30,8 +32,6 @@ from platform_monitoring.config import (
     PlatformApiConfig,
 )
 from platform_monitoring.docker_client import Docker
-from yarl import URL
-
 from tests.integration.conftest_kube import MyKubeClient
 
 from .conftest import ApiAddress, create_local_app_server, random_str
@@ -78,6 +78,10 @@ class MonitoringApiEndpoints:
     @property
     def endpoint(self) -> URL:
         return self.api_v1_endpoint / "jobs"
+
+    @property
+    def jobs_available_url(self) -> URL:
+        return self.endpoint / "available"
 
     def generate_top_url(self, job_id: str) -> URL:
         return self.endpoint / job_id / "top"
@@ -442,6 +446,56 @@ class TestApi:
             assert resp.headers["Access-Control-Allow-Origin"] == "https://neu.ro"
             assert resp.headers["Access-Control-Allow-Credentials"] == "true"
             assert resp.headers["Access-Control-Allow-Methods"] == "GET"
+
+    @pytest.mark.asyncio
+    async def test_get_available(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        regular_user_factory: Callable[..., Awaitable[_User]],
+        client: aiohttp.ClientSession,
+    ) -> None:
+        user = await regular_user_factory()
+        async with client.post(
+            monitoring_api.jobs_available_url,
+            headers=user.headers,
+            json={"cpu-small": {"cpu": 0.1, "memory_mb": 128}},
+        ) as resp:
+            assert resp.status == HTTPOk.status_code, await resp.text()
+            result = await resp.json()
+            assert "cpu-small" in result
+
+    @pytest.mark.asyncio
+    async def test_get_available_bad_request(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        regular_user_factory: Callable[..., Awaitable[_User]],
+        client: aiohttp.ClientSession,
+    ) -> None:
+        user = await regular_user_factory()
+        async with client.post(
+            monitoring_api.jobs_available_url, headers=user.headers
+        ) as resp:
+            assert resp.status == HTTPBadRequest.status_code, await resp.text()
+
+    @pytest.mark.asyncio
+    async def test_get_available_forbidden(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        regular_user_factory: Callable[..., Awaitable[_User]],
+        client: aiohttp.ClientSession,
+        cluster_name: str,
+    ) -> None:
+        user = await regular_user_factory(cluster_name="other-cluster")
+        async with client.post(
+            monitoring_api.jobs_available_url, headers=user.headers
+        ) as resp:
+            assert resp.status == HTTPForbidden.status_code, await resp.text()
+            result = await resp.json()
+            assert result == {
+                "missing": [
+                    {"uri": f"job://{cluster_name}/{user.name}", "action": "read"}
+                ]
+            }
 
 
 class TestTopApi:

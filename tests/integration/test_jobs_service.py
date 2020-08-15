@@ -15,12 +15,15 @@ from neuromation.api import (
     JobStatus,
     Resources,
 )
+
 from platform_monitoring.config import DOCKER_API_VERSION, DockerConfig
+from platform_monitoring.config_client import ConfigClient
 from platform_monitoring.jobs_service import (
     Container,
     ImageReference,
     JobException,
     JobsService,
+    Preset,
 )
 from platform_monitoring.user import User
 
@@ -108,11 +111,19 @@ class TestJobsService:
     @pytest.fixture
     async def jobs_service(
         self,
+        platform_config_client: ConfigClient,
         platform_api_client: PlatformApiClient,
         kube_client: MyKubeClient,
         docker_config: DockerConfig,
+        cluster_name: str,
     ) -> JobsService:
-        return JobsService(platform_api_client.jobs, kube_client, docker_config)
+        return JobsService(
+            config_client=platform_config_client,
+            jobs_client=platform_api_client.jobs,
+            kube_client=kube_client,
+            docker_config=docker_config,
+            cluster_name=cluster_name,
+        )
 
     async def wait_for_job(
         self,
@@ -510,3 +521,10 @@ class TestJobsService:
         ret = await jobs_service.exec_inspect(job, exec_id)
         assert ret["ExitCode"] == 1
         await platform_api_client.jobs.kill(job.id)
+
+    @pytest.mark.asyncio
+    async def test_get_available_jobs_count(self, jobs_service: JobsService) -> None:
+        result = await jobs_service.get_available_jobs_counts(
+            {"cpu": Preset(cpu=0.1, memory_mb=100)}
+        )
+        assert result and "cpu" in result

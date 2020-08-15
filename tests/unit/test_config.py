@@ -2,6 +2,8 @@ from pathlib import Path
 from typing import Any, Dict
 
 import pytest
+from yarl import URL
+
 from platform_monitoring.config import (
     Config,
     CORSConfig,
@@ -13,12 +15,12 @@ from platform_monitoring.config import (
     LogsStorageType,
     PlatformApiConfig,
     PlatformAuthConfig,
+    PlatformConfig,
     RegistryConfig,
     S3Config,
     ServerConfig,
 )
 from platform_monitoring.config_factory import EnvironConfigFactory
-from yarl import URL
 
 
 CA_DATA_PEM = "this-is-certificate-authority-public-key"
@@ -42,12 +44,15 @@ def token_path(tmp_path: Path) -> str:
 @pytest.fixture
 def environ(cert_authority_path: str, token_path: str) -> Dict[str, Any]:
     return {
+        "NP_MONITORING_CLUSTER_NAME": "default",
         "NP_MONITORING_API_HOST": "0.0.0.0",
         "NP_MONITORING_API_PORT": 8080,
         "NP_MONITORING_PLATFORM_API_URL": "http://platformapi/api/v1",
         "NP_MONITORING_PLATFORM_API_TOKEN": "platform-api-token",
         "NP_MONITORING_PLATFORM_AUTH_URL": "http://platformauthapi/api/v1",
         "NP_MONITORING_PLATFORM_AUTH_TOKEN": "platform-auth-token",
+        "NP_MONITORING_PLATFORM_CONFIG_URL": "http://platformconfig/api/v1",
+        "NP_MONITORING_PLATFORM_CONFIG_TOKEN": "platform-config-token",
         "NP_MONITORING_ES_HOSTS": "http://es1,http://es2",
         "NP_MONITORING_K8S_API_URL": "https://localhost:8443",
         "NP_MONITORING_K8S_AUTH_TYPE": "token",
@@ -68,12 +73,16 @@ def environ(cert_authority_path: str, token_path: str) -> Dict[str, Any]:
 def test_create(environ: Dict[str, Any]) -> None:
     config = EnvironConfigFactory(environ).create()
     assert config == Config(
+        cluster_name="default",
         server=ServerConfig(host="0.0.0.0", port=8080),
         platform_api=PlatformApiConfig(
             url=URL("http://platformapi/api/v1"), token="platform-api-token"
         ),
         platform_auth=PlatformAuthConfig(
             url=URL("http://platformauthapi/api/v1"), token="platform-auth-token"
+        ),
+        platform_config=PlatformConfig(
+            url=URL("http://platformconfig/api/v1"), token="platform-config-token"
         ),
         elasticsearch=ElasticsearchConfig(hosts=["http://es1", "http://es2"]),
         logs=LogsConfig(storage_type=LogsStorageType.ELASTICSEARCH),

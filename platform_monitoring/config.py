@@ -27,6 +27,12 @@ class PlatformAuthConfig:
 
 
 @dataclass(frozen=True)
+class PlatformConfig:
+    url: URL
+    token: str
+
+
+@dataclass(frozen=True)
 class ElasticsearchConfig:
     hosts: Sequence[str]
 
@@ -97,9 +103,11 @@ class DockerConfig:
 
 @dataclass(frozen=True)
 class Config:
+    cluster_name: str
     server: ServerConfig
     platform_api: PlatformApiConfig
     platform_auth: PlatformAuthConfig
+    platform_config: PlatformConfig
     logs: LogsConfig
     kube: KubeConfig
     docker: DockerConfig

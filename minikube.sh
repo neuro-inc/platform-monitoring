@@ -17,6 +17,9 @@ function minikube::start {
         --wait=all \
         --wait-timeout=5m
     kubectl config use-context minikube
+    kubectl get nodes -o name | xargs -I {} kubectl label {} --overwrite \
+        platform.neuromation.io/job=true \
+        platform.neuromation.io/nodepool=minikube
 }
 
 function minikube::load_images {

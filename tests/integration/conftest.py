@@ -17,6 +17,8 @@ from aiobotocore.client import AioBaseClient
 from aioelasticsearch import Elasticsearch
 from async_timeout import timeout
 from neuromation.api import Client as PlatformApiClient
+from yarl import URL
+
 from platform_monitoring.api import (
     create_elasticsearch_client,
     create_platform_api_client,
@@ -31,11 +33,11 @@ from platform_monitoring.config import (
     LogsStorageType,
     PlatformApiConfig,
     PlatformAuthConfig,
+    PlatformConfig,
     RegistryConfig,
     S3Config,
     ServerConfig,
 )
-from yarl import URL
 
 
 logger = logging.getLogger(__name__)
@@ -226,6 +228,7 @@ def docker_config() -> DockerConfig:
 def config_factory(
     auth_config: PlatformAuthConfig,
     platform_api_config: PlatformApiConfig,
+    platform_config: PlatformConfig,
     es_config: ElasticsearchConfig,
     kube_config: KubeConfig,
     registry_config: RegistryConfig,
@@ -234,9 +237,11 @@ def config_factory(
 ) -> Callable[..., Config]:
     def _f(**kwargs: Any) -> Config:
         defaults = dict(
+            cluster_name=cluster_name,
             server=ServerConfig(host="0.0.0.0", port=8080),
             platform_auth=auth_config,
             platform_api=platform_api_config,
+            platform_config=platform_config,
             elasticsearch=es_config,
             logs=LogsConfig(storage_type=LogsStorageType.ELASTICSEARCH),
             kube=kube_config,

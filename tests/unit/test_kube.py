@@ -4,10 +4,14 @@ from unittest import mock
 
 import aiohttp
 import pytest
+
 from platform_monitoring.kube_client import (
     JobError,
+    Node,
     Pod,
     PodContainerStats,
+    PodPhase,
+    Resources,
     StatsSummary,
 )
 from platform_monitoring.logs import FilteredStreamWrapper
@@ -68,6 +72,10 @@ class TestPod:
         container_id = pod.get_container_id("testcontainer")
         assert container_id == "testcontainerid"
 
+    def test_phase(self) -> None:
+        pod = Pod({"spec": {}, "status": {"phase": "Running"}})
+        assert pod.phase == PodPhase.RUNNING
+
     def test_is_phase_running_false(self) -> None:
         pod = Pod({"spec": {}, "status": {"phase": "Pending"}})
         assert not pod.is_phase_running
@@ -75,6 +83,67 @@ class TestPod:
     def test_is_phase_running(self) -> None:
         pod = Pod({"spec": {}, "status": {"phase": "Running"}})
         assert pod.is_phase_running
+
+    def test_no_resource_requests(self) -> None:
+        pod = Pod({"spec": {"containers": [{"resources": {}}]}})
+        assert pod.resource_requests == Resources()
+
+    def test_resource_requests_cpu_milicores(self) -> None:
+        pod = Pod(
+            {"spec": {"containers": [{"resources": {"requests": {"cpu": "100m"}}}]}}
+        )
+        assert pod.resource_requests == Resources(cpu_m=100)
+
+    def test_resource_requests_cpu_cores(self) -> None:
+        pod = Pod({"spec": {"containers": [{"resources": {"requests": {"cpu": "1"}}}]}})
+        assert pod.resource_requests == Resources(cpu_m=1000)
+
+    def test_resource_requests_memory_mebibytes(self) -> None:
+        pod = Pod(
+            {
+                "spec": {
+                    "containers": [{"resources": {"requests": {"memory": "1000Mi"}}}]
+                }
+            }
+        )
+        assert pod.resource_requests == Resources(memory_mb=1000)
+
+    def test_resource_requests_memory_gibibytes(self) -> None:
+        pod = Pod(
+            {"spec": {"containers": [{"resources": {"requests": {"memory": "1Gi"}}}]}}
+        )
+        assert pod.resource_requests == Resources(memory_mb=1024)
+
+    def test_resource_requests_gpu(self) -> None:
+        pod = Pod(
+            {
+                "spec": {
+                    "containers": [{"resources": {"requests": {"nvidia.com/gpu": "1"}}}]
+                }
+            }
+        )
+        assert pod.resource_requests == Resources(gpu=1)
+
+    def test_resource_requests_for_multiple_containers(self) -> None:
+        pod = Pod(
+            {
+                "spec": {
+                    "containers": [
+                        {"resources": {"requests": {"cpu": "0.5", "memory": "512Mi"}}},
+                        {
+                            "resources": {
+                                "requests": {
+                                    "cpu": "1",
+                                    "memory": "1Gi",
+                                    "nvidia.com/gpu": "1",
+                                }
+                            }
+                        },
+                    ]
+                }
+            }
+        )
+        assert pod.resource_requests == Resources(cpu_m=1500, memory_mb=1536, gpu=1)
 
 
 class TestPodContainerStats:
@@ -279,3 +348,39 @@ class TestFilteredStreamWrapper:
             b"chunk07\rchunk08\r\n",
             b"",
         ]
+
+
+class TestNode:
+    def test_name(self) -> None:
+        node = Node({"metadata": {"name": "default"}})
+        assert node.name == "default"
+
+    def test_get_label(self) -> None:
+        node = Node({"metadata": {"labels": {"hello": "world"}}})
+        assert node.get_label("hello") == "world"
+
+    def test_get_label_is_none(self) -> None:
+        node = Node({"metadata": {}})
+        assert node.get_label("hello") is None
+
+
+class TestResources:
+    def test_add(self) -> None:
+        resources1 = Resources(cpu_m=1, memory_mb=2, gpu=3)
+        resources2 = Resources(cpu_m=4, memory_mb=5, gpu=6)
+        assert resources1.add(resources2) == Resources(cpu_m=5, memory_mb=7, gpu=9)
+
+    def test_available(self) -> None:
+        total = Resources(cpu_m=1000, memory_mb=1024, gpu=2)
+        used = Resources(cpu_m=100, memory_mb=256, gpu=1)
+        assert total.available(used) == Resources(cpu_m=900, memory_mb=768, gpu=1)
+
+    def test_count(self) -> None:
+        total = Resources(cpu_m=1000, memory_mb=1024, gpu=2)
+
+        assert total.count(Resources(cpu_m=100, memory_mb=128, gpu=1)) == 2
+        assert total.count(Resources(cpu_m=100, memory_mb=128)) == 8
+        assert total.count(Resources(cpu_m=100)) == 10
+        assert total.count(Resources(cpu_m=1100)) == 0
+        assert total.count(Resources()) == 110
+        assert Resources().count(Resources()) == 0

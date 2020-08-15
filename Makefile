@@ -20,12 +20,13 @@ setup:
 	pip install -r requirements/test.txt
 
 lint:
+	isort --check-only --diff platform_monitoring tests setup.py
 	black --check platform_monitoring tests setup.py
 	flake8 platform_monitoring tests setup.py
 	mypy platform_monitoring tests setup.py
 
 format:
-	isort -rc platform_monitoring tests setup.py
+	isort platform_monitoring tests setup.py
 	black platform_monitoring tests setup.py
 
 test_unit:
@@ -83,7 +84,7 @@ docker_push: docker_build
 	docker push $(IMAGE_AWS):$(IMAGE_TAG)
 
 helm_install:
-	curl https://raw.githubusercontent.com/kubernetes/helm/master/scripts/get | bash -s -- -v v2.11.0
+	curl https://raw.githubusercontent.com/kubernetes/helm/master/scripts/get | bash -s -- -v $(HELM_VERSION)
 	helm init --client-only
 
 helm_deploy:
