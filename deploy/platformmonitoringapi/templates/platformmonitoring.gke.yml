@@ -31,14 +31,14 @@ spec:
           httpGet:
             path: /api/v1/ping
             port: tcp-web
-          initialDelaySeconds: 30
+          initialDelaySeconds: 10
           periodSeconds: 5
         readinessProbe:
           httpGet:
             path: /api/v1/ping
             port: tcp-web
-          initialDelaySeconds: 30
-          periodSeconds: 30
+          initialDelaySeconds: 10
+          periodSeconds: 10
         ports:
           - containerPort: 8080
             name: tcp-web
@@ -236,6 +236,6 @@ spec:
   type: ClusterIP
   ports:
   - port: 8080
-    targetPort: 8080
+    targetPort: tcp-web
   selector:
     service: platformmonitoringapi
