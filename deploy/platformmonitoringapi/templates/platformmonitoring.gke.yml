@@ -27,6 +27,22 @@ spec:
       - name: platformmonitoringapi
         image: {{ .Values.IMAGE }}
         imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /api/v1/ping
+            port: tcp-web
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /api/v1/ping
+            port: tcp-web
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        ports:
+          - containerPort: 8080
+            name: tcp-web
+            protocol: TCP
         resources:
           requests:
             cpu: {{ .Values.NP_MONITORING_REQUESTS_CPU }}
@@ -227,6 +243,6 @@ spec:
   type: ClusterIP
   ports:
   - port: 8080
-    targetPort: 8080
+    targetPort: tcp-web
   selector:
     service: platformmonitoringapi
