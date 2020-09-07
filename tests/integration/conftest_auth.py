@@ -106,8 +106,7 @@ async def regular_user_factory(
 
 @pytest.fixture
 async def share_job(
-    auth_client: AuthClient,
-    cluster_name: str,
+    auth_client: AuthClient, cluster_name: str
 ) -> AsyncIterator[Callable[[_User, _User, str], Awaitable[None]]]:
     async def _impl(
         owner: _User, follower: _User, job_id: str, action: str = "read"

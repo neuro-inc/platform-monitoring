@@ -68,9 +68,7 @@ class Preset:
     @property
     def resources(self) -> Resources:
         return Resources(
-            cpu_m=int(self.cpu * 1000),
-            memory_mb=self.memory_mb,
-            gpu=self.gpu,
+            cpu_m=int(self.cpu * 1000), memory_mb=self.memory_mb, gpu=self.gpu
         )
 
     def can_be_scheduled(self, node_pool: NodePool) -> bool:

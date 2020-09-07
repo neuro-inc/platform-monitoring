@@ -118,9 +118,7 @@ async def wait_for_service(
 # TODO (A Yushkovskiy, 05-May-2019) This fixture should have scope="session" in order
 #  to be faster, but it causes mysterious errors `RuntimeError: Event loop is closed`
 async def platform_api_config(
-    request: FixtureRequest,
-    in_minikube: bool,
-    token_factory: Callable[[str], str],
+    request: FixtureRequest, in_minikube: bool, token_factory: Callable[[str], str]
 ) -> AsyncIterator[PlatformApiConfig]:
     if in_minikube:
         base_url = "http://platformapi:8080"
@@ -258,9 +256,7 @@ def config_factory(
 
 
 @pytest.fixture
-def config(
-    config_factory: Callable[..., Config],
-) -> Config:
+def config(config_factory: Callable[..., Config]) -> Config:
     return config_factory()
 
 

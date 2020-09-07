@@ -135,9 +135,7 @@ def kube_client() -> mock.Mock:
 
 @pytest.fixture
 def service(
-    config_client: ConfigClient,
-    jobs_client: JobsClient,
-    kube_client: KubeClient,
+    config_client: ConfigClient, jobs_client: JobsClient, kube_client: KubeClient
 ) -> JobsService:
     return JobsService(
         config_client=config_client,

@@ -61,8 +61,7 @@ async def job_factory(
 
 @pytest.fixture
 async def wait_for_job_docker_client(
-    kube_client: MyKubeClient,
-    docker_config: DockerConfig,
+    kube_client: MyKubeClient, docker_config: DockerConfig
 ) -> Callable[[str], Awaitable[None]]:
     async def go(job_id: str) -> None:
         timeout_s: float = 60
@@ -413,12 +412,7 @@ class TestJobsService:
         resources = Resources(
             memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
         )
-        job = await job_factory(
-            "alpine:latest",
-            "sh",
-            resources,
-            tty=True,
-        )
+        job = await job_factory("alpine:latest", "sh", resources, tty=True)
         await self.wait_for_job_running(job, platform_api_client)
 
         job = await platform_api_client.jobs.status(job.id)
