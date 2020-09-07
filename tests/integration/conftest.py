@@ -62,7 +62,7 @@ def in_minikube(in_docker: bool) -> bool:
 
 @pytest.fixture(scope="session")
 def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
-    """ This fixture fixes scope mismatch error with implicitly added "event_loop".
+    """This fixture fixes scope mismatch error with implicitly added "event_loop".
     see https://github.com/pytest-dev/pytest-asyncio/issues/68
     """
     asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
@@ -118,7 +118,9 @@ async def wait_for_service(
 # TODO (A Yushkovskiy, 05-May-2019) This fixture should have scope="session" in order
 #  to be faster, but it causes mysterious errors `RuntimeError: Event loop is closed`
 async def platform_api_config(
-    request: FixtureRequest, in_minikube: bool, token_factory: Callable[[str], str],
+    request: FixtureRequest,
+    in_minikube: bool,
+    token_factory: Callable[[str], str],
 ) -> AsyncIterator[PlatformApiConfig]:
     if in_minikube:
         base_url = "http://platformapi:8080"
@@ -164,7 +166,7 @@ async def es_config(
 
 @pytest.fixture
 async def es_client(es_config: ElasticsearchConfig) -> AsyncIterator[Elasticsearch]:
-    """ Elasticsearch client that goes directly to elasticsearch-logging service
+    """Elasticsearch client that goes directly to elasticsearch-logging service
     without any authentication.
     """
     async with create_elasticsearch_client(es_config) as es_client:
@@ -256,7 +258,9 @@ def config_factory(
 
 
 @pytest.fixture
-def config(config_factory: Callable[..., Config],) -> Config:
+def config(
+    config_factory: Callable[..., Config],
+) -> Config:
     return config_factory()
 
 

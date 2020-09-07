@@ -158,7 +158,10 @@ def cert_authority_data_pem(
 
 
 @pytest.fixture
-async def kube_config(request: FixtureRequest, in_minikube: bool,) -> KubeConfig:
+async def kube_config(
+    request: FixtureRequest,
+    in_minikube: bool,
+) -> KubeConfig:
     if in_minikube:
         return KubeConfig(
             endpoint_url="https://kubernetes.default:443",

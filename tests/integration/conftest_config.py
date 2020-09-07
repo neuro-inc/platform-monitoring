@@ -93,7 +93,8 @@ async def platform_config_client(
     platform_config_url: URL, cluster_name: str, cluster_token: str
 ) -> AsyncIterator[ConfigClient]:
     async with ConfigClient(
-        api_url=platform_config_url / "api/v1", token=cluster_token,
+        api_url=platform_config_url / "api/v1",
+        token=cluster_token,
     ) as client:
         yield client
 
