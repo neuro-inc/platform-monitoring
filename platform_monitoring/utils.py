@@ -70,7 +70,11 @@ class JobsHelper:
         return job.status == JobStatus.RUNNING
 
     def is_job_finished(self, job: Job) -> bool:
-        return job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED)
+        return job.status in (
+            JobStatus.SUCCEEDED,
+            JobStatus.FAILED,
+            JobStatus.CANCELLED,
+        )
 
 
 class KubeHelper:
