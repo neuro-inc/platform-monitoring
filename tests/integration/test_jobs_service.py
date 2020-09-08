@@ -153,6 +153,8 @@ class TestJobsService:
         def _condition(job: Job) -> bool:
             if job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED):
                 pytest.fail(f"Job '{job.id} has completed'")
+            if job.status == JobStatus.CANCELLED:
+                pytest.fail(f"Job '{job.id} has been cancelled'")
             return job.status == JobStatus.RUNNING
 
         await self.wait_for_job(job, platform_api_client, _condition, *args, **kwargs)
@@ -167,6 +169,8 @@ class TestJobsService:
         def _condition(job: Job) -> bool:
             if job.status == JobStatus.FAILED:
                 pytest.fail(f"Job '{job.id} has failed'")
+            if job.status == JobStatus.CANCELLED:
+                pytest.fail(f"Job '{job.id} has been cancelled'")
             return job.status == JobStatus.SUCCEEDED
 
         await self.wait_for_job(job, platform_api_client, _condition, *args, **kwargs)
