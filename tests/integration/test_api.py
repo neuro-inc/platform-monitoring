@@ -588,7 +588,6 @@ class TestTopApi:
         jobs_client: JobsClient,
         infinite_job: str,
     ) -> None:
-
         url = monitoring_api.generate_top_url(job_id=infinite_job)
         with pytest.raises(WSServerHandshakeError, match="Invalid response status"):
             async with client.ws_connect(url):
@@ -604,7 +603,7 @@ class TestTopApi:
     ) -> None:
         job = infinite_job
         await jobs_client.delete_job(job)
-        await jobs_client.long_polling_by_job_id(job_id=job, status="succeeded")
+        await jobs_client.long_polling_by_job_id(job_id=job, status="cancelled")
 
         num_request = 2
         records = []

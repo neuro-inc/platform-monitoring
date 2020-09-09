@@ -213,7 +213,7 @@ class TestKubeClient:
                             pass
                     break
                 except AssertionError as exc:
-                    if "Pattern" not in str(exc):
+                    if "pattern" not in str(exc):
                         raise
                 await asyncio.sleep(0.1)
 
