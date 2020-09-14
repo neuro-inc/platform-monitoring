@@ -57,7 +57,7 @@ def test_create_s3_log_reader_factory(
 ) -> None:
     config = config_factory(LogsStorageType.S3)
     result = create_log_reader_factory(
-        config, kube_client, s3_client=mock.Mock(spec=AioBaseClient),
+        config, kube_client, s3_client=mock.Mock(spec=AioBaseClient)
     )
     assert isinstance(result, S3LogReaderFactory)
 
