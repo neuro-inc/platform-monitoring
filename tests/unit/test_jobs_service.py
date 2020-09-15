@@ -172,6 +172,32 @@ class TestJobsService:
         assert result == {"cpu": 9, "cpu-p": 19, "gpu": 1, "gpu-unknown": 0}
 
     @pytest.mark.asyncio
+    async def test_get_available_jobs_count_when_node_pool_with_zones(
+        self,
+        service: JobsService,
+        config_client: mock.Mock,
+        kube_client: mock.Mock,
+        cluster_payload: Dict[str, Any],
+    ) -> None:
+        node_pool = cluster_payload["cloud_provider"]["node_pools"][0]
+        cluster_zones = cluster_payload["cloud_provider"]["zones"]
+        node_pool["zones"] = [cluster_zones[0]]
+        config_client.get_cluster.side_effect = get_cluster_factory(cluster_payload)
+
+        kube_client.get_pods.side_effect = get_pods_factory(
+            create_pod("minikube-cpu-1", cpu_m=50, memory_mb=128),
+            create_pod("minikube-cpu-1", cpu_m=50, memory_mb=128),
+        )
+
+        result = await service.get_available_jobs_counts(
+            {
+                "cpu": Preset(cpu=0.2, memory_mb=100),
+                "cpu-p": Preset(cpu=0.2, memory_mb=100, is_preemptible=True),
+            }
+        )
+        assert result == {"cpu": 4, "cpu-p": 14}
+
+    @pytest.mark.asyncio
     async def test_get_available_jobs_count_when_cluster_without_zones(
         self,
         service: JobsService,

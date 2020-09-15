@@ -15,6 +15,14 @@ class NodePool:
         return self._payload["name"]
 
     @property
+    def zones(self) -> Sequence[str]:
+        return self._payload.get("zones", [])
+
+    @property
+    def zones_count(self) -> int:
+        return len(self.zones)
+
+    @property
     def max_size(self) -> int:
         return self._payload["max_size"]
 

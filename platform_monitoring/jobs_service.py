@@ -321,7 +321,7 @@ class JobsService:
         return result
 
     def _get_max_nodes_count(self, cluster: Cluster, node_pool: NodePool) -> int:
-        return max(1, cluster.zones_count) * node_pool.max_size
+        return max(1, node_pool.zones_count or cluster.zones_count) * node_pool.max_size
 
     def _get_node_resource_limit(self, node_pool: NodePool) -> Resources:
         return Resources(
