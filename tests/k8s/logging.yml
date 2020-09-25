@@ -172,7 +172,7 @@ spec:
     k8s-app: fluentd-logging
     version: v1
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: fluent-bit
