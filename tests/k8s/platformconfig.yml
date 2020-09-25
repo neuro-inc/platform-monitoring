@@ -103,10 +103,13 @@ metadata:
   name: platformconfig-postgres
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      service: platformconfig-postgres
   template:
     metadata:
       labels:
-        app: postgres
+        service: platformconfig-postgres
     spec:
       containers:
         - name: postgres
@@ -133,4 +136,4 @@ spec:
   ports:
    - port: 5432
   selector:
-   app: postgres
+   service: platformconfig-postgres
