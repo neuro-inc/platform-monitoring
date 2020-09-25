@@ -111,6 +111,16 @@ spec:
       labels:
         service: platformapi
     spec:
+      initContainers:
+      - name: platformapi-migrations
+        image: platformapi:latest
+        imagePullPolicy: Never
+        command: ["alembic", "upgrade", "head"]
+        env:
+        - name: NP_DB_REDIS_URI
+          value: redis://platformredis:6379/0
+        - name: NP_DB_POSTGRES_DSN
+          value: postgresql://postgres:postgres@platformapi-postgres:5432
       containers:
       - name: platformapi
         image: platformapi:latest
