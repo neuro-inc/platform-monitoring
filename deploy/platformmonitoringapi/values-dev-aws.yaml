@@ -28,12 +28,8 @@ fluentbit:
   nodeSelector:
     platform.neuromation.io/job: "true"
   tolerations:
-  - effect: NoSchedule
-    key: platform.neuromation.io/job
-    operator: Exists
-  - effect: NoSchedule
-    key: nvidia.com/gpu
-    operator: Exists
+    - effect: NoSchedule
+      operator: Exists
   taildb:
     directory: /var/lib/platform-monitoring-fluent-bit
 
