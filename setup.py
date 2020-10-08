@@ -12,7 +12,7 @@ install_requires = (
     "trafaret==2.1.0",
     "platform-logging==0.3",
     "aiohttp-cors==0.7.0",
-    "aiobotocore==1.1.1",
+    "aiobotocore==1.1.2",
 )
 
 setup(
