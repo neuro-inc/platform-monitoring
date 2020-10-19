@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 
 install_requires = (
     "aiohttp==3.6.3",
-    "yarl==1.6.2",
+    "yarl==1.5.1",
     "neuro_auth_client==19.10.5",
     "neuromation==20.10.7",
     "aioelasticsearch==0.7.0",
@@ -13,6 +13,7 @@ install_requires = (
     "platform-logging==0.3",
     "aiohttp-cors==0.7.0",
     "aiobotocore==1.1.2",
+    "multidict==4.7.6",
 )
 
 setup(
