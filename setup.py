@@ -13,7 +13,7 @@ install_requires = (
     "platform-logging==0.3",
     "aiohttp-cors==0.7.0",
     "aiobotocore==1.1.2",
-    "multidict==4.7.6",
+    "multidict==5.0.0",
 )
 
 setup(
