@@ -45,6 +45,7 @@ fluentd:
     enabled: true
     accessMode: ReadWriteOnce
     size: 10Gi
+    storageClassName: standard
   s3:
     buffer:
       chunkLimitSize: 8M
