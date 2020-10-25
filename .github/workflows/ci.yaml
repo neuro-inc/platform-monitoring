@@ -138,7 +138,7 @@ jobs:
         with:
           login-server: ${{ secrets.AZURE_DEV_ACR_SERVER }}
           username: ${{ secrets.AZURE_DEV_ACR_USERNAME }}
-          password: ${{ secrets.AZURE_DEV_ACR_PASSWORD }}1
+          password: ${{ secrets.AZURE_DEV_ACR_PASSWORD }}
       - name: Push image to registry
         run: make docker_push
       - name: Update kube config
