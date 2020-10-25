@@ -1,7 +1,6 @@
 IMAGE_NAME ?= platformmonitoringapi
 IMAGE_TAG ?= $(GITHUB_SHA)
 IMAGE ?= $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/$(IMAGE_NAME)
-#IMAGE_AWS ?= $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com/$(IMAGE_NAME)
 
 CLOUD_IMAGE_gke   ?= $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/$(IMAGE_NAME)
 CLOUD_IMAGE_aws   ?= $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com/$(IMAGE_NAME)
@@ -53,7 +52,7 @@ docker_build_tests:
 	    make docker_build; \
 	    docker build -f tests.Dockerfile -t $(IMAGE_NAME)-tests:latest .
 
-gke_login:
+gke_k8s_login:
 	sudo chown circleci:circleci -R $$HOME
 	@echo $(GKE_ACCT_AUTH) | base64 --decode > $(HOME)//gcloud-service-key.json
 	gcloud auth activate-service-account --key-file $(HOME)/gcloud-service-key.json
@@ -64,10 +63,10 @@ gke_login:
 	docker version
 	gcloud auth configure-docker
 
-eks_login:
+aws_k8s_login:
 	aws eks --region $(AWS_REGION) update-kubeconfig --name $(CLUSTER_NAME)
 
-aks_login:
+azure_k8s_login:
 	az aks get-credentials --resource-group $(AZURE_DEV_RG_NAME) --name $(CLUSTER_NAME)
 
 docker_pull_test_images:
