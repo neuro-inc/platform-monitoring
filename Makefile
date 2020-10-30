@@ -23,16 +23,13 @@ include k8s.mk
 setup:
 	@echo "Using extra pip index: $(PIP_EXTRA_INDEX_URL)"
 	pip install -r requirements/test.txt
+	pre-commit install
 
-lint:
-	isort --check-only --diff platform_monitoring tests setup.py
-	black --check platform_monitoring tests setup.py
-	flake8 platform_monitoring tests setup.py
+lint: format
 	mypy platform_monitoring tests setup.py
 
 format:
-	isort platform_monitoring tests setup.py
-	black platform_monitoring tests setup.py
+	pre-commit run --all-files --show-diff-on-failure
 
 test_unit:
 	pytest -vv --cov=platform_monitoring --cov-report xml:.coverage-unit.xml tests/unit
