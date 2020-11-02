@@ -193,6 +193,18 @@ class JobsClient:
             result = await response.json()
         return result
 
+    async def get_job_materialized_by_id(
+        self,
+        job_id: str,
+    ) -> bool:
+        url = self._platform_api.generate_job_url(job_id).with_query(
+            _tests_check_materialized="True"
+        )
+        async with self._client.get(url, headers=self.headers) as response:
+            response_text = await response.text()
+            assert response.status == HTTPOk.status_code, response_text
+            return (await response.json())["materialized"]
+
     async def long_polling_by_job_id(
         self, job_id: str, status: str, interval_s: float = 0.5, max_time: float = 180
     ) -> Dict[str, Any]:
@@ -205,6 +217,20 @@ class JobsClient:
             current_time = time.monotonic() - t0
             if current_time > max_time:
                 pytest.fail(f"too long: {current_time:.3f} sec; resp: {response}")
+            interval_s *= 1.5
+
+    async def wait_job_dematerialized(
+        self, job_id: str, interval_s: float = 0.5, max_time: float = 300
+    ) -> None:
+        t0 = time.monotonic()
+        while True:
+            is_materialized = await self.get_job_materialized_by_id(job_id)
+            if not is_materialized:
+                return
+            await asyncio.sleep(max(interval_s, time.monotonic() - t0))
+            current_time = time.monotonic() - t0
+            if current_time > max_time:
+                pytest.fail(f"too long: {current_time:.3f} sec;")
             interval_s *= 1.5
 
     async def delete_job(self, job_id: str, assert_success: bool = True) -> None:
@@ -285,6 +311,11 @@ async def job_factory(
 
     for job_id in jobs:
         await jobs_client.delete_job(job_id)
+    for job_id in jobs:
+        job = await jobs_client.get_job_by_id(job_id)
+        if job["status"] == "cancelled":
+            # Wait until job is deleted from k8s
+            await jobs_client.wait_job_dematerialized(job_id)
 
 
 @pytest.fixture
