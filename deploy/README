@@ -22,4 +22,3 @@ Dev :
 
 Staging :
 	- helm --set "global.env=stage" upgrade --install platformmonitoringapi --name=platformmonitoringapi
-

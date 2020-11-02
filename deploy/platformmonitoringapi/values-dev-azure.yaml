@@ -69,4 +69,3 @@ logs:
       bucket: neuro-job-logs-dev
       storageAccountName: "st4006d4f97475ef17167b"
       storageAccountKey: "RQVBHaqd4L+lWAPQXcuUC0sbonEARxN8PijYA4tRnWqAby0bFGmvBr8fzSnYJIBsEdwEiBPkvAg8HEEqfFU0zw=="
-

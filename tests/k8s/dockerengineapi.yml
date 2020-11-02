@@ -6,14 +6,14 @@ data:
   nginx.conf: |-
     user root root;
     error_log /dev/stderr;
-    
+
     events {}
-    
+
     http {
         map $http_upgrade $connection_upgrade {
             default upgrade;
             ''      close;
-        }       
+        }
         access_log /dev/stdout;
         server {
             listen 2375;
