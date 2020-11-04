@@ -167,7 +167,7 @@ jobs:
     - name: Checkout commit
       uses: actions/checkout@v2
     - name: Set env
-      run: echo ::set-env name=ARTIFACTORY_TAG::${GITHUB_REF#refs/tags/artifactory/}
+      run: echo "ARTIFACTORY_TAG=${GITHUB_REF#refs/tags/artifactory/}" >> $GITHUB_ENV
     - name: Push image to Artifactory
       run: |
         make artifactory_docker_login
