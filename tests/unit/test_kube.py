@@ -226,7 +226,7 @@ class TestStatsSummary:
 class TestFilteredStreamWrapper:
     @pytest.mark.asyncio
     async def test_read_eof(self) -> None:
-        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False))
+        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
         reader.feed_eof()
         stream = FilteredStreamWrapper(reader)
         chunk = await stream.read()
@@ -234,7 +234,7 @@ class TestFilteredStreamWrapper:
 
     @pytest.mark.asyncio
     async def test_read_two_lines_eof(self) -> None:
-        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False))
+        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
         reader.feed_data(b"line1\n")
         reader.feed_data(b"line2")
         reader.feed_eof()
@@ -246,7 +246,7 @@ class TestFilteredStreamWrapper:
 
     @pytest.mark.asyncio
     async def test_half_line(self) -> None:
-        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False))
+        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
         reader.feed_data(b"line1\n")
         reader.feed_data(b"line2\n")
         stream = FilteredStreamWrapper(reader)
@@ -267,7 +267,7 @@ class TestFilteredStreamWrapper:
 
     @pytest.mark.asyncio
     async def test_filtered_single_rpc_error(self) -> None:
-        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False))
+        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
         reader.feed_data(b"line1\n")
         reader.feed_data(b"rpc error: code = whatever")
         reader.feed_eof()
@@ -279,7 +279,7 @@ class TestFilteredStreamWrapper:
 
     @pytest.mark.asyncio
     async def test_filtered_two_rpc_errors(self) -> None:
-        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False))
+        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
         reader.feed_data(b"line1\n")
         reader.feed_data(b"rpc error: code = whatever\n")
         reader.feed_data(b"rpc error: code = again\n")
@@ -294,7 +294,7 @@ class TestFilteredStreamWrapper:
 
     @pytest.mark.asyncio
     async def test_not_filtered_single_rpc_not_eof(self) -> None:
-        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False))
+        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
         reader.feed_data(b"line1\n")
         reader.feed_data(b"rpc error: code = whatever\n")
         reader.feed_data(b"line2\n")
@@ -311,7 +311,7 @@ class TestFilteredStreamWrapper:
 
     @pytest.mark.asyncio
     async def test_min_line_chunk(self) -> None:
-        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False))
+        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
         stream = FilteredStreamWrapper(reader)
 
         async def _read_all() -> List[bytes]:
