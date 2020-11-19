@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 install_requires = (
     "aiohttp==3.7.2",
     "neuro_auth_client==19.10.5",
-    "neuromation==20.11.10",
+    "neuromation==20.11.18",
     "aioelasticsearch==0.7.0",
     "aiodocker==0.19.1",
     "docker-image-py==0.1.10",
