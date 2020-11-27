@@ -19,11 +19,12 @@ from aiodocker.exceptions import DockerError
 from aiodocker.stream import Stream
 from neuromation.api import JobDescription as Job
 from neuromation.api.jobs import Jobs as JobsClient
+from platform_config_client import ConfigClient
+from platform_config_client.models import ResourcePoolType
 
 from platform_monitoring.config import DockerConfig
 
 from .config import DOCKER_API_VERSION
-from .config_client import Cluster, ConfigClient, NodePool
 from .docker_client import Docker, ImageReference
 from .kube_client import JobNotFoundException, KubeClient, Pod, PodPhase, Resources
 from .user import User
@@ -55,26 +56,6 @@ class JobException(Exception):
 class NodeNotFoundException(Exception):
     def __init__(self, name: str) -> None:
         super().__init__(f"Node {name!r} was not found")
-
-
-@dataclass(frozen=True)
-class Preset:
-    cpu: float
-    memory_mb: int
-    gpu: int = 0
-    gpu_model: str = ""
-    is_preemptible: bool = False
-
-    @property
-    def resources(self) -> Resources:
-        return Resources(
-            cpu_m=int(self.cpu * 1000), memory_mb=self.memory_mb, gpu=self.gpu
-        )
-
-    def can_be_scheduled(self, node_pool: NodePool) -> bool:
-        return self.gpu_model == node_pool.gpu_model and (
-            self.is_preemptible or not node_pool.is_preemptible
-        )
 
 
 class JobsService:
@@ -255,35 +236,36 @@ class JobsService:
             # from "aiodocker.docker.Docker" to ".docker_client.Docker"
             yield cast(Docker, docker)
 
-    async def get_available_jobs_counts(
-        self, presets: Mapping[str, Preset]
-    ) -> Mapping[str, int]:
+    async def get_available_jobs_counts(self) -> Mapping[str, int]:
         result: Dict[str, int] = {}
         cluster = await self._config_client.get_cluster(self._cluster_name)
         resource_requests = await self._get_resource_requests_by_node_pool()
-        for preset_name, preset in presets.items():
+        pool_types = {p.name: p for p in cluster.orchestrator.resource_pool_types}
+        for preset in cluster.orchestrator.resource_presets:
             available_jobs_count = 0
-            for node_pool in cluster.node_pools:
-                if not preset.can_be_scheduled(node_pool):
-                    continue
+            preset_resources = Resources(
+                cpu_m=int(preset.cpu * 1000),
+                memory_mb=preset.memory_mb,
+                gpu=preset.gpu or 0,
+            )
+            preset_pool_types = [pool_types[r] for r in preset.resource_affinity]
+            for node_pool in preset_pool_types:
                 node_resource_limit = self._get_node_resource_limit(node_pool)
                 node_resource_requests = resource_requests.get(node_pool.name, [])
                 running_nodes_count = len(node_resource_requests)
-                free_nodes_count = (
-                    self._get_max_nodes_count(cluster, node_pool) - running_nodes_count
-                )
+                free_nodes_count = node_pool.max_size - running_nodes_count
                 # get number of jobs that can be scheduled on running nodes
                 # in the current node pool
                 for request in node_resource_requests:
                     available_resources = node_resource_limit.available(request)
-                    available_jobs_count += available_resources.count(preset.resources)
+                    available_jobs_count += available_resources.count(preset_resources)
                 # get number of jobs that can be scheduled on free nodes
                 # in the current node pool
                 if free_nodes_count > 0:
                     available_jobs_count += (
-                        free_nodes_count * node_resource_limit.count(preset.resources)
+                        free_nodes_count * node_resource_limit.count(preset_resources)
                     )
-            result[preset_name] = available_jobs_count
+            result[preset.name] = available_jobs_count
         return result
 
     async def _get_resource_requests_by_node_pool(self) -> Dict[str, List[Resources]]:
@@ -320,12 +302,9 @@ class JobsService:
             group.append(pod)
         return result
 
-    def _get_max_nodes_count(self, cluster: Cluster, node_pool: NodePool) -> int:
-        return max(1, node_pool.zones_count or cluster.zones_count) * node_pool.max_size
-
-    def _get_node_resource_limit(self, node_pool: NodePool) -> Resources:
+    def _get_node_resource_limit(self, node_pool: ResourcePoolType) -> Resources:
         return Resources(
-            cpu_m=node_pool.available_cpu_m,
+            cpu_m=int(node_pool.available_cpu * 1000),
             memory_mb=node_pool.available_memory_mb,
-            gpu=node_pool.gpu,
+            gpu=node_pool.gpu or 0,
         )

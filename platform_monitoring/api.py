@@ -33,10 +33,9 @@ from neuromation.api import (
     Factory as PlatformClientFactory,
     JobDescription as Job,
 )
+from platform_config_client import ConfigClient
 from platform_logging import init_logging
 from yarl import URL
-
-from platform_monitoring.user import untrusted_user
 
 from .base import JobStats, Telemetry
 from .config import (
@@ -50,10 +49,10 @@ from .config import (
     PlatformConfig,
     S3Config,
 )
-from .config_client import ConfigClient
 from .config_factory import EnvironConfigFactory
-from .jobs_service import Container, ExecCreate, JobException, JobsService, Preset
+from .jobs_service import Container, ExecCreate, JobException, JobsService
 from .kube_client import JobError, KubeClient, KubeTelemetry
+from .user import untrusted_user
 from .utils import (
     ElasticsearchLogReaderFactory,
     JobsHelper,
@@ -63,7 +62,6 @@ from .utils import (
 )
 from .validators import (
     create_exec_create_request_payload_validator,
-    create_presets_validator,
     create_save_request_payload_validator,
 )
 
@@ -103,12 +101,11 @@ class MonitoringApiHandler:
             create_exec_create_request_payload_validator()
         )
 
-        self._presets_validator = create_presets_validator()
-
     def register(self, app: aiohttp.web.Application) -> None:
         app.add_routes(
             [
-                aiohttp.web.post("/available", self.get_available),
+                aiohttp.web.post("/available", self.get_capacity),  # deprecated
+                aiohttp.web.get("/capacity", self.get_capacity),
                 aiohttp.web.get("/{job_id}/log", self.stream_log),
                 aiohttp.web.get("/{job_id}/top", self.stream_top),
                 aiohttp.web.post("/{job_id}/save", self.stream_save),
@@ -138,7 +135,7 @@ class MonitoringApiHandler:
     def _log_reader_factory(self) -> LogReaderFactory:
         return self._app["log_reader_factory"]
 
-    async def get_available(self, request: Request) -> Response:
+    async def get_capacity(self, request: Request) -> Response:
         # Check that user has access to the cluster
         user = await untrusted_user(request)
         await check_any_permissions(
@@ -149,18 +146,7 @@ class MonitoringApiHandler:
                 )
             ],
         )
-        payload = await request.json()
-        payload = self._presets_validator.check(payload)
-        presets: Dict[str, Preset] = {}
-        for name, p in payload.items():
-            presets[name] = Preset(
-                cpu=p["cpu"],
-                memory_mb=p["memory_mb"],
-                gpu=p["gpu"],
-                gpu_model=p["gpu_model"],
-                is_preemptible=p["is_preemptible"],
-            )
-        result = await self._jobs_service.get_available_jobs_counts(presets)
+        result = await self._jobs_service.get_available_jobs_counts()
         return json_response(result)
 
     async def stream_log(self, request: Request) -> StreamResponse:
