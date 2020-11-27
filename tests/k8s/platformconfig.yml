@@ -19,7 +19,7 @@ spec:
     spec:
       initContainers:
       - name: platformconfig-migrations
-        image: platformconfig-migrations:latest
+        image: platformconfig:latest
         imagePullPolicy: Never
         command: ["alembic", "upgrade", "head"]
         env:
