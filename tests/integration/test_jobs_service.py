@@ -15,15 +15,14 @@ from neuromation.api import (
     JobStatus,
     Resources,
 )
+from platform_config_client import ConfigClient
 
 from platform_monitoring.config import DOCKER_API_VERSION, DockerConfig
-from platform_monitoring.config_client import ConfigClient
 from platform_monitoring.jobs_service import (
     Container,
     ImageReference,
     JobException,
     JobsService,
-    Preset,
 )
 from platform_monitoring.user import User
 
@@ -528,7 +527,5 @@ class TestJobsService:
 
     @pytest.mark.asyncio
     async def test_get_available_jobs_count(self, jobs_service: JobsService) -> None:
-        result = await jobs_service.get_available_jobs_counts(
-            {"cpu": Preset(cpu=0.1, memory_mb=100)}
-        )
-        assert result and "cpu" in result
+        result = await jobs_service.get_available_jobs_counts()
+        assert result and "cpu-small" in result

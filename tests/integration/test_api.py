@@ -80,8 +80,8 @@ class MonitoringApiEndpoints:
         return self.api_v1_endpoint / "jobs"
 
     @property
-    def jobs_available_url(self) -> URL:
-        return self.endpoint / "available"
+    def jobs_capacity_url(self) -> URL:
+        return self.endpoint / "capacity"
 
     def generate_top_url(self, job_id: str) -> URL:
         return self.endpoint / job_id / "top"
@@ -479,37 +479,23 @@ class TestApi:
             assert resp.headers["Access-Control-Allow-Methods"] == "GET"
 
     @pytest.mark.asyncio
-    async def test_get_available(
+    async def test_get_capacity(
         self,
         monitoring_api: MonitoringApiEndpoints,
         regular_user_factory: Callable[..., Awaitable[_User]],
         client: aiohttp.ClientSession,
     ) -> None:
         user = await regular_user_factory()
-        async with client.post(
-            monitoring_api.jobs_available_url,
+        async with client.get(
+            monitoring_api.jobs_capacity_url,
             headers=user.headers,
-            json={"cpu-small": {"cpu": 0.1, "memory_mb": 128}},
         ) as resp:
             assert resp.status == HTTPOk.status_code, await resp.text()
             result = await resp.json()
             assert "cpu-small" in result
 
     @pytest.mark.asyncio
-    async def test_get_available_bad_request(
-        self,
-        monitoring_api: MonitoringApiEndpoints,
-        regular_user_factory: Callable[..., Awaitable[_User]],
-        client: aiohttp.ClientSession,
-    ) -> None:
-        user = await regular_user_factory()
-        async with client.post(
-            monitoring_api.jobs_available_url, headers=user.headers
-        ) as resp:
-            assert resp.status == HTTPBadRequest.status_code, await resp.text()
-
-    @pytest.mark.asyncio
-    async def test_get_available_forbidden(
+    async def test_get_capacity_forbidden(
         self,
         monitoring_api: MonitoringApiEndpoints,
         regular_user_factory: Callable[..., Awaitable[_User]],
@@ -517,8 +503,8 @@ class TestApi:
         cluster_name: str,
     ) -> None:
         user = await regular_user_factory(cluster_name="other-cluster")
-        async with client.post(
-            monitoring_api.jobs_available_url, headers=user.headers
+        async with client.get(
+            monitoring_api.jobs_capacity_url, headers=user.headers
         ) as resp:
             assert resp.status == HTTPForbidden.status_code, await resp.text()
             result = await resp.json()
