@@ -4,8 +4,7 @@ from setuptools import find_packages, setup
 install_requires = (
     "aiohttp==3.7.2",
     "neuro_auth_client==19.10.5",
-    "platform_config_client==20.11.26",
-    "neuromation==20.11.10",
+    "neuromation==20.11.18",
     "aioelasticsearch==0.7.0",
     "elasticsearch==7.9.1",
     "aiodocker==0.19.1",
