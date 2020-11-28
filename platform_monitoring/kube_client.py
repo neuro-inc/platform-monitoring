@@ -5,7 +5,7 @@ import ssl
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, AsyncIterator, Dict, List, NoReturn, Optional, Sequence
+from typing import Any, AsyncIterator, Dict, NoReturn, Optional, Sequence
 from urllib.parse import urlsplit
 
 import aiohttp
@@ -411,22 +411,19 @@ class KubeClient:
             yield response.content
 
     async def get_pods(
-        self, label_selector: str = "", phases: Sequence[PodPhase] = ()
+        self, label_selector: str = "", field_selector: str = ""
     ) -> Sequence[Pod]:
         assert self._client
-        params = None
+        params = {}
         if label_selector:
-            params = {"labelSelector": label_selector}
-        async with self._client.get(self._pods_url, params=params) as response:
+            params["labelSelector"] = label_selector
+        if field_selector:
+            params["fieldSelector"] = field_selector
+        async with self._client.get(self._pods_url, params=params or None) as response:
             await self._check_response_status(response)
             payload = await response.json()
             self._assert_resource_kind("PodList", payload)
-            result: List[Pod] = []
-            for item in payload["items"]:
-                pod = Pod(item)
-                if not phases or pod.phase in phases:
-                    result.append(pod)
-            return result
+            return [Pod(p) for p in payload["items"]]
 
     async def get_nodes(self, label_selector: str = "") -> Sequence[Node]:
         assert self._client

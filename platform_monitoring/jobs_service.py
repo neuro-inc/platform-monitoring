@@ -24,15 +24,11 @@ from platform_config_client.models import ResourcePoolType
 
 from platform_monitoring.config import DockerConfig
 
-from .config import DOCKER_API_VERSION
+from .config import DOCKER_API_VERSION, KubeConfig
 from .docker_client import Docker, ImageReference
-from .kube_client import JobNotFoundException, KubeClient, Pod, PodPhase, Resources
+from .kube_client import JobNotFoundException, KubeClient, Pod, Resources
 from .user import User
 from .utils import KubeHelper
-
-
-NODE_POOL_LABEL = "platform.neuromation.io/nodepool"
-JOB_LABEL = "platform.neuromation.io/job"
 
 
 @dataclass(frozen=True)
@@ -66,6 +62,8 @@ class JobsService:
         kube_client: KubeClient,
         docker_config: DockerConfig,
         cluster_name: str,
+        kube_job_label: str = KubeConfig.job_label,
+        kube_node_pool_label: str = KubeConfig.node_pool_label,
     ) -> None:
         self._config_client = config_client
         self._jobs_client = jobs_client
@@ -73,6 +71,8 @@ class JobsService:
         self._kube_helper = KubeHelper()
         self._docker_config = docker_config
         self._cluster_name = cluster_name
+        self._kube_job_label = kube_job_label
+        self._kube_node_pool_label = kube_node_pool_label
 
     async def get(self, job_id: str) -> Job:
         return await self._jobs_client.status(job_id)
@@ -271,9 +271,16 @@ class JobsService:
     async def _get_resource_requests_by_node_pool(self) -> Dict[str, List[Resources]]:
         result: Dict[str, List[Resources]] = {}
         pods = await self._kube_client.get_pods(
-            label_selector=JOB_LABEL, phases=(PodPhase.PENDING, PodPhase.RUNNING)
+            label_selector=self._kube_job_label,
+            field_selector=",".join(
+                (
+                    "status.phase!=Failed",
+                    "status.phase!=Succeeded",
+                    "status.phase!=Unknown",
+                ),
+            ),
         )
-        nodes = await self._kube_client.get_nodes(label_selector=JOB_LABEL)
+        nodes = await self._kube_client.get_nodes(label_selector=self._kube_job_label)
         for node_name, node_pods in self._group_pods_by_node(pods).items():
             if not node_name:
                 continue
@@ -282,7 +289,7 @@ class JobsService:
                     break
             else:
                 raise NodeNotFoundException(node_name)
-            node_pool_name = node.get_label(NODE_POOL_LABEL)
+            node_pool_name = node.get_label(self._kube_node_pool_label)
             if not node_pool_name:  # pragma: no coverage
                 continue
             pod_resources = [p.resource_requests for p in node_pods]

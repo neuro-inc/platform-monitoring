@@ -277,7 +277,13 @@ class TestKubeClient:
             assert pods[0].name == job_pod.name
 
             pods = await kube_client.get_pods(
-                phases=(PodPhase.PENDING, PodPhase.RUNNING)
+                field_selector=",".join(
+                    (
+                        "status.phase!=Failed",
+                        "status.phase!=Succeeded",
+                        "status.phase!=Unknown",
+                    ),
+                ),
             )
             assert pods
             assert all(

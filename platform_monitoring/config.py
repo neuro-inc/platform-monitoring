@@ -84,6 +84,9 @@ class KubeConfig:
 
     kubelet_node_port: int = 10250
 
+    job_label: str = "platform.neuromation.io/job"
+    node_pool_label: str = "platform.neuromation.io/nodepool"
+
 
 @dataclass(frozen=True)
 class RegistryConfig:

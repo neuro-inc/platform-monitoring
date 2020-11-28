@@ -90,6 +90,14 @@ spec:
           value: {{ .Values.NP_MONITORING_K8S_KUBELET_PORT | quote }}
         - name: NP_CORS_ORIGINS
           value: {{ .Values.NP_CORS_ORIGINS }}
+{{- if .Values.NP_MONITORING_NODE_LABEL_JOB }}
+        - name: NP_MONITORING_NODE_LABEL_JOB
+          value: {{ .Values.NP_MONITORING_NODE_LABEL_JOB }}
+{{- end }}
+{{- if .Values.NP_MONITORING_NODE_LABEL_NODE_POOL }}
+        - name: NP_MONITORING_NODE_LABEL_NODE_POOL
+          value: {{ .Values.NP_MONITORING_NODE_LABEL_NODE_POOL }}
+{{- end }}
 
 {{- if eq .Values.logs.persistence.type "aws" }}
         - name: NP_MONITORING_LOGS_STORAGE_TYPE
