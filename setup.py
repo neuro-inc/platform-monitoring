@@ -13,7 +13,7 @@ install_requires = (
     "platform-logging==0.3",
     "aiohttp-cors==0.7.0",
     "aiobotocore==1.1.2",
-    "urllib3>=1.20,<1.26",  # botocore requirements
+    "urllib3>=1.20,<1.27",  # botocore requirements
 )
 
 setup(
