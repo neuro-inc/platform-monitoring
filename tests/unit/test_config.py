@@ -105,6 +105,16 @@ def test_create(environ: Dict[str, Any]) -> None:
     )
 
 
+def test_create_with_kubernetes_labels(environ: Dict[str, Any]) -> None:
+    environ["NP_MONITORING_NODE_LABEL_JOB"] = "job"
+    environ["NP_MONITORING_NODE_LABEL_NODE_POOL"] = "node-pool"
+
+    config = EnvironConfigFactory(environ).create()
+
+    assert config.kube.job_label == "job"
+    assert config.kube.node_pool_label == "node-pool"
+
+
 def test_create_with_s3(environ: Dict[str, Any]) -> None:
     environ["NP_MONITORING_S3_REGION"] = "us-east-1"
     environ["NP_MONITORING_S3_ACCESS_KEY_ID"] = "access_key"

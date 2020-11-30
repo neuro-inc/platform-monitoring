@@ -14,7 +14,7 @@ from platform_config_client.models import ResourcePreset
 
 from platform_monitoring.config import DockerConfig
 from platform_monitoring.jobs_service import JobsService, NodeNotFoundException
-from platform_monitoring.kube_client import KubeClient, Node, Pod, PodPhase
+from platform_monitoring.kube_client import KubeClient, Node, Pod
 
 
 def create_node(node_pool_name: str, node_name: str) -> Node:
@@ -33,12 +33,14 @@ def create_node(node_pool_name: str, node_name: str) -> Node:
 
 def get_pods_factory(
     *pods: Pod,
-) -> Callable[[str, Sequence[PodPhase]], Awaitable[Sequence[Pod]]]:
+) -> Callable[[str, str], Awaitable[Sequence[Pod]]]:
     async def _get_pods(
-        label_selector: str = "", phases: Sequence[PodPhase] = ()
+        label_selector: str = "", field_selector: str = ""
     ) -> Sequence[Pod]:
         assert label_selector == "platform.neuromation.io/job"
-        assert phases == (PodPhase.PENDING, PodPhase.RUNNING)
+        assert field_selector == (
+            "status.phase!=Failed,status.phase!=Succeeded,status.phase!=Unknown"
+        )
         return (*pods,)
 
     return _get_pods

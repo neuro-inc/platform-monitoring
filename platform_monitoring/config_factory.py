@@ -134,6 +134,12 @@ class EnvironConfigFactory:
                 self._environ.get("NP_MONITORING_K8S_KUBELET_PORT")
                 or KubeConfig.kubelet_node_port
             ),
+            job_label=self._environ.get(
+                "NP_MONITORING_NODE_LABEL_JOB", KubeConfig.job_label
+            ),
+            node_pool_label=self._environ.get(
+                "NP_MONITORING_NODE_LABEL_NODE_POOL", KubeConfig.node_pool_label
+            ),
         )
 
     def _create_registry(self) -> RegistryConfig:
