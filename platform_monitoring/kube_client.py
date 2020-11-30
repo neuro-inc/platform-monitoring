@@ -419,7 +419,7 @@ class KubeClient:
             params["labelSelector"] = label_selector
         if field_selector:
             params["fieldSelector"] = field_selector
-        async with self._client.get(self._pods_url, params=params or None) as response:
+        async with self._client.get(self._pods_url, params=params) as response:
             await self._check_response_status(response)
             payload = await response.json()
             self._assert_resource_kind("PodList", payload)
