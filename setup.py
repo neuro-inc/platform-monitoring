@@ -7,7 +7,6 @@ install_requires = (
     "platform_config_client==20.11.26",
     "neuromation==20.12.7",
     "aioelasticsearch==0.7.0",
-    "elasticsearch==7.10.0",
     "aiodocker==0.19.1",
     "docker-image-py==0.1.10",
     "trafaret==2.1.0",
