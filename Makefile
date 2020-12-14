@@ -22,6 +22,7 @@ include k8s.mk
 setup:
 	@echo "Using extra pip index: $(PIP_EXTRA_INDEX_URL)"
 	pip install -r requirements/test.txt
+	pip install -e .
 	pre-commit install
 
 lint: format
@@ -45,7 +46,11 @@ test_integration_minikube: docker_build_tests
 	kubectl run --restart=Never --image-pull-policy=Never $$FLAGS --rm --image=platformmonitoringapi-tests:latest tests -- pytest -vv --log-cli-level=debug -s tests/integration/ -m minikube
 
 docker_build:
-	docker build -f Dockerfile.k8s -t $(IMAGE_NAME):latest --build-arg PIP_EXTRA_INDEX_URL .
+	python setup.py sdist
+	docker build -f Dockerfile.k8s \
+		--build-arg PIP_EXTRA_INDEX_URL \
+		--build-arg DIST_FILENAME=`python setup.py --fullname`.tar.gz \
+		-t $(IMAGE_NAME):latest .
 
 docker_build_tests:
 	@eval $$(minikube docker-env); \

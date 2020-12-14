@@ -1,18 +1,28 @@
-FROM python:3.7.7-stretch
-
-WORKDIR /neuromation
+FROM python:3.7.7-stretch AS installer
 
 ARG PIP_EXTRA_INDEX_URL
 
-# installing dependencies ONLY
-COPY setup.py ./
-RUN \
-    pip install -e . && \
-    pip uninstall -y platform-monitoring
+# Separate step for requirements to speed up docker builds
+COPY platform_monitoring.egg-info/requires.txt requires.txt
+RUN python -c 'from pkg_resources import Distribution, PathMetadata;\
+dist = Distribution(metadata=PathMetadata(".", "."));\
+print("\n".join(str(r) for r in dist.requires()));\
+' > requirements.txt
+RUN pip install --user -r requirements.txt
 
-# installing platform-monitoring
-COPY platform_monitoring platform_monitoring
-RUN pip install -e .
+ARG DIST_FILENAME
+
+# Install service itself
+COPY dist/${DIST_FILENAME} ${DIST_FILENAME}
+RUN pip install --user $DIST_FILENAME
+
+FROM python:3.7.7-stretch as service
+
+WORKDIR /app
+
+ENV PATH=/root/.local/bin:$PATH
+
+COPY --from=installer /root/.local/ /root/.local/
 
 ENV NP_MONITORING_API_PORT=8080
 EXPOSE $NP_MONITORING_API_PORT
