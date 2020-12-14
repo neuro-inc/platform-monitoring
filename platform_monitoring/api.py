@@ -11,6 +11,7 @@ import aiobotocore
 import aiohttp
 import aiohttp.web
 import aiohttp_cors
+import pkg_resources
 from aiobotocore.client import AioBaseClient
 from aiodocker.stream import Stream
 from aioelasticsearch import Elasticsearch
@@ -713,6 +714,13 @@ def _setup_cors(app: aiohttp.web.Application, config: CORSConfig) -> None:
         cors.add(route)
 
 
+package_version = pkg_resources.get_distribution("platform-monitoring").version
+
+
+async def add_version_to_header(request: Request, response: StreamResponse) -> None:
+    response.headers["X-Service-Version"] = f"platform-monitoring/{package_version}"
+
+
 async def create_app(config: Config) -> aiohttp.web.Application:
     app = aiohttp.web.Application(middlewares=[handle_exceptions])
     app["config"] = config
@@ -787,6 +795,9 @@ async def create_app(config: Config) -> aiohttp.web.Application:
     app.add_subapp("/api/v1", api_v1_app)
 
     _setup_cors(app, config.cors)
+
+    app.on_response_prepare.append(add_version_to_header)
+
     return app
 
 

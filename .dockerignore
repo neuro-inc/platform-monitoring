@@ -1,0 +1,9 @@
+*
+!dist
+!platform_monitoring.egg-info
+
+!Makefile
+!tests
+!requirements
+
+**/*.pyc

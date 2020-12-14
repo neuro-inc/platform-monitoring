@@ -379,6 +379,14 @@ class TestApi:
             assert text == "Pong"
 
     @pytest.mark.asyncio
+    async def test_ping_includes_version(
+        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
+    ) -> None:
+        async with client.get(monitoring_api.ping_url) as resp:
+            assert resp.status == HTTPOk.status_code
+            assert "platform-monitoring" in resp.headers["X-Service-Version"]
+
+    @pytest.mark.asyncio
     async def test_secured_ping(
         self,
         monitoring_api: MonitoringApiEndpoints,
