@@ -1,7 +1,9 @@
+import asyncio
 import io
 import json
 import logging
 import warnings
+import zlib
 from types import TracebackType
 from typing import (
     Any,
@@ -270,7 +272,7 @@ class S3LogReader(LogReader):
         self._buffer = LogBuffer()
         self._key_iterator: Iterator[str] = iter(())
         self._response_body: Optional[StreamingBody] = None
-        self._line_iterator: Optional[AsyncIterator[str]] = None
+        self._line_iterator: Optional[AsyncIterator[bytes]] = None
 
     def _get_prefix(self) -> str:
         return self._prefix_format.format(
@@ -331,7 +333,29 @@ class S3LogReader(LogReader):
         response = await self._s3_client.get_object(Bucket=self._bucket_name, Key=key)
         self._response_body = response["Body"]
         await self._response_body.__aenter__()
-        self._line_iterator = self._response_body.iter_lines()
+
+        if response["ContentType"] == "application/x-gzip":
+            self._line_iterator = self._iter_decompressed_lines(self._response_body)
+        else:
+            self._line_iterator = self._response_body.iter_lines()
+
+    @classmethod
+    async def _iter_decompressed_lines(
+        cls, body: StreamingBody
+    ) -> AsyncIterator[bytes]:
+        loop = asyncio.get_event_loop()
+        decompress_obj = zlib.decompressobj(wbits=16 + zlib.MAX_WBITS)
+        pending = b""
+        async for chunk in body.iter_chunks():
+            chunk_d = await loop.run_in_executor(
+                None, lambda: decompress_obj.decompress(chunk)
+            )
+            lines = (pending + chunk_d).splitlines(True)
+            for line in lines[:-1]:
+                yield line.splitlines()[0]
+            pending = lines[-1]
+        if pending:
+            yield pending.splitlines()[0]
 
     async def _end_read_file(
         self,
