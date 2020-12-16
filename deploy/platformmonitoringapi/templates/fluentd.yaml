@@ -54,7 +54,7 @@ metadata:
     component: fluentd
 spec:
   replicas: 1
-  serviceName: fluentd-headless
+  serviceName: fluentd
   selector:
     matchLabels:
       app: {{ include "platform-monitoring.name" . }}
