@@ -28,6 +28,23 @@ spec:
     release: {{ .Release.Name | quote }}
     component: fluentd
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fluentd-service
+  labels:
+{{ include "platform-monitoring.labels.standard" . | indent 4 }}
+    component: fluentd
+spec:
+  type: ClusterIP
+  ports:
+  - port: {{ .Values.fluentd.forwardPort }}
+    targetPort: {{ .Values.fluentd.forwardPort }}
+  selector:
+    app: {{ include "platform-monitoring.name" . }}
+    release: {{ .Release.Name | quote }}
+    component: fluentd
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -37,7 +54,7 @@ metadata:
     component: fluentd
 spec:
   replicas: 1
-  serviceName: fluentd
+  serviceName: fluentd-headless
   selector:
     matchLabels:
       app: {{ include "platform-monitoring.name" . }}
