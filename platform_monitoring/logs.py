@@ -4,6 +4,7 @@ import json
 import logging
 import warnings
 import zlib
+from collections import namedtuple
 from types import TracebackType
 from typing import (
     Any,
@@ -283,14 +284,18 @@ class S3LogReader(LogReader):
 
     async def __aenter__(self) -> "LogReader":
         paginator = self._s3_client.get_paginator("list_objects_v2")
-        keys: List[str] = []
+        Key = namedtuple("Key", ["value", "time_index"])
+        keys: List[Key] = []
         async for page in paginator.paginate(
             Bucket=self._bucket_name, Prefix=self._get_prefix()
         ):
             for obj in page.get("Contents", ()):
-                keys.append(obj["Key"])
-        keys.sort()
-        self._key_iterator = iter(keys)
+                s3_key = obj["Key"]
+                # get time and index components from s3 key
+                time_index = "_".join(s3_key.split("_")[-2:]).split(".")[0]
+                keys.append(Key(value=obj["Key"], time_index=time_index))
+        keys.sort(key=lambda k: k.time_index)  # order keys by time and index
+        self._key_iterator = iter(key.value for key in keys)
         return self
 
     async def __aexit__(self, *args: Any) -> None:
