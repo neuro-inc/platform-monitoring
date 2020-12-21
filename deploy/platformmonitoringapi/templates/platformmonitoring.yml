@@ -43,31 +43,24 @@ spec:
           - containerPort: 8080
             name: tcp-web
             protocol: TCP
-        resources:
-          requests:
-            cpu: {{ .Values.NP_MONITORING_REQUESTS_CPU }}
-            memory: {{ .Values.NP_MONITORING_REQUESTS_MEMORY }}
-          limits:
-            cpu: {{ .Values.NP_MONITORING_LIMITS_CPU }}
-            memory: {{ .Values.NP_MONITORING_LIMITS_MEMORY }}
+{{- if .Values.resources }}
+        resources: {{ toYaml .Values.resources | nindent 10 }}
+{{- end }}
         env:
         - name: NP_MONITORING_CLUSTER_NAME
           value: {{ .Values.NP_MONITORING_CLUSTER_NAME }}
         - name: NP_MONITORING_PLATFORM_API_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: platformservices-secret
-              key: compute_token
+{{- if .Values.platform.token }}
+{{ toYaml .Values.platform.token | indent 10 }}
+{{- end }}
         - name: NP_MONITORING_PLATFORM_AUTH_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: platformservices-secret
-              key: compute_token
+{{- if .Values.platform.token }}
+{{ toYaml .Values.platform.token | indent 10 }}
+{{- end }}
         - name: NP_MONITORING_PLATFORM_CONFIG_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: platformservices-secret
-              key: cluster_token
+{{- if .Values.platform.token }}
+{{ toYaml .Values.platform.token | indent 10 }}
+{{- end }}
         - name: NP_MONITORING_K8S_API_URL
           value: https://kubernetes.default:443
         - name: NP_MONITORING_K8S_AUTH_TYPE
@@ -250,7 +243,30 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-  - port: 8080
+  - name: http
+    port: 8080
     targetPort: tcp-web
   selector:
     service: platformmonitoringapi
+{{- if .Values.ingress }}
+---
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: platformmonitoringapi
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    traefik.frontend.rule.type: PathPrefix
+    external-dns.platform.neuromation.io: "true"
+spec:
+  rules:
+  {{- range .Values.ingress.hosts }}
+  - host: {{ . | quote }}
+    http:
+      paths:
+      - path: /api/v1/jobs
+        backend:
+          serviceName: platformmonitoringapi
+          servicePort: http
+  {{- end }}
+{{- end }}

@@ -21,6 +21,7 @@ include k8s.mk
 
 setup:
 	@echo "Using extra pip index: $(PIP_EXTRA_INDEX_URL)"
+	pip install -U pip
 	pip install -r requirements/test.txt
 	pip install -e .
 	pre-commit install
@@ -100,7 +101,13 @@ helm_install:
 	helm init --client-only
 
 helm_deploy:
-	helm -f deploy/platformmonitoringapi/values-$(HELM_ENV)-$(CLOUD_PROVIDER).yaml --set "IMAGE=$(CLOUD_IMAGE):$(IMAGE_TAG)" upgrade --install platformmonitoringapi deploy/platformmonitoringapi/ --namespace platform --wait --timeout 600
+	helm \
+		-f deploy/platformmonitoringapi/values-$(HELM_ENV).yaml \
+		-f deploy/platformmonitoringapi/values-$(HELM_ENV)-$(CLOUD_PROVIDER).yaml \
+		--set "IMAGE=$(CLOUD_IMAGE):$(IMAGE_TAG)" \
+		upgrade --install \
+		platformmonitoringapi deploy/platformmonitoringapi/ \
+		--namespace platform --wait --timeout 600
 
 artifactory_docker_login:
 	@docker login $(ARTIFACTORY_DOCKER_REPO) \
