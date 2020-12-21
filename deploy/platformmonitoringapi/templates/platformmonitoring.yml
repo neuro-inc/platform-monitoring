@@ -18,8 +18,11 @@ spec:
     metadata:
       labels:
         service: platformmonitoringapi
-{{- if .Values.monitoring.podAnnotations }}
       annotations:
+{{- if .Values.secrets }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+{{- end }}
+{{- if .Values.monitoring.podAnnotations }}
 {{ toYaml .Values.monitoring.podAnnotations | indent 8 }}
 {{- end }}
     spec:
