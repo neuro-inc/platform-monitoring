@@ -18,9 +18,7 @@ resources:
     cpu: "1"
     memory: "1Gi"
 
-ingress:
-  extraAnnotations: {}
-  hosts: []
+ingress: {}
 
 secrets: []
 
