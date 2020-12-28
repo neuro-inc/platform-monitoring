@@ -19,6 +19,7 @@ resources:
     memory: "1Gi"
 
 ingress:
+  extraAnnotations: {}
   hosts: []
 
 secrets: []
