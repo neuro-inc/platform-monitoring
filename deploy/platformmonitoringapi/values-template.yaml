@@ -1,8 +1,4 @@
 IMAGE: neuro-docker-local-public.jfrog.io/platformmonitoringapi:IMAGE_TAG
-NP_MONITORING_REQUESTS_CPU: "0.1"
-NP_MONITORING_LIMITS_CPU: "1"
-NP_MONITORING_REQUESTS_MEMORY: "50Mi"
-NP_MONITORING_LIMITS_MEMORY: "1Gi"
 NP_MONITORING_REPLICAS: "2"
 NP_MONITORING_PLATFORM_API_URL: http://platformapi:8080/api/v1
 NP_MONITORING_PLATFORM_AUTH_URL: http://platformauthapi:8080
@@ -10,6 +6,21 @@ NP_MONITORING_K8S_NS: default
 NP_MONITORING_REGISTRY_URL: https://
 DOCKER_LOGIN_ARTIFACTORY_SECRET_NAME: "artifactory-regcred"
 NP_MONITORING_K8S_KUBELET_PORT: ""
+
+platform:
+  token: {}
+
+resources:
+  requests:
+    cpu: "0.1"
+    memory: "50Mi"
+  limits:
+    cpu: "1"
+    memory: "1Gi"
+
+ingress: {}
+
+secrets: []
 
 monitoring:
   podAnnotations: {}

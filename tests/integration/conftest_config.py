@@ -28,6 +28,7 @@ def _cluster_payload() -> Dict[str, Any]:
             "host": {"mount_path": "/tmp"},
             "url": "http://platformapi/api/v1/storage",
         },
+        "blob_storage": {"url": "http://platformapi/api/v1/blob"},
         "registry": {
             "url": "http://localhost:5000",
             "email": "registry@neuromation.io",
