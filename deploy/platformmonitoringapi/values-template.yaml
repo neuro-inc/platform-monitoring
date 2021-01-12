@@ -36,13 +36,13 @@ nodeLabels:
 
 dockerEngine:
   image:
-    repository: "$NGINX_IMAGE_REPO" # nginx
+    repository: $DOCKER_SERVER/nginx # nginx
     tag: latest
   port: 2375
 
 fluentbit:
   image:
-    repository: "$FLUENT_BIT_IMAGE_REPO" # fluent/fluent-bit
+    repository: $DOCKER_SERVER/fluent/fluent-bit # fluent/fluent-bit
     tag: "1.3.7"
   resources:
     requests:
@@ -59,7 +59,7 @@ fluentbit:
 
 fluentd:
   image:
-    repository: "$FLUENTD_IMAGE_REPO" # bitnami/fluentd
+    repository: $DOCKER_SERVER/bitnami/fluentd # bitnami/fluentd
     tag: 1.10.4-debian-10-r2
   forwardPort: 24224
   podAnnotations: {}
@@ -87,7 +87,7 @@ fluentd:
 
 minio:
   image:
-    repository: "$MINIO_IMAGE_REPO" # minio/minio
+    repository: $DOCKER_SERVER/minio/minio # minio/minio
     tag: RELEASE.2020-03-05T01-04-19Z
   port: 9000
   resources:

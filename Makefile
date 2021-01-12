@@ -114,10 +114,7 @@ _helm_fetch:
 _helm_expand_vars:
 	export IMAGE_REPO=$(ARTIFACTORY_IMAGE); \
 	export IMAGE_TAG=$(TAG); \
-	export NGINX_IMAGE_REPO=$(ARTIFACTORY_DOCKER_REPO)/nginx; \
-	export FLUENTD_IMAGE_REPO=$(ARTIFACTORY_DOCKER_REPO)/bitnami/fluentd; \
-	export FLUENT_BIT_IMAGE_REPO=$(ARTIFACTORY_DOCKER_REPO)/fluent/fluent-bit; \
-	export MINIO_IMAGE_REPO=$(ARTIFACTORY_DOCKER_REPO)/minio/minio; \
+	export DOCKER_SERVER=$(ARTIFACTORY_DOCKER_REPO); \
 	cat temp_deploy/$(HELM_CHART)/values-template.yaml | envsubst > temp_deploy/$(HELM_CHART)/values.yaml
 
 helm_deploy: _helm_fetch _helm_expand_vars
