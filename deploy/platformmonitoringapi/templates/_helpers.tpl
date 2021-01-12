@@ -54,13 +54,3 @@ kube.var.log.containers.{pod_name}_{namespace_name}_{container_name}
 {{- define "platform-monitoring.logs.storage.key" -}}
 platform-monitoring-logs-storage-key
 {{- end -}}
-
-{{- define "platform-monitoring.imagePullSecrets" -}}
-{{- $imagePullSecrets := . | default list | uniq -}}
-{{- if $imagePullSecrets }}
-imagePullSecrets:
-{{- range $imagePullSecrets }}
-- name: {{ . | quote }}
-{{- end -}}
-{{- end -}}
-{{- end -}}

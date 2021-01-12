@@ -8,6 +8,8 @@ image:
   repository: "$IMAGE_REPO"
   tag: "$IMAGE_TAG"
 
+imagePullSecrets: []
+
 replicas: 2
 
 platform:

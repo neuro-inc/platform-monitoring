@@ -81,4 +81,6 @@ spec:
       tolerations:
 {{ toYaml .Values.fluentbit.tolerations | indent 8 }}
 {{- end }}
-{{- include "platform-monitoring.imagePullSecrets" .Values.fluentbit.image.pullSecrets | indent 6 }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml .Values.imagePullSecrets | nindent 6 }}
+      {{- end }}

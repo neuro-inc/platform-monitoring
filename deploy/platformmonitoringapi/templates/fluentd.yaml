@@ -200,12 +200,8 @@ spec:
         emptyDir: {}
 {{- end }}
 
-{{- $imagePullSecrets := .Values.fluentd.image.pullSecrets | default list }}
-{{- if has .Values.logs.persistence.type (list "aws" "es") }}
-{{- include "platform-monitoring.imagePullSecrets" $imagePullSecrets| toYaml | indent 6 }}
-{{- else }}
-{{- $imagePullSecrets := concat $imagePullSecrets (.Values.minio.image.pullSecrets | default list) }}
-{{- include "platform-monitoring.imagePullSecrets" $imagePullSecrets | indent 6 }}
+{{- if .Values.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml .Values.imagePullSecrets | nindent 6 }}
 {{- end }}
 
 {{- if .Values.fluentd.persistence.enabled }}
