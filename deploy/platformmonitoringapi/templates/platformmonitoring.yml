@@ -5,7 +5,7 @@ metadata:
   labels:
 {{ include "platform-monitoring.labels.standard" . | indent 4 }}
 spec:
-  replicas: {{ .Values.NP_MONITORING_REPLICAS }}
+  replicas: {{ .Values.replicas }}
   selector:
     matchLabels:
       service: platformmonitoringapi
@@ -22,14 +22,13 @@ spec:
 {{- if .Values.secrets }}
         checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
 {{- end }}
-{{- if .Values.monitoring.podAnnotations }}
-{{ toYaml .Values.monitoring.podAnnotations | indent 8 }}
+{{- if .Values.podAnnotations }}
+{{ toYaml .Values.podAnnotations | indent 8 }}
 {{- end }}
     spec:
       containers:
       - name: platformmonitoringapi
-        image: {{ .Values.IMAGE }}
-        imagePullPolicy: Always
+        image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
         livenessProbe:
           httpGet:
             path: /api/v1/ping
@@ -86,13 +85,13 @@ spec:
           value: {{ .Values.NP_MONITORING_K8S_KUBELET_PORT | quote }}
         - name: NP_CORS_ORIGINS
           value: {{ .Values.NP_CORS_ORIGINS }}
-{{- if .Values.NP_MONITORING_NODE_LABEL_JOB }}
+{{- if .Values.nodeLabels.job }}
         - name: NP_MONITORING_NODE_LABEL_JOB
-          value: {{ .Values.NP_MONITORING_NODE_LABEL_JOB }}
+          value: {{ .Values.nodeLabels.job }}
 {{- end }}
-{{- if .Values.NP_MONITORING_NODE_LABEL_NODE_POOL }}
+{{- if .Values.nodeLabels.nodePool }}
         - name: NP_MONITORING_NODE_LABEL_NODE_POOL
-          value: {{ .Values.NP_MONITORING_NODE_LABEL_NODE_POOL }}
+          value: {{ .Values.nodeLabels.nodePool }}
 {{- end }}
 
 {{- if eq .Values.logs.persistence.type "aws" }}
@@ -133,7 +132,7 @@ spec:
           value: {{ include "platform-monitoring.logs.storage.s3.keyPrefixFormat" . | quote }}
 
       - name: minio
-        image: {{ .Values.minio.image | quote }}
+        image: {{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}
         args:
         - gateway
         - gcs
@@ -180,7 +179,7 @@ spec:
           value: {{ include "platform-monitoring.logs.storage.s3.keyPrefixFormat" . | quote }}
 
       - name: minio
-        image: {{ .Values.minio.image | quote }}
+        image: {{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}
         args:
         - gateway
         - azure
@@ -231,10 +230,13 @@ spec:
 {{- end }}
 {{- end }}
 
-      {{- if .Values.DOCKER_LOGIN_ARTIFACTORY_SECRET_NAME }}
-      imagePullSecrets:
-        - name: {{ .Values.DOCKER_LOGIN_ARTIFACTORY_SECRET_NAME }}
-      {{- end }}
+{{- $imagePullSecrets := .Values.image.pullSecrets | default list }}
+{{- if has .Values.logs.persistence.type (list "aws" "es") }}
+{{- include "platform-monitoring.imagePullSecrets" $imagePullSecrets | indent 6 }}
+{{- else }}
+{{- $imagePullSecrets := concat $imagePullSecrets (.Values.minio.image.pullSecrets | default list) }}
+{{- include "platform-monitoring.imagePullSecrets" $imagePullSecrets | indent 6 }}
+{{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -251,7 +253,7 @@ spec:
     targetPort: tcp-web
   selector:
     service: platformmonitoringapi
-{{- if .Values.ingress }}
+{{- if .Values.ingress.enabled }}
 ---
 apiVersion: networking.k8s.io/v1beta1
 kind: Ingress

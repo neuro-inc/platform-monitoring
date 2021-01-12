@@ -78,7 +78,7 @@ spec:
         fsGroup: 1001
       containers:
       - name: fluentd
-        image: docker.io/bitnami/fluentd:1.10.4-debian-10-r2
+        image: {{ .Values.fluentd.image.repository }}:{{ .Values.fluentd.image.tag }}
         volumeMounts:
         - name: config
           mountPath: /opt/bitnami/fluentd/conf
@@ -121,7 +121,7 @@ spec:
         - name: S3_SECRET_ACCESS_KEY
           value: minio_secret_key
       - name: minio
-        image: {{ .Values.minio.image | quote }}
+        image: {{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}
         args:
         - gateway
         - gcs
@@ -153,7 +153,7 @@ spec:
               name: {{ include "platform-monitoring.logs.storage.key" . }}
               key: account_key
       - name: minio
-        image: {{ .Values.minio.image | quote }}
+        image: {{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}
         args:
         - gateway
         - azure
@@ -199,6 +199,15 @@ spec:
       - name: fluentd-buffer
         emptyDir: {}
 {{- end }}
+
+{{- $imagePullSecrets := .Values.fluentd.image.pullSecrets | default list }}
+{{- if has .Values.logs.persistence.type (list "aws" "es") }}
+{{- include "platform-monitoring.imagePullSecrets" $imagePullSecrets| toYaml | indent 6 }}
+{{- else }}
+{{- $imagePullSecrets := concat $imagePullSecrets (.Values.minio.image.pullSecrets | default list) }}
+{{- include "platform-monitoring.imagePullSecrets" $imagePullSecrets | indent 6 }}
+{{- end }}
+
 {{- if .Values.fluentd.persistence.enabled }}
   volumeClaimTemplates:
     - metadata:

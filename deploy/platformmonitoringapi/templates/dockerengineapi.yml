@@ -11,8 +11,16 @@ spec:
       labels:
         service: dockerengineapi
       annotations:
-        checksum/config: '{{ include (print $.Template.BasePath "/dockerengineapi_configmap.yml") . | sha256sum }}'
+        checksum/config: {{ include (print $.Template.BasePath "/dockerengineapi_configmap.yml") . | sha256sum | quote }}
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: {{ .Values.nodeLabels.job | quote }}
+                operator: Exists
+      hostNetwork: true
       tolerations:
       - effect: NoExecute
         operator: Exists
@@ -20,10 +28,9 @@ spec:
         operator: Exists
       containers:
       - name: dockerengineapi
-        image: nginx:latest
+        image: {{ .Values.dockerEngine.image.repository }}:{{ .Values.dockerEngine.image.tag }}
         ports:
-        - containerPort: 2375
-          hostPort: 2375
+        - containerPort: {{ .Values.dockerEngine.port }}
         volumeMounts:
         - name: nginx-conf
           subPath: nginx.conf
@@ -37,3 +44,4 @@ spec:
       - name: docker-sock
         hostPath:
           path: /var/run/docker.sock
+{{- include "platform-monitoring.imagePullSecrets" .Values.dockerEngine.image.pullSecrets | indent 6 }}

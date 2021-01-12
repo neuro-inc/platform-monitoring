@@ -19,7 +19,7 @@ data:
         }
         access_log /dev/stdout;
         server {
-            listen 2375;
+            listen {{ .Values.dockerEngine.port }};
             location / {
                 proxy_pass http://unix:/var/run/docker.sock:/;
                 proxy_buffering off;

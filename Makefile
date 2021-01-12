@@ -1,12 +1,11 @@
 IMAGE_NAME ?= platformmonitoringapi
-IMAGE_TAG ?= $(GITHUB_SHA)
-IMAGE ?= $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/$(IMAGE_NAME)
+TAG ?= latest
 
 CLOUD_IMAGE_gke   ?= $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/$(IMAGE_NAME)
 CLOUD_IMAGE_aws   ?= $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com/$(IMAGE_NAME)
 CLOUD_IMAGE_azure ?= $(AZURE_ACR_NAME).azurecr.io/$(IMAGE_NAME)
 
-CLOUD_IMAGE  = ${CLOUD_IMAGE_${CLOUD_PROVIDER}}
+CLOUD_IMAGE = ${CLOUD_IMAGE_${CLOUD_PROVIDER}}
 
 PLATFORMAPI_IMAGE = $(shell cat PLATFORMAPI_IMAGE)
 PLATFORMAUTHAPI_IMAGE = $(shell cat PLATFORMAUTHAPI_IMAGE)
@@ -14,6 +13,11 @@ PLATFORMCONFIG_IMAGE = $(shell cat PLATFORMCONFIG_IMAGE)
 
 ARTIFACTORY_DOCKER_REPO ?= neuro-docker-local-public.jfrog.io
 ARTIFACTORY_HELM_REPO ?= https://neuro.jfrog.io/artifactory/helm-local-public
+
+ARTIFACTORY_IMAGE = $(ARTIFACTORY_DOCKER_REPO)/$(IMAGE_NAME)
+
+HELM_ENV ?= dev
+HELM_CHART = platformmonitoringapi
 
 export PIP_EXTRA_INDEX_URL ?= $(shell python pip_extra_index_url.py)
 
@@ -87,66 +91,45 @@ docker_pull_test_images:
 gcr_login:
 	@echo $(GKE_ACCT_AUTH) | base64 --decode | docker login -u _json_key --password-stdin https://gcr.io
 
-ecr_login:
-	$$(aws ecr get-login --no-include-email --region $(AWS_REGION))
-
 docker_push: docker_build
-	docker tag $(IMAGE_NAME):latest $(CLOUD_IMAGE):latest
-	docker tag $(IMAGE_NAME):latest $(CLOUD_IMAGE):$(IMAGE_TAG)
-	docker push $(CLOUD_IMAGE):latest
-	docker push $(CLOUD_IMAGE):$(IMAGE_TAG)
+	docker tag $(IMAGE_NAME):latest $(CLOUD_IMAGE):$(TAG)
+	docker push $(CLOUD_IMAGE):$(TAG)
+
+artifactory_docker_push: docker_build
+	docker tag $(IMAGE_NAME):latest $(ARTIFACTORY_IMAGE):$(TAG)
+	docker push $(ARTIFACTORY_IMAGE):$(TAG)
 
 helm_install:
 	curl https://raw.githubusercontent.com/kubernetes/helm/master/scripts/get | bash -s -- -v $(HELM_VERSION)
 	helm init --client-only
-
-helm_deploy:
-	helm \
-		-f deploy/platformmonitoringapi/values-$(HELM_ENV).yaml \
-		-f deploy/platformmonitoringapi/values-$(HELM_ENV)-$(CLOUD_PROVIDER).yaml \
-		--set "IMAGE=$(CLOUD_IMAGE):$(IMAGE_TAG)" \
-		upgrade --install \
-		platformmonitoringapi deploy/platformmonitoringapi/ \
-		--namespace platform --wait --timeout 600
-
-artifactory_docker_login:
-	@docker login $(ARTIFACTORY_DOCKER_REPO) \
-		--username=$(ARTIFACTORY_USERNAME) \
-		--password=$(ARTIFACTORY_PASSWORD)
-
-artifactory_docker_push: docker_build
-ifeq ($(ARTIFACTORY_TAG),)
-	$(error ARTIFACTORY_TAG is not set)
-endif
-	docker tag $(IMAGE_NAME):latest $(ARTIFACTORY_DOCKER_REPO)/$(IMAGE_NAME):$(ARTIFACTORY_TAG)
-	docker push $(ARTIFACTORY_DOCKER_REPO)/$(IMAGE_NAME):$(ARTIFACTORY_TAG)
-
-artifactory_helm_plugin_install:
 	helm plugin install https://github.com/belitre/helm-push-artifactory-plugin
 
-artifactory_helm_repo_add:
-ifeq ($(ARTIFACTORY_USERNAME),)
-	$(error ARTIFACTORY_USERNAME is not set)
-endif
-ifeq ($(ARTIFACTORY_PASSWORD),)
-	$(error ARTIFACTORY_PASSWORD is not set)
-endif
-	helm init --client-only
-	helm repo add neuro-local-public \
-		$(ARTIFACTORY_HELM_REPO) \
-		--username ${ARTIFACTORY_USERNAME} \
-		--password ${ARTIFACTORY_PASSWORD}
+_helm_fetch:
+	rm -rf temp_deploy/$(HELM_CHART)
+	mkdir -p temp_deploy/$(HELM_CHART)
+	cp -Rf deploy/$(HELM_CHART) temp_deploy/
+	find temp_deploy/$(HELM_CHART) -type f -name 'values*' -delete
+	cp deploy/$(HELM_CHART)/values-template.yaml temp_deploy/$(HELM_CHART)/
 
-artifactory_helm_push:
-ifeq ($(ARTIFACTORY_TAG),)
-	$(error ARTIFACTORY_TAG is not set)
-endif
-	mkdir -p temp_deploy/platformmonitoringapi
-	cp -Rf deploy/platformmonitoringapi/. temp_deploy/platformmonitoringapi
-	cp temp_deploy/platformmonitoringapi/values-template.yaml temp_deploy/platformmonitoringapi/values.yaml
-	sed -i "s/IMAGE_TAG/$(ARTIFACTORY_TAG)/g" temp_deploy/platformmonitoringapi/values.yaml
-	find temp_deploy/platformmonitoringapi -type f -name 'values-*' -delete
-	helm package --app-version=$(ARTIFACTORY_TAG) --version=$(ARTIFACTORY_TAG) temp_deploy/platformmonitoringapi/
-	helm push-artifactory $(IMAGE_NAME)-$(ARTIFACTORY_TAG).tgz neuro-local-public
-	rm -rf temp_deploy
-	rm $(IMAGE_NAME)-$(ARTIFACTORY_TAG).tgz
+_helm_expand_vars:
+	export IMAGE_REPO=$(ARTIFACTORY_IMAGE); \
+	export IMAGE_TAG=$(TAG); \
+	export NGINX_IMAGE_REPO=$(ARTIFACTORY_DOCKER_REPO)/nginx; \
+	export FLUENTD_IMAGE_REPO=$(ARTIFACTORY_DOCKER_REPO)/bitnami/fluentd; \
+	export FLUENT_BIT_IMAGE_REPO=$(ARTIFACTORY_DOCKER_REPO)/fluent/fluent-bit; \
+	export MINIO_IMAGE_REPO=$(ARTIFACTORY_DOCKER_REPO)/minio/minio; \
+	cat temp_deploy/$(HELM_CHART)/values-template.yaml | envsubst > temp_deploy/$(HELM_CHART)/values.yaml
+
+helm_deploy: _helm_fetch _helm_expand_vars
+	helm upgrade platformmonitoringapi temp_deploy/$(HELM_CHART) \
+		--namespace platform \
+		-f deploy/$(HELM_CHART)/values-$(HELM_ENV)-$(CLOUD_PROVIDER).yaml \
+		--set "image.repository=$(CLOUD_IMAGE)" \
+		--install --wait --timeout 600
+
+artifactory_helm_push: _helm_fetch _helm_expand_vars
+	helm package --app-version=$(TAG) --version=$(TAG) temp_deploy/$(HELM_CHART)
+	helm push-artifactory $(HELM_CHART)-$(TAG).tgz $(ARTIFACTORY_HELM_REPO) \
+		--username $(ARTIFACTORY_USERNAME) \
+		--password $(ARTIFACTORY_PASSWORD)
+	rm $(HELM_CHART)-$(TAG).tgz
