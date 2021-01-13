@@ -184,7 +184,7 @@ jobs:
       with:
         python-version: 3.7.7
     - name: Login to Artifactory docker registry
-      uses: docker/docker-login@v1
+      uses: docker/login-actiong@v1
       with:
         registry: ${{ secrets.ARTIFACTORY_DOCKER_REPO }}
         username: ${{ secrets.ARTIFACTORY_USERNAME }}
