@@ -109,13 +109,12 @@ _helm_fetch:
 	mkdir -p temp_deploy/$(HELM_CHART)
 	cp -Rf deploy/$(HELM_CHART) temp_deploy/
 	find temp_deploy/$(HELM_CHART) -type f -name 'values*' -delete
-	cp deploy/$(HELM_CHART)/values-template.yaml temp_deploy/$(HELM_CHART)/
 
 _helm_expand_vars:
 	export IMAGE_REPO=$(ARTIFACTORY_IMAGE); \
 	export IMAGE_TAG=$(TAG); \
 	export DOCKER_SERVER=$(ARTIFACTORY_DOCKER_REPO); \
-	cat temp_deploy/$(HELM_CHART)/values-template.yaml | envsubst > temp_deploy/$(HELM_CHART)/values.yaml
+	cat deploy/$(HELM_CHART)/values-template.yaml | envsubst > temp_deploy/$(HELM_CHART)/values.yaml
 
 helm_deploy: _helm_fetch _helm_expand_vars
 	helm upgrade platformmonitoringapi temp_deploy/$(HELM_CHART) \
