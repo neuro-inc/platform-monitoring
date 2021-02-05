@@ -108,8 +108,8 @@ def cluster() -> Cluster:
                     name="cpu-p",
                     cpu=0.2,
                     memory_mb=100,
-                    is_preemptible=True,
-                    is_preemptible_node_required=True,
+                    scheduler_enabled=True,
+                    preemptible_node=True,
                 ),
                 ResourcePreset(
                     name="gpu",
