@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any, AsyncIterator, Callable, Dict
 
 import aiohttp
@@ -6,7 +7,8 @@ from aiohttp.web_exceptions import HTTPCreated, HTTPNoContent
 from platform_config_client import ConfigClient
 from yarl import URL
 
-from platform_monitoring.config import PlatformConfig
+from platform_monitoring.api import create_platform_api_client
+from platform_monitoring.config import PlatformApiConfig, PlatformConfig
 from tests.integration.conftest import get_service_url
 
 
@@ -91,6 +93,7 @@ async def platform_config_client(
 @pytest.fixture
 async def _cluster(
     client: aiohttp.ClientSession,
+    platform_api_config: PlatformApiConfig,
     platform_config_url: URL,
     cluster_token: str,
     _cluster_payload: Dict[str, Any],
@@ -103,6 +106,7 @@ async def _cluster(
             json=_cluster_payload,
         )
         assert response.status == HTTPCreated.status_code, await response.text()
+        await asyncio.wait_for(_wait_for_platform_api_config(platform_api_config), 30)
         yield cluster_name
     finally:
         response = await client.delete(
@@ -111,3 +115,15 @@ async def _cluster(
         )
         response_text = await response.text()
         assert response.status == HTTPNoContent.status_code, response_text
+
+
+async def _wait_for_platform_api_config(
+    platform_api_config: PlatformApiConfig, sleep_s: float = 0.1
+) -> None:
+    while True:
+        try:
+            async with create_platform_api_client(platform_api_config):
+                return
+        except Exception:
+            pass
+        await asyncio.sleep(sleep_s)
