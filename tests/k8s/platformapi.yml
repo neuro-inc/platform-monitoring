@@ -142,8 +142,12 @@ spec:
           value: not-important-NP_K8S_SSH_AUTH_INGRESS_DOMAIN_NAME
         - name: NP_DB_REDIS_URI
           value: redis://platformredis:6379/0
-        - name: NP_OAUTH_BASE_URL
-          value: not-important-NP_OAUTH_BASE_URL
+        - name: NP_OAUTH_AUTH_URL
+          value: not-important-NP_OAUTH_AUTH_URL
+        - name: NP_OAUTH_TOKEN_URL
+          value: not-important-NP_OAUTH_TOKEN_URL
+        - name: NP_OAUTH_LOGOUT_URL
+          value: not-important-NP_OAUTH_LOGOUT_URL
         - name: NP_OAUTH_CLIENT_ID
           value: not-important-NP_OAUTH_CLIENT_ID
         - name: NP_OAUTH_AUDIENCE

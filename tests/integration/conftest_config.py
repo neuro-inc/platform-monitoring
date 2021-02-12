@@ -36,9 +36,7 @@ def _cluster_payload() -> Dict[str, Any]:
         "orchestrator": {
             "kubernetes": {
                 "url": "http://localhost:8001",
-                "ca_data": "certificate",
                 "auth_type": "none",
-                "token": None,
                 "namespace": "default",
                 "node_label_gpu": "cloud.google.com/gke-accelerator",
                 "node_label_preemptible": "cloud.google.com/gke-preemptible",
