@@ -95,6 +95,9 @@ docker_push: docker_build
 	docker tag $(IMAGE_NAME):latest $(CLOUD_IMAGE):$(TAG)
 	docker push $(CLOUD_IMAGE):$(TAG)
 
+	docker tag $(IMAGE_NAME):latest $(CLOUD_IMAGE):latest
+	docker push $(CLOUD_IMAGE):latest
+
 artifactory_docker_push: docker_build
 	docker tag $(IMAGE_NAME):latest $(ARTIFACTORY_IMAGE):$(TAG)
 	docker push $(ARTIFACTORY_IMAGE):$(TAG)
