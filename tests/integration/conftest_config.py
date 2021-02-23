@@ -58,7 +58,14 @@ def _cluster_payload() -> Dict[str, Any]:
                     "available_memory_mb": 1024,
                 }
             ],
-            "resource_presets": [{"name": "cpu-small", "cpu": 0.1, "memory_mb": 100}],
+            "resource_presets": [
+                {
+                    "name": "cpu-small",
+                    "credits_per_hour": "0.0",
+                    "cpu": 0.1,
+                    "memory_mb": 100,
+                }
+            ],
         },
         "monitoring": {"url": "http://platformapi/api/v1/jobs"},
         "secrets": {"url": "http://platformapi/api/v1/secrets"},
