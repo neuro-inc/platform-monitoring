@@ -5,7 +5,7 @@ NP_MONITORING_PLATFORM_CONFIG_URL: http://platformconfig:8080
 NP_MONITORING_K8S_NS: platform-jobs
 NP_MONITORING_REGISTRY_URL: https://registry-dev.neu.ro
 NP_MONITORING_K8S_KUBELET_PORT: ""
-NP_CORS_ORIGINS: http://localhost:8000,https://master--neuro-web.netlify.com,https://master--neuro-web.netlify.app,https://master--megafon-neuro.netlify.app
+NP_CORS_ORIGINS: http://localhost:8000,https://master--neuro-web.netlify.app,https://master--megafon-web.netlify.app,https://master--mts-web.netlify.app,https://master--minzdrav-web.netlify.app
 
 platform:
   token:
