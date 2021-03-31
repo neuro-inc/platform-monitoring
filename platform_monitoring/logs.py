@@ -285,19 +285,18 @@ class S3LogReader(LogReader):
 
     async def __aenter__(self) -> "LogReader":
         paginator = self._s3_client.get_paginator("list_objects_v2")
-        Key = namedtuple("Key", ["value", "time_index"])
+        Key = namedtuple("Key", ["value", "time_slice"])
         keys: List[Key] = []
-        paginate = paginator.paginate(
+        async for page in paginator.paginate(
             Bucket=self._bucket_name, Prefix=self._get_prefix()
-        )
-        async for page in paginate:
+        ):
             for obj in page.get("Contents", ()):
                 s3_key = obj["Key"]
-                # get time and index components from s3 key
-                time_component = basename(s3_key).split(".")[0].split("_")
-                time_index = (int(time_component[0]), int(time_component[1]))
-                keys.append(Key(value=s3_key, time_index=time_index))
-        keys.sort(key=lambda k: k.time_index)  # order keys by time and index
+                # get time slice from s3 key
+                time_slice_str = basename(s3_key).split(".")[0].split("_")
+                time_slice = (int(time_slice_str[0]), int(time_slice_str[1]))
+                keys.append(Key(value=s3_key, time_slice=time_slice))
+        keys.sort(key=lambda k: k.time_slice)  # order keys by time slice
         self._key_iterator = iter(key.value for key in keys)
         return self
 
