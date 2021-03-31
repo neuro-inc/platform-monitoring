@@ -43,13 +43,6 @@ from platform_monitoring.config import (
 logger = logging.getLogger(__name__)
 
 
-pytest_plugins = [
-    "tests.integration.conftest_auth",
-    "tests.integration.conftest_config",
-    "tests.integration.conftest_kube",
-]
-
-
 @pytest.fixture(scope="session")
 def in_docker() -> bool:
     return os.path.isfile("/.dockerenv")

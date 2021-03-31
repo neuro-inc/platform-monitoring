@@ -5,6 +5,7 @@ import logging
 import warnings
 import zlib
 from collections import namedtuple
+from os.path import basename
 from types import TracebackType
 from typing import (
     Any,
@@ -286,14 +287,16 @@ class S3LogReader(LogReader):
         paginator = self._s3_client.get_paginator("list_objects_v2")
         Key = namedtuple("Key", ["value", "time_index"])
         keys: List[Key] = []
-        async for page in paginator.paginate(
+        paginate = paginator.paginate(
             Bucket=self._bucket_name, Prefix=self._get_prefix()
-        ):
+        )
+        async for page in paginate:
             for obj in page.get("Contents", ()):
                 s3_key = obj["Key"]
                 # get time and index components from s3 key
-                time_index = "_".join(s3_key.split("_")[-2:]).split(".")[0]
-                keys.append(Key(value=obj["Key"], time_index=time_index))
+                time_component = basename(s3_key).split(".")[0].split("_")
+                time_index = (int(time_component[0]), int(time_component[1]))
+                keys.append(Key(value=s3_key, time_index=time_index))
         keys.sort(key=lambda k: k.time_index)  # order keys by time and index
         self._key_iterator = iter(key.value for key in keys)
         return self
