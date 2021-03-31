@@ -42,7 +42,9 @@ spec:
           value: "8080"
         - name: NP_PLATFORM_AUTH_URL
           value: http://platformauthapi:8080
-        - name: NP_PLATFORM_AUTH_TOKEN
+        - name: NP_PLATFORM_ADMIN_URL
+          value: http://platformadmin:8080
+        - name: NP_PLATFORM_CONFIG_TOKEN
           value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImNsdXN0ZXIifQ.kZG6EyaHMa2gNzrgKQlwVnZ0OZ5mruFZ0xVAbntm-dU
         - name: NP_PUBLIC_NEURO_REGISTRY_URL
           value: not-important
@@ -52,8 +54,6 @@ spec:
           value: not-important
         - name: NP_PLATFORM_API_URL
           value: http://platformapi:8080
-        - name: NP_PLATFORM_API_TOKEN
-          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImNsdXN0ZXIifQ.kZG6EyaHMa2gNzrgKQlwVnZ0OZ5mruFZ0xVAbntm-dU
         - name: NP_AWS_REGION
           value: not-important
         - name: NP_AWS_ACCESS_KEY_ID
