@@ -1183,6 +1183,57 @@ class TestAttachApi:
         assert result["history"]["exit_code"] == 1, result
 
     @pytest.mark.asyncio
+    async def test_reattach_just_after_exit(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        wait_for_job_docker_client: None,
+        job_submit: Dict[str, Any],
+    ) -> None:
+        command = "sh"
+        job_submit["container"]["command"] = command
+        job_submit["container"]["tty"] = True
+        headers = jobs_client.headers
+
+        url = platform_api.jobs_base_url
+        async with client.post(url, headers=headers, json=job_submit) as response:
+            assert response.status == 202
+            result = await response.json()
+            assert result["status"] in ["pending"]
+            job_id = result["id"]
+
+        await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
+
+        url1 = monitoring_api.generate_resize_url(job_id=job_id, w=70, h=20)
+
+        async with client.post(url1, headers=headers) as response:
+            assert response.status == 200
+
+        url2 = monitoring_api.generate_attach_url(
+            job_id=job_id, stdin=True, stdout=True, stderr=True, logs=True
+        )
+
+        async with client.ws_connect(url2, method="POST", headers=headers) as ws:
+            # We can't be sure if we connect before inital prompt or after
+            try:
+                await asyncio.wait_for(ws.receive_bytes(), timeout=0.2)
+            except asyncio.TimeoutError:
+                pass
+
+            await ws.send_bytes(b"\n")
+            assert await expect_prompt(ws) == b"\r\n# "
+            await ws.send_bytes(b"exit 1\n")
+            assert await expect_prompt(ws) == b"exit 1\r\n"
+
+        with pytest.raises(WSServerHandshakeError):
+            async with client.ws_connect(url2, method="POST", headers=headers):
+                pass
+
+        await jobs_client.long_polling_by_job_id(job_id, status="failed")
+
+    @pytest.mark.asyncio
     async def test_attach_nontty_shared_by_name(
         self,
         platform_api: PlatformApiEndpoints,

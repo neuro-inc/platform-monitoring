@@ -123,6 +123,19 @@ class JobsService:
 
         async with self._get_docker_client(pod) as docker:
             container = docker.containers.container(cont_id)
+            # If container is dead, we should close the connection
+            # Unfortunately, if it died recently, the docker API
+            # will not update immediately, so we have to do some re-checks
+            # here. This adds 1 second delay (configurable below):
+            checks = 2
+            while checks > 0:
+                data = await container.show()
+                if not data["State"]["Running"]:
+                    raise JobException(f"Job '{job.id}' is not running.")
+                checks -= 1
+                if checks > 0:
+                    await asyncio.sleep(0.5)
+
             async with container.attach(
                 stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
             ) as stream:
