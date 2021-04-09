@@ -347,11 +347,11 @@ class MonitoringApiHandler:
         job = await self._resolve_job(request, "write")
 
         response = WebSocketResponse()
-        await response.prepare(request)
 
         async with self._jobs_service.attach(
             job, stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
         ) as stream:
+            await response.prepare(request)
             transfer = Transfer(response, stream, stdin, stdout or stderr)
             await transfer.transfer()
 
@@ -545,7 +545,7 @@ class Transfer:
                 aiohttp.WSMsgType.CLOSED,
             ):
                 self._closing = True
-                self._stream.close()
+                await self._stream.close()
             elif msg.type == aiohttp.WSMsgType.ERROR:
                 exc = self._ws.exception()
                 logger.error(
@@ -571,6 +571,9 @@ async def handle_exceptions(
     try:
         return await handler(request)
     except ValueError as e:
+        payload = {"error": str(e)}
+        return json_response(payload, status=HTTPBadRequest.status_code)
+    except JobException as e:
         payload = {"error": str(e)}
         return json_response(payload, status=HTTPBadRequest.status_code)
     except aiohttp.web.HTTPException:

@@ -107,6 +107,13 @@ async def _cluster(
 ) -> AsyncIterator[str]:
     cluster_name = _cluster_payload["name"]
     try:
+        await client.delete(
+            platform_config_url / "api/v1/clusters" / cluster_name,
+            headers={"Authorization": f"Bearer {cluster_token}"},
+        )
+    except Exception:
+        pass
+    try:
         response = await client.post(
             platform_config_url / "api/v1/clusters",
             headers={"Authorization": f"Bearer {cluster_token}"},
