@@ -78,6 +78,7 @@ def cluster() -> Cluster:
         name="default",
         orchestrator=OrchestratorConfig(
             job_hostname_template="",
+            job_internal_hostname_template="",
             job_fallback_hostname="",
             job_schedule_timeout_s=1,
             job_schedule_scale_up_timeout_s=1,
@@ -100,12 +101,14 @@ def cluster() -> Cluster:
             resource_presets=[
                 ResourcePreset(
                     name="cpu",
+                    credits_per_hour=10,
                     cpu=0.2,
                     memory_mb=100,
                     resource_affinity=["minikube-cpu"],
                 ),
                 ResourcePreset(
                     name="cpu-p",
+                    credits_per_hour=10,
                     cpu=0.2,
                     memory_mb=100,
                     scheduler_enabled=True,
@@ -113,6 +116,7 @@ def cluster() -> Cluster:
                 ),
                 ResourcePreset(
                     name="gpu",
+                    credits_per_hour=10,
                     cpu=0.2,
                     memory_mb=100,
                     gpu=1,
