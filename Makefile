@@ -10,6 +10,7 @@ CLOUD_IMAGE = ${CLOUD_IMAGE_${CLOUD_PROVIDER}}
 PLATFORMAPI_IMAGE = $(shell cat PLATFORMAPI_IMAGE)
 PLATFORMAUTHAPI_IMAGE = $(shell cat PLATFORMAUTHAPI_IMAGE)
 PLATFORMCONFIG_IMAGE = $(shell cat PLATFORMCONFIG_IMAGE)
+PLATFORMNOTIFICATIONS_IMAGE = $(shell cat PLATFORMNOTIFICATIONS_IMAGE)
 
 ARTIFACTORY_DOCKER_REPO ?= neuro-docker-local-public.jfrog.io
 ARTIFACTORY_HELM_REPO ?= https://neuro.jfrog.io/artifactory/helm-local-public
@@ -84,9 +85,11 @@ docker_pull_test_images:
 	    docker pull $(PLATFORMAPI_IMAGE); \
 	    docker pull $(PLATFORMAUTHAPI_IMAGE); \
 	    docker pull $(PLATFORMCONFIG_IMAGE); \
+	    docker pull $(PLATFORMNOTIFICATIONS_IMAGE); \
 	    docker tag $(PLATFORMAPI_IMAGE) platformapi:latest; \
 	    docker tag $(PLATFORMAUTHAPI_IMAGE) platformauthapi:latest; \
-	    docker tag $(PLATFORMCONFIG_IMAGE) platformconfig:latest
+	    docker tag $(PLATFORMCONFIG_IMAGE) platformconfig:latest; \
+	    docker tag $(PLATFORMNOTIFICATIONS_IMAGE) platformnotifications:latest
 
 gcr_login:
 	@echo $(GKE_ACCT_AUTH) | base64 --decode | docker login -u _json_key --password-stdin https://gcr.io

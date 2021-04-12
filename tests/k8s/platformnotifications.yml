@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platformnotifications-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: platformnotifications-redis
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        service: platformnotifications-redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:4
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: platformnotifications-redis
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 6379
+    targetPort: 6379
+  selector:
+    service: platformnotifications-redis
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platformnotifications
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: platformnotifications
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        service: platformnotifications
+    spec:
+      initContainers:
+      - name: wait-for-config
+        image: curlimages/curl
+        command: [sh]
+        args:
+        - -c
+        - |
+          code=-1
+
+          while [ $code != 0 ]
+          do
+            curl -f -H "Authorization: Bearer $NP_TOKEN" "$NP_PLATFORM_API_URL/api/v1/config"
+            code=$?
+          done
+        env:
+        - name: NP_PLATFORM_API_URL
+          value: http://platformapi:8080
+        - name: NP_TOKEN
+          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6Im5vdGlmaWNhdGlvbiIsImh0dHBzOi8vcGxhdGZvcm0ubmV1cm9tYXRpb24uaW8vdXNlciI6Im5vdGlmaWNhdGlvbiJ9.XiHClMa0aNPK7L6mm8NJrux8UQ414tN3UdVoxR6ybv8
+      containers:
+      - name: platformnotifications
+        image: platformnotifications:latest
+        imagePullPolicy: Never
+        env:
+        - name: NP_NOTIFICATIONS_PLATFORM_API_URL
+          value: http://platformapi:8080/api/v1
+        - name: NP_NOTIFICATIONS_PLATFORM_API_TOKEN
+          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6Im5vdGlmaWNhdGlvbiIsImh0dHBzOi8vcGxhdGZvcm0ubmV1cm9tYXRpb24uaW8vdXNlciI6Im5vdGlmaWNhdGlvbiJ9.XiHClMa0aNPK7L6mm8NJrux8UQ414tN3UdVoxR6ybv8
+        - name: NP_NOTIFICATIONS_PLATFORM_AUTH_URL
+          value: http://platformauthapi:8080
+        - name: NP_NOTIFICATIONS_PLATFORM_AUTH_TOKEN
+          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6Im5vdGlmaWNhdGlvbiIsImh0dHBzOi8vcGxhdGZvcm0ubmV1cm9tYXRpb24uaW8vdXNlciI6Im5vdGlmaWNhdGlvbiJ9.XiHClMa0aNPK7L6mm8NJrux8UQ414tN3UdVoxR6ybv8
+        - name: NP_DB_REDIS_URI
+          value: redis://platformnotifications-redis:6379/0
+        - name: NP_NOTIFICATIONS_TRANSPORT
+          value:
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: platformnotifications
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8080
+    targetPort: 8080
+  selector:
+    service: platformnotifications
