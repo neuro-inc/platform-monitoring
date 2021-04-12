@@ -49,6 +49,10 @@ class JobException(Exception):
     pass
 
 
+class JobNotRunningException(JobException):
+    pass
+
+
 class NodeNotFoundException(Exception):
     def __init__(self, name: str) -> None:
         super().__init__(f"Node {name!r} was not found")
@@ -131,7 +135,7 @@ class JobsService:
             while checks > 0:
                 data = await container.show()
                 if not data["State"]["Running"]:
-                    raise JobException(f"Job '{job.id}' is not running.")
+                    raise JobNotRunningException(f"Job '{job.id}' is not running.")
                 checks -= 1
                 if checks > 0:
                     await asyncio.sleep(0.5)
