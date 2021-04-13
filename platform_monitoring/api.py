@@ -25,6 +25,7 @@ from aiohttp.web import (
     json_response,
     middleware,
 )
+from aiohttp.web_exceptions import HTTPNotFound
 from aiohttp_security import check_authorized
 from aiohttp_security.api import AUTZ_KEY
 from neuro_auth_client import AuthClient, Permission
@@ -51,7 +52,13 @@ from .config import (
     S3Config,
 )
 from .config_factory import EnvironConfigFactory
-from .jobs_service import Container, ExecCreate, JobException, JobsService
+from .jobs_service import (
+    Container,
+    ExecCreate,
+    JobException,
+    JobNotRunningException,
+    JobsService,
+)
 from .kube_client import JobError, KubeClient, KubeTelemetry
 from .user import untrusted_user
 from .utils import (
@@ -573,6 +580,9 @@ async def handle_exceptions(
     except ValueError as e:
         payload = {"error": str(e)}
         return json_response(payload, status=HTTPBadRequest.status_code)
+    except JobNotRunningException as e:
+        payload = {"error": str(e)}
+        return json_response(payload, status=HTTPNotFound.status_code)
     except JobException as e:
         payload = {"error": str(e)}
         return json_response(payload, status=HTTPBadRequest.status_code)
