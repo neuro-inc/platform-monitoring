@@ -228,7 +228,7 @@ class JobsService:
             pod = None
 
         if not pod:
-            raise JobException(f"Job '{job_id}' is not running.")
+            raise JobNotRunningException(f"Job '{job_id}' is not running.")
 
         return pod
 

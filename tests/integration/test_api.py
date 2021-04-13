@@ -1227,9 +1227,17 @@ class TestAttachApi:
             await ws.send_bytes(b"exit 1\n")
             assert await expect_prompt(ws) == b"exit 1\r\n"
 
-        with pytest.raises(WSServerHandshakeError):
+        with pytest.raises(WSServerHandshakeError) as err:
             async with client.ws_connect(url2, method="POST", headers=headers):
                 pass
+        assert err.value.status == 404
+
+        await asyncio.sleep(2)  # Allow poller to collect pod
+
+        with pytest.raises(WSServerHandshakeError) as err:
+            async with client.ws_connect(url2, method="POST", headers=headers):
+                pass
+        assert err.value.status == 404
 
         await jobs_client.long_polling_by_job_id(job_id, status="failed")
 
