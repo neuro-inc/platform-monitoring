@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 setup_requires = ("setuptools_scm",)
 
 install_requires = (
-    "aiohttp==3.7.3",
+    "aiohttp==3.7.4",
     "neuro_auth_client==19.10.5",
     "platform_config_client==21.4.11",
     "neuromation==20.12.7",
