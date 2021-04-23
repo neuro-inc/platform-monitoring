@@ -140,10 +140,6 @@ spec:
           value: http://platformnotifications:8080
         - name: NP_NOTIFICATIONS_TOKEN
           value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZGVudGl0eSI6ImNvbXB1dGUifQ.IJDlKCfbiuNGZH9Sh6p-CdUL5KxEK5JStqzfDk4-RAA
-        - name: NP_API_ZIPKIN_URL
-          value: not-important-NP_API_ZIPKIN_URL
-        - name: NP_API_ZIPKIN_SAMPLE_RATE
-          value: "0"
         - name: NP_AUTH_URL
           value: http://platformauthapi:8080
         - name: NP_AUTH_TOKEN

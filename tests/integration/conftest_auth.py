@@ -15,7 +15,6 @@ from jose import jwt
 from neuro_auth_client import AuthClient, Permission, User as AuthClientUser
 from yarl import URL
 
-from platform_monitoring.api import create_auth_client
 from platform_monitoring.config import PlatformAuthConfig
 from tests.integration.conftest import get_service_url, random_str
 
@@ -57,7 +56,7 @@ def auth_config(
 async def auth_client(
     auth_config: PlatformAuthConfig,
 ) -> AsyncGenerator[AuthClient, None]:
-    async with create_auth_client(auth_config) as client:
+    async with AuthClient(auth_config.url, auth_config.token) as client:
         await client.ping()
         yield client
 

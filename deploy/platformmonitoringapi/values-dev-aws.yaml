@@ -39,3 +39,8 @@ logs:
     aws:
       region: us-east-1
       bucket: neuro-job-logs-dev
+
+sentry:
+  dsn: https://11316dd021994d7085c50e86c2ae404c@o454648.ingest.sentry.io/5597106
+  clusterName: dev
+  sampleRate: 0.1

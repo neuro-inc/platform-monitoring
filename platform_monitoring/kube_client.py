@@ -5,7 +5,7 @@ import ssl
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, AsyncIterator, Dict, NoReturn, Optional, Sequence
+from typing import Any, AsyncIterator, Dict, List, NoReturn, Optional, Sequence
 from urllib.parse import urlsplit
 
 import aiohttp
@@ -197,6 +197,7 @@ class KubeClient:
         read_timeout_s: int = 100,
         conn_pool_size: int = 100,
         kubelet_node_port: int = KubeConfig.kubelet_node_port,
+        trace_configs: Optional[List[aiohttp.TraceConfig]] = None,
     ) -> None:
         self._base_url = base_url
         self._namespace = namespace
@@ -213,9 +214,12 @@ class KubeClient:
         self._conn_timeout_s = conn_timeout_s
         self._read_timeout_s = read_timeout_s
         self._conn_pool_size = conn_pool_size
-        self._client: Optional[aiohttp.ClientSession] = None
 
         self._kubelet_port = kubelet_node_port
+
+        self._trace_configs = trace_configs
+
+        self._client: Optional[aiohttp.ClientSession] = None
 
     @property
     def _is_ssl(self) -> bool:
@@ -257,7 +261,10 @@ class KubeClient:
             connect=self._conn_timeout_s, total=self._read_timeout_s
         )
         return aiohttp.ClientSession(
-            connector=connector, timeout=timeout, headers=headers
+            connector=connector,
+            timeout=timeout,
+            headers=headers,
+            trace_configs=self._trace_configs,
         )
 
     @property

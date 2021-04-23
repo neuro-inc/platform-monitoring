@@ -24,6 +24,7 @@ from aiobotocore.client import AioBaseClient
 from aiobotocore.response import StreamingBody
 from aioelasticsearch import Elasticsearch
 from aioelasticsearch.helpers import Scan
+from platform_logging import trace
 
 from .base import LogReader
 from .kube_client import KubeClient
@@ -284,6 +285,11 @@ class S3LogReader(LogReader):
         )
 
     async def __aenter__(self) -> "LogReader":
+        await self._load_log_keys()
+        return self
+
+    @trace
+    async def _load_log_keys(self) -> None:
         paginator = self._s3_client.get_paginator("list_objects_v2")
         Key = namedtuple("Key", ["value", "time_slice"])
         keys: List[Key] = []
@@ -298,7 +304,6 @@ class S3LogReader(LogReader):
                 keys.append(Key(value=s3_key, time_slice=time_slice))
         keys.sort(key=lambda k: k.time_slice)  # order keys by time slice
         self._key_iterator = iter(key.value for key in keys)
-        return self
 
     async def __aexit__(self, *args: Any) -> None:
         self._buffer.close()
