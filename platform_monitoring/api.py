@@ -615,7 +615,7 @@ async def create_monitoring_app(config: Config) -> aiohttp.web.Application:
 
 @asynccontextmanager
 async def create_platform_api_client(
-    config: PlatformApiConfig, trace_configs: List[aiohttp.TraceConfig]
+    config: PlatformApiConfig, trace_configs: Optional[List[aiohttp.TraceConfig]] = None
 ) -> AsyncIterator[PlatformApiClient]:
     tmp_config = Path(mktemp())
     platform_api_factory = PlatformClientFactory(
@@ -633,7 +633,7 @@ async def create_platform_api_client(
 
 @asynccontextmanager
 async def create_kube_client(
-    config: KubeConfig, trace_configs: List[aiohttp.TraceConfig]
+    config: KubeConfig, trace_configs: Optional[List[aiohttp.TraceConfig]] = None
 ) -> AsyncIterator[KubeClient]:
     client = KubeClient(
         base_url=config.endpoint_url,

@@ -12,7 +12,7 @@ from typing import (
 import pytest
 from aiohttp.hdrs import AUTHORIZATION
 from jose import jwt
-from neuro_auth_client import AuthClient, Permission, User as AuthClientUser
+from neuro_auth_client import AuthClient, Cluster, Permission, User as AuthClientUser
 from yarl import URL
 
 from platform_monitoring.config import PlatformAuthConfig
@@ -87,7 +87,7 @@ async def regular_user_factory(
             name = f"user-{random_str(8)}"
         if not cluster_name:
             cluster_name = default_cluster_name
-        user = AuthClientUser(name=name, cluster_name=cluster_name)
+        user = AuthClientUser(name=name, clusters=[Cluster(name=cluster_name)])
         await auth_client.add_user(user, token=admin_token)
         # Grant permissions to the user home directory
         headers = auth_client._generate_headers(compute_token)
