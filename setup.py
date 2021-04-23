@@ -5,17 +5,18 @@ setup_requires = ("setuptools_scm",)
 
 install_requires = (
     "aiohttp==3.7.4",
-    "neuro_auth_client==19.10.5",
-    "platform_config_client==21.4.11",
-    "neuromation==20.12.7",
+    "neuro_auth_client==21.4.19",
+    "platform_config_client==21.4.20",
+    "neuro-sdk==21.4.23",
     "aioelasticsearch==0.7.0",
     "aiodocker==0.19.1",
     "docker-image-py==0.1.10",
     "trafaret==2.1.0",
-    "platform-logging==0.3",
+    "platform-logging==21.4.22",
     "aiohttp-cors==0.7.0",
-    "aiobotocore==1.2.0",
-    "urllib3>=1.20,<1.26",  # botocore requirements
+    "aiobotocore==1.3.0",
+    "aiozipkin==1.0.0",
+    "sentry-sdk==1.0.0",
 )
 
 setup(

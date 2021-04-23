@@ -17,8 +17,7 @@ from typing import (
 
 from aiodocker.exceptions import DockerError
 from aiodocker.stream import Stream
-from neuromation.api import JobDescription as Job
-from neuromation.api.jobs import Jobs as JobsClient
+from neuro_sdk import JobDescription as Job, Jobs as JobsClient
 from platform_config_client import ConfigClient
 from platform_config_client.models import ResourcePoolType
 
