@@ -107,7 +107,7 @@ class DockerConfig:
 @dataclass(frozen=True)
 class ZipkinConfig:
     url: URL
-    app_name: str = "platformmonitoringapi"
+    app_name: str = "platform-monitoring"
     sample_rate: float = 0
 
 
@@ -115,7 +115,7 @@ class ZipkinConfig:
 class SentryConfig:
     dsn: URL
     cluster_name: str
-    app_name: str = "platformmonitoringapi"
+    app_name: str = "platform-monitoring"
     sample_rate: float = 0
 
 
