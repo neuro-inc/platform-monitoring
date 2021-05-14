@@ -16,7 +16,7 @@ from _pytest.fixtures import FixtureRequest
 from aiobotocore.client import AioBaseClient
 from aioelasticsearch import Elasticsearch
 from async_timeout import timeout
-from neuromation.api import Client as PlatformApiClient
+from neuro_sdk import Client as PlatformApiClient
 from yarl import URL
 
 from platform_monitoring.api import (

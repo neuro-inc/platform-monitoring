@@ -2,7 +2,7 @@ import abc
 
 from aiobotocore.client import AioBaseClient
 from aioelasticsearch import Elasticsearch
-from neuromation.api import JobDescription as Job, JobStatus
+from neuro_sdk import JobDescription as Job, JobStatus
 
 from .base import LogReader
 from .kube_client import KubeClient

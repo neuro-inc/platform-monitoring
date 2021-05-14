@@ -8,7 +8,7 @@ import pytest
 from aiodocker import Docker
 from aiodocker.stream import Stream
 from async_timeout import timeout
-from neuromation.api import (
+from neuro_sdk import (
     Client as PlatformApiClient,
     Container as JobContainer,
     JobDescription as Job,

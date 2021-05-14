@@ -3,7 +3,7 @@ from typing import Any, Awaitable, Callable, Dict, Optional, Sequence
 from unittest import mock
 
 import pytest
-from neuromation.api.jobs import Jobs as JobsClient
+from neuro_sdk import Jobs as JobsClient
 from platform_config_client import (
     Cluster,
     ConfigClient,
