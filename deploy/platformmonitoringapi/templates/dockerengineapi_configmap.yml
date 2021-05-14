@@ -17,7 +17,14 @@ data:
             default upgrade;
             ''      close;
         }
-        access_log /dev/stdout;
+
+        map $status $loggable {
+            ~^[23]  0;
+            default 1;
+        }
+
+        access_log /dev/stdout combined if=$loggable;
+
         server {
             listen {{ .Values.dockerEngine.port }};
             location / {
