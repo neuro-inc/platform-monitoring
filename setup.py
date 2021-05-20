@@ -15,7 +15,7 @@ install_requires = (
     "platform-logging==21.5.13",
     "aiohttp-cors==0.7.0",
     "aiobotocore==1.3.0",
-    "aiozipkin==1.0.0",
+    "aiozipkin==1.1.0",
     "sentry-sdk==1.0.0",
 )
 
