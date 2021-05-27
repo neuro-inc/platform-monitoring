@@ -11,7 +11,9 @@ from .logs import ElasticsearchLogReader, PodContainerLogReader, S3LogReader
 
 class LogReaderFactory(abc.ABC):
     @abc.abstractmethod
-    async def get_pod_log_reader(self, pod_name: str) -> LogReader:
+    async def get_pod_log_reader(
+        self, pod_name: str, *, previous: bool = False, archive: bool = False
+    ) -> LogReader:
         pass  # pragma: no cover
 
 
@@ -24,10 +26,15 @@ class ElasticsearchLogReaderFactory(LogReaderFactory):
         self._kube_client = kube_client
         self._es_client = es_client
 
-    async def get_pod_log_reader(self, pod_name: str) -> LogReader:
-        if await self._kube_client.check_pod_exists(pod_name):
+    async def get_pod_log_reader(
+        self, pod_name: str, *, previous: bool = False, archive: bool = False
+    ) -> LogReader:
+        if not archive and await self._kube_client.check_pod_exists(pod_name):
             return PodContainerLogReader(
-                client=self._kube_client, pod_name=pod_name, container_name=pod_name
+                client=self._kube_client,
+                pod_name=pod_name,
+                container_name=pod_name,
+                previous=previous,
             )
         return ElasticsearchLogReader(
             es_client=self._es_client,
@@ -50,10 +57,15 @@ class S3LogReaderFactory(LogReaderFactory):
         self._bucket_name = bucket_name
         self._key_prefix_format = key_prefix_format
 
-    async def get_pod_log_reader(self, pod_name: str) -> LogReader:
-        if await self._kube_client.check_pod_exists(pod_name):
+    async def get_pod_log_reader(
+        self, pod_name: str, *, previous: bool = False, archive: bool = False
+    ) -> LogReader:
+        if not archive and await self._kube_client.check_pod_exists(pod_name):
             return PodContainerLogReader(
-                client=self._kube_client, pod_name=pod_name, container_name=pod_name
+                client=self._kube_client,
+                pod_name=pod_name,
+                container_name=pod_name,
+                previous=previous,
             )
         return S3LogReader(
             s3_client=self._s3_client,
