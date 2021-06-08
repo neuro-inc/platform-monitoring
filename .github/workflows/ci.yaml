@@ -3,7 +3,7 @@ name: Continuous Integration
 on:
   push:
     branches: [master]
-    tags: ['v*.*.*']
+    tags: [v*.*.*]
   pull_request:
     branches: [master]
 
@@ -27,7 +27,7 @@ jobs:
       with:
         python-version: 3.7.7
     - name: Cache packages
-      uses: actions/cache@v1
+      uses: actions/cache@v2.1.6
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-py-3.7.7-${{ hashFiles('requirements/*.txt') }}-${{
@@ -59,7 +59,7 @@ jobs:
       uses: aws-actions/amazon-ecr-login@v1
     - name: Configure Azure credentials
       if: env.CLOUD_PROVIDER == 'azure'
-      uses: azure/login@v1.1
+      uses: azure/login@v1.3.0
       with:
         creds: ${{secrets.AZURE_CREDENTIALS}}
     - name: Login to Azure ACR
@@ -109,7 +109,7 @@ jobs:
     name: Deploy on dev
     runs-on: ubuntu-latest
     needs: test
-    if: github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     env:
       ARTIFACTORY_DOCKER_REPO: ${{ secrets.ARTIFACTORY_DOCKER_REPO }}
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
@@ -142,7 +142,7 @@ jobs:
       uses: aws-actions/amazon-ecr-login@v1
     - name: Configure Azure credentials
       if: env.CLOUD_PROVIDER == 'azure'
-      uses: azure/login@v1.1
+      uses: azure/login@v1.3.0
       with:
         creds: ${{secrets.AZURE_CREDENTIALS}}
     - name: Login to Azure ACR
