@@ -68,11 +68,11 @@ spec:
           value: not-important
         - name: NP_JOB_FALLBACK_HOSTNAME
           value: not-important
-        - name: NP_LATEST_PLATFORM_INFRA_IMAGE_TAG
+        - name: NP_PLATFORM_INFRA_IMAGE_TAG
           value: not-important
-        - name: NP_PLATFORM_INFRA_WORKFLOWS_IMAGE_NAME
+        - name: NP_PLATFORM_INFRA_IMAGE_NAME
           value: not-important
-        - name: NP_PLATFORM_INFRA_WORKFLOWS_IMAGE_PULL_POLICY
+        - name: NP_PLATFORM_INFRA_IMAGE_PULL_POLICY
           value: Always
         - name: NP_POSTGRES_HOST
           value: platformconfig-postgres
