@@ -144,12 +144,15 @@ class PodContainerLogReader(LogReader):
         container_name: str,
         client_conn_timeout_s: Optional[float] = None,
         client_read_timeout_s: Optional[float] = None,
+        *,
+        previous: bool = False,
     ) -> None:
         self._client = client
         self._pod_name = pod_name
         self._container_name = container_name
         self._client_conn_timeout_s = client_conn_timeout_s
         self._client_read_timeout_s = client_read_timeout_s
+        self._previous = previous
 
         self._stream_cm: Optional[AsyncContextManager[aiohttp.StreamReader]] = None
         self._stream: Optional[FilteredStreamWrapper] = None
@@ -161,6 +164,8 @@ class PodContainerLogReader(LogReader):
             kwargs["conn_timeout_s"] = self._client_conn_timeout_s
         if self._client_read_timeout_s is not None:
             kwargs["read_timeout_s"] = self._client_read_timeout_s
+        if self._previous:
+            kwargs["previous"] = True
         self._stream_cm = self._client.create_pod_container_logs_stream(
             pod_name=self._pod_name, container_name=self._container_name, **kwargs
         )

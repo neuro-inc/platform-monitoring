@@ -167,10 +167,14 @@ class MonitoringApiHandler:
         return json_response(result)
 
     async def stream_log(self, request: Request) -> StreamResponse:
+        previous = _get_bool_param(request, "previous", False)
+        archive = _get_bool_param(request, "archive", False)
         job = await self._resolve_job(request, "read")
 
         pod_name = self._kube_helper.get_job_pod_name(job)
-        log_reader = await self._log_reader_factory.get_pod_log_reader(pod_name)
+        log_reader = await self._log_reader_factory.get_pod_log_reader(
+            pod_name, previous=previous, archive=archive
+        )
 
         # TODO (A Danshyn, 05.07.2018): expose. make configurable
         chunk_size = 1024
@@ -904,3 +908,14 @@ def _job_uri_with_name(uri: URL, name: str) -> URL:
     assert uri.host
     assert uri.name
     return uri.with_name(name)
+
+
+def _get_bool_param(request: Request, name: str, default: bool = False) -> bool:
+    param = request.query.get(name)
+    if param is None:
+        return default
+    if param == "true":
+        return True
+    if param == "false":
+        return False
+    raise ValueError(f'"{name}" request parameter can be "true" or "false"')

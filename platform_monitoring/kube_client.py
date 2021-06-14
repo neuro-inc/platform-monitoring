@@ -312,11 +312,14 @@ class KubeClient:
         proxy_url = self._generate_node_proxy_url(name, self._kubelet_port)
         return f"{proxy_url}/stats/summary"
 
-    def _generate_pod_log_url(self, pod_name: str, container_name: str) -> str:
-        return (
-            f"{self._generate_pod_url(pod_name)}/log"
-            f"?container={pod_name}&follow=true"
-        )
+    def _generate_pod_log_url(
+        self, pod_name: str, container_name: str, previous: bool
+    ) -> str:
+        url = self._generate_pod_url(pod_name)
+        url = f"{url}/log?container={pod_name}&follow=true"
+        if previous:
+            url = f"{url}&previous=true"
+        return url
 
     async def _request(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         assert self._client, "client is not initialized"
@@ -406,8 +409,9 @@ class KubeClient:
         container_name: str,
         conn_timeout_s: float = 60 * 5,
         read_timeout_s: float = 60 * 30,
+        previous: bool = False,
     ) -> AsyncIterator[aiohttp.StreamReader]:
-        url = self._generate_pod_log_url(pod_name, container_name)
+        url = self._generate_pod_log_url(pod_name, container_name, previous)
         client_timeout = aiohttp.ClientTimeout(
             connect=conn_timeout_s, sock_read=read_timeout_s
         )
