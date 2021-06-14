@@ -429,13 +429,22 @@ class TestLogReader:
 
             await self._wait_container_is_restarted(kube_client, job_pod.name)
 
-            log_reader = PodContainerLogReader(
-                client=kube_client,
-                pod_name=job_pod.name,
-                container_name=job_pod.name,
-                previous=True,
-            )
-            payload = await self._consume_log_reader(log_reader)
+            for i in range(3)[::-1]:
+                try:
+                    log_reader = PodContainerLogReader(
+                        client=kube_client,
+                        pod_name=job_pod.name,
+                        container_name=job_pod.name,
+                        previous=True,
+                    )
+                    payload = await self._consume_log_reader(log_reader)
+                    break
+                except KubeClientException:
+                    if not i:
+                        raise
+                    await asyncio.sleep(1)
+                    continue
+
             assert b" Restart\n" in payload
             assert payload.count(b"Restart") == 1
             timestamp = int(payload.split()[0])
