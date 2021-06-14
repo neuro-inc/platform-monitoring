@@ -158,8 +158,7 @@ class PodContainerLogReader(LogReader):
         self._stream: Optional[FilteredStreamWrapper] = None
 
     async def __aenter__(self) -> LogReader:
-        if not self._previous:
-            await self._client.wait_pod_is_running(self._pod_name)
+        await self._client.wait_pod_is_running(self._pod_name)
         kwargs = {}
         if self._client_conn_timeout_s is not None:
             kwargs["conn_timeout_s"] = self._client_conn_timeout_s

@@ -112,6 +112,10 @@ class MyPodDescriptor:
     def set_command(self, command: str) -> None:
         self._payload["spec"]["containers"][0]["args"] = shlex.split(command)
 
+    def set_restart_policy(self, policy: str) -> None:
+        self._payload["spec"]["restartPolicy"]
+        self._payload["spec"]["restartPolicy"] = policy
+
     @property
     def payload(self) -> Dict[str, Any]:
         return self._payload
