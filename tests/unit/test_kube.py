@@ -14,7 +14,7 @@ from platform_monitoring.kube_client import (
     Resources,
     StatsSummary,
 )
-from platform_monitoring.logs import FilteredStreamWrapper
+from platform_monitoring.logs import filter_out_rpc_error
 
 
 class TestPod:
@@ -223,14 +223,14 @@ class TestStatsSummary:
         assert stats
 
 
-class TestFilteredStreamWrapper:
+class TestFilterOutRPCError:
     @pytest.mark.asyncio
-    async def test_read_eof(self) -> None:
+    async def test_iter_eof(self) -> None:
         reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
         reader.feed_eof()
-        stream = FilteredStreamWrapper(reader)
-        chunk = await stream.read()
-        assert not chunk
+        it = filter_out_rpc_error(reader)
+        chunks = [chunk async for chunk in it]
+        assert chunks == []
 
     @pytest.mark.asyncio
     async def test_read_two_lines_eof(self) -> None:
@@ -238,32 +238,9 @@ class TestFilteredStreamWrapper:
         reader.feed_data(b"line1\n")
         reader.feed_data(b"line2")
         reader.feed_eof()
-        stream = FilteredStreamWrapper(reader)
-        chunk = await stream.read()
-        assert chunk == b"line1\n"
-        chunk = await stream.read()
-        assert chunk == b"line2"
-
-    @pytest.mark.asyncio
-    async def test_half_line(self) -> None:
-        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
-        reader.feed_data(b"line1\n")
-        reader.feed_data(b"line2\n")
-        stream = FilteredStreamWrapper(reader)
-        chunk = await stream.read(size=2)
-        assert chunk == b"li"
-        chunk = await stream.read(size=2)
-        assert chunk == b"ne"
-
-        reader.feed_data(b"line3")
-        reader.feed_eof()
-
-        chunk = await stream.read(size=2)
-        assert chunk == b"1\n"
-        chunk = await stream.read()
-        assert chunk == b"line2\n"
-        chunk = await stream.read()
-        assert chunk == b"line3"
+        it = filter_out_rpc_error(reader)
+        chunks = [chunk async for chunk in it]
+        assert chunks == [b"line1\n", b"line2"]
 
     @pytest.mark.asyncio
     async def test_filtered_single_rpc_error(self) -> None:
@@ -271,11 +248,9 @@ class TestFilteredStreamWrapper:
         reader.feed_data(b"line1\n")
         reader.feed_data(b"rpc error: code = whatever")
         reader.feed_eof()
-        stream = FilteredStreamWrapper(reader)
-        chunk = await stream.read()
-        assert chunk == b"line1\n"
-        chunk = await stream.read()
-        assert not chunk
+        it = filter_out_rpc_error(reader)
+        chunks = [chunk async for chunk in it]
+        assert chunks == [b"line1\n"]
 
     @pytest.mark.asyncio
     async def test_filtered_two_rpc_errors(self) -> None:
@@ -284,13 +259,9 @@ class TestFilteredStreamWrapper:
         reader.feed_data(b"rpc error: code = whatever\n")
         reader.feed_data(b"rpc error: code = again\n")
         reader.feed_eof()
-        stream = FilteredStreamWrapper(reader)
-        chunk = await stream.read()
-        assert chunk == b"line1\n"
-        chunk = await stream.read()
-        assert chunk == b"rpc error: code = whatever\n"
-        chunk = await stream.read()
-        assert not chunk
+        it = filter_out_rpc_error(reader)
+        chunks = [chunk async for chunk in it]
+        assert chunks == [b"line1\n", b"rpc error: code = whatever\n"]
 
     @pytest.mark.asyncio
     async def test_not_filtered_single_rpc_not_eof(self) -> None:
@@ -299,29 +270,17 @@ class TestFilteredStreamWrapper:
         reader.feed_data(b"rpc error: code = whatever\n")
         reader.feed_data(b"line2\n")
         reader.feed_eof()
-        stream = FilteredStreamWrapper(reader)
-        chunk = await stream.read()
-        assert chunk == b"line1\n"
-        chunk = await stream.read()
-        assert chunk == b"rpc error: code = whatever\n"
-        chunk = await stream.read()
-        assert chunk == b"line2\n"
-        chunk = await stream.read()
-        assert not chunk
+        it = filter_out_rpc_error(reader)
+        chunks = [chunk async for chunk in it]
+        assert chunks == [b"line1\n", b"rpc error: code = whatever\n", b"line2\n"]
 
     @pytest.mark.asyncio
     async def test_min_line_chunk(self) -> None:
         reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
-        stream = FilteredStreamWrapper(reader)
+        it = filter_out_rpc_error(reader)
 
         async def _read_all() -> List[bytes]:
-            chunks: List[bytes] = []
-            while True:
-                c = await stream.read()
-                chunks.append(c)
-                if not c:
-                    break
-            return chunks
+            return [chunk async for chunk in it]
 
         async def _feed_raw_chunk(data: bytes) -> None:
             reader.feed_data(data)
@@ -346,7 +305,6 @@ class TestFilteredStreamWrapper:
             b"chunk05\r\n",
             b"chunk06\r\n",
             b"chunk07\rchunk08\r\n",
-            b"",
         ]
 
 

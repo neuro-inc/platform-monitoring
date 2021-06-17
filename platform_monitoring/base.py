@@ -1,18 +1,15 @@
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, AsyncIterator, Optional
 
 
 class LogReader(ABC):
-    async def __aenter__(self) -> "LogReader":
-        return self
-
-    async def __aexit__(self, *args: Any) -> None:
+    @abstractmethod
+    async def __aenter__(self) -> AsyncIterator[bytes]:
         pass
 
-    @abstractmethod
-    async def read(self, size: int = -1) -> bytes:
+    async def __aexit__(self, *args: Any) -> None:
         pass
 
 
