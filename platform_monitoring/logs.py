@@ -123,6 +123,7 @@ class PodContainerLogReader(LogReader):
         self._previous = previous
 
         self._stream_cm: Optional[AsyncContextManager[aiohttp.StreamReader]] = None
+        self._iterator: Optional[AsyncIterator[bytes]] = None
 
     async def __aenter__(self) -> AsyncIterator[bytes]:
         await self._client.wait_pod_is_running(self._pod_name)
@@ -138,9 +139,12 @@ class PodContainerLogReader(LogReader):
         )
         assert self._stream_cm
         stream = await self._stream_cm.__aenter__()
-        return filter_out_rpc_error(stream)
+        self._iterator = filter_out_rpc_error(stream)
+        return self._iterator
 
     async def __aexit__(self, *args: Any) -> None:
+        assert self._iterator
+        await self._iterator.aclose()  # type: ignore
         assert self._stream_cm
         stream_cm = self._stream_cm
         self._stream_cm = None
@@ -164,6 +168,7 @@ class ElasticsearchLogReader(LogReader):
         self._container_name = container_name
 
         self._scan: Optional[Scan] = None
+        self._iterator: Optional[AsyncIterator[bytes]] = None
 
     def _combine_search_query(self) -> Dict[str, Any]:
         terms = [
@@ -190,9 +195,12 @@ class ElasticsearchLogReader(LogReader):
             size=100,
         )
         await self._scan.__aenter__()
-        return (doc["_source"]["log"].encode() async for doc in self._scan)
+        self._iterator = (doc["_source"]["log"].encode() async for doc in self._scan)
+        return self._iterator
 
     async def __aexit__(self, *args: Any) -> None:
+        assert self._iterator
+        await self._iterator.aclose()  # type: ignore
         assert self._scan
         scan = self._scan
         self._scan = None
@@ -218,6 +226,7 @@ class S3LogReader(LogReader):
         self._key_iterator: Iterator[str] = iter(())
         self._response_body: Optional[StreamingBody] = None
         self._line_iterator: Optional[AsyncIterator[bytes]] = None
+        self._iterator: Optional[AsyncIterator[bytes]] = None
 
     def _get_prefix(self) -> str:
         return self._prefix_format.format(
@@ -228,7 +237,8 @@ class S3LogReader(LogReader):
 
     async def __aenter__(self) -> AsyncIterator[bytes]:
         await self._load_log_keys()
-        return self._iter()
+        self._iterator = self._iterate()
+        return self._iterator
 
     @trace
     async def _load_log_keys(self) -> None:
@@ -245,13 +255,15 @@ class S3LogReader(LogReader):
                 time_slice = (int(time_slice_str[0]), int(time_slice_str[1]))
                 keys.append(Key(value=s3_key, time_slice=time_slice))
         keys.sort(key=lambda k: k.time_slice)  # order keys by time slice
-        self._key_iterator = iter(key.value for key in keys)
+        self._key_iterator = (key.value for key in keys)
 
     async def __aexit__(self, *args: Any) -> None:
+        assert self._iterator
+        await self._iterator.aclose()  # type: ignore
         self._key_iterator = iter(())
         await self._end_read_file(*args)
 
-    async def _iter(self) -> AsyncIterator[bytes]:
+    async def _iterate(self) -> AsyncIterator[bytes]:
         while await self._start_read_file():
             assert self._line_iterator
             async for line in self._line_iterator:
@@ -299,6 +311,8 @@ class S3LogReader(LogReader):
         exc_val: Optional[BaseException] = None,
         exc_tb: Optional[TracebackType] = None,
     ) -> None:
+        if self._line_iterator:
+            await self._line_iterator.aclose()  # type: ignore
         self._line_iterator = None
         if self._response_body:
             await self._response_body.__aexit__(exc_type, exc_val, exc_tb)
