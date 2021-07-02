@@ -1,7 +1,8 @@
 import asyncio
 import io
+import re
 import uuid
-from typing import Any, AsyncIterator, Dict
+from typing import Any, AsyncContextManager, AsyncIterator, Dict
 from unittest import mock
 from uuid import uuid4
 
@@ -12,7 +13,7 @@ from aiohttp import web
 from async_timeout import timeout
 from yarl import URL
 
-from platform_monitoring.base import LogReader
+# from platform_monitoring.base import LogReader
 from platform_monitoring.config import KubeConfig
 from platform_monitoring.kube_client import (
     JobNotFoundException,
@@ -23,10 +24,12 @@ from platform_monitoring.kube_client import (
 )
 from platform_monitoring.logs import (
     ElasticsearchLogReader,
+    ElasticsearchLogReaderFactory,
+    LogReaderFactory,
     PodContainerLogReader,
     S3LogReader,
+    S3LogReaderFactory,
 )
-from platform_monitoring.utils import ElasticsearchLogReaderFactory, S3LogReaderFactory
 from tests.integration.conftest import ApiAddress, create_local_app_server
 
 from .conftest_kube import MyKubeClient, MyPodDescriptor
@@ -89,10 +92,14 @@ class TestKubeClient:
         job_pod: MyPodDescriptor,
     ) -> None:
         # TODO (A Yushkovskiy, 31-May-2019) check returned job_pod statuses
-        await kube_client.create_pod(job_pod.payload)
-        with pytest.raises(asyncio.TimeoutError):
-            await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=0.1)
-        await kube_client.delete_pod(job_pod.name)
+        try:
+            await kube_client.create_pod(job_pod.payload)
+            with pytest.raises(asyncio.TimeoutError):
+                await kube_client.wait_pod_is_running(
+                    pod_name=job_pod.name, timeout_s=0.1
+                )
+        finally:
+            await kube_client.delete_pod(job_pod.name)
 
     @pytest.mark.asyncio
     async def test_wait_pod_is_running(
@@ -102,13 +109,18 @@ class TestKubeClient:
         job_pod: MyPodDescriptor,
     ) -> None:
         # TODO (A Yushkovskiy, 31-May-2019) check returned job_pod statuses
-        await kube_client.create_pod(job_pod.payload)
-        is_waiting = await kube_client.is_container_waiting(job_pod.name)
-        assert is_waiting
-        await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=60.0)
-        is_waiting = await kube_client.is_container_waiting(job_pod.name)
-        assert not is_waiting
-        await kube_client.delete_pod(job_pod.name)
+        try:
+            await kube_client.create_pod(job_pod.payload)
+            is_waiting = await kube_client.is_container_waiting(job_pod.name)
+            assert is_waiting
+            assert await kube_client.get_container_started_at(job_pod.name) is None
+
+            await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=60.0)
+            is_waiting = await kube_client.is_container_waiting(job_pod.name)
+            assert not is_waiting
+            assert await kube_client.get_container_started_at(job_pod.name) is not None
+        finally:
+            await kube_client.delete_pod(job_pod.name)
 
     @pytest.mark.asyncio
     async def test_get_pod_container_stats_error_json_response_parsing(
@@ -173,10 +185,12 @@ class TestKubeClient:
     async def test_check_pod_exists_true(
         self, kube_client: MyKubeClient, job_pod: MyPodDescriptor
     ) -> None:
-        await kube_client.create_pod(job_pod.payload)
-        does_exist = await kube_client.check_pod_exists(pod_name=job_pod.name)
-        assert does_exist is True
-        await kube_client.delete_pod(job_pod.name)
+        try:
+            await kube_client.create_pod(job_pod.payload)
+            does_exist = await kube_client.check_pod_exists(pod_name=job_pod.name)
+            assert does_exist is True
+        finally:
+            await kube_client.delete_pod(job_pod.name)
 
     @pytest.mark.asyncio
     async def test_check_pod_exists_false(
@@ -295,12 +309,15 @@ class TestKubeClient:
 
 class TestLogReader:
     async def _consume_log_reader(
-        self, log_reader: LogReader, chunk_size: int = -1
+        self,
+        log_reader: AsyncContextManager[AsyncIterator[bytes]],
+        chunk_size: int = -1,
     ) -> bytes:
         istream = io.BytesIO()
         try:
             async with log_reader as it:
                 async for chunk in it:
+                    # assert chunk == b""
                     istream.write(chunk)
         except asyncio.CancelledError:
             pass
@@ -378,8 +395,8 @@ class TestLogReader:
     async def test_read_cancelled(
         self,
         kube_config: KubeConfig,
-        kube_client: MyKubeClient,
         job_pod: MyPodDescriptor,
+        kube_client: MyKubeClient,
     ) -> None:
         command = 'bash -c "for i in {1..60}; do echo $i; sleep 1; done"'
         job_pod.set_command(command)
@@ -394,6 +411,181 @@ class TestLogReader:
         payload = await task
         expected_payload = "\n".join(str(i) for i in range(1, 6))
         assert payload.startswith(expected_payload.encode())
+
+    async def _test_merged_log_reader(
+        self,
+        kube_client: MyKubeClient,
+        job_pod: MyPodDescriptor,
+        factory: LogReaderFactory,
+    ) -> None:
+        command = 'bash -c "date +[%T]; for i in {1..5}; do sleep 1; echo $i; done"'
+        job_pod.set_command(command)
+        names = []
+        tasks = []
+
+        def run_log_reader(name: str) -> None:
+            names.append(name)
+            log_reader = factory.get_pod_log_reader(job_pod.name, separator=b"===")
+            task = asyncio.ensure_future(self._consume_log_reader(log_reader))
+            tasks.append(task)
+
+        try:
+            await kube_client.create_pod(job_pod.payload)
+            run_log_reader("created")
+            await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=60.0)
+            for i in range(6):
+                if i:
+                    await asyncio.sleep(2)
+                run_log_reader(f"started [{i}]")
+        finally:
+            await kube_client.delete_pod(job_pod.name)
+        run_log_reader("deleted")
+        await asyncio.sleep(10)
+        run_log_reader("collected")
+
+        payloads = await asyncio.gather(*tasks)
+
+        # Output for debugging
+        for i in range(len(names)):
+            print(f"{names[i]}: {payloads[i]!r}")
+
+        expected_payload = "".join(f"{i}\n" for i in range(1, 6)).encode()
+        payload0 = payloads[0]
+        assert re.sub(rb"\[.*?\]\n", b"", payload0) == expected_payload
+        for i, payload in enumerate(payloads):
+            if i < 6:
+                assert b"===" not in payload
+            else:
+                assert payload.count(b"===\n") == 1
+            payload = payload.replace(b"===\n", b"")
+            payload = re.sub(rb"Unable to retrieve .*", b"", payload)
+            assert payload == payload0
+
+    @pytest.mark.asyncio
+    async def test_elasticsearch_merged_log_reader(
+        self,
+        kube_client: MyKubeClient,
+        es_client: Elasticsearch,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        await self._test_merged_log_reader(
+            kube_client,
+            job_pod,
+            ElasticsearchLogReaderFactory(kube_client, es_client),
+        )
+
+    @pytest.mark.asyncio
+    async def test_s3_merged_log_reader(
+        self,
+        kube_client: MyKubeClient,
+        s3_client: AioBaseClient,
+        s3_logs_bucket: str,
+        s3_logs_key_prefix_format: str,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        await self._test_merged_log_reader(
+            kube_client,
+            job_pod,
+            S3LogReaderFactory(
+                kube_client,
+                s3_client,
+                bucket_name=s3_logs_bucket,
+                key_prefix_format=s3_logs_key_prefix_format,
+            ),
+        )
+
+    async def _test_merged_log_reader_restarted(
+        self,
+        kube_client: MyKubeClient,
+        job_pod: MyPodDescriptor,
+        factory: LogReaderFactory,
+    ) -> None:
+        command = 'bash -c "date +[%T]; for i in {1..5}; do sleep 1; echo $i; done"'
+        job_pod.set_command(command)
+        job_pod.set_restart_policy("Always")
+        names = []
+        tasks = []
+
+        def run_log_reader(name: str) -> None:
+            names.append(name)
+            log_reader = factory.get_pod_log_reader(job_pod.name, separator=b"===")
+            task = asyncio.ensure_future(self._consume_log_reader(log_reader))
+            tasks.append(task)
+
+        try:
+            await kube_client.create_pod(job_pod.payload)
+            run_log_reader("created")
+            await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=60.0)
+            for i in range(6):
+                if i:
+                    await asyncio.sleep(2)
+                run_log_reader(f"started [{i}]")
+            await self._wait_container_is_restarted(kube_client, job_pod.name, 1)
+            for i in range(6):
+                if i:
+                    await asyncio.sleep(2)
+                run_log_reader(f"restarted 1 [{i}]")
+            await self._wait_container_is_restarted(kube_client, job_pod.name, 2)
+            for i in range(6):
+                if i:
+                    await asyncio.sleep(2)
+                run_log_reader(f"restarted 2 [{i}]")
+        finally:
+            await kube_client.delete_pod(job_pod.name)
+        run_log_reader("deleted")
+        await asyncio.sleep(10)
+        run_log_reader("finished")
+
+        payloads = await asyncio.gather(*tasks)
+
+        # Output for debugging
+        for i in range(len(names)):
+            print(f"{names[i]}: {payloads[i]!r}")
+
+        expected_payload = "".join(f"{i}\n" for i in range(1, 6)).encode()
+        payload0 = payloads[0]
+        assert re.sub(rb"\[.*?\]\n", b"", payload0) == expected_payload * 3
+        for i, payload in enumerate(payloads):
+            if i < 7:
+                assert b"===" not in payload
+            else:
+                assert payload.count(b"===\n") == 1
+            payload = payload.replace(b"===\n", b"")
+            payload = re.sub(rb"Unable to retrieve .*", b"", payload)
+            assert payload == payload0
+
+    @pytest.mark.asyncio
+    async def test_elasticsearch_merged_log_reader_restarted(
+        self,
+        kube_client: MyKubeClient,
+        es_client: Elasticsearch,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        await self._test_merged_log_reader_restarted(
+            kube_client,
+            job_pod,
+            ElasticsearchLogReaderFactory(kube_client, es_client),
+        )
+
+    @pytest.mark.asyncio
+    async def test_s3_merged_log_reader_restarted(
+        self,
+        kube_client: MyKubeClient,
+        s3_client: AioBaseClient,
+        s3_logs_bucket: str,
+        s3_logs_key_prefix_format: str,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        await self._test_merged_log_reader_restarted(
+            kube_client,
+            job_pod,
+            S3LogReaderFactory(
+                kube_client,
+                s3_client,
+                bucket_name=s3_logs_bucket,
+                key_prefix_format=s3_logs_key_prefix_format,
+            ),
+        )
 
     @pytest.mark.asyncio
     async def test_read_restarted(
@@ -461,6 +653,10 @@ class TestLogReader:
             async with timeout(timeout_s):
                 while True:
                     pod = await kube_client.get_pod(name)
+                    # print()
+                    # import pprint
+
+                    # pprint.pprint(pod._payload)
                     status = pod.get_container_status(name)
                     if status.get("restartCount", 0) >= count:
                         break
@@ -479,18 +675,19 @@ class TestLogReader:
         command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
         expected_payload = ("\n".join(str(i) for i in range(1, 6)) + "\n").encode()
         job_pod.set_command(command)
-        await kube_client.create_pod(job_pod.payload)
-        await kube_client.wait_pod_is_terminated(job_pod.name)
+        try:
+            await kube_client.create_pod(job_pod.payload)
+            await kube_client.wait_pod_is_terminated(job_pod.name)
 
-        await self._check_kube_logs(
-            kube_client,
-            namespace_name=kube_config.namespace,
-            pod_name=job_pod.name,
-            container_name=job_pod.name,
-            expected_payload=expected_payload,
-        )
-
-        await kube_client.delete_pod(job_pod.name)
+            await self._check_kube_logs(
+                kube_client,
+                namespace_name=kube_config.namespace,
+                pod_name=job_pod.name,
+                container_name=job_pod.name,
+                expected_payload=expected_payload,
+            )
+        finally:
+            await kube_client.delete_pod(job_pod.name)
         await self._check_es_logs(
             es_client,
             namespace_name=kube_config.namespace,
@@ -498,6 +695,7 @@ class TestLogReader:
             container_name=job_pod.name,
             expected_payload=expected_payload,
         )
+        assert 0
 
     @pytest.mark.asyncio
     async def test_elasticsearch_log_reader_restarted(
@@ -524,6 +722,7 @@ class TestLogReader:
             container_name=job_pod.name,
             expected_payload=expected_payload * 2,
         )
+        assert 0
 
     @pytest.mark.asyncio
     async def test_s3_log_reader(
@@ -538,18 +737,19 @@ class TestLogReader:
         command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
         expected_payload = ("\n".join(str(i) for i in range(1, 6)) + "\n").encode()
         job_pod.set_command(command)
-        await kube_client.create_pod(job_pod.payload)
-        await kube_client.wait_pod_is_terminated(job_pod.name)
+        try:
+            await kube_client.create_pod(job_pod.payload)
+            await kube_client.wait_pod_is_terminated(job_pod.name)
 
-        await self._check_kube_logs(
-            kube_client,
-            namespace_name=kube_config.namespace,
-            pod_name=job_pod.name,
-            container_name=job_pod.name,
-            expected_payload=expected_payload,
-        )
-
-        await kube_client.delete_pod(job_pod.name)
+            await self._check_kube_logs(
+                kube_client,
+                namespace_name=kube_config.namespace,
+                pod_name=job_pod.name,
+                container_name=job_pod.name,
+                expected_payload=expected_payload,
+            )
+        finally:
+            await kube_client.delete_pod(job_pod.name)
         await self._check_s3_logs(
             s3_client,
             bucket_name=s3_logs_bucket,
@@ -589,6 +789,7 @@ class TestLogReader:
             container_name=job_pod.name,
             expected_payload=expected_payload * 2,
         )
+        assert 0
 
     async def _check_kube_logs(
         self,
@@ -705,27 +906,33 @@ class TestLogReader:
     ) -> None:
         command = 'bash -c "echo hello"'
         job_pod.set_command(command)
-        await kube_client.create_pod(job_pod.payload)
+        try:
+            await kube_client.create_pod(job_pod.payload)
 
-        pod_name = job_pod.name
+            pod_name = job_pod.name
 
-        await kube_client.wait_pod_is_terminated(pod_name)
+            await kube_client.wait_pod_is_terminated(pod_name)
 
-        factory = ElasticsearchLogReaderFactory(kube_client, es_client)
+            factory = ElasticsearchLogReaderFactory(kube_client, es_client)
 
-        log_reader = await factory.get_pod_log_reader(pod_name)
-        assert isinstance(log_reader, PodContainerLogReader)
+            log_reader = factory.get_pod_log_reader(pod_name)
+            payload = await self._consume_log_reader(log_reader)
+            assert payload == b""
 
-        log_reader = await factory.get_pod_log_reader(pod_name, previous=True)
-        assert isinstance(log_reader, PodContainerLogReader)
+            async with factory.get_pod_log_reader(pod_name) as log_reader2:
+                async for chunk in log_reader2:
+                    assert chunk == b""
+                    assert isinstance(chunk, bytes)
+        finally:
+            await kube_client.delete_pod(job_pod.name)
 
-        log_reader = await factory.get_pod_log_reader(pod_name, archive=True)
-        assert isinstance(log_reader, ElasticsearchLogReader)
-
-        await kube_client.delete_pod(job_pod.name)
-
-        log_reader = await factory.get_pod_log_reader(pod_name)
-        assert isinstance(log_reader, ElasticsearchLogReader)
+        log_reader = factory.get_pod_log_reader(pod_name)
+        payload = await self._consume_log_reader(log_reader)
+        assert payload == b""
+        async with factory.get_pod_log_reader(pod_name) as log_reader2:
+            async for chunk in log_reader2:
+                assert chunk == b""
+                assert isinstance(chunk, bytes)
 
     @pytest.mark.asyncio
     async def test_get_job_s3_log_reader(
@@ -739,29 +946,32 @@ class TestLogReader:
     ) -> None:
         command = 'bash -c "echo hello"'
         job_pod.set_command(command)
-        await kube_client.create_pod(job_pod.payload)
+        try:
+            await kube_client.create_pod(job_pod.payload)
 
-        pod_name = job_pod.name
+            pod_name = job_pod.name
 
-        await kube_client.wait_pod_is_terminated(pod_name)
+            await kube_client.wait_pod_is_terminated(pod_name)
 
-        factory = S3LogReaderFactory(
-            kube_client,
-            s3_client,
-            bucket_name=s3_logs_bucket,
-            key_prefix_format=s3_logs_key_prefix_format,
-        )
+            factory = S3LogReaderFactory(
+                kube_client,
+                s3_client,
+                bucket_name=s3_logs_bucket,
+                key_prefix_format=s3_logs_key_prefix_format,
+            )
 
-        log_reader = await factory.get_pod_log_reader(pod_name)
-        assert isinstance(log_reader, PodContainerLogReader)
+            log_reader = factory.get_pod_log_reader(pod_name)
+            payload = await self._consume_log_reader(log_reader)
+            assert payload == b""
+            # async with factory.get_pod_log_reader(pod_name) as log_reader:
+            # async for chunk in log_reader:
+            # assert isinstance(chunk, bytes)
+        finally:
+            await kube_client.delete_pod(job_pod.name)
 
-        log_reader = await factory.get_pod_log_reader(pod_name, previous=True)
-        assert isinstance(log_reader, PodContainerLogReader)
-
-        log_reader = await factory.get_pod_log_reader(pod_name, archive=True)
-        assert isinstance(log_reader, S3LogReader)
-
-        await kube_client.delete_pod(job_pod.name)
-
-        log_reader = await factory.get_pod_log_reader(pod_name)
-        assert isinstance(log_reader, S3LogReader)
+        log_reader = factory.get_pod_log_reader(pod_name)
+        payload = await self._consume_log_reader(log_reader)
+        assert payload == b""
+        # async with factory.get_pod_log_reader(pod_name) as log_reader:
+        # async for chunk in log_reader:
+        # assert isinstance(chunk, bytes)

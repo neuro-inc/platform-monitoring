@@ -4,11 +4,13 @@ import logging
 import ssl
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, NoReturn, Optional, Sequence
 from urllib.parse import urlsplit
 
 import aiohttp
+import iso8601
 from aiohttp import ContentTypeError
 from async_timeout import timeout
 from yarl import URL
@@ -362,6 +364,21 @@ class KubeClient:
                 if not is_waiting:
                     return
                 await asyncio.sleep(interval_s)
+
+    async def get_container_started_at(self, pod_name: str) -> Optional[datetime]:
+        pod = await self.get_pod(pod_name)
+        status = pod.get_container_status(pod_name)
+        try:
+            date_str = status["state"]["running"]["startedAt"]
+        except KeyError:
+            try:
+                date_str = status["state"]["terminated"]["startedAt"]
+                if not date_str:
+                    return None
+            except KeyError:
+                # waiting
+                return None
+        return iso8601.parse_date(date_str)
 
     def _get_node_proxy_url(self, host: str, port: int) -> URL:
         return URL(self._generate_node_proxy_url(host, port))

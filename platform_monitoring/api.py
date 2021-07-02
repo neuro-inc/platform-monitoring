@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import random
 import shlex
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from pathlib import Path
@@ -67,14 +68,9 @@ from .jobs_service import (
     JobsService,
 )
 from .kube_client import JobError, KubeClient, KubeTelemetry
+from .logs import ElasticsearchLogReaderFactory, LogReaderFactory, S3LogReaderFactory
 from .user import untrusted_user
-from .utils import (
-    ElasticsearchLogReaderFactory,
-    JobsHelper,
-    KubeHelper,
-    LogReaderFactory,
-    S3LogReaderFactory,
-)
+from .utils import JobsHelper, KubeHelper
 from .validators import (
     create_exec_create_request_payload_validator,
     create_save_request_payload_validator,
@@ -167,23 +163,24 @@ class MonitoringApiHandler:
         return json_response(result)
 
     async def stream_log(self, request: Request) -> StreamResponse:
-        previous = _get_bool_param(request, "previous", False)
-        archive = _get_bool_param(request, "archive", False)
         job = await self._resolve_job(request, "read")
 
         pod_name = self._kube_helper.get_job_pod_name(job)
-        log_reader = await self._log_reader_factory.get_pod_log_reader(
-            pod_name, previous=previous, archive=archive
-        )
+        separator = request.query.get("separator")
+        if not separator:
+            separator = _getrandbytes(30).hex()
 
         response = StreamResponse(status=200)
         response.enable_chunked_encoding()
         response.enable_compression(aiohttp.web.ContentCoding.identity)
         response.content_type = "text/plain"
         response.charset = "utf-8"
+        response.headers["X-Separator"] = separator
         await response.prepare(request)
 
-        async with log_reader as it:
+        async with self._log_reader_factory.get_pod_log_reader(
+            pod_name, separator=separator.encode()
+        ) as it:
             async for chunk in it:
                 await response.write(chunk)
 
@@ -915,3 +912,7 @@ def _get_bool_param(request: Request, name: str, default: bool = False) -> bool:
     if param == "false":
         return False
     raise ValueError(f'"{name}" request parameter can be "true" or "false"')
+
+
+def _getrandbytes(size: int) -> bytes:
+    return random.getrandbits(size * 8).to_bytes(size, "big")
