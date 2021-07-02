@@ -299,12 +299,8 @@ class TestLogReader:
     ) -> bytes:
         istream = io.BytesIO()
         try:
-            async with log_reader:
-                while True:
-                    chunk = await log_reader.read(chunk_size)
-                    if not chunk:
-                        break
-                    assert chunk_size < 0 or len(chunk) <= chunk_size
+            async with log_reader as it:
+                async for chunk in it:
                     istream.write(chunk)
         except asyncio.CancelledError:
             pass

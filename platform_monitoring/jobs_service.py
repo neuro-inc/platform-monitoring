@@ -27,7 +27,7 @@ from .config import DOCKER_API_VERSION, KubeConfig
 from .docker_client import Docker, ImageReference
 from .kube_client import JobNotFoundException, KubeClient, Pod, Resources
 from .user import User
-from .utils import KubeHelper
+from .utils import KubeHelper, asyncgeneratorcontextmanager
 
 
 @dataclass(frozen=True)
@@ -80,6 +80,7 @@ class JobsService:
     async def get(self, job_id: str) -> Job:
         return await self._jobs_client.status(job_id)
 
+    @asyncgeneratorcontextmanager
     async def save(
         self, job: Job, user: User, container: Container
     ) -> AsyncIterator[Dict[str, Any]]:

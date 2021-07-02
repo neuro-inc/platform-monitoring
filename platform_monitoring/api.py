@@ -176,8 +176,6 @@ class MonitoringApiHandler:
             pod_name, previous=previous, archive=archive
         )
 
-        # TODO (A Danshyn, 05.07.2018): expose. make configurable
-        chunk_size = 1024
         response = StreamResponse(status=200)
         response.enable_chunked_encoding()
         response.enable_compression(aiohttp.web.ContentCoding.identity)
@@ -185,11 +183,8 @@ class MonitoringApiHandler:
         response.charset = "utf-8"
         await response.prepare(request)
 
-        async with log_reader:
-            while True:
-                chunk = await log_reader.read(size=chunk_size)
-                if not chunk:
-                    break
+        async with log_reader as it:
+            async for chunk in it:
                 await response.write(chunk)
 
         await response.write_eof()
@@ -306,8 +301,9 @@ class MonitoringApiHandler:
         await response.prepare(request)
 
         try:
-            async for chunk in self._jobs_service.save(job, user, container):
-                await response.write(self._serialize_chunk(chunk, encoding))
+            async with self._jobs_service.save(job, user, container) as it:
+                async for chunk in it:
+                    await response.write(self._serialize_chunk(chunk, encoding))
         except JobException as e:
             # Serialize an exception in a similar way as docker does:
             chunk = {"error": str(e), "errorDetail": {"message": str(e)}}

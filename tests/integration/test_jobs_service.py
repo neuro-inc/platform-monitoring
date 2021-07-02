@@ -216,8 +216,9 @@ class TestJobsService:
             )
         )
 
-        async for chunk in jobs_service.save(job, user, container):
-            pass
+        async with jobs_service.save(job, user, container) as it:
+            async for chunk in it:
+                pass
 
         new_job = await job_factory(
             str(container.image), 'sh -c \'[ "$(cat /test)" = "123" ]\'', resources
@@ -254,8 +255,9 @@ class TestJobsService:
             image=ImageReference(domain=registry_host, path=f"{user.name}/alpine")
         )
 
-        async for chunk in jobs_service.save(job, user, container):
-            pass
+        async with jobs_service.save(job, user, container) as it:
+            async for chunk in it:
+                pass
 
         new_job = await job_factory(
             str(container.image),
@@ -292,8 +294,9 @@ class TestJobsService:
         )
 
         with pytest.raises(JobException, match="is not running"):
-            async for chunk in jobs_service.save(job, user, container):
-                pass
+            async with jobs_service.save(job, user, container) as it:
+                async for chunk in it:
+                    pass
 
     @pytest.mark.asyncio
     async def test_save_push_failure(
@@ -324,7 +327,8 @@ class TestJobsService:
         )
         repository = f"{registry_host}/{user.name}/alpine"
 
-        data = [chunk async for chunk in jobs_service.save(job, user, container)]
+        async with jobs_service.save(job, user, container) as it:
+            data = [chunk async for chunk in it]
         assert len(data) == 4, str(data)
 
         assert data[0]["status"] == "CommitStarted"
@@ -372,8 +376,9 @@ class TestJobsService:
             JobException,
             match="invalid reference format: repository name must be lowercase",
         ):
-            async for chunk in jobs_service.save(job, user, container):
-                pass
+            async with jobs_service.save(job, user, container) as it:
+                async for chunk in it:
+                    pass
 
     @pytest.mark.asyncio
     async def test_attach_nontty(
