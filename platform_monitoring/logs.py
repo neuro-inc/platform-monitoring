@@ -228,8 +228,19 @@ class S3LogReader(LogReader):
         self._line_iterator: Optional[AsyncIterator[bytes]] = None
         self._iterator: Optional[AsyncIterator[bytes]] = None
 
+    @staticmethod
+    def get_prefix(
+        prefix_format: str, namespace_name: str, pod_name: str, container_name: str
+    ) -> str:
+        return prefix_format.format(
+            namespace_name=namespace_name,
+            pod_name=pod_name,
+            container_name=container_name,
+        )
+
     def _get_prefix(self) -> str:
-        return self._prefix_format.format(
+        return self.get_prefix(
+            prefix_format=self._prefix_format,
             namespace_name=self._namespace_name,
             pod_name=self._pod_name,
             container_name=self._container_name,

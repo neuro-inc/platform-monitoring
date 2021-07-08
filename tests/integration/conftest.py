@@ -253,6 +253,15 @@ def config(config_factory: Callable[..., Config]) -> Config:
     return config_factory()
 
 
+@pytest.fixture
+def config_s3_storage(
+    config_factory: Callable[..., Config], s3_config: S3Config
+) -> Config:
+    return config_factory(
+        logs=LogsConfig(storage_type=LogsStorageType.S3), s3=s3_config
+    )
+
+
 @dataclass(frozen=True)
 class ApiAddress:
     host: str
