@@ -418,7 +418,7 @@ class TestLogReader:
         job_pod: MyPodDescriptor,
         factory: LogReaderFactory,
     ) -> None:
-        command = 'bash -c "date +[%T]; for i in {1..5}; do sleep 1; echo $i; done"'
+        command = 'bash -c "for i in {1..5}; do sleep 1; echo $i; done"'
         job_pod.set_command(command)
         names = []
         tasks = []
@@ -446,20 +446,12 @@ class TestLogReader:
         payloads = await asyncio.gather(*tasks)
 
         # Output for debugging
-        for i in range(len(names)):
-            print(f"{names[i]}: {payloads[i]!r}")
+        for i, (name, payload) in enumerate(zip(names, payloads)):
+            print(f"{i}. {name}: {payload!r}")
 
         expected_payload = "".join(f"{i}\n" for i in range(1, 6)).encode()
-        payload0 = payloads[0]
-        assert re.sub(rb"\[.*?\]\n", b"", payload0) == expected_payload
-        for i, payload in enumerate(payloads):
-            if i < 6:
-                assert b"===" not in payload
-            else:
-                assert payload.count(b"===\n") == 1
-            payload = payload.replace(b"===\n", b"")
-            payload = re.sub(rb"Unable to retrieve .*", b"", payload)
-            assert payload == payload0
+        for name, payload in zip(names, payloads):
+            assert payload == expected_payload, name
 
     @pytest.mark.asyncio
     async def test_elasticsearch_merged_log_reader(
@@ -534,25 +526,24 @@ class TestLogReader:
             await kube_client.delete_pod(job_pod.name)
         run_log_reader("deleted")
         await asyncio.sleep(10)
-        run_log_reader("finished")
+        run_log_reader("collected")
 
         payloads = await asyncio.gather(*tasks)
 
         # Output for debugging
-        for i in range(len(names)):
-            print(f"{names[i]}: {payloads[i]!r}")
+        for i, (name, payload) in enumerate(zip(names, payloads)):
+            print(f"{i}. {name}: {payload!r}")
 
         expected_payload = "".join(f"{i}\n" for i in range(1, 6)).encode()
         payload0 = payloads[0]
         assert re.sub(rb"\[.*?\]\n", b"", payload0) == expected_payload * 3
-        for i, payload in enumerate(payloads):
-            if i < 7:
-                assert b"===" not in payload
-            else:
-                assert payload.count(b"===\n") == 1
+        for i, (name, payload) in enumerate(zip(names, payloads)):
+            if i < 2 or i >= len(names) - 1:
+                assert b"===" not in payload, name
+            elif i >= 7 and i <= 13:
+                assert payload.count(b"===\n") == 1, name
             payload = payload.replace(b"===\n", b"")
-            payload = re.sub(rb"Unable to retrieve .*", b"", payload)
-            assert payload == payload0
+            assert payload == payload0, name
 
     @pytest.mark.asyncio
     async def test_elasticsearch_merged_log_reader_restarted(

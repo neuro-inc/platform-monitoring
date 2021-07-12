@@ -253,6 +253,18 @@ class TestFilterOutRPCError:
         assert chunks == [b"line1\n"]
 
     @pytest.mark.asyncio
+    async def test_filtered_single_rpc_error2(self) -> None:
+        reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
+        reader.feed_data(b"line1\n")
+        reader.feed_data(
+            b"Unable to retrieve container logs for docker://0123456789abcdef"
+        )
+        reader.feed_eof()
+        it = filter_out_rpc_error(reader)
+        chunks = [chunk async for chunk in it]
+        assert chunks == [b"line1\n"]
+
+    @pytest.mark.asyncio
     async def test_filtered_two_rpc_errors(self) -> None:
         reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
         reader.feed_data(b"line1\n")

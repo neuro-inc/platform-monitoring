@@ -26,6 +26,13 @@ from .utils import aclosing, asyncgeneratorcontextmanager
 logger = logging.getLogger(__name__)
 
 
+error_prefixes = (
+    b"rpc error: code =",
+    b"Unable to retrieve",
+)
+max_error_prefix_len = max(map(len, error_prefixes))
+
+
 async def filter_out_rpc_error(stream: aiohttp.StreamReader) -> AsyncIterator[bytes]:
     # https://github.com/neuromation/platform-api/issues/131
     # k8s API (and the underlying docker API) sometimes returns an rpc
@@ -76,12 +83,11 @@ async def filter_out_rpc_error(stream: aiohttp.StreamReader) -> AsyncIterator[by
         _is_line_start = True
 
     while True:
-        error_prefix = b"rpc error: code ="
-        chunk, is_line_start = await read_chunk(min_line_length=len(error_prefix))
+        chunk, is_line_start = await read_chunk(min_line_length=max_error_prefix_len)
         # 1. `chunk` may not be a whole line, ending with "\n";
         # 2. `chunk` may be the beginning of a line with the min length of
-        # `len(error_prefix)`.
-        if is_line_start and chunk.startswith(error_prefix):
+        # `max_error_prefix_len`.
+        if is_line_start and chunk.startswith(error_prefixes):
             unreadline(chunk)
             line = await readline()
             next_chunk, _ = await read_chunk(min_line_length=1)
@@ -366,13 +372,16 @@ class LogReaderFactory(abc.ABC):
                     break
             await asyncio.sleep(interval_s)
 
-        if has_archive and separator is not None:
-            yield separator + b"\n"
+        if not has_archive:
+            separator = None
 
         try:
             while True:
                 async with self.get_pod_live_log_reader(pod_name) as it:
                     async for chunk in it:
+                        if separator is not None:
+                            yield separator + b"\n"
+                            separator = None
                         yield chunk
                 async with timeout(timeout_s):
                     since = start
