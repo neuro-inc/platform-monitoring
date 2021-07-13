@@ -55,6 +55,7 @@ class LogsStorageType(str, enum.Enum):
 @dataclass(frozen=True)
 class LogsConfig:
     storage_type: LogsStorageType
+    cleanup_interval_sec: float = 15 * 60  # 15m
 
 
 class KubeClientAuthType(str, enum.Enum):

@@ -7,7 +7,7 @@ install_requires = (
     "aiohttp==3.7.4.post0",
     "neuro_auth_client==21.5.17",
     "platform_config_client==21.5.18",
-    "neuro-sdk==21.5.17",
+    "neuro-sdk==21.7.12a1",
     "aioelasticsearch==0.7.0",
     "aiodocker==0.19.1",
     "docker-image-py==0.1.10",
