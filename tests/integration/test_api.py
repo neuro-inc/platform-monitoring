@@ -32,6 +32,7 @@ from platform_monitoring.config import (
     PlatformApiConfig,
 )
 from platform_monitoring.docker_client import Docker
+from platform_monitoring.kube_client import JobNotFoundException
 from tests.integration.conftest_kube import MyKubeClient
 
 from .conftest import ApiAddress, create_local_app_server, random_str
@@ -155,6 +156,15 @@ class PlatformApiEndpoints:
 @pytest.fixture
 async def monitoring_api(config: Config) -> AsyncIterator[MonitoringApiEndpoints]:
     app = await create_app(config)
+    async with create_local_app_server(app, port=8080) as address:
+        yield MonitoringApiEndpoints(address=address)
+
+
+@pytest.fixture
+async def monitoring_api_s3_storage(
+    config_s3_storage: Config,
+) -> AsyncIterator[MonitoringApiEndpoints]:
+    app = await create_app(config_s3_storage)
     async with create_local_app_server(app, port=8080) as address:
         yield MonitoringApiEndpoints(address=address)
 
@@ -874,6 +884,53 @@ class TestLogApi:
         url = monitoring_api.generate_log_url(job_id)
         async with client.get(url, headers=user2.headers) as resp:
             assert resp.status == HTTPOk.status_code
+
+    @pytest.mark.asyncio
+    async def test_job_log_cleanup(
+        self,
+        monitoring_api_s3_storage: MonitoringApiEndpoints,
+        platform_api: PlatformApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        job_submit: Dict[str, Any],
+        kube_client: MyKubeClient,
+    ) -> None:
+        command = 'bash -c "for i in {1..5}; do echo $i; done; sleep 100"'
+        request_payload = job_submit
+        request_payload["container"]["command"] = command
+        headers = jobs_client.headers
+
+        url = platform_api.jobs_base_url
+        async with client.post(url, headers=headers, json=request_payload) as response:
+            assert response.status == HTTPAccepted.status_code, await response.text()
+            result = await response.json()
+            job_id = result["id"]
+
+        # Jobs is canceled so its pod removed immediately
+        await jobs_client.long_polling_by_job_id(job_id, "running")
+        await jobs_client.delete_job(job_id)
+
+        async def _wait_no_pod() -> None:
+            while True:
+                try:
+                    await kube_client.get_pod(job_id)
+                except JobNotFoundException:
+                    return
+
+        await asyncio.wait_for(_wait_no_pod(), timeout=60)
+
+        url = monitoring_api_s3_storage.generate_log_url(job_id)
+        async with client.get(url, headers=headers) as response:
+            actual_payload = await response.read()
+            expected_payload = "\n".join(str(i) for i in range(1, 6)) + "\n"
+            assert actual_payload == expected_payload.encode()
+
+        async with client.delete(url, headers=headers) as response:
+            assert response.status == HTTPNoContent.status_code
+
+        async with client.get(url, headers=headers) as response:
+            actual_payload = await response.read()
+            assert actual_payload == b""
 
 
 class TestSaveApi:

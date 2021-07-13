@@ -26,7 +26,7 @@ from platform_monitoring.logs import (
     PodContainerLogReader,
     S3LogReader,
 )
-from platform_monitoring.utils import ElasticsearchLogReaderFactory, S3LogReaderFactory
+from platform_monitoring.utils import ElasticsearchLogsService, S3LogsService
 from tests.integration.conftest import ApiAddress, create_local_app_server
 
 from .conftest_kube import MyKubeClient, MyPodDescriptor
@@ -590,6 +590,52 @@ class TestLogReader:
             expected_payload=expected_payload * 2,
         )
 
+    @pytest.mark.asyncio
+    async def test_s3_logs_cleanup(
+        self,
+        kube_config: KubeConfig,
+        kube_client: MyKubeClient,
+        job_pod: MyPodDescriptor,
+        s3_client: AioBaseClient,
+        s3_logs_bucket: str,
+        s3_logs_key_prefix_format: str,
+    ) -> None:
+        command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
+        expected_payload = ("\n".join(str(i) for i in range(1, 6)) + "\n").encode()
+        job_pod.set_command(command)
+        await kube_client.create_pod(job_pod.payload)
+        await kube_client.wait_pod_is_terminated(job_pod.name)
+
+        await self._check_s3_logs(
+            s3_client,
+            bucket_name=s3_logs_bucket,
+            prefix_format=s3_logs_key_prefix_format,
+            namespace_name=kube_config.namespace,
+            pod_name=job_pod.name,
+            container_name=job_pod.name,
+            expected_payload=expected_payload,
+        )
+
+        service = S3LogsService(
+            kube_client,
+            s3_client,
+            bucket_name=s3_logs_bucket,
+            key_prefix_format=s3_logs_key_prefix_format,
+        )
+
+        await service.drop_logs(job_pod.name)
+
+        await self._check_s3_logs(
+            s3_client,
+            bucket_name=s3_logs_bucket,
+            prefix_format=s3_logs_key_prefix_format,
+            namespace_name=kube_config.namespace,
+            pod_name=job_pod.name,
+            container_name=job_pod.name,
+            expected_payload=b"",
+            timeout_s=1,
+        )
+
     async def _check_kube_logs(
         self,
         kube_client: KubeClient,
@@ -711,7 +757,7 @@ class TestLogReader:
 
         await kube_client.wait_pod_is_terminated(pod_name)
 
-        factory = ElasticsearchLogReaderFactory(kube_client, es_client)
+        factory = ElasticsearchLogsService(kube_client, es_client)
 
         log_reader = await factory.get_pod_log_reader(pod_name)
         assert isinstance(log_reader, PodContainerLogReader)
@@ -745,7 +791,7 @@ class TestLogReader:
 
         await kube_client.wait_pod_is_terminated(pod_name)
 
-        factory = S3LogReaderFactory(
+        factory = S3LogsService(
             kube_client,
             s3_client,
             bucket_name=s3_logs_bucket,

@@ -45,15 +45,19 @@ def asyncgeneratorcontextmanager(
     return wrapper
 
 
-class LogReaderFactory(abc.ABC):
+class LogsService(abc.ABC):
     @abc.abstractmethod
     async def get_pod_log_reader(
         self, pod_name: str, *, previous: bool = False, archive: bool = False
     ) -> LogReader:
         pass  # pragma: no cover
 
+    @abc.abstractmethod
+    async def drop_logs(self, pod_name: str) -> None:
+        pass  # pragma: no cover
 
-class ElasticsearchLogReaderFactory(LogReaderFactory):
+
+class ElasticsearchLogsService(LogsService):
     # TODO (A Yushkovskiy 07-Jun-2019) Add another abstraction layer joining together
     #  kube-client and elasticsearch-client (in platform-api it's KubeOrchestrator)
     #  and move there method `get_pod_log_reader`
@@ -79,8 +83,11 @@ class ElasticsearchLogReaderFactory(LogReaderFactory):
             container_name=pod_name,
         )
 
+    async def drop_logs(self, pod_name: str) -> None:
+        raise NotImplementedError("Dropping logs for Elasticsearch is not implemented")
 
-class S3LogReaderFactory(LogReaderFactory):
+
+class S3LogsService(LogsService):
     def __init__(
         self,
         kube_client: KubeClient,
@@ -111,6 +118,23 @@ class S3LogReaderFactory(LogReaderFactory):
             pod_name=pod_name,
             container_name=pod_name,
         )
+
+    async def drop_logs(self, pod_name: str) -> None:
+        paginator = self._s3_client.get_paginator("list_objects_v2")
+
+        async for page in paginator.paginate(
+            Bucket=self._bucket_name,
+            Prefix=S3LogReader.get_prefix(
+                self._key_prefix_format,
+                namespace_name=self._kube_client.namespace,
+                pod_name=pod_name,
+                container_name=pod_name,
+            ),
+        ):
+            for obj in page.get("Contents", ()):
+                await self._s3_client.delete_object(
+                    Bucket=self._bucket_name, Key=obj["Key"]
+                )
 
 
 class JobsHelper:
