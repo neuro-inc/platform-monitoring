@@ -249,6 +249,12 @@ class JobsClient:
             if assert_success:
                 assert response.status == HTTPNoContent.status_code
 
+    async def drop_job(self, job_id: str, assert_success: bool = True) -> None:
+        url = self._platform_api.generate_job_url(job_id) / "drop"
+        async with self._client.post(url, headers=self.headers) as response:
+            if assert_success:
+                assert response.status == HTTPNoContent.status_code
+
 
 @pytest.fixture
 def jobs_client_factory(
@@ -931,6 +937,42 @@ class TestLogApi:
         async with client.get(url, headers=headers) as response:
             actual_payload = await response.read()
             assert actual_payload == b""
+
+    @pytest.mark.asyncio
+    async def test_job_logs_removed_on_drop(
+        self,
+        monitoring_api_s3_storage: MonitoringApiEndpoints,
+        platform_api: PlatformApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        job_submit: Dict[str, Any],
+        kube_client: MyKubeClient,
+    ) -> None:
+        command = 'bash -c "exit 0"'
+        request_payload = job_submit
+        request_payload["container"]["command"] = command
+        headers = jobs_client.headers
+
+        url = platform_api.jobs_base_url
+        async with client.post(url, headers=headers, json=request_payload) as response:
+            assert response.status == HTTPAccepted.status_code, await response.text()
+            result = await response.json()
+            job_id = result["id"]
+
+        # Jobs is canceled so its pod removed immediately
+        await jobs_client.long_polling_by_job_id(job_id, "succeeded")
+
+        # Drop request
+        await jobs_client.drop_job(job_id)
+
+        async def _wait_no_job() -> None:
+            while True:
+                try:
+                    await jobs_client.get_job_by_id(job_id)
+                except AssertionError:
+                    return
+
+        await asyncio.wait_for(_wait_no_job(), timeout=10)
 
 
 class TestSaveApi:

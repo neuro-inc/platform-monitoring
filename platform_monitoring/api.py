@@ -67,6 +67,7 @@ from .jobs_service import (
     JobsService,
 )
 from .kube_client import JobError, KubeClient, KubeTelemetry
+from .log_cleanup_poller import LogCleanupPoller
 from .user import untrusted_user
 from .utils import (
     ElasticsearchLogsService,
@@ -805,11 +806,12 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             )
             app["monitoring_app"]["config_client"] = config_client
 
-            app["monitoring_app"]["logs_service"] = create_logs_service(
+            logs_service = create_logs_service(
                 config, kube_client, es_client, s3_client
             )
+            app["monitoring_app"]["logs_service"] = logs_service
 
-            app["monitoring_app"]["jobs_service"] = JobsService(
+            jobs_service = JobsService(
                 config_client=config_client,
                 jobs_client=platform_client.jobs,
                 kube_client=kube_client,
@@ -817,6 +819,15 @@ async def create_app(config: Config) -> aiohttp.web.Application:
                 cluster_name=config.cluster_name,
                 kube_job_label=config.kube.job_label,
                 kube_node_pool_label=config.kube.node_pool_label,
+            )
+            app["monitoring_app"]["jobs_service"] = jobs_service
+
+            await exit_stack.enter_async_context(
+                LogCleanupPoller(
+                    jobs_service=jobs_service,
+                    logs_service=logs_service,
+                    interval_sec=config.logs.cleanup_interval_sec,
+                )
             )
 
             yield
