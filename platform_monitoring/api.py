@@ -68,7 +68,8 @@ from .jobs_service import (
     JobsService,
 )
 from .kube_client import JobError, KubeClient, KubeTelemetry
-from .logs import ElasticsearchLogReaderFactory, LogReaderFactory, S3LogReaderFactory
+from .log_cleanup_poller import LogCleanupPoller
+from .logs import ElasticsearchLogsService, LogsService, S3LogsService
 from .user import untrusted_user
 from .utils import JobsHelper, KubeHelper
 from .validators import (
@@ -120,6 +121,7 @@ class MonitoringApiHandler:
                 aiohttp.web.post("/available", self.get_capacity),  # deprecated
                 aiohttp.web.get("/capacity", self.get_capacity),
                 aiohttp.web.get("/{job_id}/log", self.stream_log),
+                aiohttp.web.delete("/{job_id}/log", self.drop_log),
                 aiohttp.web.get("/{job_id}/top", self.stream_top),
                 aiohttp.web.post("/{job_id}/save", self.stream_save),
                 aiohttp.web.post("/{job_id}/attach", self.ws_attach),
@@ -145,8 +147,8 @@ class MonitoringApiHandler:
         return self._app["kube_client"]
 
     @property
-    def _log_reader_factory(self) -> LogReaderFactory:
-        return self._app["log_reader_factory"]
+    def _logs_service(self) -> LogsService:
+        return self._app["logs_service"]
 
     async def get_capacity(self, request: Request) -> Response:
         # Check that user has access to the cluster
@@ -178,7 +180,7 @@ class MonitoringApiHandler:
         response.headers["X-Separator"] = separator
         await response.prepare(request)
 
-        async with self._log_reader_factory.get_pod_log_reader(
+        async with self._logs_service.get_pod_log_reader(
             pod_name, separator=separator.encode()
         ) as it:
             async for chunk in it:
@@ -186,6 +188,13 @@ class MonitoringApiHandler:
 
         await response.write_eof()
         return response
+
+    async def drop_log(self, request: Request) -> Response:
+        job = await self._resolve_job(request, "write")
+
+        pod_name = self._kube_helper.get_job_pod_name(job)
+        await self._logs_service.drop_logs(pod_name)
+        return Response(status=aiohttp.web.HTTPNoContent.status_code)
 
     async def stream_top(self, request: Request) -> WebSocketResponse:
         job = await self._resolve_job(request, "read")
@@ -676,20 +685,20 @@ def create_s3_client(config: S3Config) -> AioBaseClient:
     return session.create_client("s3", region_name=config.region, **kwargs)
 
 
-def create_log_reader_factory(
+def create_logs_service(
     config: Config,
     kube_client: KubeClient,
     es_client: Optional[Elasticsearch] = None,
     s3_client: Optional[AioBaseClient] = None,
-) -> LogReaderFactory:
+) -> LogsService:
     if config.logs.storage_type == LogsStorageType.ELASTICSEARCH:
         assert es_client
-        return ElasticsearchLogReaderFactory(kube_client, es_client)
+        return ElasticsearchLogsService(kube_client, es_client)
 
     if config.logs.storage_type == LogsStorageType.S3:
         assert config.s3
         assert s3_client
-        return S3LogReaderFactory(
+        return S3LogsService(
             kube_client,
             s3_client,
             bucket_name=config.s3.job_logs_bucket_name,
@@ -794,11 +803,12 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             )
             app["monitoring_app"]["config_client"] = config_client
 
-            app["monitoring_app"]["log_reader_factory"] = create_log_reader_factory(
+            logs_service = create_logs_service(
                 config, kube_client, es_client, s3_client
             )
+            app["monitoring_app"]["logs_service"] = logs_service
 
-            app["monitoring_app"]["jobs_service"] = JobsService(
+            jobs_service = JobsService(
                 config_client=config_client,
                 jobs_client=platform_client.jobs,
                 kube_client=kube_client,
@@ -806,6 +816,15 @@ async def create_app(config: Config) -> aiohttp.web.Application:
                 cluster_name=config.cluster_name,
                 kube_job_label=config.kube.job_label,
                 kube_node_pool_label=config.kube.node_pool_label,
+            )
+            app["monitoring_app"]["jobs_service"] = jobs_service
+
+            await exit_stack.enter_async_context(
+                LogCleanupPoller(
+                    jobs_service=jobs_service,
+                    logs_service=logs_service,
+                    interval_sec=config.logs.cleanup_interval_sec,
+                )
             )
 
             yield

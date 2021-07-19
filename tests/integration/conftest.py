@@ -236,7 +236,9 @@ def config_factory(
             platform_api=platform_api_config,
             platform_config=platform_config,
             elasticsearch=es_config,
-            logs=LogsConfig(storage_type=LogsStorageType.ELASTICSEARCH),
+            logs=LogsConfig(
+                storage_type=LogsStorageType.ELASTICSEARCH, cleanup_interval_sec=0.5
+            ),
             kube=kube_config,
             registry=registry_config,
             docker=docker_config,
@@ -251,6 +253,16 @@ def config_factory(
 @pytest.fixture
 def config(config_factory: Callable[..., Config]) -> Config:
     return config_factory()
+
+
+@pytest.fixture
+def config_s3_storage(
+    config_factory: Callable[..., Config], s3_config: S3Config
+) -> Config:
+    return config_factory(
+        logs=LogsConfig(storage_type=LogsStorageType.S3, cleanup_interval_sec=0.5),
+        s3=s3_config,
+    )
 
 
 @dataclass(frozen=True)

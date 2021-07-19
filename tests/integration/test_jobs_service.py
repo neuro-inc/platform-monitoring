@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import re
 import uuid
 from typing import Any, AsyncIterator, Awaitable, Callable, Optional
@@ -11,6 +12,7 @@ from async_timeout import timeout
 from neuro_sdk import (
     Client as PlatformApiClient,
     Container as JobContainer,
+    IllegalArgumentError,
     JobDescription as Job,
     JobStatus,
     Resources,
@@ -55,7 +57,8 @@ async def job_factory(
     yield _factory
 
     for job in jobs:
-        await platform_api_client.jobs.kill(job.id)
+        with contextlib.suppress(IllegalArgumentError):  # Ignore if job was dropped
+            await platform_api_client.jobs.kill(job.id)
 
 
 @pytest.fixture
@@ -534,3 +537,38 @@ class TestJobsService:
     async def test_get_available_jobs_count(self, jobs_service: JobsService) -> None:
         result = await jobs_service.get_available_jobs_counts()
         assert result and "cpu-small" in result
+
+    @pytest.mark.asyncio
+    async def test_mark_logs_dropped(
+        self,
+        job_factory: JobFactory,
+        platform_api_client: PlatformApiClient,
+        jobs_service: JobsService,
+    ) -> None:
+        resources = Resources(
+            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+        )
+        job = await job_factory(
+            "alpine:latest",
+            "sh -c 'exit 0'",
+            resources,
+            tty=False,
+        )
+        await self.wait_for_job_succeeded(job, platform_api_client)
+
+        await platform_api_client.jobs.kill(job.id)
+
+        # Drop request
+        # TODO: replace with sdk call when available
+        url = platform_api_client._config.api_url / "jobs" / job.id / "drop"
+        auth = await platform_api_client._config._api_auth()
+        async with platform_api_client._core.request("POST", url, auth=auth):
+            pass
+
+        # Job should be still there
+        assert await platform_api_client.jobs.status(job.id)
+
+        await jobs_service.mark_logs_dropped(job.id)
+
+        with pytest.raises(IllegalArgumentError):
+            await platform_api_client.jobs.status(job.id)

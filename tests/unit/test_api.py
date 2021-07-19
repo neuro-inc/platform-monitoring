@@ -5,10 +5,10 @@ import pytest
 from aiobotocore.client import AioBaseClient
 from aioelasticsearch import Elasticsearch
 
-from platform_monitoring.api import create_log_reader_factory
+from platform_monitoring.api import create_logs_service
 from platform_monitoring.config import Config, LogsConfig, LogsStorageType, S3Config
 from platform_monitoring.kube_client import KubeClient
-from platform_monitoring.logs import ElasticsearchLogReaderFactory, S3LogReaderFactory
+from platform_monitoring.logs import ElasticsearchLogsService, S3LogsService
 
 
 @pytest.fixture
@@ -42,33 +42,33 @@ def config_factory() -> Callable[[LogsStorageType], Config]:
     return _factory
 
 
-def test_create_es_log_reader_factory(
+def test_create_es_logs_service(
     config_factory: Callable[[LogsStorageType], Config], kube_client: KubeClient
 ) -> None:
     config = config_factory(LogsStorageType.ELASTICSEARCH)
-    result = create_log_reader_factory(
+    result = create_logs_service(
         config, kube_client, es_client=mock.Mock(spec=Elasticsearch)
     )
-    assert isinstance(result, ElasticsearchLogReaderFactory)
+    assert isinstance(result, ElasticsearchLogsService)
 
 
-def test_create_s3_log_reader_factory(
+def test_create_s3_logs_service(
     config_factory: Callable[[LogsStorageType], Config], kube_client: KubeClient
 ) -> None:
     config = config_factory(LogsStorageType.S3)
-    result = create_log_reader_factory(
+    result = create_logs_service(
         config, kube_client, s3_client=mock.Mock(spec=AioBaseClient)
     )
-    assert isinstance(result, S3LogReaderFactory)
+    assert isinstance(result, S3LogsService)
 
 
-def test_create_log_reader_factory_raises(
+def test_create_logs_service_raises(
     config_factory: Callable[[LogsStorageType], Config], kube_client: KubeClient
 ) -> None:
     config = config_factory(LogsStorageType.S3)
     with pytest.raises(AssertionError):
-        create_log_reader_factory(config, kube_client)
+        create_logs_service(config, kube_client)
 
     config = config_factory(LogsStorageType.ELASTICSEARCH)
     with pytest.raises(AssertionError):
-        create_log_reader_factory(config, kube_client)
+        create_logs_service(config, kube_client)

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from functools import reduce
 from typing import (
     Any,
+    AsyncContextManager,
     AsyncIterator,
     Dict,
     List,
@@ -79,6 +80,22 @@ class JobsService:
 
     async def get(self, job_id: str) -> Job:
         return await self._jobs_client.status(job_id)
+
+    def get_jobs_for_log_removal(self) -> AsyncContextManager[AsyncIterator[Job]]:
+        return self._jobs_client.list(
+            cluster_name=self._cluster_name,
+            _being_dropped=True,
+            _logs_removed=False,
+        )
+
+    async def mark_logs_dropped(self, job_id: str) -> None:
+        url = self._jobs_client._config.api_url / "jobs" / job_id / "drop_progress"
+        payload = {"logs_removed": True}
+        auth = await self._jobs_client._config._api_auth()
+        async with self._jobs_client._core.request(
+            "POST", url, auth=auth, json=payload
+        ):
+            pass
 
     @asyncgeneratorcontextmanager
     async def save(

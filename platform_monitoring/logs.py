@@ -245,8 +245,19 @@ class S3LogReader(LogReader):
         self._until = until
         self._iterator: Optional[AsyncIterator[bytes]] = None
 
+    @staticmethod
+    def get_prefix(
+        prefix_format: str, namespace_name: str, pod_name: str, container_name: str
+    ) -> str:
+        return prefix_format.format(
+            namespace_name=namespace_name,
+            pod_name=pod_name,
+            container_name=container_name,
+        )
+
     def _get_prefix(self) -> str:
-        return self._prefix_format.format(
+        return self.get_prefix(
+            prefix_format=self._prefix_format,
             namespace_name=self._namespace_name,
             pod_name=self._pod_name,
             container_name=self._container_name,
@@ -330,7 +341,7 @@ class S3LogReader(LogReader):
             yield pending.splitlines()[0]
 
 
-class LogReaderFactory(abc.ABC):
+class LogsService(abc.ABC):
     @asyncgeneratorcontextmanager
     async def get_pod_log_reader(
         self,
@@ -422,8 +433,12 @@ class LogReaderFactory(abc.ABC):
     ) -> LogReader:
         pass  # pragma: no cover
 
+    @abc.abstractmethod
+    async def drop_logs(self, pod_name: str) -> None:
+        pass  # pragma: no cover
 
-class BaseLogReaderFactory(LogReaderFactory):
+
+class BaseLogsService(LogsService):
     count = 0
 
     def __init__(self, kube_client: KubeClient) -> None:
@@ -443,7 +458,7 @@ class BaseLogReaderFactory(LogReaderFactory):
         )
 
 
-class ElasticsearchLogReaderFactory(BaseLogReaderFactory):
+class ElasticsearchLogsService(BaseLogsService):
     # TODO (A Yushkovskiy 07-Jun-2019) Add another abstraction layer joining together
     #  kube-client and elasticsearch-client (in platform-api it's KubeOrchestrator)
     #  and move there method `get_pod_log_reader`
@@ -468,8 +483,11 @@ class ElasticsearchLogReaderFactory(BaseLogReaderFactory):
             until=until,
         )
 
+    async def drop_logs(self, pod_name: str) -> None:
+        raise NotImplementedError("Dropping logs for Elasticsearch is not implemented")
 
-class S3LogReaderFactory(BaseLogReaderFactory):
+
+class S3LogsService(BaseLogsService):
     def __init__(
         self,
         kube_client: KubeClient,
@@ -499,3 +517,20 @@ class S3LogReaderFactory(BaseLogReaderFactory):
             since=since,
             until=until,
         )
+
+    async def drop_logs(self, pod_name: str) -> None:
+        paginator = self._s3_client.get_paginator("list_objects_v2")
+
+        async for page in paginator.paginate(
+            Bucket=self._bucket_name,
+            Prefix=S3LogReader.get_prefix(
+                self._key_prefix_format,
+                namespace_name=self._kube_client.namespace,
+                pod_name=pod_name,
+                container_name=pod_name,
+            ),
+        ):
+            for obj in page.get("Contents", ()):
+                await self._s3_client.delete_object(
+                    Bucket=self._bucket_name, Key=obj["Key"]
+                )
