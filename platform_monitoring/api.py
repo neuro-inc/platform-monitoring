@@ -68,14 +68,9 @@ from .jobs_service import (
 )
 from .kube_client import JobError, KubeClient, KubeTelemetry
 from .log_cleanup_poller import LogCleanupPoller
+from .logs import ElasticsearchLogsService, LogsService, S3LogsService
 from .user import untrusted_user
-from .utils import (
-    ElasticsearchLogsService,
-    JobsHelper,
-    KubeHelper,
-    LogsService,
-    S3LogsService,
-)
+from .utils import JobsHelper, KubeHelper
 from .validators import (
     create_exec_create_request_payload_validator,
     create_save_request_payload_validator,

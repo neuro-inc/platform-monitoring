@@ -6,7 +6,8 @@ from typing import Any, Optional
 from platform_logging import new_trace
 
 from platform_monitoring.jobs_service import JobsService
-from platform_monitoring.utils import KubeHelper, LogsService
+from platform_monitoring.logs import LogsService
+from platform_monitoring.utils import KubeHelper
 
 
 logger = logging.getLogger(__name__)

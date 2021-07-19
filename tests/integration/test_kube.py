@@ -23,10 +23,11 @@ from platform_monitoring.kube_client import (
 )
 from platform_monitoring.logs import (
     ElasticsearchLogReader,
+    ElasticsearchLogsService,
     PodContainerLogReader,
     S3LogReader,
+    S3LogsService,
 )
-from platform_monitoring.utils import ElasticsearchLogsService, S3LogsService
 from tests.integration.conftest import ApiAddress, create_local_app_server
 
 from .conftest_kube import MyKubeClient, MyPodDescriptor
