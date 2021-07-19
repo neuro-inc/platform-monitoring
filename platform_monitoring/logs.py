@@ -375,6 +375,7 @@ class LogReaderFactory(abc.ABC):
         if not has_archive:
             separator = None
 
+        can_restart: Optional[bool] = None
         try:
             while True:
                 async with self.get_pod_live_log_reader(pod_name) as it:
@@ -383,6 +384,10 @@ class LogReaderFactory(abc.ABC):
                             yield separator + b"\n"
                             separator = None
                         yield chunk
+                if can_restart is None:
+                    can_restart = await self.can_pod_restart(pod_name)
+                if not can_restart:
+                    break
                 async with timeout(timeout_s):
                     since = start
                     while True:
@@ -394,6 +399,10 @@ class LogReaderFactory(abc.ABC):
                         await asyncio.sleep(interval_s)
         except JobNotFoundException:
             pass
+
+    @abc.abstractmethod
+    async def can_pod_restart(self, pod_name: str) -> bool:
+        pass  # pragma: no cover
 
     @abc.abstractmethod
     async def get_container_started_at(self, pod_name: str) -> Optional[datetime]:
@@ -419,6 +428,9 @@ class BaseLogReaderFactory(LogReaderFactory):
 
     def __init__(self, kube_client: KubeClient) -> None:
         self._kube_client = kube_client
+
+    async def can_pod_restart(self, pod_name: str) -> bool:
+        return await self._kube_client.can_pod_restart(pod_name)
 
     async def get_container_started_at(self, pod_name: str) -> Optional[datetime]:
         return await self._kube_client.get_container_started_at(pod_name)

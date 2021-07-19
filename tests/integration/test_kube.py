@@ -439,9 +439,10 @@ class TestLogReader:
                 run_log_reader(f"started [{i}]")
         finally:
             await kube_client.delete_pod(job_pod.name)
+        run_log_reader("deleting")
+        while await kube_client.check_pod_exists(job_pod.name):
+            await asyncio.sleep(1)
         run_log_reader("deleted")
-        await asyncio.sleep(10)
-        run_log_reader("collected")
 
         payloads = await asyncio.gather(*tasks)
 
@@ -524,9 +525,10 @@ class TestLogReader:
                 run_log_reader(f"restarted 2 [{i}]")
         finally:
             await kube_client.delete_pod(job_pod.name)
+        run_log_reader("deleting")
+        while await kube_client.check_pod_exists(job_pod.name):
+            await asyncio.sleep(1)
         run_log_reader("deleted")
-        await asyncio.sleep(10)
-        run_log_reader("collected")
 
         payloads = await asyncio.gather(*tasks)
 
@@ -644,10 +646,6 @@ class TestLogReader:
             async with timeout(timeout_s):
                 while True:
                     pod = await kube_client.get_pod(name)
-                    # print()
-                    # import pprint
-
-                    # pprint.pprint(pod._payload)
                     status = pod.get_container_status(name)
                     if status.get("restartCount", 0) >= count:
                         break

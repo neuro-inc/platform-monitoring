@@ -1,12 +1,13 @@
 import asyncio
 import enum
+import json
 import logging
 import ssl
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, AsyncIterator, Dict, List, NoReturn, Optional, Sequence
+from typing import Any, AsyncIterator, Dict, List, Optional, Sequence
 from urllib.parse import urlsplit
 
 import aiohttp
@@ -109,6 +110,10 @@ class Pod:
     @property
     def node_name(self) -> Optional[str]:
         return self._payload["spec"].get("nodeName")
+
+    @property
+    def restart_policy(self) -> str:
+        return self._payload["spec"].get("restartPolicy") or "Never"
 
     @property
     def _status_payload(self) -> Dict[str, Any]:
@@ -365,6 +370,10 @@ class KubeClient:
                     return
                 await asyncio.sleep(interval_s)
 
+    async def can_pod_restart(self, pod_name: str) -> bool:
+        pod = await self.get_pod(pod_name)
+        return pod.restart_policy != "Never"
+
     async def get_container_started_at(self, pod_name: str) -> Optional[datetime]:
         pod = await self.get_pod(pod_name)
         status = pod.get_container_status(pod_name)
@@ -467,6 +476,12 @@ class KubeClient:
     async def _check_response_status(self, response: aiohttp.ClientResponse) -> None:
         if response.status != 200:
             payload = await response.text()
+            try:
+                pod = json.loads(payload)
+            except ValueError:
+                pass
+            else:
+                self._raise_status_job_exception(pod, job_id="")
             raise KubeClientException(payload)
 
     def _assert_resource_kind(
@@ -475,20 +490,19 @@ class KubeClient:
         kind = payload["kind"]
         if kind == "Status":
             self._raise_status_job_exception(payload, job_id="")
+            raise JobError("unexpected error")
         elif kind != expected_kind:
             raise ValueError(f"unknown kind: {kind}")
 
     def _raise_status_job_exception(
         self, pod: Dict[str, Any], job_id: Optional[str]
-    ) -> NoReturn:
+    ) -> None:
         if pod["code"] == 409:
             raise JobError(f"job '{job_id}' already exist")
         elif pod["code"] == 404:
             raise JobNotFoundException(f"job '{job_id}' was not found")
         elif pod["code"] == 422:
             raise JobError(f"can not create job with id '{job_id}'")
-        else:
-            raise JobError("unexpected error")
 
 
 @dataclass(frozen=True)
