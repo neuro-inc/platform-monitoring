@@ -1,3 +1,4 @@
+import abc
 import asyncio
 import io
 import json
@@ -328,3 +329,95 @@ class S3LogReader(LogReader):
         if self._response_body:
             await self._response_body.__aexit__(exc_type, exc_val, exc_tb)
             self._response_body = None
+
+
+class LogsService(abc.ABC):
+    @abc.abstractmethod
+    async def get_pod_log_reader(
+        self, pod_name: str, *, previous: bool = False, archive: bool = False
+    ) -> LogReader:
+        pass  # pragma: no cover
+
+    @abc.abstractmethod
+    async def drop_logs(self, pod_name: str) -> None:
+        pass  # pragma: no cover
+
+
+class ElasticsearchLogsService(LogsService):
+    # TODO (A Yushkovskiy 07-Jun-2019) Add another abstraction layer joining together
+    #  kube-client and elasticsearch-client (in platform-api it's KubeOrchestrator)
+    #  and move there method `get_pod_log_reader`
+
+    def __init__(self, kube_client: KubeClient, es_client: Elasticsearch) -> None:
+        self._kube_client = kube_client
+        self._es_client = es_client
+
+    async def get_pod_log_reader(
+        self, pod_name: str, *, previous: bool = False, archive: bool = False
+    ) -> LogReader:
+        if not archive and await self._kube_client.check_pod_exists(pod_name):
+            return PodContainerLogReader(
+                client=self._kube_client,
+                pod_name=pod_name,
+                container_name=pod_name,
+                previous=previous,
+            )
+        return ElasticsearchLogReader(
+            es_client=self._es_client,
+            namespace_name=self._kube_client.namespace,
+            pod_name=pod_name,
+            container_name=pod_name,
+        )
+
+    async def drop_logs(self, pod_name: str) -> None:
+        raise NotImplementedError("Dropping logs for Elasticsearch is not implemented")
+
+
+class S3LogsService(LogsService):
+    def __init__(
+        self,
+        kube_client: KubeClient,
+        s3_client: AioBaseClient,
+        bucket_name: str,
+        key_prefix_format: str,
+    ) -> None:
+        self._kube_client = kube_client
+        self._s3_client = s3_client
+        self._bucket_name = bucket_name
+        self._key_prefix_format = key_prefix_format
+
+    async def get_pod_log_reader(
+        self, pod_name: str, *, previous: bool = False, archive: bool = False
+    ) -> LogReader:
+        if not archive and await self._kube_client.check_pod_exists(pod_name):
+            return PodContainerLogReader(
+                client=self._kube_client,
+                pod_name=pod_name,
+                container_name=pod_name,
+                previous=previous,
+            )
+        return S3LogReader(
+            s3_client=self._s3_client,
+            bucket_name=self._bucket_name,
+            prefix_format=self._key_prefix_format,
+            namespace_name=self._kube_client.namespace,
+            pod_name=pod_name,
+            container_name=pod_name,
+        )
+
+    async def drop_logs(self, pod_name: str) -> None:
+        paginator = self._s3_client.get_paginator("list_objects_v2")
+
+        async for page in paginator.paginate(
+            Bucket=self._bucket_name,
+            Prefix=S3LogReader.get_prefix(
+                self._key_prefix_format,
+                namespace_name=self._kube_client.namespace,
+                pod_name=pod_name,
+                container_name=pod_name,
+            ),
+        ):
+            for obj in page.get("Contents", ()):
+                await self._s3_client.delete_object(
+                    Bucket=self._bucket_name, Key=obj["Key"]
+                )

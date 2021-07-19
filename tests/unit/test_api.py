@@ -8,7 +8,7 @@ from aioelasticsearch import Elasticsearch
 from platform_monitoring.api import create_logs_service
 from platform_monitoring.config import Config, LogsConfig, LogsStorageType, S3Config
 from platform_monitoring.kube_client import KubeClient
-from platform_monitoring.utils import ElasticsearchLogsService, S3LogsService
+from platform_monitoring.logs import ElasticsearchLogsService, S3LogsService
 
 
 @pytest.fixture
