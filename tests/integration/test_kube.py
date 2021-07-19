@@ -13,7 +13,6 @@ from aiohttp import web
 from async_timeout import timeout
 from yarl import URL
 
-# from platform_monitoring.base import LogReader
 from platform_monitoring.config import KubeConfig
 from platform_monitoring.kube_client import (
     JobNotFoundException,
@@ -309,15 +308,12 @@ class TestKubeClient:
 
 class TestLogReader:
     async def _consume_log_reader(
-        self,
-        log_reader: AsyncContextManager[AsyncIterator[bytes]],
-        chunk_size: int = -1,
+        self, log_reader: AsyncContextManager[AsyncIterator[bytes]]
     ) -> bytes:
         istream = io.BytesIO()
         try:
             async with log_reader as it:
                 async for chunk in it:
-                    # assert chunk == b""
                     istream.write(chunk)
         except asyncio.CancelledError:
             pass
@@ -387,7 +383,7 @@ class TestLogReader:
         log_reader = PodContainerLogReader(
             client=kube_client, pod_name=job_pod.name, container_name=job_pod.name
         )
-        payload = await self._consume_log_reader(log_reader, chunk_size=1)
+        payload = await self._consume_log_reader(log_reader)
         expected_payload = "\n".join(str(i) for i in range(1, 6)) + "\n"
         assert payload == expected_payload.encode()
 
@@ -395,8 +391,8 @@ class TestLogReader:
     async def test_read_cancelled(
         self,
         kube_config: KubeConfig,
-        job_pod: MyPodDescriptor,
         kube_client: MyKubeClient,
+        job_pod: MyPodDescriptor,
     ) -> None:
         command = 'bash -c "for i in {1..60}; do echo $i; sleep 1; done"'
         job_pod.set_command(command)
@@ -405,7 +401,7 @@ class TestLogReader:
         log_reader = PodContainerLogReader(
             client=kube_client, pod_name=job_pod.name, container_name=job_pod.name
         )
-        task = asyncio.ensure_future(self._consume_log_reader(log_reader, chunk_size=1))
+        task = asyncio.ensure_future(self._consume_log_reader(log_reader))
         await asyncio.sleep(10)
         task.cancel()
         payload = await task
@@ -684,7 +680,6 @@ class TestLogReader:
             container_name=job_pod.name,
             expected_payload=expected_payload,
         )
-        assert 0
 
     @pytest.mark.asyncio
     async def test_elasticsearch_log_reader_restarted(
@@ -711,7 +706,6 @@ class TestLogReader:
             container_name=job_pod.name,
             expected_payload=expected_payload * 2,
         )
-        assert 0
 
     @pytest.mark.asyncio
     async def test_s3_log_reader(
@@ -778,7 +772,6 @@ class TestLogReader:
             container_name=job_pod.name,
             expected_payload=expected_payload * 2,
         )
-        assert 0
 
     @pytest.mark.asyncio
     async def test_s3_logs_cleanup(
@@ -837,7 +830,7 @@ class TestLogReader:
         log_reader = PodContainerLogReader(
             client=kube_client, pod_name=pod_name, container_name=container_name
         )
-        payload = await self._consume_log_reader(log_reader, chunk_size=1)
+        payload = await self._consume_log_reader(log_reader)
         assert payload == expected_payload, "Pod logs did not match."
 
     async def _check_es_logs(
@@ -860,7 +853,7 @@ class TestLogReader:
                         pod_name=pod_name,
                         container_name=container_name,
                     )
-                    payload = await self._consume_log_reader(log_reader, chunk_size=1)
+                    payload = await self._consume_log_reader(log_reader)
                     if payload == expected_payload:
                         return
                     await asyncio.sleep(interval_s)
@@ -891,7 +884,7 @@ class TestLogReader:
                         pod_name=pod_name,
                         container_name=container_name,
                     )
-                    payload = await self._consume_log_reader(log_reader, chunk_size=1)
+                    payload = await self._consume_log_reader(log_reader)
                     if payload == expected_payload:
                         return
                     await asyncio.sleep(interval_s)
@@ -909,7 +902,7 @@ class TestLogReader:
             pod_name=pod_name,
             container_name=container_name,
         )
-        payload = await self._consume_log_reader(log_reader, chunk_size=1)
+        payload = await self._consume_log_reader(log_reader)
         assert payload == b""
 
     @pytest.mark.asyncio
@@ -928,7 +921,7 @@ class TestLogReader:
             pod_name=pod_name,
             container_name=container_name,
         )
-        payload = await self._consume_log_reader(log_reader, chunk_size=1)
+        payload = await self._consume_log_reader(log_reader)
         assert payload == b""
 
     @pytest.mark.asyncio
@@ -998,15 +991,9 @@ class TestLogReader:
             log_reader = factory.get_pod_log_reader(pod_name)
             payload = await self._consume_log_reader(log_reader)
             assert payload == b""
-            # async with factory.get_pod_log_reader(pod_name) as log_reader:
-            # async for chunk in log_reader:
-            # assert isinstance(chunk, bytes)
         finally:
             await kube_client.delete_pod(job_pod.name)
 
         log_reader = factory.get_pod_log_reader(pod_name)
         payload = await self._consume_log_reader(log_reader)
         assert payload == b""
-        # async with factory.get_pod_log_reader(pod_name) as log_reader:
-        # async for chunk in log_reader:
-        # assert isinstance(chunk, bytes)
