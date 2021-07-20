@@ -339,7 +339,9 @@ class KubeClient:
     async def get_raw_pod(self, pod_name: str) -> Dict[str, Any]:
         url = self._generate_pod_url(pod_name)
         payload = await self._request(method="GET", url=url)
-        self._assert_resource_kind(expected_kind="Pod", payload=payload)
+        self._assert_resource_kind(
+            expected_kind="Pod", payload=payload, job_id=pod_name
+        )
         return payload
 
     async def get_pod(self, pod_name: str) -> Pod:
@@ -444,7 +446,7 @@ class KubeClient:
         async with self._client.get(  # type: ignore
             url, timeout=client_timeout
         ) as response:
-            await self._check_response_status(response)
+            await self._check_response_status(response, job_id=pod_name)
             yield response.content
 
     async def get_pods(
@@ -473,7 +475,9 @@ class KubeClient:
             self._assert_resource_kind("NodeList", payload)
             return [Node(item) for item in payload["items"]]
 
-    async def _check_response_status(self, response: aiohttp.ClientResponse) -> None:
+    async def _check_response_status(
+        self, response: aiohttp.ClientResponse, job_id: str = ""
+    ) -> None:
         if response.status != 200:
             payload = await response.text()
             try:
@@ -481,15 +485,17 @@ class KubeClient:
             except ValueError:
                 pass
             else:
-                self._raise_status_job_exception(pod, job_id="")
+                self._raise_status_job_exception(pod, job_id=job_id)
+            if response.status == 400:
+                raise JobNotFoundException(f"job '{job_id}' was not found")
             raise KubeClientException(payload)
 
     def _assert_resource_kind(
-        self, expected_kind: str, payload: Dict[str, Any]
+        self, expected_kind: str, payload: Dict[str, Any], job_id: str = ""
     ) -> None:
         kind = payload["kind"]
         if kind == "Status":
-            self._raise_status_job_exception(payload, job_id="")
+            self._raise_status_job_exception(payload, job_id=job_id)
             raise JobError("unexpected error")
         elif kind != expected_kind:
             raise ValueError(f"unknown kind: {kind}")
