@@ -192,7 +192,7 @@ class TestKubeClient:
 
     @pytest.mark.asyncio
     async def test_create_log_stream_not_found(self, kube_client: KubeClient) -> None:
-        with pytest.raises(KubeClientException):
+        with pytest.raises(JobNotFoundException):
             async with kube_client.create_pod_container_logs_stream(
                 pod_name="unknown", container_name="unknown"
             ):
@@ -932,7 +932,7 @@ class TestLogReader:
 
         log_reader = factory.get_pod_log_reader(pod_name)
         payload = await self._consume_log_reader(log_reader)
-        assert payload == b""
+        assert payload == b"hello\n"
         await kube_client.delete_pod(job_pod.name)
 
         log_reader = factory.get_pod_log_reader(pod_name)
@@ -966,7 +966,7 @@ class TestLogReader:
 
         log_reader = factory.get_pod_log_reader(pod_name)
         payload = await self._consume_log_reader(log_reader)
-        assert payload == b""
+        assert payload == b"hello\n"
         await kube_client.delete_pod(job_pod.name)
 
         log_reader = factory.get_pod_log_reader(pod_name)
