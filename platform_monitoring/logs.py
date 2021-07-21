@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 
 error_prefixes = (
     b"rpc error: code =",
+    # failed to try resolving symlinks in path "/var/log/pods/xxx.log":
+    # lstat /var/log/pods/xxx.log: no such file or directory
+    b"failed to try resolving",
+    # Unable to retrieve container logs for docker://xxxx
     b"Unable to retrieve",
 )
 max_error_prefix_len = max(map(len, error_prefixes))
