@@ -450,6 +450,26 @@ class TestLogReader:
         finally:
             await kube_client.delete_pod(job_pod.name)
 
+    async def _wait_container_is_restarted(
+        self,
+        kube_client: MyKubeClient,
+        name: str,
+        count: int = 1,
+        *,
+        timeout_s: float = 120.0,
+        interval_s: float = 1.0,
+    ) -> None:
+        try:
+            async with timeout(timeout_s):
+                while True:
+                    pod = await kube_client.get_pod(name)
+                    status = pod.get_container_status(name)
+                    if status.get("restartCount", 0) >= count:
+                        break
+                    await asyncio.sleep(interval_s)
+        except asyncio.TimeoutError:
+            pytest.fail(f"Container {name} has not restarted")
+
     @pytest.mark.asyncio
     async def test_elasticsearch_log_reader(
         self,
@@ -789,7 +809,7 @@ class TestLogReader:
         job_pod: MyPodDescriptor,
         factory: LogsService,
     ) -> None:
-        command = 'bash -c "for i in {1..5}; do echo $i; sleep 2; done"'
+        command = 'bash -c "for i in {1..5}; do sleep 1; echo $i; done"'
         job_pod.set_command(command)
         names = []
         tasks = []
@@ -806,7 +826,7 @@ class TestLogReader:
             await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=60.0)
             for i in range(6):
                 if i:
-                    await asyncio.sleep(4)
+                    await asyncio.sleep(2)
                 run_log_reader(f"started [{i}]")
         finally:
             await kube_client.delete_pod(job_pod.name)
@@ -863,7 +883,7 @@ class TestLogReader:
         job_pod: MyPodDescriptor,
         factory: LogsService,
     ) -> None:
-        command = 'bash -c "date +[%T]; for i in {1..5}; do sleep 2; echo $i; done"'
+        command = 'bash -c "date +[%T]; for i in {1..5}; do sleep 1; echo $i; done"'
         job_pod.set_command(command)
         job_pod.set_restart_policy("Always")
         names = []
@@ -881,17 +901,17 @@ class TestLogReader:
             await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=60.0)
             for i in range(6):
                 if i:
-                    await asyncio.sleep(4)
+                    await asyncio.sleep(2)
                 run_log_reader(f"started [{i}]")
             await kube_client.wait_container_is_restarted(job_pod.name, 1)
             for i in range(6):
                 if i:
-                    await asyncio.sleep(4)
+                    await asyncio.sleep(2)
                 run_log_reader(f"restarted 1 [{i}]")
             await kube_client.wait_container_is_restarted(job_pod.name, 2)
             for i in range(6):
                 if i:
-                    await asyncio.sleep(4)
+                    await asyncio.sleep(2)
                 run_log_reader(f"restarted 2 [{i}]")
         finally:
             await kube_client.delete_pod(job_pod.name)
