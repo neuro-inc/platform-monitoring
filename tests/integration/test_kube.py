@@ -209,17 +209,14 @@ class TestKubeClient:
 
         async with timeout(5.0):
             while True:
-                try:
-                    stream_cm = kube_client.create_pod_container_logs_stream(
-                        pod_name=job_pod.name, container_name=job_pod.name
-                    )
-                    with pytest.raises(KubeClientException, match="ContainerCreating"):
-                        async with stream_cm:
-                            pass
+                stream_cm = kube_client.create_pod_container_logs_stream(
+                    pod_name=job_pod.name, container_name=job_pod.name
+                )
+                with pytest.raises(JobNotFoundException) as cm:
+                    async with stream_cm:
+                        pass
+                if "has not created" in str(cm.value):
                     break
-                except AssertionError as exc:
-                    if "pattern" not in str(exc):
-                        raise
                 await asyncio.sleep(0.1)
 
     @pytest.mark.asyncio

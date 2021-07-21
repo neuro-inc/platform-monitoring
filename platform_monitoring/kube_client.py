@@ -331,7 +331,7 @@ class KubeClient:
     async def _request(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         assert self._client, "client is not initialized"
         async with self._client.request(*args, **kwargs) as response:
-            # TODO (A Danshyn 05/21/18): check status code etc
+            await self._check_response_status(response)
             payload = await response.json()
             logger.debug("k8s response payload: %s", payload)
             return payload
@@ -419,6 +419,8 @@ class KubeClient:
             return summary.get_pod_container_stats(
                 self._namespace, pod_name, container_name
             )
+        except JobNotFoundException:
+            return None
         except ContentTypeError as e:
             logger.info(f"Failed to parse response: {e}", exc_info=True)
             return None
@@ -478,16 +480,13 @@ class KubeClient:
     async def _check_response_status(
         self, response: aiohttp.ClientResponse, job_id: str = ""
     ) -> None:
-        if response.status != 200:
+        if not 200 <= response.status < 300:
             payload = await response.text()
             try:
                 pod = json.loads(payload)
             except ValueError:
-                pass
-            else:
-                self._raise_status_job_exception(pod, job_id=job_id)
-            if response.status == 400:
-                raise JobNotFoundException(f"job '{job_id}' was not found")
+                pod = {"code": response.status, "message": payload}
+            self._raise_status_job_exception(pod, job_id=job_id)
             raise KubeClientException(payload)
 
     def _assert_resource_kind(
@@ -509,6 +508,10 @@ class KubeClient:
             raise JobNotFoundException(f"job '{job_id}' was not found")
         elif pod["code"] == 422:
             raise JobError(f"can not create job with id '{job_id}'")
+        if pod["code"] == 400 and "ContainerCreating" in pod["message"]:
+            raise JobNotFoundException(f"job '{job_id}' has not created yet")
+        if pod["code"] == 400 and "is terminated" in pod["message"]:
+            raise JobNotFoundException(f"job '{job_id}' is terminated")
 
 
 @dataclass(frozen=True)
