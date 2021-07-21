@@ -108,6 +108,8 @@ spec:
           value: {{ .Values.nodeLabels.nodePool }}
 {{- end }}
 
+        - name: NP_MONITORING_LOGS_CLEANUP_INTERVAL_SEC
+          value: {{ .Values.logs.cleanup_interval_sec | quote }}
 {{- if eq .Values.logs.persistence.type "aws" }}
         - name: NP_MONITORING_LOGS_STORAGE_TYPE
           value: s3
