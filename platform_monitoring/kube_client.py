@@ -508,10 +508,13 @@ class KubeClient:
             raise JobNotFoundException(f"job '{job_id}' was not found")
         elif pod["code"] == 422:
             raise JobError(f"can not create job with id '{job_id}'")
-        if pod["code"] == 400 and "ContainerCreating" in pod["message"]:
-            raise JobNotFoundException(f"job '{job_id}' has not created yet")
-        if pod["code"] == 400 and "is terminated" in pod["message"]:
-            raise JobNotFoundException(f"job '{job_id}' is terminated")
+        if pod["code"] == 400:
+            if "ContainerCreating" in pod["message"]:
+                raise JobNotFoundException(f"job '{job_id}' has not created yet")
+            if "is not available" in pod["message"]:
+                raise JobNotFoundException(f"job '{job_id}' has not created yet")
+            if "is terminated" in pod["message"]:
+                raise JobNotFoundException(f"job '{job_id}' is terminated")
 
 
 @dataclass(frozen=True)
