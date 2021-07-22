@@ -15,7 +15,7 @@ platform:
         key: compute_token
 
 podAnnotations:
-  iam.amazonaws.com/role: arn:aws:iam::771188043543:role/s3-d04bce531282b98cb801932de6c118c7
+  iam.amazonaws.com/role: arn:aws:iam::771188043543:role/s3-366c09e4841fcc83df56b8f070c34716
 
 ingress:
   enabled: true
@@ -31,7 +31,7 @@ fluentd:
     storageClassName: standard
 
   podAnnotations:
-    iam.amazonaws.com/role: arn:aws:iam::771188043543:role/s3-d04bce531282b98cb801932de6c118c7
+    iam.amazonaws.com/role: arn:aws:iam::771188043543:role/s3-366c09e4841fcc83df56b8f070c34716
 
 logs:
   persistence:

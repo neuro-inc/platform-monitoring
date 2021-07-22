@@ -98,7 +98,13 @@ class EnvironConfigFactory:
                     "NP_MONITORING_LOGS_STORAGE_TYPE",
                     LogsStorageType.ELASTICSEARCH.value,
                 )
-            )
+            ),
+            cleanup_interval_sec=float(
+                self._environ.get(
+                    "NP_MONITORING_LOGS_CLEANUP_INTERVAL_SEC",
+                    LogsConfig.cleanup_interval_sec,
+                ),
+            ),
         )
 
     def _create_kube(self) -> KubeConfig:

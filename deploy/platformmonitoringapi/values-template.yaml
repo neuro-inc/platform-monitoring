@@ -112,6 +112,7 @@ minio:
   #   failureThreshold: 3
 
 logs:
+  cleanup_interval_sec: 900
   persistence:
     type: es
 

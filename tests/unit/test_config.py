@@ -172,6 +172,14 @@ def test_create_with_s3_logs(environ: Dict[str, Any]) -> None:
     assert config.logs == LogsConfig(storage_type=LogsStorageType.S3)
 
 
+def test_create_with_logs_interval_custom(environ: Dict[str, Any]) -> None:
+    environ["NP_MONITORING_LOGS_CLEANUP_INTERVAL_SEC"] = "10"
+
+    config = EnvironConfigFactory(environ).create()
+
+    assert config.logs.cleanup_interval_sec == 10
+
+
 @pytest.mark.parametrize(
     "url, expected_host",
     (
