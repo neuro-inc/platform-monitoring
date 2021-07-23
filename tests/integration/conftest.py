@@ -120,7 +120,7 @@ async def platform_api_config(
         base_url = get_service_url("platformapi", namespace="default")
     assert base_url.startswith("http")
     url = URL(base_url) / "api/v1"
-    await wait_for_service("platformapi", url / "ping", timeout_s=300)
+    await wait_for_service("platformapi", url / "ping", timeout_s=120)
     yield PlatformApiConfig(
         url=url,
         token=token_factory("compute"),  # token is hard-coded in the yaml configuration
