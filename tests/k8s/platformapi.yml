@@ -201,8 +201,6 @@ spec:
           value: host
         - name: NP_HOST_MOUNT_PATH
           value: /tmp
-        - name: NP_KUBE_IMAGE_PULL_SECRET
-          value: docker-hub-registry
       - name: kubeproxy
         image: lachlanevenson/k8s-kubectl:v1.10.3
         args: [proxy]
