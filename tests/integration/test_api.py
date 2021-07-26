@@ -1077,7 +1077,7 @@ class TestSaveApi:
         async with client.post(url, headers=headers, json=payload) as resp:
             assert resp.status == HTTPOk.status_code, str(resp)
             chunks = [
-                json.loads(chunk, encoding="utf-8")
+                json.loads(chunk.decode("utf-8"))
                 async for chunk in resp.content
                 if chunk
             ]
@@ -1109,7 +1109,7 @@ class TestSaveApi:
             async with client.post(url, headers=headers, json=payload) as resp:
                 assert resp.status == HTTPOk.status_code, str(resp)
                 chunks = [
-                    json.loads(chunk, encoding="utf-8")
+                    json.loads(chunk.decode("utf-8"))
                     async for chunk in resp.content
                     if chunk
                 ]
@@ -1149,7 +1149,7 @@ class TestSaveApi:
         async with client.post(url, headers=headers, json=payload) as resp:
             assert resp.status == HTTPOk.status_code, str(resp)
             chunks = [
-                json.loads(chunk, encoding="utf-8")
+                json.loads(chunk.decode("utf-8"))
                 async for chunk in resp.content
                 if chunk
             ]
