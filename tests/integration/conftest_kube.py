@@ -98,9 +98,13 @@ class MyKubeClient(KubeClient):
         try:
             async with timeout(timeout_s):
                 while True:
-                    pod = await self.get_pod(name)
-                    status = pod.get_container_status(name)
-                    if status.get("restartCount", 0) >= count:
+                    status = await self.get_container_status(name)
+                    restart_count = status.restart_count
+                    if restart_count is None:
+                        print(f"restart_count is None!!! status = {status.__dict__}")
+                        break
+                    assert restart_count is not None
+                    if restart_count >= count:
                         break
                     await asyncio.sleep(interval_s)
         except asyncio.TimeoutError:

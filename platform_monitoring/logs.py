@@ -15,11 +15,10 @@ from aiobotocore.client import AioBaseClient
 from aiobotocore.response import StreamingBody
 from aioelasticsearch import Elasticsearch
 from aioelasticsearch.helpers import Scan
-from async_timeout import timeout
 from platform_logging import trace
 
 from .base import LogReader
-from .kube_client import JobNotFoundException, KubeClient
+from .kube_client import ContainerStatus, JobNotFoundException, KubeClient
 from .utils import aclosing, asyncgeneratorcontextmanager
 
 
@@ -129,7 +128,7 @@ class PodContainerLogReader(LogReader):
         self._iterator: Optional[AsyncIterator[bytes]] = None
 
     async def __aenter__(self) -> AsyncIterator[bytes]:
-        await self._client.wait_pod_is_running(self._pod_name)
+        await self._client.wait_pod_is_not_waiting(self._pod_name)
         kwargs = {}
         if self._client_conn_timeout_s is not None:
             kwargs["conn_timeout_s"] = self._client_conn_timeout_s
@@ -163,7 +162,6 @@ class ElasticsearchLogReader(LogReader):
         container_name: str,
         *,
         since: Optional[datetime] = None,
-        until: Optional[datetime] = None,
     ) -> None:
         self._es_client = es_client
         self._index = "logstash-*"
@@ -172,7 +170,6 @@ class ElasticsearchLogReader(LogReader):
         self._pod_name = pod_name
         self._container_name = container_name
         self._since = since
-        self._until = until
         self._scan: Optional[Scan] = None
         self._iterator: Optional[AsyncIterator[bytes]] = None
 
@@ -219,9 +216,6 @@ class ElasticsearchLogReader(LogReader):
             time = iso8601.parse_date(source["time"])
             if self._since is not None and time <= self._since:
                 continue
-            if self._until is not None and time > self._until:
-                self.last_time = self._until
-                break
             self.last_time = time
             yield source["log"].encode()
 
@@ -237,7 +231,6 @@ class S3LogReader(LogReader):
         container_name: str,
         *,
         since: Optional[datetime] = None,
-        until: Optional[datetime] = None,
     ) -> None:
         self._s3_client = s3_client
         self._bucket_name = bucket_name
@@ -246,7 +239,6 @@ class S3LogReader(LogReader):
         self._pod_name = pod_name
         self._container_name = container_name
         self._since = since
-        self._until = until
         self._iterator: Optional[AsyncIterator[bytes]] = None
 
     @staticmethod
@@ -315,9 +307,6 @@ class S3LogReader(LogReader):
                             time = iso8601.parse_date(event["time"])
                             if since is not None and time <= since:
                                 continue
-                            if self._until is not None and time > self._until:
-                                self.last_time = self._until
-                                return
                             last_time = time
                             self.last_time = time
                             yield event["log"].encode()
@@ -357,41 +346,55 @@ class LogsService(abc.ABC):
     ) -> AsyncIterator[bytes]:
         since: Optional[datetime] = None
         try:
-            start = await self.get_container_started_at(pod_name)
+            status = await self.get_container_status(pod_name)
+            start = status.started_at if status.is_running else None
+            first_run = status.is_running and status.restart_count == 0
         except JobNotFoundException:
             start = None
+            first_run = False
+
         has_archive = False
-        while True:
-            empty = True
-            until = start or datetime.now(tz=timezone.utc)
-            log_reader = self.get_pod_archive_log_reader(
-                pod_name, since=since, until=until
-            )
-            async with log_reader as it:
-                async for chunk in it:
-                    empty = False
-                    yield chunk
-            if not empty:
-                has_archive = True
-            old_start = start
-            since = log_reader.last_time
-            try:
-                start = await self.get_container_started_at(pod_name)
-            except JobNotFoundException:
-                start = None
-            if start is None:
-                if old_start is None and empty:
-                    break
-            else:
-                if start == until:
-                    break
-            await asyncio.sleep(interval_s)
+        if not first_run:
+            while True:
+                empty = True
+                old_start = start
+                until = start or datetime.now(tz=timezone.utc)
+                log_reader = self.get_pod_archive_log_reader(pod_name, since=since)
+                async with log_reader as it:
+                    async for chunk in it:
+                        assert log_reader.last_time
+                        if log_reader.last_time > until:
+                            since = until
+                            break
+                        empty = False
+                        has_archive = True
+                        yield chunk
+                    else:
+                        since = log_reader.last_time
+
+                try:
+                    status = await self.get_container_status(pod_name)
+                    start = status.started_at if status.is_running else None
+                except JobNotFoundException:
+                    start = None
+                if start is None:
+                    if old_start is None and empty:
+                        break
+                else:
+                    if start == until:
+                        break
+                await asyncio.sleep(interval_s)
 
         if not has_archive:
             separator = None
 
-        can_restart: Optional[bool] = None
         try:
+            if start is None:
+                status = await self.wait_pod_is_running(
+                    pod_name, timeout_s=timeout_s, interval_s=interval_s
+                )
+                start = status.started_at
+
             while True:
                 async with self.get_pod_live_log_reader(pod_name) as it:
                     async for chunk in it:
@@ -399,28 +402,29 @@ class LogsService(abc.ABC):
                             yield separator + b"\n"
                             separator = None
                         yield chunk
-                if can_restart is None:
-                    can_restart = await self.can_pod_restart(pod_name)
-                if not can_restart:
-                    break
-                async with timeout(timeout_s):
-                    since = start
-                    while True:
-                        start = await self.get_container_started_at(pod_name)
-                        if start is not None and start != since:
-                            if since is not None:
-                                break
-                            since = start
-                        await asyncio.sleep(interval_s)
+
+                since = start
+                while True:
+                    status = await self.wait_pod_is_running(
+                        pod_name, timeout_s=timeout_s, interval_s=interval_s
+                    )
+                    if not status.can_restart:
+                        return
+                    start = status.started_at
+                    if start != since:
+                        break
+                    await asyncio.sleep(interval_s)
         except JobNotFoundException:
             pass
 
     @abc.abstractmethod
-    async def can_pod_restart(self, pod_name: str) -> bool:
+    async def get_container_status(self, name: str) -> ContainerStatus:
         pass  # pragma: no cover
 
     @abc.abstractmethod
-    async def get_container_started_at(self, pod_name: str) -> Optional[datetime]:
+    async def wait_pod_is_running(
+        self, name: str, *, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
+    ) -> ContainerStatus:
         pass  # pragma: no cover
 
     @abc.abstractmethod
@@ -433,7 +437,6 @@ class LogsService(abc.ABC):
         pod_name: str,
         *,
         since: Optional[datetime] = None,
-        until: Optional[datetime] = None,
     ) -> LogReader:
         pass  # pragma: no cover
 
@@ -448,11 +451,15 @@ class BaseLogsService(LogsService):
     def __init__(self, kube_client: KubeClient) -> None:
         self._kube_client = kube_client
 
-    async def can_pod_restart(self, pod_name: str) -> bool:
-        return await self._kube_client.can_pod_restart(pod_name)
+    async def get_container_status(self, name: str) -> ContainerStatus:
+        return await self._kube_client.get_container_status(name)
 
-    async def get_container_started_at(self, pod_name: str) -> Optional[datetime]:
-        return await self._kube_client.get_container_started_at(pod_name)
+    async def wait_pod_is_running(
+        self, name: str, *, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
+    ) -> ContainerStatus:
+        return await self._kube_client.wait_pod_is_running(
+            name, timeout_s=timeout_s, interval_s=interval_s
+        )
 
     def get_pod_live_log_reader(self, pod_name: str) -> LogReader:
         return PodContainerLogReader(
@@ -476,7 +483,6 @@ class ElasticsearchLogsService(BaseLogsService):
         pod_name: str,
         *,
         since: Optional[datetime] = None,
-        until: Optional[datetime] = None,
     ) -> LogReader:
         return ElasticsearchLogReader(
             es_client=self._es_client,
@@ -484,7 +490,6 @@ class ElasticsearchLogsService(BaseLogsService):
             pod_name=pod_name,
             container_name=pod_name,
             since=since,
-            until=until,
         )
 
     async def drop_logs(self, pod_name: str) -> None:
@@ -509,7 +514,6 @@ class S3LogsService(BaseLogsService):
         pod_name: str,
         *,
         since: Optional[datetime] = None,
-        until: Optional[datetime] = None,
     ) -> LogReader:
         return S3LogReader(
             s3_client=self._s3_client,
@@ -519,7 +523,6 @@ class S3LogsService(BaseLogsService):
             pod_name=pod_name,
             container_name=pod_name,
             since=since,
-            until=until,
         )
 
     async def drop_logs(self, pod_name: str) -> None:

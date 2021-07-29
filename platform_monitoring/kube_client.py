@@ -187,6 +187,46 @@ class Node:
         return self._payload["metadata"].get("labels", {}).get(key)
 
 
+class ContainerStatus:
+    def __init__(self, payload: Dict[str, Any], restart_policy: str) -> None:
+        self._payload = payload
+        self._restart_policy = restart_policy
+
+    @property
+    def is_waiting(self) -> bool:
+        state = self._payload.get("state")
+        return not state or "waiting" in state
+
+    @property
+    def is_running(self) -> bool:
+        state = self._payload.get("state")
+        return (not not state) and "running" in state
+
+    @property
+    def can_restart(self) -> bool:
+        return self._restart_policy != "Never"
+
+    @property
+    def restart_count(self) -> Optional[int]:
+        if not self.can_restart:
+            return None
+        return self._payload.get("restartCount") or 0
+
+    @property
+    def started_at(self) -> Optional[datetime]:
+        try:
+            date_str = self._payload["state"]["running"]["startedAt"]
+        except KeyError:
+            try:
+                date_str = self._payload["state"]["terminated"]["startedAt"]
+                if not date_str:
+                    return None
+            except KeyError:
+                # waiting
+                return None
+        return iso8601.parse_date(date_str)
+
+
 class KubeClient:
     def __init__(
         self,
@@ -352,44 +392,42 @@ class KubeClient:
         container_status = pod.get_container_status(pod_name)
         return container_status.get("state", {})
 
-    async def is_container_waiting(self, pod_name: str) -> bool:
-        state = await self._get_raw_container_state(pod_name)
-        is_waiting = not state or "waiting" in state
-        return is_waiting
+    async def get_container_status(self, name: str) -> ContainerStatus:
+        pod = await self.get_pod(name)
+        return ContainerStatus(
+            pod.get_container_status(name),
+            restart_policy=pod.restart_policy,
+        )
 
     async def wait_pod_is_running(
-        self, pod_name: str, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
-    ) -> None:
-        """Wait until the pod transitions from the waiting state.
+        self, pod_name: str, *, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
+    ) -> ContainerStatus:
+        """Wait until the pod transitions to the running state.
 
-        Raise JobError if there is no such pod.
+        Raise JobNotFoundException if there is no such pod.
         Raise asyncio.TimeoutError if it takes too long for the pod.
         """
         async with timeout(timeout_s):
             while True:
-                is_waiting = await self.is_container_waiting(pod_name)
-                if not is_waiting:
-                    return
+                status = await self.get_container_status(pod_name)
+                if status.is_running:
+                    return status
                 await asyncio.sleep(interval_s)
 
-    async def can_pod_restart(self, pod_name: str) -> bool:
-        pod = await self.get_pod(pod_name)
-        return pod.restart_policy != "Never"
+    async def wait_pod_is_not_waiting(
+        self, pod_name: str, *, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
+    ) -> ContainerStatus:
+        """Wait until the pod transitions from the waiting state.
 
-    async def get_container_started_at(self, pod_name: str) -> Optional[datetime]:
-        pod = await self.get_pod(pod_name)
-        status = pod.get_container_status(pod_name)
-        try:
-            date_str = status["state"]["running"]["startedAt"]
-        except KeyError:
-            try:
-                date_str = status["state"]["terminated"]["startedAt"]
-                if not date_str:
-                    return None
-            except KeyError:
-                # waiting
-                return None
-        return iso8601.parse_date(date_str)
+        Raise JobNotFoundException if there is no such pod.
+        Raise asyncio.TimeoutError if it takes too long for the pod.
+        """
+        async with timeout(timeout_s):
+            while True:
+                status = await self.get_container_status(pod_name)
+                if not status.is_waiting:
+                    return status
+                await asyncio.sleep(interval_s)
 
     def _get_node_proxy_url(self, host: str, port: int) -> URL:
         return URL(self._generate_node_proxy_url(host, port))
