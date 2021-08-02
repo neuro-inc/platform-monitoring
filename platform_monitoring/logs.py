@@ -5,7 +5,7 @@ import json
 import logging
 import warnings
 import zlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from os.path import basename
 from typing import Any, AsyncContextManager, AsyncIterator, Dict, List, Optional, Tuple
 
@@ -343,8 +343,11 @@ class LogsService(abc.ABC):
         separator: Optional[bytes] = None,
         timeout_s: float = 10.0 * 60,
         interval_s: float = 1.0,
+        archive_delay_s: float = 3.0 * 60,
     ) -> AsyncIterator[bytes]:
+        archive_delay = timedelta(seconds=archive_delay_s)
         since: Optional[datetime] = None
+        start_time = _utcnow()
         try:
             status = await self.get_container_status(pod_name)
             start = status.started_at if status.is_running else None
@@ -355,10 +358,11 @@ class LogsService(abc.ABC):
 
         has_archive = False
         if not first_run:
+            last_archived_time = _utcnow()
             while True:
                 empty = True
                 old_start = start
-                until = start or datetime.now(tz=timezone.utc)
+                until = start or _utcnow()
                 log_reader = self.get_pod_archive_log_reader(pod_name, since=since)
                 async with log_reader as it:
                     async for chunk in it:
@@ -370,7 +374,10 @@ class LogsService(abc.ABC):
                         has_archive = True
                         yield chunk
                     else:
-                        since = log_reader.last_time
+                        if log_reader.last_time:
+                            since = log_reader.last_time
+                if log_reader.last_time:
+                    last_archived_time = log_reader.last_time
 
                 try:
                     status = await self.get_container_status(pod_name)
@@ -378,7 +385,11 @@ class LogsService(abc.ABC):
                 except JobNotFoundException:
                     start = None
                 if start is None:
-                    if old_start is None and empty:
+                    if (
+                        old_start is None
+                        and empty
+                        and _utcnow() - last_archived_time > archive_delay
+                    ):
                         break
                 else:
                     if start == until:
@@ -409,6 +420,8 @@ class LogsService(abc.ABC):
                         pod_name, timeout_s=timeout_s, interval_s=interval_s
                     )
                     if not status.can_restart:
+                        if _utcnow() - start_time > timedelta(seconds=120):
+                            raise AssertionError(f"timeout {_utcnow() - start_time}")
                         return
                     start = status.started_at
                     if start != since:
@@ -416,6 +429,9 @@ class LogsService(abc.ABC):
                     await asyncio.sleep(interval_s)
         except JobNotFoundException:
             pass
+
+        if _utcnow() - start_time > timedelta(seconds=120):
+            raise AssertionError(f"timeout {_utcnow() - start_time}")
 
     @abc.abstractmethod
     async def get_container_status(self, name: str) -> ContainerStatus:
@@ -541,3 +557,7 @@ class S3LogsService(BaseLogsService):
                 await self._s3_client.delete_object(
                     Bucket=self._bucket_name, Key=obj["Key"]
                 )
+
+
+def _utcnow() -> datetime:
+    return datetime.now(tz=timezone.utc)

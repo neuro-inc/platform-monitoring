@@ -412,6 +412,8 @@ class KubeClient:
                 status = await self.get_container_status(pod_name)
                 if status.is_running:
                     return status
+                if not (status.is_waiting or status.can_restart):
+                    raise JobNotFoundException
                 await asyncio.sleep(interval_s)
 
     async def wait_pod_is_not_waiting(

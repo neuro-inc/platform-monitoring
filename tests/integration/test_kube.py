@@ -784,15 +784,15 @@ class TestLogReader:
 
         factory = ElasticsearchLogsService(kube_client, es_client)
 
-        log_reader = factory.get_pod_log_reader(pod_name)
+        log_reader = factory.get_pod_log_reader(pod_name, archive_delay_s=10.0)
         payload = await self._consume_log_reader(log_reader)
         assert payload == b"hello\n"
 
         await kube_client.delete_pod(job_pod.name)
 
-        log_reader = factory.get_pod_log_reader(pod_name)
+        log_reader = factory.get_pod_log_reader(pod_name, archive_delay_s=10.0)
         payload = await self._consume_log_reader(log_reader)
-        assert payload == b""
+        assert payload == b"hello\n"
 
     @pytest.mark.asyncio
     async def test_get_job_s3_log_reader(
@@ -819,14 +819,14 @@ class TestLogReader:
             key_prefix_format=s3_logs_key_prefix_format,
         )
 
-        log_reader = factory.get_pod_log_reader(pod_name)
+        log_reader = factory.get_pod_log_reader(pod_name, archive_delay_s=10.0)
         payload = await self._consume_log_reader(log_reader)
         assert payload == b"hello\n"
         await kube_client.delete_pod(job_pod.name)
 
-        log_reader = factory.get_pod_log_reader(pod_name)
+        log_reader = factory.get_pod_log_reader(pod_name, archive_delay_s=10.0)
         payload = await self._consume_log_reader(log_reader)
-        assert payload == b""
+        assert payload == b"hello\n"
 
     async def _test_merged_log_reader(
         self,
@@ -841,7 +841,9 @@ class TestLogReader:
 
         def run_log_reader(name: str) -> None:
             names.append(name)
-            log_reader = factory.get_pod_log_reader(job_pod.name, separator=b"===")
+            log_reader = factory.get_pod_log_reader(
+                job_pod.name, separator=b"===", archive_delay_s=10.0
+            )
             task = asyncio.ensure_future(self._consume_log_reader(log_reader))
             tasks.append(task)
 
@@ -916,7 +918,9 @@ class TestLogReader:
 
         def run_log_reader(name: str) -> None:
             names.append(name)
-            log_reader = factory.get_pod_log_reader(job_pod.name, separator=b"===")
+            log_reader = factory.get_pod_log_reader(
+                job_pod.name, separator=b"===", archive_delay_s=10.0
+            )
             task = asyncio.ensure_future(self._consume_log_reader(log_reader))
             tasks.append(task)
 
