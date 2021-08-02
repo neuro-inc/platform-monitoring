@@ -347,7 +347,6 @@ class LogsService(abc.ABC):
     ) -> AsyncIterator[bytes]:
         archive_delay = timedelta(seconds=archive_delay_s)
         since: Optional[datetime] = None
-        start_time = _utcnow()
         try:
             status = await self.get_container_status(pod_name)
             start = status.started_at if status.is_running else None
@@ -420,8 +419,6 @@ class LogsService(abc.ABC):
                         pod_name, timeout_s=timeout_s, interval_s=interval_s
                     )
                     if not status.can_restart:
-                        if _utcnow() - start_time > timedelta(seconds=120):
-                            raise AssertionError(f"timeout {_utcnow() - start_time}")
                         return
                     start = status.started_at
                     if start != since:
@@ -429,9 +426,6 @@ class LogsService(abc.ABC):
                     await asyncio.sleep(interval_s)
         except JobNotFoundException:
             pass
-
-        if _utcnow() - start_time > timedelta(seconds=120):
-            raise AssertionError(f"timeout {_utcnow() - start_time}")
 
     @abc.abstractmethod
     async def get_container_status(self, name: str) -> ContainerStatus:
