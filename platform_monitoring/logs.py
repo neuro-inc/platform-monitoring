@@ -25,7 +25,7 @@ from aiobotocore.client import AioBaseClient
 from aiobotocore.response import StreamingBody
 from aioelasticsearch import Elasticsearch
 from aioelasticsearch.helpers import Scan
-from platform_logging import trace
+from neuro_logging import trace
 
 from .base import LogReader
 from .kube_client import KubeClient
