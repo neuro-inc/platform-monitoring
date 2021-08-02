@@ -31,13 +31,7 @@ from aiohttp_security import check_authorized
 from aiohttp_security.api import AUTZ_KEY
 from neuro_auth_client import AuthClient, Permission
 from neuro_auth_client.security import AuthScheme, setup_security
-from neuro_sdk import (
-    Client as PlatformApiClient,
-    Factory as PlatformClientFactory,
-    JobDescription as Job,
-)
-from platform_config_client import ConfigClient
-from platform_logging import (
+from neuro_logging import (
     init_logging,
     make_sentry_trace_config,
     make_zipkin_trace_config,
@@ -46,6 +40,12 @@ from platform_logging import (
     setup_zipkin,
     setup_zipkin_tracer,
 )
+from neuro_sdk import (
+    Client as PlatformApiClient,
+    Factory as PlatformClientFactory,
+    JobDescription as Job,
+)
+from platform_config_client import ConfigClient
 from yarl import URL
 
 from .base import JobStats, Telemetry
