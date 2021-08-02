@@ -95,9 +95,10 @@ async def wait_for_service(
         while True:
             try:
                 async with aiohttp.ClientSession() as client:
-                    async with client.get(service_ping_url) as resp:
-                        assert resp.status == aiohttp.web.HTTPOk.status_code
-                        return
+                    async with timeout(1):
+                        async with client.get(service_ping_url) as resp:
+                            assert resp.status == aiohttp.web.HTTPOk.status_code
+                            return
             except Exception as e:
                 logging.info(
                     f"Failed to ping service '{service_name}' "

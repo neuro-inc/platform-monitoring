@@ -9,10 +9,10 @@ install_requires = (
     "platform_config_client==21.5.18",
     "neuro-sdk==21.7.12a1",
     "aioelasticsearch==0.7.0",
-    "aiodocker==0.19.1",
+    "aiodocker==0.21.0",
     "docker-image-py==0.1.10",
     "trafaret==2.1.0",
-    "platform-logging==21.5.13",
+    "platform-logging==21.7.27",
     "aiohttp-cors==0.7.0",
     "aiobotocore==1.3.0",
     "aiozipkin==1.1.0",
@@ -29,7 +29,7 @@ setup(
     packages=find_packages(),
     setup_requires=setup_requires,
     install_requires=install_requires,
-    python_requires=">=3.7",
+    python_requires=">=3.8",
     entry_points={
         "console_scripts": ["platform-monitoring=platform_monitoring.api:main"]
     },
