@@ -1,10 +1,13 @@
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, AsyncIterator, Optional
 
 
 class LogReader(ABC):
+    last_time: Optional[datetime] = None
+
     @abstractmethod
     async def __aenter__(self) -> AsyncIterator[bytes]:
         pass

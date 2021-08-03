@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Callable, Dict, Sequence
 from unittest import mock
 
@@ -42,17 +43,23 @@ class TestS3LogReader:
             [
                 {
                     "Contents": [
-                        {"Key": "s3-key/202101010102_0.gz"},
-                        {"Key": "s3-key/202101010101_1.gz"},
+                        {"Key": "s3-key/20210131120200_0.gz"},
+                        {"Key": "s3-key/20210131120100_1.gz"},
                     ]
                 },
-                {"Contents": [{"Key": "s3-key/202101010101_0.gz"}]},
+                {"Contents": [{"Key": "s3-key/20210131120100_0.gz"}]},
             ]
         )
 
         async with log_reader:
-            assert list(log_reader._key_iterator) == [
-                "s3-key/202101010101_0.gz",
-                "s3-key/202101010101_1.gz",
-                "s3-key/202101010102_0.gz",
+            assert list(await log_reader._load_log_keys(None)) == [
+                "s3-key/20210131120100_0.gz",
+                "s3-key/20210131120100_1.gz",
+                "s3-key/20210131120200_0.gz",
             ]
+            dt = datetime(2021, 1, 31, 12, 2, 0, tzinfo=timezone.utc)
+            assert list(await log_reader._load_log_keys(dt)) == [
+                "s3-key/20210131120200_0.gz",
+            ]
+            dt = datetime(2021, 1, 31, 12, 2, 1, tzinfo=timezone.utc)
+            assert list(await log_reader._load_log_keys(dt)) == []

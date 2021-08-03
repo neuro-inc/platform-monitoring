@@ -17,6 +17,7 @@ install_requires = (
     "aiobotocore==1.3.0",
     "aiozipkin==1.1.0",
     "sentry-sdk==1.1.0",
+    "iso8601==0.1.14",
 )
 
 setup(

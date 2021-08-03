@@ -1,14 +1,17 @@
 import asyncio
 import enum
+import json
 import logging
 import ssl
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import Any, AsyncIterator, Dict, List, NoReturn, Optional, Sequence
+from typing import Any, AsyncIterator, Dict, List, Optional, Sequence
 from urllib.parse import urlsplit
 
 import aiohttp
+import iso8601
 from aiohttp import ContentTypeError
 from async_timeout import timeout
 from yarl import URL
@@ -109,6 +112,10 @@ class Pod:
         return self._payload["spec"].get("nodeName")
 
     @property
+    def restart_policy(self) -> str:
+        return self._payload["spec"].get("restartPolicy") or "Never"
+
+    @property
     def _status_payload(self) -> Dict[str, Any]:
         payload = self._payload.get("status")
         if not payload:
@@ -178,6 +185,46 @@ class Node:
 
     def get_label(self, key: str) -> Optional[str]:
         return self._payload["metadata"].get("labels", {}).get(key)
+
+
+class ContainerStatus:
+    def __init__(self, payload: Dict[str, Any], restart_policy: str) -> None:
+        self._payload = payload
+        self._restart_policy = restart_policy
+
+    @property
+    def is_waiting(self) -> bool:
+        state = self._payload.get("state")
+        return not state or "waiting" in state
+
+    @property
+    def is_running(self) -> bool:
+        state = self._payload.get("state")
+        return (not not state) and "running" in state
+
+    @property
+    def can_restart(self) -> bool:
+        return self._restart_policy != "Never"
+
+    @property
+    def restart_count(self) -> Optional[int]:
+        if not self.can_restart:
+            return None
+        return self._payload.get("restartCount") or 0
+
+    @property
+    def started_at(self) -> Optional[datetime]:
+        try:
+            date_str = self._payload["state"]["running"]["startedAt"]
+        except KeyError:
+            try:
+                date_str = self._payload["state"]["terminated"]["startedAt"]
+                if not date_str:
+                    return None
+            except KeyError:
+                # waiting
+                return None
+        return iso8601.parse_date(date_str)
 
 
 class KubeClient:
@@ -324,7 +371,7 @@ class KubeClient:
     async def _request(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         assert self._client, "client is not initialized"
         async with self._client.request(*args, **kwargs) as response:
-            # TODO (A Danshyn 05/21/18): check status code etc
+            await self._check_response_status(response)
             payload = await response.json()
             logger.debug("k8s response payload: %s", payload)
             return payload
@@ -332,7 +379,9 @@ class KubeClient:
     async def get_raw_pod(self, pod_name: str) -> Dict[str, Any]:
         url = self._generate_pod_url(pod_name)
         payload = await self._request(method="GET", url=url)
-        self._assert_resource_kind(expected_kind="Pod", payload=payload)
+        self._assert_resource_kind(
+            expected_kind="Pod", payload=payload, job_id=pod_name
+        )
         return payload
 
     async def get_pod(self, pod_name: str) -> Pod:
@@ -343,24 +392,43 @@ class KubeClient:
         container_status = pod.get_container_status(pod_name)
         return container_status.get("state", {})
 
-    async def is_container_waiting(self, pod_name: str) -> bool:
-        state = await self._get_raw_container_state(pod_name)
-        is_waiting = not state or "waiting" in state
-        return is_waiting
+    async def get_container_status(self, name: str) -> ContainerStatus:
+        pod = await self.get_pod(name)
+        return ContainerStatus(
+            pod.get_container_status(name),
+            restart_policy=pod.restart_policy,
+        )
 
     async def wait_pod_is_running(
-        self, pod_name: str, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
-    ) -> None:
-        """Wait until the pod transitions from the waiting state.
+        self, pod_name: str, *, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
+    ) -> ContainerStatus:
+        """Wait until the pod transitions to the running state.
 
-        Raise JobError if there is no such pod.
+        Raise JobNotFoundException if there is no such pod.
         Raise asyncio.TimeoutError if it takes too long for the pod.
         """
         async with timeout(timeout_s):
             while True:
-                is_waiting = await self.is_container_waiting(pod_name)
-                if not is_waiting:
-                    return
+                status = await self.get_container_status(pod_name)
+                if status.is_running:
+                    return status
+                if not (status.is_waiting or status.can_restart):
+                    raise JobNotFoundException
+                await asyncio.sleep(interval_s)
+
+    async def wait_pod_is_not_waiting(
+        self, pod_name: str, *, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
+    ) -> ContainerStatus:
+        """Wait until the pod transitions from the waiting state.
+
+        Raise JobNotFoundException if there is no such pod.
+        Raise asyncio.TimeoutError if it takes too long for the pod.
+        """
+        async with timeout(timeout_s):
+            while True:
+                status = await self.get_container_status(pod_name)
+                if not status.is_waiting:
+                    return status
                 await asyncio.sleep(interval_s)
 
     def _get_node_proxy_url(self, host: str, port: int) -> URL:
@@ -391,6 +459,8 @@ class KubeClient:
             return summary.get_pod_container_stats(
                 self._namespace, pod_name, container_name
             )
+        except JobNotFoundException:
+            return None
         except ContentTypeError as e:
             logger.info(f"Failed to parse response: {e}", exc_info=True)
             return None
@@ -418,7 +488,7 @@ class KubeClient:
         async with self._client.get(  # type: ignore
             url, timeout=client_timeout
         ) as response:
-            await self._check_response_status(response)
+            await self._check_response_status(response, job_id=pod_name)
             yield response.content
 
     async def get_pods(
@@ -447,31 +517,44 @@ class KubeClient:
             self._assert_resource_kind("NodeList", payload)
             return [Node(item) for item in payload["items"]]
 
-    async def _check_response_status(self, response: aiohttp.ClientResponse) -> None:
-        if response.status != 200:
+    async def _check_response_status(
+        self, response: aiohttp.ClientResponse, job_id: str = ""
+    ) -> None:
+        if not 200 <= response.status < 300:
             payload = await response.text()
+            try:
+                pod = json.loads(payload)
+            except ValueError:
+                pod = {"code": response.status, "message": payload}
+            self._raise_status_job_exception(pod, job_id=job_id)
             raise KubeClientException(payload)
 
     def _assert_resource_kind(
-        self, expected_kind: str, payload: Dict[str, Any]
+        self, expected_kind: str, payload: Dict[str, Any], job_id: str = ""
     ) -> None:
         kind = payload["kind"]
         if kind == "Status":
-            self._raise_status_job_exception(payload, job_id="")
+            self._raise_status_job_exception(payload, job_id=job_id)
+            raise JobError("unexpected error")
         elif kind != expected_kind:
             raise ValueError(f"unknown kind: {kind}")
 
     def _raise_status_job_exception(
         self, pod: Dict[str, Any], job_id: Optional[str]
-    ) -> NoReturn:
+    ) -> None:
         if pod["code"] == 409:
             raise JobError(f"job '{job_id}' already exist")
         elif pod["code"] == 404:
             raise JobNotFoundException(f"job '{job_id}' was not found")
         elif pod["code"] == 422:
             raise JobError(f"can not create job with id '{job_id}'")
-        else:
-            raise JobError("unexpected error")
+        if pod["code"] == 400:
+            if "ContainerCreating" in pod["message"]:
+                raise JobNotFoundException(f"job '{job_id}' has not created yet")
+            if "is not available" in pod["message"]:
+                raise JobNotFoundException(f"job '{job_id}' has not created yet")
+            if "is terminated" in pod["message"]:
+                raise JobNotFoundException(f"job '{job_id}' is terminated")
 
 
 @dataclass(frozen=True)

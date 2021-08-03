@@ -68,11 +68,47 @@ class MyKubeClient(KubeClient):
                         return
                     await asyncio.sleep(interval_s)
         except asyncio.TimeoutError:
-            pytest.fail("Pod has not terminated yet")
+            pytest.fail(f"Pod {pod_name} has not terminated yet")
+
+    async def wait_pod_is_deleted(
+        self,
+        pod_name: str,
+        timeout_s: float = 10.0 * 60,
+        interval_s: float = 1.0,
+    ) -> None:
+        try:
+            async with timeout(timeout_s):
+                while await self.check_pod_exists(pod_name):
+                    await asyncio.sleep(interval_s)
+        except asyncio.TimeoutError:
+            pytest.fail(f"Pod {pod_name} has not deleted yet")
 
     async def get_node_list(self) -> Dict[str, Any]:
         url = f"{self._api_v1_url}/nodes"
         return await self._request(method="GET", url=url)
+
+    async def wait_container_is_restarted(
+        self,
+        name: str,
+        count: int = 1,
+        *,
+        timeout_s: float = 10.0 * 60,
+        interval_s: float = 1.0,
+    ) -> None:
+        try:
+            async with timeout(timeout_s):
+                while True:
+                    status = await self.get_container_status(name)
+                    restart_count = status.restart_count
+                    if restart_count is None:
+                        print(f"restart_count is None!!! status = {status.__dict__}")
+                        break
+                    assert restart_count is not None
+                    if restart_count >= count:
+                        break
+                    await asyncio.sleep(interval_s)
+        except asyncio.TimeoutError:
+            pytest.fail(f"Container {name} has not restarted yet")
 
 
 class MyPodDescriptor:
