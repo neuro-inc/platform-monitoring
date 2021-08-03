@@ -839,22 +839,25 @@ class TestLogReader:
         names = []
         tasks = []
 
-        def run_log_reader(name: str) -> None:
+        def run_log_reader(name: str, delay: float = 0) -> None:
+            async def coro() -> bytes:
+                await asyncio.sleep(delay)
+                log_reader = factory.get_pod_log_reader(
+                    job_pod.name, separator=b"===", archive_delay_s=10.0
+                )
+                return await self._consume_log_reader(log_reader)
+
             names.append(name)
-            log_reader = factory.get_pod_log_reader(
-                job_pod.name, separator=b"===", archive_delay_s=10.0
-            )
-            task = asyncio.ensure_future(self._consume_log_reader(log_reader))
+            task = asyncio.ensure_future(coro())
             tasks.append(task)
 
         try:
             await kube_client.create_pod(job_pod.payload)
             run_log_reader("created")
             await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=60.0)
-            for i in range(6):
-                if i:
-                    await asyncio.sleep(2)
-                run_log_reader(f"started [{i}]")
+            for i in range(4):
+                run_log_reader(f"started [{i}]", delay=i * 2)
+            await kube_client.wait_pod_is_terminated(job_pod.name)
         finally:
             await kube_client.delete_pod(job_pod.name)
         run_log_reader("deleting")
@@ -868,6 +871,7 @@ class TestLogReader:
             print(f"{i}. {name}: {payload!r}")
 
         expected_payload = "".join(f"{i}\n" for i in range(1, 6)).encode()
+        # All logs are completely either live or archive, no separator.
         for name, payload in zip(names, payloads):
             assert payload == expected_payload, name
 
@@ -916,32 +920,31 @@ class TestLogReader:
         names = []
         tasks = []
 
-        def run_log_reader(name: str) -> None:
+        def run_log_reader(name: str, delay: float = 0) -> None:
+            async def coro() -> bytes:
+                await asyncio.sleep(delay)
+                log_reader = factory.get_pod_log_reader(
+                    job_pod.name, separator=b"===", archive_delay_s=10.0
+                )
+                return await self._consume_log_reader(log_reader)
+
             names.append(name)
-            log_reader = factory.get_pod_log_reader(
-                job_pod.name, separator=b"===", archive_delay_s=10.0
-            )
-            task = asyncio.ensure_future(self._consume_log_reader(log_reader))
+            task = asyncio.ensure_future(coro())
             tasks.append(task)
 
         try:
             await kube_client.create_pod(job_pod.payload)
             run_log_reader("created")
             await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=60.0)
-            for i in range(6):
-                if i:
-                    await asyncio.sleep(2)
-                run_log_reader(f"started [{i}]")
+            for i in range(4):
+                run_log_reader(f"started [{i}]", delay=i * 2)
             await kube_client.wait_container_is_restarted(job_pod.name, 1)
-            for i in range(6):
-                if i:
-                    await asyncio.sleep(2)
-                run_log_reader(f"restarted 1 [{i}]")
+            for i in range(4):
+                run_log_reader(f"restarted 1 [{i}]", delay=i * 2)
             await kube_client.wait_container_is_restarted(job_pod.name, 2)
-            for i in range(6):
-                if i:
-                    await asyncio.sleep(2)
-                run_log_reader(f"restarted 2 [{i}]")
+            for i in range(4):
+                run_log_reader(f"restarted 2 [{i}]", delay=i * 2)
+            await kube_client.wait_pod_is_terminated(job_pod.name)
         finally:
             await kube_client.delete_pod(job_pod.name)
         run_log_reader("deleting")
@@ -959,8 +962,12 @@ class TestLogReader:
         assert re.sub(rb"\[.*?\]\n", b"", payload0) == expected_payload * 3
         for i, (name, payload) in enumerate(zip(names, payloads)):
             if i < 2 or i >= len(names) - 1:
+                # No separator in earlest (live only) and
+                # latest (archive only) logs.
                 assert b"===" not in payload, name
-            elif i >= 7 and i <= 13:
+            elif "restarted 1 " in name:
+                # There should be parts of live and archive logs,
+                # and a separator between them.
                 assert payload.count(b"===\n") == 1, name
             payload = payload.replace(b"===\n", b"")
             assert payload == payload0, name

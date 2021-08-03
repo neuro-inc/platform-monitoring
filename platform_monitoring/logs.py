@@ -359,7 +359,6 @@ class LogsService(abc.ABC):
         if not first_run:
             last_archived_time = _utcnow()
             while True:
-                empty = True
                 old_start = start
                 until = start or _utcnow()
                 log_reader = self.get_pod_archive_log_reader(pod_name, since=since)
@@ -369,7 +368,6 @@ class LogsService(abc.ABC):
                         if log_reader.last_time > until:
                             since = until
                             break
-                        empty = False
                         has_archive = True
                         yield chunk
                     else:
@@ -383,15 +381,14 @@ class LogsService(abc.ABC):
                     start = status.started_at if status.is_running else None
                 except JobNotFoundException:
                     start = None
-                if start is None:
-                    if (
-                        old_start is None
-                        and empty
-                        and _utcnow() - last_archived_time > archive_delay
-                    ):
+                if start == old_start:  # Either both None or same time.
+                    if start and last_archived_time > start:
+                        # There is an archived entry from the current
+                        # running container.
                         break
-                else:
-                    if start == until:
+                    if _utcnow() - last_archived_time > archive_delay:
+                        # Last entry from the previous running container was
+                        # archived long time ago.
                         break
                 await asyncio.sleep(interval_s)
 
