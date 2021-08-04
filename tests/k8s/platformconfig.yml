@@ -168,7 +168,7 @@ spec:
         image: curlimages/curl
         command: [sh]
         args:
-        - -c
+        - -ec
         - |
           curl -vv -X POST \
             -H "Authorization: Bearer $NP_TOKEN" \
@@ -207,6 +207,7 @@ spec:
               "secrets": {"url": "http://platformapi/api/v1/secrets"},
               "metrics": {"url": "http://platformapi/api/v1/metrics"},
               "disks": {"url": "http://platformapi/api/v1/disk"},
+              "buckets": {"url": "http://platformapi/api/v1/buckets"},
               "ingress": {"acme_environment": "staging"}
           }
           EOM
