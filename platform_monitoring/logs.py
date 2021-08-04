@@ -405,7 +405,7 @@ class LogsService(abc.ABC):
             while True:
                 async with self.get_pod_live_log_reader(pod_name) as it:
                     async for chunk in it:
-                        if separator is not None:
+                        if separator:
                             yield separator + b"\n"
                             separator = None
                         yield chunk

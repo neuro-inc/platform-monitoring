@@ -169,8 +169,8 @@ class MonitoringApiHandler:
 
         pod_name = self._kube_helper.get_job_pod_name(job)
         separator = request.query.get("separator")
-        if not separator:
-            separator = _getrandbytes(30).hex()
+        if separator is None:
+            separator = "=== Live logs ===" + _getrandbytes(30).hex()
 
         response = StreamResponse(status=200)
         response.enable_chunked_encoding()
