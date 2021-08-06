@@ -533,7 +533,7 @@ class TestLogReader:
         job_pod: MyPodDescriptor,
         es_client: Elasticsearch,
     ) -> None:
-        command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
+        command = 'bash -c "sleep 5; for i in {1..5}; do echo $i; sleep 1; done"'
         expected_payload = ("\n".join(str(i) for i in range(1, 6)) + "\n").encode()
         job_pod.set_command(command)
         job_pod.set_restart_policy("Always")
@@ -595,7 +595,7 @@ class TestLogReader:
         s3_logs_bucket: str,
         s3_logs_key_prefix_format: str,
     ) -> None:
-        command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
+        command = 'bash -c "sleep 5; for i in {1..5}; do echo $i; sleep 1; done"'
         expected_payload = ("\n".join(str(i) for i in range(1, 6)) + "\n").encode()
         job_pod.set_command(command)
         job_pod.set_restart_policy("Always")
@@ -914,7 +914,9 @@ class TestLogReader:
         job_pod: MyPodDescriptor,
         factory: LogsService,
     ) -> None:
-        command = 'bash -c "date +[%T]; for i in {1..5}; do sleep 1; echo $i; done"'
+        command = (
+            'bash -c "sleep 5; date +[%T]; for i in {1..5}; do sleep 1; echo $i; done"'
+        )
         job_pod.set_command(command)
         job_pod.set_restart_policy("Always")
         names = []
@@ -924,7 +926,7 @@ class TestLogReader:
             async def coro() -> bytes:
                 await asyncio.sleep(delay)
                 log_reader = factory.get_pod_log_reader(
-                    job_pod.name, separator=b"===", archive_delay_s=10.0
+                    job_pod.name, separator=b"===", archive_delay_s=20.0
                 )
                 return await self._consume_log_reader(log_reader)
 
