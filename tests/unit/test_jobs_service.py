@@ -13,6 +13,7 @@ from platform_config_client import (
 from platform_config_client.models import ResourcePreset
 
 from platform_monitoring.config import DockerConfig
+from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
 from platform_monitoring.jobs_service import JobsService, NodeNotFoundException
 from platform_monitoring.kube_client import KubeClient, Node, Pod
 
@@ -173,6 +174,9 @@ def service(
         jobs_client=jobs_client,
         kube_client=kube_client,
         docker_config=DockerConfig(),
+        container_runtime_client_registry=ContainerRuntimeClientRegistry(
+            container_runtime_port=9000
+        ),
         cluster_name="default",
     )
 

@@ -6,19 +6,22 @@ import shlex
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from pathlib import Path
 from tempfile import mktemp
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional, Union
 
 import aiobotocore
 import aiohttp
+import aiohttp.hdrs
 import aiohttp.web
 import aiohttp_cors
 import pkg_resources
 from aiobotocore.client import AioBaseClient
 from aiodocker.stream import Stream
 from aioelasticsearch import Elasticsearch
+from aiohttp.client_ws import ClientWebSocketResponse
 from aiohttp.web import (
     HTTPBadRequest,
     HTTPInternalServerError,
+    HTTPNotFound,
     Request,
     Response,
     StreamResponse,
@@ -26,7 +29,6 @@ from aiohttp.web import (
     json_response,
     middleware,
 )
-from aiohttp.web_exceptions import HTTPNotFound
 from aiohttp.web_urldispatcher import AbstractRoute
 from aiohttp_security import check_authorized
 from aiohttp_security.api import AUTZ_KEY
@@ -60,6 +62,10 @@ from .config import (
     S3Config,
 )
 from .config_factory import EnvironConfigFactory
+from .container_runtime_client import (
+    ContainerNotFoundError,
+    ContainerRuntimeClientRegistry,
+)
 from .jobs_service import (
     Container,
     ExecCreate,
@@ -126,8 +132,10 @@ class MonitoringApiHandler:
                 aiohttp.web.post("/{job_id}/save", self.stream_save),
                 aiohttp.web.post("/{job_id}/attach", self.ws_attach),
                 aiohttp.web.get("/{job_id}/attach", self.ws_attach),
-                aiohttp.web.post("/{job_id}/resize", self.resize),
+                aiohttp.web.post("/{job_id}/exec", self.ws_exec),
+                aiohttp.web.get("/{job_id}/exec", self.ws_exec),
                 aiohttp.web.post("/{job_id}/kill", self.kill),
+                aiohttp.web.post("/{job_id}/resize", self.resize),
                 aiohttp.web.post("/{job_id}/exec_create", self.exec_create),
                 aiohttp.web.post("/{job_id}/port_forward/{port}", self.port_forward),
                 aiohttp.web.get("/{job_id}/port_forward/{port}", self.port_forward),
@@ -350,14 +358,18 @@ class MonitoringApiHandler:
         return json_response(None)
 
     async def kill(self, request: Request) -> Response:
-        signal = request.query.get("signal", "SIGKILL")
+        signal = request.query.get("signal")
 
         job = await self._resolve_job(request, "write")
 
-        await self._jobs_service.kill(job, signal)
+        if signal:
+            await self._jobs_service.kill(job, signal)
+        else:
+            await self._jobs_service.kill_v2(job)
         return json_response(None, status=204)
 
     async def ws_attach(self, request: Request) -> StreamResponse:
+        tty = _parse_bool(request.query.get("tty", "0"))
         stdin = _parse_bool(request.query.get("stdin", "0"))
         stdout = _parse_bool(request.query.get("stdout", "1"))
         stderr = _parse_bool(request.query.get("stderr", "1"))
@@ -366,15 +378,59 @@ class MonitoringApiHandler:
         if not (stdin or stdout or stderr):
             raise ValueError("Required at least one of stdin, stdout or stderr")
 
+        if tty and stdout and stderr:
+            raise ValueError("Stdin and stdout cannot be multiplexed in tty mode")
+
         job = await self._resolve_job(request, "write")
 
         response = WebSocketResponse()
 
-        async with self._jobs_service.attach(
-            job, stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
-        ) as stream:
+        protocol = request.headers.get(
+            aiohttp.hdrs.SEC_WEBSOCKET_PROTOCOL, "v1.channels.neu.ro"
+        )
+
+        if protocol == "v2.channels.neu.ro":
+            async with self._jobs_service.attach_v2(
+                job, tty=tty, stdin=stdin, stdout=stdout, stderr=stderr
+            ) as ws:
+                await response.prepare(request)
+                transferV2 = TransferV2(response, ws, stdin, stdout or stderr)
+                await transferV2.transfer()
+        else:
+            async with self._jobs_service.attach(
+                job, stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
+            ) as stream:
+                await response.prepare(request)
+                transfer = Transfer(response, stream, stdin, stdout or stderr)
+                await transfer.transfer()
+
+        return response
+
+    async def ws_exec(self, request: Request) -> StreamResponse:
+        cmd = request.query.get("cmd")
+        tty = _parse_bool(request.query.get("tty", "0"))
+        stdin = _parse_bool(request.query.get("stdin", "0"))
+        stdout = _parse_bool(request.query.get("stdout", "1"))
+        stderr = _parse_bool(request.query.get("stderr", "1"))
+
+        if not cmd:
+            raise ValueError("Command is required")
+
+        if not (stdin or stdout or stderr):
+            raise ValueError("Required at least one of stdin, stdout or stderr")
+
+        if tty and stdout and stderr:
+            raise ValueError("Stdin and stdout cannot be multiplexed in tty mode")
+
+        job = await self._resolve_job(request, "write")
+
+        response = WebSocketResponse()
+
+        async with self._jobs_service.exec_v2(
+            job, cmd=cmd, tty=tty, stdin=stdin, stdout=stdout, stderr=stderr
+        ) as ws:
             await response.prepare(request)
-            transfer = Transfer(response, stream, stdin, stdout or stderr)
+            transfer = TransferV2(response, ws, stdin, stdout or stderr)
             await transfer.transfer()
 
         return response
@@ -586,6 +642,65 @@ class Transfer:
                 await self._ws.send_bytes(bytes([data.stream]) + data.data)
 
 
+class TransferV2:
+    def __init__(
+        self,
+        resp: WebSocketResponse,
+        client_resp: ClientWebSocketResponse,
+        handle_input: bool,
+        handle_output: bool,
+    ) -> None:
+        self._resp = resp
+        self._client_resp = client_resp
+        self._handle_input = handle_input
+        self._handle_output = handle_output
+        self._closing = False
+
+    async def transfer(self) -> None:
+        tasks = []
+        if self._handle_input:
+            tasks.append(
+                asyncio.create_task(self._proxy(self._resp, self._client_resp))
+            )
+        if self._handle_output:
+            tasks.append(
+                asyncio.create_task(self._proxy(self._client_resp, self._resp))
+            )
+
+        try:
+            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            await self._resp.close()
+            await self._client_resp.close()
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await task
+
+    async def _proxy(
+        self,
+        src: Union[WebSocketResponse, ClientWebSocketResponse],
+        dst: Union[WebSocketResponse, ClientWebSocketResponse],
+    ) -> None:
+        try:
+            async for msg in src:
+                if self._closing:
+                    break
+
+                if msg.type == aiohttp.WSMsgType.BINARY:
+                    await dst.send_bytes(msg.data)
+                elif msg.type == aiohttp.WSMsgType.ERROR:
+                    exc = src.exception()
+                    logger.error(
+                        "WS connection closed with exception %s", exc, exc_info=exc
+                    )
+                else:
+                    raise ValueError(f"Unsupported WS message type {msg.type}")
+        except StopAsyncIteration:
+            self._closing = True
+
+
 @middleware
 async def handle_exceptions(
     request: Request, handler: Callable[[Request], Awaitable[StreamResponse]]
@@ -595,6 +710,9 @@ async def handle_exceptions(
     except ValueError as e:
         payload = {"error": str(e)}
         return json_response(payload, status=HTTPBadRequest.status_code)
+    except ContainerNotFoundError as e:
+        payload = {"error": str(e)}
+        return json_response(payload, status=HTTPNotFound.status_code)
     except JobNotRunningException as e:
         payload = {"error": str(e)}
         return json_response(payload, status=HTTPNotFound.status_code)
@@ -808,11 +926,18 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             )
             app["monitoring_app"]["logs_service"] = logs_service
 
+            container_runtime_client_registry = await exit_stack.enter_async_context(
+                ContainerRuntimeClientRegistry(
+                    container_runtime_port=config.container_runtime.port,
+                    trace_configs=make_tracing_trace_configs(config),
+                )
+            )
             jobs_service = JobsService(
                 config_client=config_client,
                 jobs_client=platform_client.jobs,
                 kube_client=kube_client,
                 docker_config=config.docker,
+                container_runtime_client_registry=container_runtime_client_registry,
                 cluster_name=config.cluster_name,
                 kube_job_label=config.kube.job_label,
                 kube_node_pool_label=config.kube.node_pool_label,
