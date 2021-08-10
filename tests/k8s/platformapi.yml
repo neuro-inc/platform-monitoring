@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: platformpostgres
-        image: postgres:9.6
+        image: postgres:11.3
         env:
           - name: POSTGRES_DB
             value: postgres
