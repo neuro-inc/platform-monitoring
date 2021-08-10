@@ -31,20 +31,24 @@ function minikube::apply_all_configurations {
     echo "Applying configurations..."
     kubectl config use-context minikube
     kubectl apply -f tests/k8s/dockerengineapi.yml
-    kubectl apply -f tests/k8s/rb.default.gke.yml
+    kubectl apply -f tests/k8s/rbac.yml
     kubectl apply -f tests/k8s/logging.yml
     kubectl apply -f tests/k8s/platformconfig.yml
     kubectl apply -f tests/k8s/platformapi.yml
+    kubectl apply -f tests/k8s/platformnotifications.yml
+    kubectl apply -f tests/k8s/platformcontainerruntime.yml
 }
 
 function minikube::clean {
     echo "Cleaning up..."
     kubectl config use-context minikube
     kubectl delete -f tests/k8s/dockerengineapi.yml
-    kubectl delete -f tests/k8s/rb.default.gke.yml
+    kubectl delete -f tests/k8s/rbac.yml
     kubectl delete -f tests/k8s/logging.yml
     kubectl delete -f tests/k8s/platformconfig.yml
     kubectl delete -f tests/k8s/platformapi.yml
+    kubectl delete -f tests/k8s/platformnotifications.yml
+    kubectl delete -f tests/k8s/platformcontainerruntime.yml
 }
 
 function minikube::stop {

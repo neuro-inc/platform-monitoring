@@ -106,6 +106,11 @@ class DockerConfig:
 
 
 @dataclass(frozen=True)
+class ContainerRuntimeConfig:
+    port: int = 9000
+
+
+@dataclass(frozen=True)
 class ZipkinConfig:
     url: URL
     app_name: str = "platform-monitoring"
@@ -130,6 +135,7 @@ class Config:
     logs: LogsConfig
     kube: KubeConfig
     docker: DockerConfig
+    container_runtime: ContainerRuntimeConfig
     registry: RegistryConfig
     cors: CORSConfig
     elasticsearch: Optional[ElasticsearchConfig] = None

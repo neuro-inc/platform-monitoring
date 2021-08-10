@@ -174,6 +174,30 @@ class Pod:
             return int(value[:-2])
         raise KubeClientException("Memory unit is not supported")
 
+    @property
+    def stdin(self) -> bool:
+        for container in self._payload["spec"]["containers"]:
+            stdin = container.get("stdin")
+            if stdin is not None:
+                return stdin
+        return False
+
+    @property
+    def stdin_once(self) -> bool:
+        for container in self._payload["spec"]["containers"]:
+            stdin_once = container.get("stdinOnce")
+            if stdin_once is not None:
+                return stdin_once
+        return False
+
+    @property
+    def tty(self) -> bool:
+        for container in self._payload["spec"]["containers"]:
+            tty = container.get("tty")
+            if tty is not None:
+                return tty
+        return False
+
 
 class Node:
     def __init__(self, payload: Dict[str, Any]) -> None:

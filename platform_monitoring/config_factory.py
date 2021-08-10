@@ -7,6 +7,7 @@ from yarl import URL
 
 from .config import (
     Config,
+    ContainerRuntimeConfig,
     CORSConfig,
     DockerConfig,
     ElasticsearchConfig,
@@ -45,6 +46,7 @@ class EnvironConfigFactory:
             kube=self._create_kube(),
             registry=self._create_registry(),
             docker=self._create_docker(),
+            container_runtime=self._create_container_runtime(),
             cors=self.create_cors(),
             zipkin=self.create_zipkin(),
             sentry=self.create_sentry(),
@@ -157,6 +159,9 @@ class EnvironConfigFactory:
 
     def _create_docker(self) -> DockerConfig:
         return DockerConfig()
+
+    def _create_container_runtime(self) -> ContainerRuntimeConfig:
+        return ContainerRuntimeConfig()
 
     def create_cors(self) -> CORSConfig:
         origins: Sequence[str] = CORSConfig.allowed_origins

@@ -42,12 +42,13 @@ function k8s::start {
 function k8s::apply_all_configurations {
     echo "Applying configurations..."
     kubectl config use-context minikube
-    kubectl apply -f tests/k8s/rb.default.gke.yml
+    kubectl apply -f tests/k8s/rbac.yml
     kubectl apply -f tests/k8s/logging.yml
     kubectl apply -f tests/k8s/platformconfig.yml
     kubectl apply -f tests/k8s/platformapi.yml
     kubectl apply -f tests/k8s/platformnotifications.yml
     kubectl apply -f tests/k8s/dockerengineapi.yml
+    kubectl apply -f tests/k8s/platformcontainerruntime.yml
 }
 
 

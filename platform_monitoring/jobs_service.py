@@ -16,8 +16,10 @@ from typing import (
     cast,
 )
 
+import aiohttp
 from aiodocker.exceptions import DockerError
 from aiodocker.stream import Stream
+from elasticsearch.client import logger
 from neuro_sdk import JobDescription as Job, Jobs as JobsClient
 from platform_config_client import ConfigClient
 from platform_config_client.models import ResourcePoolType
@@ -25,6 +27,7 @@ from platform_config_client.models import ResourcePoolType
 from platform_monitoring.config import DockerConfig
 
 from .config import DOCKER_API_VERSION, KubeConfig
+from .container_runtime_client import ContainerRuntimeClientRegistry
 from .docker_client import Docker, ImageReference
 from .kube_client import JobNotFoundException, KubeClient, Pod, Resources
 from .user import User
@@ -64,6 +67,7 @@ class JobsService:
         config_client: ConfigClient,
         jobs_client: JobsClient,
         kube_client: KubeClient,
+        container_runtime_client_registry: ContainerRuntimeClientRegistry,
         docker_config: DockerConfig,
         cluster_name: str,
         kube_job_label: str = KubeConfig.job_label,
@@ -74,6 +78,7 @@ class JobsService:
         self._kube_client = kube_client
         self._kube_helper = KubeHelper()
         self._docker_config = docker_config
+        self._container_runtime_client_registry = container_runtime_client_registry
         self._cluster_name = cluster_name
         self._kube_job_label = kube_job_label
         self._kube_node_pool_label = kube_node_pool_label
@@ -225,6 +230,79 @@ class JobsService:
             exe = docker.containers.exec(exec_id)
             async with exe.start(detach=False) as stream:
                 yield stream
+
+    @asynccontextmanager
+    async def attach_v2(
+        self,
+        job: Job,
+        *,
+        tty: bool = False,
+        stdin: bool = False,
+        stdout: bool = True,
+        stderr: bool = True,
+    ) -> AsyncIterator[aiohttp.ClientWebSocketResponse]:
+        pod_name = self._kube_helper.get_job_pod_name(job)
+        pod = await self._get_running_jobs_pod(pod_name)
+        cont_id = pod.get_container_id(pod_name)
+        assert cont_id
+
+        if pod.stdin and not pod.stdin_once:
+            # If stdin remains open we need to pass stdin = True.
+            # Otherwise connection closes immediately.
+            stdin = True
+
+        if not pod.stdin:
+            stdin = False
+
+        if pod.tty and stdin and not tty:
+            # Otherwise connection closes immediately.
+            tty = True
+
+        if not pod.tty:
+            tty = False
+
+        logger.info(pod.host_ip)
+
+        runtime_client = await self._container_runtime_client_registry.get(pod.host_ip)
+
+        async with runtime_client.attach(
+            cont_id, tty=tty, stdin=stdin, stdout=stdout, stderr=stderr
+        ) as ws:
+            yield ws
+
+    @asynccontextmanager
+    async def exec_v2(
+        self,
+        job: Job,
+        *,
+        cmd: str,
+        tty: bool = False,
+        stdin: bool = False,
+        stdout: bool = True,
+        stderr: bool = True,
+    ) -> AsyncIterator[aiohttp.ClientWebSocketResponse]:
+        pod_name = self._kube_helper.get_job_pod_name(job)
+        pod = await self._get_running_jobs_pod(pod_name)
+        cont_id = pod.get_container_id(pod_name)
+        assert cont_id
+
+        runtime_client = await self._container_runtime_client_registry.get(pod.host_ip)
+
+        async with runtime_client.exec(
+            cont_id, cmd, tty=tty, stdin=stdin, stdout=stdout, stderr=stderr
+        ) as ws:
+            yield ws
+
+    async def kill_v2(self, job: Job) -> None:
+        pod_name = self._kube_helper.get_job_pod_name(job)
+
+        pod = await self._get_running_jobs_pod(pod_name)
+        cont_id = pod.get_container_id(pod_name)
+        assert cont_id
+
+        runtime_client = await self._container_runtime_client_registry.get(pod.host_ip)
+
+        await runtime_client.kill(cont_id)
 
     async def port_forward(
         self, job: Job, port: int

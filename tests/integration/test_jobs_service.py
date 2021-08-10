@@ -20,6 +20,7 @@ from neuro_sdk import (
 from platform_config_client import ConfigClient
 
 from platform_monitoring.config import DOCKER_API_VERSION, DockerConfig
+from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
 from platform_monitoring.jobs_service import (
     Container,
     ImageReference,
@@ -117,6 +118,7 @@ class TestJobsService:
         platform_api_client: PlatformApiClient,
         kube_client: MyKubeClient,
         docker_config: DockerConfig,
+        container_runtime_client_registry: ContainerRuntimeClientRegistry,
         cluster_name: str,
     ) -> JobsService:
         return JobsService(
@@ -124,6 +126,7 @@ class TestJobsService:
             jobs_client=platform_api_client.jobs,
             kube_client=kube_client,
             docker_config=docker_config,
+            container_runtime_client_registry=container_runtime_client_registry,
             cluster_name=cluster_name,
         )
 
@@ -200,7 +203,7 @@ class TestJobsService:
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=16,
+            memory_mb=32,
             cpu=0.1,
             gpu=None,
             shm=False,

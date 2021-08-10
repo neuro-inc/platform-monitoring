@@ -25,6 +25,7 @@ from platform_monitoring.api import (
 )
 from platform_monitoring.config import (
     Config,
+    ContainerRuntimeConfig,
     CORSConfig,
     DockerConfig,
     ElasticsearchConfig,
@@ -38,6 +39,7 @@ from platform_monitoring.config import (
     S3Config,
     ServerConfig,
 )
+from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
 
 
 logger = logging.getLogger(__name__)
@@ -125,6 +127,30 @@ async def platform_api_config(
         url=url,
         token=token_factory("compute"),  # token is hard-coded in the yaml configuration
     )
+
+
+@pytest.fixture
+async def container_runtime_config(in_minikube: bool) -> ContainerRuntimeConfig:
+    if in_minikube:
+        url = URL("http://platform-container-runtime:9000")
+    else:
+        url = URL(get_service_url("platform-container-runtime", namespace="default"))
+    assert url
+    await wait_for_service(
+        "platform-container-runtime", url / "api/v1/ping", timeout_s=120
+    )
+    assert url.port
+    return ContainerRuntimeConfig(port=url.port)
+
+
+@pytest.fixture
+async def container_runtime_client_registry(
+    container_runtime_config: ContainerRuntimeConfig,
+) -> AsyncIterator[ContainerRuntimeClientRegistry]:
+    async with ContainerRuntimeClientRegistry(
+        container_runtime_port=container_runtime_config.port
+    ) as registry:
+        yield registry
 
 
 @pytest.fixture
@@ -227,6 +253,7 @@ def config_factory(
     kube_config: KubeConfig,
     registry_config: RegistryConfig,
     docker_config: DockerConfig,
+    container_runtime_config: ContainerRuntimeConfig,
     cluster_name: str,
 ) -> Callable[..., Config]:
     def _f(**kwargs: Any) -> Config:
@@ -243,6 +270,7 @@ def config_factory(
             kube=kube_config,
             registry=registry_config,
             docker=docker_config,
+            container_runtime=container_runtime_config,
             cors=CORSConfig(allowed_origins=["https://neu.ro"]),
         )
         kwargs = {**defaults, **kwargs}

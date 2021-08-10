@@ -6,6 +6,7 @@ from yarl import URL
 
 from platform_monitoring.config import (
     Config,
+    ContainerRuntimeConfig,
     CORSConfig,
     DockerConfig,
     ElasticsearchConfig,
@@ -106,6 +107,7 @@ def test_create(environ: Dict[str, Any]) -> None:
         ),
         registry=RegistryConfig(url=URL("http://testhost:5000")),
         docker=DockerConfig(),
+        container_runtime=ContainerRuntimeConfig(),
         cors=CORSConfig(["https://domain1.com", "http://do.main"]),
         zipkin=ZipkinConfig(url=URL("https://zipkin:9411")),
         sentry=SentryConfig(dsn=URL("https://sentry"), cluster_name="test"),
