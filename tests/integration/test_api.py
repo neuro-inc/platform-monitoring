@@ -1699,11 +1699,6 @@ class TestAttachV2Api:
             await ws.send_bytes(b"\x00exit 1\n")
             assert await expect_prompt(ws) == b"exit 1\r\n"
 
-        with pytest.raises(WSServerHandshakeError) as err:
-            async with client.ws_connect(url, headers=headers):
-                pass
-        assert err.value.status == 404
-
         await asyncio.sleep(2)  # Allow poller to collect pod
 
         with pytest.raises(WSServerHandshakeError) as err:
