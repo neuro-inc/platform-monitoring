@@ -39,7 +39,10 @@ class ContainerRuntimeClient:
                     stdin=_bool_to_str(stdin),
                     stdout=_bool_to_str(stdout),
                     stderr=_bool_to_str(stderr),
-                )
+                ),
+                timeout=None,  # type: ignore
+                receive_timeout=None,
+                heartbeat=30,
             ) as ws:
                 yield ws
         except aiohttp.WSServerHandshakeError as ex:
@@ -69,7 +72,10 @@ class ContainerRuntimeClient:
                     stdin=_bool_to_str(stdin),
                     stdout=_bool_to_str(stdout),
                     stderr=_bool_to_str(stderr),
-                )
+                ),
+                timeout=None,  # type: ignore
+                receive_timeout=None,
+                heartbeat=30,
             ) as ws:
                 yield ws
         except aiohttp.WSServerHandshakeError as ex:
