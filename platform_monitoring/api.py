@@ -657,21 +657,17 @@ class TransferV2:
         self._closing = False
 
     async def transfer(self) -> None:
-        tasks = []
-        if self._handle_input:
-            tasks.append(
-                asyncio.create_task(self._proxy(self._resp, self._client_resp))
-            )
-        if self._handle_output:
-            tasks.append(
-                asyncio.create_task(self._proxy(self._client_resp, self._resp))
-            )
+        tasks = [
+            asyncio.create_task(self._proxy(self._resp, self._client_resp)),
+            asyncio.create_task(self._proxy(self._client_resp, self._resp)),
+        ]
 
         try:
             await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         finally:
             await self._resp.close()
             await self._client_resp.close()
+
             for task in tasks:
                 if not task.done():
                     task.cancel()
@@ -698,6 +694,8 @@ class TransferV2:
                 else:
                     raise ValueError(f"Unsupported WS message type {msg.type}")
         except StopAsyncIteration:
+            pass
+        finally:
             self._closing = True
 
 
