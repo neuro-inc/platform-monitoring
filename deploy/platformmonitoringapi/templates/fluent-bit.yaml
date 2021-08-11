@@ -25,6 +25,8 @@ spec:
       component: fluent-bit
   updateStrategy:
     type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 100%
   template:
     metadata:
       labels:
