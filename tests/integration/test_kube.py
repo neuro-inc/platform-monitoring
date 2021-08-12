@@ -376,6 +376,17 @@ class TestLogReader:
             pass
         return bytes(buffer)
 
+    def _remove_timestamps(self, data: bytes) -> bytes:
+        result = []
+        for line in data.splitlines(True):
+            timestamp, rest = line.split(b" ", 1)
+            assert re.fullmatch(
+                rb"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+Z",
+                timestamp,
+            )
+            result.append(rest)
+        return b"".join(result)
+
     @pytest.mark.asyncio
     async def test_read_instantly_succeeded(
         self,
@@ -439,6 +450,27 @@ class TestLogReader:
             client=kube_client, pod_name=job_pod.name, container_name=job_pod.name
         )
         payload = await self._consume_log_reader(log_reader)
+        expected_payload = "\n".join(str(i) for i in range(1, 6)) + "\n"
+        assert payload == expected_payload.encode()
+
+    @pytest.mark.asyncio
+    async def test_read_with_timestamps(
+        self,
+        kube_config: KubeConfig,
+        kube_client: MyKubeClient,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
+        job_pod.set_command(command)
+        await kube_client.create_pod(job_pod.payload)
+        log_reader = PodContainerLogReader(
+            client=kube_client,
+            pod_name=job_pod.name,
+            container_name=job_pod.name,
+            timestamps=True,
+        )
+        payload = await self._consume_log_reader(log_reader)
+        payload = self._remove_timestamps(payload)
         expected_payload = "\n".join(str(i) for i in range(1, 6)) + "\n"
         assert payload == expected_payload.encode()
 
@@ -538,13 +570,15 @@ class TestLogReader:
             expected_payload=expected_payload,
         )
         await kube_client.delete_pod(job_pod.name)
-        await self._check_es_logs(
-            es_client,
-            namespace_name=kube_config.namespace,
-            pod_name=job_pod.name,
-            container_name=job_pod.name,
-            expected_payload=expected_payload,
-        )
+        for timestamps in [False, True]:
+            await self._check_es_logs(
+                es_client,
+                namespace_name=kube_config.namespace,
+                pod_name=job_pod.name,
+                container_name=job_pod.name,
+                expected_payload=expected_payload,
+                timestamps=timestamps,
+            )
 
     @pytest.mark.asyncio
     async def test_elasticsearch_log_reader_restarted(
@@ -596,15 +630,17 @@ class TestLogReader:
             expected_payload=expected_payload,
         )
         await kube_client.delete_pod(job_pod.name)
-        await self._check_s3_logs(
-            s3_client,
-            bucket_name=s3_logs_bucket,
-            prefix_format=s3_logs_key_prefix_format,
-            namespace_name=kube_config.namespace,
-            pod_name=job_pod.name,
-            container_name=job_pod.name,
-            expected_payload=expected_payload,
-        )
+        for timestamps in [False, True]:
+            await self._check_s3_logs(
+                s3_client,
+                bucket_name=s3_logs_bucket,
+                prefix_format=s3_logs_key_prefix_format,
+                namespace_name=kube_config.namespace,
+                pod_name=job_pod.name,
+                container_name=job_pod.name,
+                expected_payload=expected_payload,
+                timestamps=timestamps,
+            )
 
     @pytest.mark.asyncio
     async def test_s3_log_reader_restarted(
@@ -705,6 +741,7 @@ class TestLogReader:
         expected_payload: Any,
         timeout_s: float = 120.0,
         interval_s: float = 1.0,
+        timestamps: bool = False,
     ) -> None:
         payload = b""
         try:
@@ -715,8 +752,11 @@ class TestLogReader:
                         namespace_name=namespace_name,
                         pod_name=pod_name,
                         container_name=container_name,
+                        timestamps=timestamps,
                     )
                     payload = await self._consume_log_reader(log_reader)
+                    if timestamps:
+                        payload = self._remove_timestamps(payload)
                     if payload == expected_payload:
                         return
                     await asyncio.sleep(interval_s)
@@ -734,6 +774,7 @@ class TestLogReader:
         expected_payload: Any,
         timeout_s: float = 120.0,
         interval_s: float = 1.0,
+        timestamps: bool = False,
     ) -> None:
         payload = b""
         try:
@@ -746,8 +787,11 @@ class TestLogReader:
                         namespace_name=namespace_name,
                         pod_name=pod_name,
                         container_name=container_name,
+                        timestamps=timestamps,
                     )
                     payload = await self._consume_log_reader(log_reader)
+                    if timestamps:
+                        payload = self._remove_timestamps(payload)
                     if payload == expected_payload:
                         return
                     await asyncio.sleep(interval_s)
