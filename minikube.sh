@@ -24,7 +24,7 @@ function minikube::start {
 
 function minikube::load_images {
     echo "Loading images to minikube..."
-    make gke_docker_pull_test_images
+    make docker_pull_test_images
 }
 
 function minikube::apply_all_configurations {
@@ -64,12 +64,12 @@ function check_service() { # attempt, max_attempt, service
     local service=$2
     echo "Checking service $service..."
     until minikube service $service --url; do
-	if [ $attempt == $max_attempts ]; then
-	    echo "Can't connect to the container"
+        if [ $attempt == $max_attempts ]; then
+            echo "Can't connect to the container"
             exit 1
-	fi
-	sleep 1
-	((attempt++))
+        fi
+        sleep 1
+        ((attempt++))
     done
 }
 
