@@ -296,35 +296,28 @@ class S3LogReader(LogReader):
 
     async def _iterate(self) -> AsyncIterator[bytes]:
         since = self._since
-        while True:
-            last_time = None
-            keys = await self._load_log_keys(since)
-            for key in keys:
-                response = await self._s3_client.get_object(
-                    Bucket=self._bucket_name, Key=key
-                )
-                response_body = response["Body"]
-                async with response_body:
-                    if response["ContentType"] == "application/x-gzip":
-                        line_iterator = self._iter_decompressed_lines(response_body)
-                    else:
-                        line_iterator = response_body.iter_lines()
-                    async with aclosing(line_iterator):
-                        async for line in line_iterator:
-                            event = json.loads(line)
-                            time = iso8601.parse_date(event["time"])
-                            if since is not None and time <= since:
-                                continue
-                            last_time = time
-                            self.last_time = time
-                            if self._debug and key:
-                                yield f"=== From file {basename(key)}\n".encode()
-                                key = ""
-                            yield event["log"].encode()
-            if last_time is None:
-                # No new lines
-                break
-            since = time
+        keys = await self._load_log_keys(since)
+        for key in keys:
+            response = await self._s3_client.get_object(
+                Bucket=self._bucket_name, Key=key
+            )
+            response_body = response["Body"]
+            async with response_body:
+                if response["ContentType"] == "application/x-gzip":
+                    line_iterator = self._iter_decompressed_lines(response_body)
+                else:
+                    line_iterator = response_body.iter_lines()
+                async with aclosing(line_iterator):
+                    async for line in line_iterator:
+                        event = json.loads(line)
+                        time = iso8601.parse_date(event["time"])
+                        if since is not None and time <= since:
+                            continue
+                        self.last_time = time
+                        if self._debug and key:
+                            yield f"=== From file {basename(key)}\n".encode()
+                            key = ""
+                        yield event["log"].encode()
 
     @classmethod
     async def _iter_decompressed_lines(
@@ -372,7 +365,8 @@ class LogsService(abc.ABC):
             last_archived_time = _utcnow()
             while True:
                 old_start = start
-                until = start or _utcnow()
+                request_time = _utcnow()
+                until = start or request_time
                 log_reader = self.get_pod_archive_log_reader(
                     pod_name, since=since, debug=debug
                 )
@@ -402,7 +396,7 @@ class LogsService(abc.ABC):
                         # There is an archived entry from the current
                         # running container.
                         break
-                    if _utcnow() - last_archived_time > archive_delay:
+                    if request_time - last_archived_time > archive_delay:
                         # Last entry from the previous running container was
                         # archived long time ago.
                         break

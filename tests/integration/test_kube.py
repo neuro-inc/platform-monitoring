@@ -993,3 +993,47 @@ class TestLogReader:
         await self._test_merged_log_reader_restarted(
             kube_client, job_pod, s3_log_service
         )
+
+    async def _test_slow_archive_log_reader(
+        self,
+        kube_client: MyKubeClient,
+        job_pod: MyPodDescriptor,
+        factory: LogsService,
+    ) -> None:
+        num = 5000
+        command = f"seq {num}"
+        job_pod.set_command(command)
+
+        try:
+            await kube_client.create_pod(job_pod.payload)
+            await kube_client.wait_pod_is_terminated(job_pod.name)
+            await asyncio.sleep(5)
+            log_reader = factory.get_pod_log_reader(
+                job_pod.name, separator=b"===", archive_delay_s=30.0
+            )
+            payload = (await self._consume_log_reader(log_reader, delay=0.001)).decode()
+        finally:
+            await kube_client.delete_pod(job_pod.name)
+
+        expected_payload = "".join(f"{i + 1}\n" for i in range(num))
+        assert payload == expected_payload
+
+    @pytest.mark.asyncio
+    async def test_elasticsearch_slow_archive_log_reader(
+        self,
+        kube_client: MyKubeClient,
+        elasticsearch_log_service: LogsService,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        await self._test_slow_archive_log_reader(
+            kube_client, job_pod, elasticsearch_log_service
+        )
+
+    @pytest.mark.asyncio
+    async def test_s3_slow_archive_log_reader(
+        self,
+        kube_client: MyKubeClient,
+        s3_log_service: LogsService,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        await self._test_slow_archive_log_reader(kube_client, job_pod, s3_log_service)
