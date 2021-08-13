@@ -504,8 +504,11 @@ class KubeClient:
         conn_timeout_s: float = 60 * 5,
         read_timeout_s: float = 60 * 30,
         previous: bool = False,
+        timestamps: bool = False,
     ) -> AsyncIterator[aiohttp.StreamReader]:
         url = self._generate_pod_log_url(pod_name, container_name, previous)
+        if timestamps:
+            url = f"{url}&timestamps=true"
         client_timeout = aiohttp.ClientTimeout(
             connect=conn_timeout_s, sock_read=read_timeout_s
         )

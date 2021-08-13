@@ -173,6 +173,7 @@ class MonitoringApiHandler:
         return json_response(result)
 
     async def stream_log(self, request: Request) -> StreamResponse:
+        timestamps = _get_bool_param(request, "timestamps", False)
         debug = _get_bool_param(request, "debug", False)
         job = await self._resolve_job(request, "read")
 
@@ -190,7 +191,7 @@ class MonitoringApiHandler:
         await response.prepare(request)
 
         async with self._logs_service.get_pod_log_reader(
-            pod_name, separator=separator.encode(), debug=debug
+            pod_name, separator=separator.encode(), timestamps=timestamps, debug=debug
         ) as it:
             async for chunk in it:
                 await response.write(chunk)
