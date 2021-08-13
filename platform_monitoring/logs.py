@@ -36,13 +36,6 @@ error_prefixes = (
 max_error_prefix_len = max(map(len, error_prefixes))
 
 
-async def iter_stream(stream: aiohttp.StreamReader) -> AsyncIterator[bytes]:
-    data = await stream.readany()
-    while data:
-        yield data
-        data = await stream.readany()
-
-
 async def filter_out_rpc_error(stream: aiohttp.StreamReader) -> AsyncIterator[bytes]:
     # https://github.com/neuromation/platform-api/issues/131
     # k8s API (and the underlying docker API) sometimes returns an rpc
@@ -151,14 +144,15 @@ class PodContainerLogReader(LogReader):
         assert self._stream_cm
         stream = await self._stream_cm.__aenter__()
         if self._debug:
-            self._iterator = iter_stream(stream)
+            self._iterator = stream.iter_any()
         else:
             self._iterator = filter_out_rpc_error(stream)
         return self._iterator
 
     async def __aexit__(self, *args: Any) -> None:
         assert self._iterator
-        await self._iterator.aclose()  # type: ignore
+        if hasattr(self._iterator, "aclose"):
+            await self._iterator.aclose()
         assert self._stream_cm
         stream_cm = self._stream_cm
         self._stream_cm = None
