@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 import random
-import shlex
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from pathlib import Path
 from tempfile import mktemp
@@ -15,7 +14,6 @@ import aiohttp.web
 import aiohttp_cors
 import pkg_resources
 from aiobotocore.client import AioBaseClient
-from aiodocker.stream import Stream
 from aioelasticsearch import Elasticsearch
 from aiohttp.client_ws import ClientWebSocketResponse
 from aiohttp.web import (
@@ -66,13 +64,7 @@ from .container_runtime_client import (
     ContainerNotFoundError,
     ContainerRuntimeClientRegistry,
 )
-from .jobs_service import (
-    Container,
-    ExecCreate,
-    JobException,
-    JobNotRunningException,
-    JobsService,
-)
+from .jobs_service import Container, JobException, JobNotRunningException, JobsService
 from .kube_client import JobError, KubeClient, KubeTelemetry
 from .log_cleanup_poller import LogCleanupPoller
 from .logs import ElasticsearchLogsService, LogsService, S3LogsService
@@ -135,14 +127,8 @@ class MonitoringApiHandler:
                 aiohttp.web.post("/{job_id}/exec", self.ws_exec),
                 aiohttp.web.get("/{job_id}/exec", self.ws_exec),
                 aiohttp.web.post("/{job_id}/kill", self.kill),
-                aiohttp.web.post("/{job_id}/resize", self.resize),
-                aiohttp.web.post("/{job_id}/exec_create", self.exec_create),
                 aiohttp.web.post("/{job_id}/port_forward/{port}", self.port_forward),
                 aiohttp.web.get("/{job_id}/port_forward/{port}", self.port_forward),
-                aiohttp.web.post("/{job_id}/{exec_id}/exec_resize", self.exec_resize),
-                aiohttp.web.get("/{job_id}/{exec_id}/exec_inspect", self.exec_inspect),
-                aiohttp.web.post("/{job_id}/{exec_id}/exec_start", self.exec_start),
-                aiohttp.web.get("/{job_id}/{exec_id}/exec_start", self.exec_start),
             ]
         )
 
@@ -350,24 +336,9 @@ class MonitoringApiHandler:
 
         return Container(image=image)
 
-    async def resize(self, request: Request) -> Response:
-        w = int(request.query.get("w", "80"))
-        h = int(request.query.get("h", "25"))
-
-        job = await self._resolve_job(request, "write")
-
-        await self._jobs_service.resize(job, w=w, h=h)
-        return json_response(None)
-
     async def kill(self, request: Request) -> Response:
-        signal = request.query.get("signal")
-
         job = await self._resolve_job(request, "write")
-
-        if signal:
-            await self._jobs_service.kill(job, signal)
-        else:
-            await self._jobs_service.kill_v2(job)
+        await self._jobs_service.kill(job)
         return json_response(None, status=204)
 
     async def ws_attach(self, request: Request) -> StreamResponse:
@@ -375,7 +346,6 @@ class MonitoringApiHandler:
         stdin = _parse_bool(request.query.get("stdin", "0"))
         stdout = _parse_bool(request.query.get("stdout", "1"))
         stderr = _parse_bool(request.query.get("stderr", "1"))
-        logs = _parse_bool(request.query.get("logs", "1"))
 
         if not (stdin or stdout or stderr):
             raise ValueError("Required at least one of stdin, stdout or stderr")
@@ -387,24 +357,12 @@ class MonitoringApiHandler:
 
         response = WebSocketResponse()
 
-        protocol = request.headers.get(
-            aiohttp.hdrs.SEC_WEBSOCKET_PROTOCOL, "v1.channels.neu.ro"
-        )
-
-        if protocol == "v2.channels.neu.ro":
-            async with self._jobs_service.attach_v2(
-                job, tty=tty, stdin=stdin, stdout=stdout, stderr=stderr
-            ) as ws:
-                await response.prepare(request)
-                transferV2 = TransferV2(response, ws, stdin, stdout or stderr)
-                await transferV2.transfer()
-        else:
-            async with self._jobs_service.attach(
-                job, stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
-            ) as stream:
-                await response.prepare(request)
-                transfer = Transfer(response, stream, stdin, stdout or stderr)
-                await transfer.transfer()
+        async with self._jobs_service.attach(
+            job, tty=tty, stdin=stdin, stdout=stdout, stderr=stderr
+        ) as ws:
+            await response.prepare(request)
+            transfer = Transfer(response, ws, stdin, stdout or stderr)
+            await transfer.transfer()
 
         return response
 
@@ -428,89 +386,11 @@ class MonitoringApiHandler:
 
         response = WebSocketResponse()
 
-        async with self._jobs_service.exec_v2(
+        async with self._jobs_service.exec(
             job, cmd=cmd, tty=tty, stdin=stdin, stdout=stdout, stderr=stderr
         ) as ws:
             await response.prepare(request)
-            transfer = TransferV2(response, ws, stdin, stdout or stderr)
-            await transfer.transfer()
-
-        return response
-
-    async def exec_create(self, request: Request) -> StreamResponse:
-        exe = await self._parse_exec_create(request)
-
-        job = await self._resolve_job(request, "write")
-
-        exec_id = await self._jobs_service.exec_create(
-            job,
-            cmd=exe.cmd,
-            stdin=exe.stdin,
-            stdout=exe.stdout,
-            stderr=exe.stderr,
-            tty=exe.tty,
-        )
-        return json_response({"job_id": job.id, "exec_id": exec_id})
-
-    async def _parse_exec_create(self, request: Request) -> ExecCreate:
-        payload = await request.json()
-        payload = self._exec_create_request_payload_validator.check(payload)
-
-        return ExecCreate(
-            cmd=payload["command"],
-            stdin=payload["stdin"],
-            stdout=payload["stdout"],
-            stderr=payload["stderr"],
-            tty=payload["tty"],
-        )
-
-    async def exec_resize(self, request: Request) -> StreamResponse:
-        exec_id = request.match_info["exec_id"]
-
-        job = await self._resolve_job(request, "write")
-
-        w = int(request.query["w"])
-        h = int(request.query["h"])
-        await self._jobs_service.exec_resize(job, exec_id, w=w, h=h)
-
-        return json_response(None)
-
-    async def exec_inspect(self, request: Request) -> StreamResponse:
-        exec_id = request.match_info["exec_id"]
-
-        job = await self._resolve_job(request, "write")
-
-        ret = await self._jobs_service.exec_inspect(job, exec_id)
-        cmd = " ".join(shlex.quote(arg) for arg in ret["ProcessConfig"]["arguments"])
-        return json_response(
-            {
-                "id": ret["ID"],
-                "running": ret["Running"],
-                "exit_code": ret["ExitCode"],
-                "job_id": job.id,
-                "tty": ret["ProcessConfig"]["tty"],
-                "entrypoint": ret["ProcessConfig"]["entrypoint"],
-                "command": cmd,
-            }
-        )
-
-    async def exec_start(self, request: Request) -> StreamResponse:
-        exec_id = request.match_info["exec_id"]
-
-        job = await self._resolve_job(request, "write")
-
-        data = await self._jobs_service.exec_inspect(job, exec_id)
-
-        response = WebSocketResponse()
-        await response.prepare(request)
-
-        async with self._jobs_service.exec_start(job, exec_id) as stream:
-            transfer = Transfer(
-                response,
-                stream,
-                data["OpenStdin"],
-                data["OpenStdout"] or data["OpenStderr"],
-            )
+            transfer = Transfer(response, ws, stdin, stdout or stderr)
             await transfer.transfer()
 
         return response
@@ -584,67 +464,6 @@ async def _forward_writing(ws: WebSocketResponse, writer: asyncio.StreamWriter) 
 
 
 class Transfer:
-    def __init__(
-        self,
-        ws: WebSocketResponse,
-        stream: Stream,
-        handle_input: bool,
-        handle_output: bool,
-    ) -> None:
-        self._ws = ws
-        self._stream = stream
-        self._handle_input = handle_input
-        self._handle_output = handle_output
-        self._closing = False
-
-    async def transfer(self) -> None:
-        tasks = []
-        if self._handle_input:
-            tasks.append(asyncio.create_task(self._do_input()))
-        if self._handle_output:
-            tasks.append(asyncio.create_task(self._do_output()))
-
-        try:
-            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        finally:
-            await self._ws.close()
-            await self._stream.close()
-            for task in tasks:
-                if not task.done():
-                    task.cancel()
-                    with suppress(asyncio.CancelledError):
-                        await task
-
-    async def _do_input(self) -> None:
-        async for msg in self._ws:
-            if msg.type == aiohttp.WSMsgType.BINARY:
-                await self._stream.write_in(msg.data)
-            elif msg.type in (
-                aiohttp.WSMsgType.CLOSE,
-                aiohttp.WSMsgType.CLOSING,
-                aiohttp.WSMsgType.CLOSED,
-            ):
-                self._closing = True
-                await self._stream.close()
-            elif msg.type == aiohttp.WSMsgType.ERROR:
-                exc = self._ws.exception()
-                logger.error(
-                    "WS connection closed with exception %s", exc, exc_info=exc
-                )
-            else:
-                raise ValueError(f"Unsupported WS message type {msg.type}")
-
-    async def _do_output(self) -> None:
-        while not self._closing:
-            data = await self._stream.read_out()
-            if data is None:
-                self._closing = True
-                await self._ws.close()
-            elif not self._closing:
-                await self._ws.send_bytes(bytes([data.stream]) + data.data)
-
-
-class TransferV2:
     def __init__(
         self,
         resp: WebSocketResponse,

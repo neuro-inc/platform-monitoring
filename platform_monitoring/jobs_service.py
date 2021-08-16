@@ -12,13 +12,11 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
-    Union,
     cast,
 )
 
 import aiohttp
 from aiodocker.exceptions import DockerError
-from aiodocker.stream import Stream
 from elasticsearch.client import logger
 from neuro_sdk import JobDescription as Job, Jobs as JobsClient
 from platform_config_client import ConfigClient
@@ -138,104 +136,6 @@ class JobsService:
         self,
         job: Job,
         *,
-        stdout: bool = False,
-        stderr: bool = False,
-        stdin: bool = False,
-        logs: bool = False,
-    ) -> AsyncIterator[Stream]:
-        pod_name = self._kube_helper.get_job_pod_name(job)
-        pod = await self._get_running_jobs_pod(pod_name)
-        cont_id = pod.get_container_id(pod_name)
-
-        async with self._get_docker_client(pod) as docker:
-            container = docker.containers.container(cont_id)
-            # If container is dead, we should close the connection
-            # Unfortunately, if it died recently, the docker API
-            # will not update immediately, so we have to do some re-checks
-            # here. This adds 1 second delay (configurable below):
-            checks = 2
-            while checks > 0:
-                data = await container.show()
-                if not data["State"]["Running"]:
-                    raise JobNotRunningException(f"Job '{job.id}' is not running.")
-                checks -= 1
-                if checks > 0:
-                    await asyncio.sleep(0.5)
-
-            async with container.attach(
-                stdin=stdin, stdout=stdout, stderr=stderr, logs=logs
-            ) as stream:
-                yield stream
-
-    async def resize(self, job: Job, *, w: int, h: int) -> None:
-        pod_name = self._kube_helper.get_job_pod_name(job)
-
-        pod = await self._get_running_jobs_pod(pod_name)
-        cont_id = pod.get_container_id(pod_name)
-        assert cont_id
-
-        async with self._get_docker_client(pod) as docker:
-            container = docker.containers.container(cont_id)
-            await container.resize(w=w, h=h)
-
-    async def kill(self, job: Job, signal: Union[str, int]) -> None:
-        pod_name = self._kube_helper.get_job_pod_name(job)
-
-        pod = await self._get_running_jobs_pod(pod_name)
-        cont_id = pod.get_container_id(pod_name)
-        assert cont_id
-
-        async with self._get_docker_client(pod) as docker:
-            container = docker.containers.container(cont_id)
-            await container.kill(signal=signal)
-
-    async def exec_create(
-        self,
-        job: Job,
-        cmd: str,
-        stdout: bool = True,
-        stderr: bool = True,
-        stdin: bool = False,
-        tty: bool = False,
-    ) -> str:
-        pod_name = self._kube_helper.get_job_pod_name(job)
-        pod = await self._get_running_jobs_pod(pod_name)
-        cont_id = pod.get_container_id(pod_name)
-        async with self._get_docker_client(pod) as docker:
-            container = docker.containers.container(cont_id)
-            exe = await container.exec(
-                cmd=cmd, stdin=stdin, stdout=stdout, stderr=stderr, tty=tty
-            )
-            return exe.id
-
-    async def exec_resize(self, job: Job, exec_id: str, *, w: int, h: int) -> None:
-        pod_name = self._kube_helper.get_job_pod_name(job)
-        pod = await self._get_running_jobs_pod(pod_name)
-        async with self._get_docker_client(pod) as docker:
-            exe = docker.containers.exec(exec_id)
-            await exe.resize(w=w, h=h)
-
-    async def exec_inspect(self, job: Job, exec_id: str) -> Dict[str, Any]:
-        pod_name = self._kube_helper.get_job_pod_name(job)
-        pod = await self._get_running_jobs_pod(pod_name)
-        async with self._get_docker_client(pod) as docker:
-            exe = docker.containers.exec(exec_id)
-            return await exe.inspect()
-
-    @asynccontextmanager
-    async def exec_start(self, job: Job, exec_id: str) -> AsyncIterator[Stream]:
-        pod_name = self._kube_helper.get_job_pod_name(job)
-        pod = await self._get_running_jobs_pod(pod_name)
-        async with self._get_docker_client(pod) as docker:
-            exe = docker.containers.exec(exec_id)
-            async with exe.start(detach=False) as stream:
-                yield stream
-
-    @asynccontextmanager
-    async def attach_v2(
-        self,
-        job: Job,
-        *,
         tty: bool = False,
         stdin: bool = False,
         stdout: bool = True,
@@ -271,7 +171,7 @@ class JobsService:
             yield ws
 
     @asynccontextmanager
-    async def exec_v2(
+    async def exec(
         self,
         job: Job,
         *,
@@ -293,7 +193,7 @@ class JobsService:
         ) as ws:
             yield ws
 
-    async def kill_v2(self, job: Job) -> None:
+    async def kill(self, job: Job) -> None:
         pod_name = self._kube_helper.get_job_pod_name(job)
 
         pod = await self._get_running_jobs_pod(pod_name)
