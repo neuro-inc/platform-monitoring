@@ -118,7 +118,7 @@ class TestKubeClient:
         await kube_client.delete_pod(job_pod.name)
 
     @pytest.mark.asyncio
-    async def test_wait_pod_is_running(
+    async def test_status_restart_never(
         self,
         kube_config: KubeConfig,
         kube_client: MyKubeClient,
@@ -131,20 +131,37 @@ class TestKubeClient:
         assert not status.can_restart
         assert status.is_waiting
         assert not status.is_running
-        assert status.restart_count is None
+        assert not status.is_terminated
+        assert status.restart_count == 0
         assert status.started_at is None
+        assert status.finished_at is None
 
-        status = await kube_client.wait_pod_is_running(
-            pod_name=job_pod.name, timeout_s=60.0
-        )
+        status = await kube_client.wait_pod_is_running(job_pod.name, timeout_s=60.0)
+        assert not status.can_restart
         assert not status.is_waiting
         assert status.is_running
-        assert status.restart_count is None
+        assert not status.is_terminated
+        assert status.restart_count == 0
         assert status.started_at is not None
+        assert status.finished_at is None
+
+        await kube_client.wait_pod_is_terminated(job_pod.name, timeout_s=60.0)
+        status = await kube_client.get_container_status(job_pod.name)
+        assert not status.can_restart
+        assert not status.is_waiting
+        assert not status.is_running
+        assert status.is_terminated
+        assert status.restart_count == 0
+        assert status.started_at is not None
+        assert status.finished_at is not None
+
         await kube_client.delete_pod(job_pod.name)
+        await kube_client.wait_pod_is_deleted(job_pod.name, timeout_s=60.0)
+        with pytest.raises(JobNotFoundException):
+            await kube_client.get_container_status(job_pod.name)
 
     @pytest.mark.asyncio
-    async def test_wait_pod_is_running_restarted(
+    async def test_status_restart_always(
         self,
         kube_config: KubeConfig,
         kube_client: MyKubeClient,
@@ -159,24 +176,120 @@ class TestKubeClient:
             assert status.can_restart
             assert status.is_waiting
             assert not status.is_running
+            assert not status.is_terminated
             assert status.restart_count == 0
             assert status.started_at is None
+            assert status.finished_at is None
 
             status = await kube_client.wait_pod_is_running(
                 pod_name=job_pod.name, timeout_s=60.0
             )
+            assert status.can_restart
             assert not status.is_waiting
             assert status.is_running
+            assert not status.is_terminated
             assert status.restart_count == 0
             assert status.started_at is not None
+            assert status.finished_at is None
             first_started_at = status.started_at
 
             await kube_client.wait_container_is_restarted(job_pod.name)
             status = await kube_client.get_container_status(job_pod.name)
+            assert status.can_restart
             assert not status.is_waiting
             assert status.is_running
+            assert not status.is_terminated
             assert status.restart_count == 1
             assert status.started_at is not None
+            assert status.finished_at is None
+            assert status.started_at != first_started_at
+        finally:
+            await kube_client.delete_pod(job_pod.name)
+
+    @pytest.mark.asyncio
+    async def test_status_restart_on_failure_success(
+        self,
+        kube_config: KubeConfig,
+        kube_client: MyKubeClient,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        job_pod.set_command("sleep 5")
+        job_pod.set_restart_policy("OnFailure")
+        await kube_client.create_pod(job_pod.payload)
+        status = await kube_client.get_container_status(job_pod.name)
+        assert status.can_restart
+        assert status.is_waiting
+        assert not status.is_running
+        assert not status.is_terminated
+        assert status.restart_count == 0
+        assert status.started_at is None
+        assert status.finished_at is None
+
+        status = await kube_client.wait_pod_is_running(job_pod.name, timeout_s=60.0)
+        assert status.can_restart
+        assert not status.is_waiting
+        assert status.is_running
+        assert not status.is_terminated
+        assert status.restart_count == 0
+        assert status.started_at is not None
+        assert status.finished_at is None
+
+        await kube_client.wait_pod_is_terminated(job_pod.name, timeout_s=60.0)
+        status = await kube_client.get_container_status(job_pod.name)
+        assert not status.can_restart
+        assert not status.is_waiting
+        assert not status.is_running
+        assert status.is_terminated
+        assert status.restart_count == 0
+        assert status.started_at is not None
+        assert status.finished_at is not None
+
+        await kube_client.delete_pod(job_pod.name)
+        await kube_client.wait_pod_is_deleted(job_pod.name, timeout_s=60.0)
+        with pytest.raises(JobNotFoundException):
+            await kube_client.get_container_status(job_pod.name)
+
+    @pytest.mark.asyncio
+    async def test_status_restart_on_failure_failure(
+        self,
+        kube_config: KubeConfig,
+        kube_client: MyKubeClient,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        job_pod.set_command("bash -c 'sleep 5; false'")
+        job_pod.set_restart_policy("OnFailure")
+        try:
+            await kube_client.create_pod(job_pod.payload)
+            status = await kube_client.get_container_status(job_pod.name)
+            assert status.can_restart
+            assert status.is_waiting
+            assert not status.is_running
+            assert not status.is_terminated
+            assert status.restart_count == 0
+            assert status.started_at is None
+            assert status.finished_at is None
+
+            status = await kube_client.wait_pod_is_running(
+                pod_name=job_pod.name, timeout_s=60.0
+            )
+            assert status.can_restart
+            assert not status.is_waiting
+            assert status.is_running
+            assert not status.is_terminated
+            assert status.restart_count == 0
+            assert status.started_at is not None
+            assert status.finished_at is None
+            first_started_at = status.started_at
+
+            await kube_client.wait_container_is_restarted(job_pod.name)
+            status = await kube_client.get_container_status(job_pod.name)
+            assert status.can_restart
+            assert not status.is_waiting
+            assert status.is_running
+            assert not status.is_terminated
+            assert status.restart_count == 1
+            assert status.started_at is not None
+            assert status.finished_at is None
             assert status.started_at != first_started_at
         finally:
             await kube_client.delete_pod(job_pod.name)
@@ -1037,3 +1150,35 @@ class TestLogReader:
         await self._test_merged_log_reader_restarted(
             kube_client, job_pod, s3_log_service
         )
+
+    async def _test_large_log_reader(
+        self,
+        kube_client: MyKubeClient,
+        job_pod: MyPodDescriptor,
+        factory: LogsService,
+    ) -> None:
+        num = 10000
+        command = f"seq {num}"
+        job_pod.set_command(command)
+
+        try:
+            await kube_client.create_pod(job_pod.payload)
+            await kube_client.wait_pod_is_terminated(job_pod.name)
+            log_reader = factory.get_pod_log_reader(
+                job_pod.name, separator=b"===", archive_delay_s=30.0
+            )
+            payload = (await self._consume_log_reader(log_reader, delay=0.001)).decode()
+        finally:
+            await kube_client.delete_pod(job_pod.name)
+
+        expected_payload = "".join(f"{i + 1}\n" for i in range(num))
+        assert payload == expected_payload
+
+    @pytest.mark.asyncio
+    async def test_large_log_reader(
+        self,
+        kube_client: MyKubeClient,
+        s3_log_service: LogsService,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        await self._test_large_log_reader(kube_client, job_pod, s3_log_service)

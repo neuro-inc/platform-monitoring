@@ -15,6 +15,7 @@ from aiobotocore.client import AioBaseClient
 from aiobotocore.response import StreamingBody
 from aioelasticsearch import Elasticsearch
 from aioelasticsearch.helpers import Scan
+from async_timeout import timeout
 from neuro_logging import trace
 
 from .base import LogReader
@@ -371,14 +372,27 @@ class LogsService(abc.ABC):
         since: Optional[datetime] = None
         try:
             status = await self.get_container_status(pod_name)
-            start = status.started_at if status.is_running else None
-            first_run = status.is_running and status.restart_count == 0
+            if status.is_running:
+                start = status.started_at
+                read_archive = status.restart_count != 0
+            elif (
+                status.is_terminated
+                and not status.can_restart
+                and status.restart_count == 0
+                and status.finished_at is not None
+                and _utcnow() - status.finished_at < archive_delay
+            ):
+                start = status.started_at
+                read_archive = False
+            else:
+                start = None
+                read_archive = True
         except JobNotFoundException:
             start = None
-            first_run = False
+            read_archive = True
 
         has_archive = False
-        if not first_run:
+        if read_archive:
             last_archived_time = _utcnow()
             while True:
                 old_start = start
@@ -425,7 +439,7 @@ class LogsService(abc.ABC):
         try:
             if start is None:
                 status = await self.wait_pod_is_running(
-                    pod_name, timeout_s=timeout_s, interval_s=interval_s
+                    pod_name, start, timeout_s=timeout_s, interval_s=interval_s
                 )
                 start = status.started_at
 
@@ -444,28 +458,35 @@ class LogsService(abc.ABC):
                             separator = None
                         yield chunk
 
-                since = start
-                while True:
-                    status = await self.wait_pod_is_running(
-                        pod_name, timeout_s=timeout_s, interval_s=interval_s
-                    )
-                    if not status.can_restart:
-                        return
-                    start = status.started_at
-                    if start != since:
-                        break
-                    await asyncio.sleep(interval_s)
+                if not status.can_restart:
+                    break
+                status = await self.wait_pod_is_running(
+                    pod_name, start, timeout_s=timeout_s, interval_s=interval_s
+                )
+                start = status.started_at
         except JobNotFoundException:
             pass
 
-    @abc.abstractmethod
-    async def get_container_status(self, name: str) -> ContainerStatus:
-        pass  # pragma: no cover
+    async def wait_pod_is_running(
+        self,
+        name: str,
+        since: Optional[datetime],
+        *,
+        timeout_s: float = 10.0 * 60,
+        interval_s: float = 1.0,
+    ) -> ContainerStatus:
+        async with timeout(timeout_s):
+            while True:
+                status = await self.get_container_status(name)
+                if not status.is_waiting:
+                    if status.started_at != since:
+                        return status
+                    if status.is_terminated and not status.can_restart:
+                        raise JobNotFoundException
+                await asyncio.sleep(interval_s)
 
     @abc.abstractmethod
-    async def wait_pod_is_running(
-        self, name: str, *, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
-    ) -> ContainerStatus:
+    async def get_container_status(self, name: str) -> ContainerStatus:
         pass  # pragma: no cover
 
     @abc.abstractmethod
@@ -498,13 +519,6 @@ class BaseLogsService(LogsService):
 
     async def get_container_status(self, name: str) -> ContainerStatus:
         return await self._kube_client.get_container_status(name)
-
-    async def wait_pod_is_running(
-        self, name: str, *, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
-    ) -> ContainerStatus:
-        return await self._kube_client.wait_pod_is_running(
-            name, timeout_s=timeout_s, interval_s=interval_s
-        )
 
     def get_pod_live_log_reader(
         self, pod_name: str, *, timestamps: bool = False, debug: bool = False
