@@ -3,7 +3,6 @@ import asyncio
 import io
 import json
 import logging
-import warnings
 import zlib
 from datetime import datetime, timedelta, timezone
 from os.path import basename
@@ -45,16 +44,20 @@ async def filter_out_rpc_error(stream: aiohttp.StreamReader) -> AsyncIterator[by
     # if it is the last line indeed.
 
     _is_line_start = True
+    unread_buffer = b""
 
     async def read_chunk(*, min_line_length: int) -> Tuple[bytes, bool]:
-        nonlocal _is_line_start
+        nonlocal _is_line_start, unread_buffer
         chunk = io.BytesIO()
         is_line_start = _is_line_start
-        while chunk.tell() < min_line_length:
-            data = await stream.readany()
-            if not data:
-                break
-
+        while True:
+            if unread_buffer:
+                data = unread_buffer
+                unread_buffer = b""
+            else:
+                data = await stream.readany()
+                if not data:
+                    break
             n_pos = data.find(b"\n") + 1
             _is_line_start = bool(n_pos)
             if n_pos:
@@ -63,9 +66,8 @@ async def filter_out_rpc_error(stream: aiohttp.StreamReader) -> AsyncIterator[by
                     unreadline(tail)
                 chunk.write(line)
                 break
-
             chunk.write(data)
-            if not is_line_start:
+            if not is_line_start or chunk.tell() >= min_line_length:
                 # if this chunk is somewhere in the middle of the line, we
                 # want to return immediately without waiting for the rest of
                 # `min_chunk_length`
@@ -74,17 +76,25 @@ async def filter_out_rpc_error(stream: aiohttp.StreamReader) -> AsyncIterator[by
         return chunk.getvalue(), is_line_start
 
     async def readline() -> bytes:
-        line = await stream.readline()
-        nonlocal _is_line_start
+        nonlocal _is_line_start, unread_buffer
         _is_line_start = True
+        if unread_buffer:
+            n_pos = unread_buffer.find(b"\n") + 1
+            if n_pos:
+                line = unread_buffer[:n_pos]
+                unread_buffer = unread_buffer[n_pos:]
+            else:
+                line = unread_buffer
+                unread_buffer = b""
+                line += await stream.readline()
+        else:
+            line = await stream.readline()
         return line
 
     def unreadline(data: bytes) -> None:
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=DeprecationWarning)
-            stream.unread_data(data)
-        nonlocal _is_line_start
+        nonlocal _is_line_start, unread_buffer
         _is_line_start = True
+        unread_buffer = data + unread_buffer
 
     while True:
         chunk, is_line_start = await read_chunk(min_line_length=max_error_prefix_len)
