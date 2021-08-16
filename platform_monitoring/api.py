@@ -371,11 +371,11 @@ class MonitoringApiHandler:
         return json_response(None, status=204)
 
     async def ws_attach(self, request: Request) -> StreamResponse:
-        tty = _parse_bool(request.query.get("tty", "0"))
-        stdin = _parse_bool(request.query.get("stdin", "0"))
-        stdout = _parse_bool(request.query.get("stdout", "1"))
-        stderr = _parse_bool(request.query.get("stderr", "1"))
-        logs = _parse_bool(request.query.get("logs", "1"))
+        tty = _get_bool_param(request, "tty", False)
+        stdin = _get_bool_param(request, "stdin", False)
+        stdout = _get_bool_param(request, "stdout", True)
+        stderr = _get_bool_param(request, "stderr", True)
+        logs = _get_bool_param(request, "logs", True)
 
         if not (stdin or stdout or stderr):
             raise ValueError("Required at least one of stdin, stdout or stderr")
@@ -410,10 +410,10 @@ class MonitoringApiHandler:
 
     async def ws_exec(self, request: Request) -> StreamResponse:
         cmd = request.query.get("cmd")
-        tty = _parse_bool(request.query.get("tty", "0"))
-        stdin = _parse_bool(request.query.get("stdin", "0"))
-        stdout = _parse_bool(request.query.get("stdout", "1"))
-        stderr = _parse_bool(request.query.get("stderr", "1"))
+        tty = _get_bool_param(request, "tty", False)
+        stdin = _get_bool_param(request, "stdin", False)
+        stdout = _get_bool_param(request, "stdout", True)
+        stderr = _get_bool_param(request, "stderr", True)
 
         if not cmd:
             raise ValueError("Command is required")
@@ -977,15 +977,6 @@ async def create_app(config: Config) -> aiohttp.web.Application:
     return app
 
 
-def _parse_bool(value: str) -> bool:
-    if value == "0":
-        return False
-    elif value == "1":
-        return True
-    else:
-        raise ValueError('Required "0" or "1"')
-
-
 def setup_tracing(config: Config) -> None:
     if config.zipkin:
         setup_zipkin_tracer(
@@ -1051,11 +1042,12 @@ def _get_bool_param(request: Request, name: str, default: bool = False) -> bool:
     param = request.query.get(name)
     if param is None:
         return default
-    if param == "true":
+    param = param.lower()
+    if param in ("1", "true"):
         return True
-    if param == "false":
+    if param in ("0", "false"):
         return False
-    raise ValueError(f'"{name}" request parameter can be "true" or "false"')
+    raise ValueError(f'"{name}" request parameter can be "true"/"1" or "false"/"0"')
 
 
 def _getrandbytes(size: int) -> bytes:
