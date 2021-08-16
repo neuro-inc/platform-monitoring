@@ -219,21 +219,32 @@ class ContainerStatus:
     @property
     def is_waiting(self) -> bool:
         state = self._payload.get("state")
-        return not state or "waiting" in state
+        return "waiting" in state if state else True
 
     @property
     def is_running(self) -> bool:
         state = self._payload.get("state")
-        return (not not state) and "running" in state
+        return "running" in state if state else False
+
+    @property
+    def is_terminated(self) -> bool:
+        state = self._payload.get("state")
+        return "terminated" in state if state else False
 
     @property
     def can_restart(self) -> bool:
-        return self._restart_policy != "Never"
+        if self._restart_policy == "Never":
+            return False
+        if self._restart_policy == "Always":
+            return True
+        assert self._restart_policy == "OnFailure"
+        try:
+            return self._payload["state"]["terminated"]["exitCode"] != 0
+        except KeyError:
+            return True
 
     @property
-    def restart_count(self) -> Optional[int]:
-        if not self.can_restart:
-            return None
+    def restart_count(self) -> int:
         return self._payload.get("restartCount") or 0
 
     @property
@@ -248,6 +259,17 @@ class ContainerStatus:
             except KeyError:
                 # waiting
                 return None
+        return iso8601.parse_date(date_str)
+
+    @property
+    def finished_at(self) -> Optional[datetime]:
+        try:
+            date_str = self._payload["state"]["terminated"]["finishedAt"]
+            if not date_str:
+                return None
+        except KeyError:
+            # running or waiting
+            return None
         return iso8601.parse_date(date_str)
 
 
@@ -436,7 +458,7 @@ class KubeClient:
                 status = await self.get_container_status(pod_name)
                 if status.is_running:
                     return status
-                if not (status.is_waiting or status.can_restart):
+                if status.is_terminated and not status.can_restart:
                     raise JobNotFoundException
                 await asyncio.sleep(interval_s)
 
@@ -504,8 +526,11 @@ class KubeClient:
         conn_timeout_s: float = 60 * 5,
         read_timeout_s: float = 60 * 30,
         previous: bool = False,
+        timestamps: bool = False,
     ) -> AsyncIterator[aiohttp.StreamReader]:
         url = self._generate_pod_log_url(pod_name, container_name, previous)
+        if timestamps:
+            url = f"{url}&timestamps=true"
         client_timeout = aiohttp.ClientTimeout(
             connect=conn_timeout_s, sock_read=read_timeout_s
         )

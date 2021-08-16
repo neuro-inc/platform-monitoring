@@ -14,6 +14,7 @@ from aiobotocore.client import AioBaseClient
 from aiobotocore.response import StreamingBody
 from aioelasticsearch import Elasticsearch
 from aioelasticsearch.helpers import Scan
+from async_timeout import timeout
 from neuro_logging import trace
 
 from .base import LogReader
@@ -126,6 +127,8 @@ class PodContainerLogReader(LogReader):
         client_read_timeout_s: Optional[float] = None,
         *,
         previous: bool = False,
+        timestamps: bool = False,
+        debug: bool = False,
     ) -> None:
         self._client = client
         self._pod_name = pod_name
@@ -133,6 +136,8 @@ class PodContainerLogReader(LogReader):
         self._client_conn_timeout_s = client_conn_timeout_s
         self._client_read_timeout_s = client_read_timeout_s
         self._previous = previous
+        self._timestamps = timestamps
+        self._debug = debug
 
         self._stream_cm: Optional[AsyncContextManager[aiohttp.StreamReader]] = None
         self._iterator: Optional[AsyncIterator[bytes]] = None
@@ -146,17 +151,23 @@ class PodContainerLogReader(LogReader):
             kwargs["read_timeout_s"] = self._client_read_timeout_s
         if self._previous:
             kwargs["previous"] = True
+        if self._timestamps:
+            kwargs["timestamps"] = True
         self._stream_cm = self._client.create_pod_container_logs_stream(
             pod_name=self._pod_name, container_name=self._container_name, **kwargs
         )
         assert self._stream_cm
         stream = await self._stream_cm.__aenter__()
-        self._iterator = filter_out_rpc_error(stream)
+        if self._debug:
+            self._iterator = stream.iter_any()
+        else:
+            self._iterator = filter_out_rpc_error(stream)
         return self._iterator
 
     async def __aexit__(self, *args: Any) -> None:
         assert self._iterator
-        await self._iterator.aclose()  # type: ignore
+        if hasattr(self._iterator, "aclose"):
+            await self._iterator.aclose()  # type: ignore
         assert self._stream_cm
         stream_cm = self._stream_cm
         self._stream_cm = None
@@ -172,6 +183,7 @@ class ElasticsearchLogReader(LogReader):
         container_name: str,
         *,
         since: Optional[datetime] = None,
+        timestamps: bool = False,
     ) -> None:
         self._es_client = es_client
         self._index = "logstash-*"
@@ -180,6 +192,7 @@ class ElasticsearchLogReader(LogReader):
         self._pod_name = pod_name
         self._container_name = container_name
         self._since = since
+        self._timestamps = timestamps
         self._scan: Optional[Scan] = None
         self._iterator: Optional[AsyncIterator[bytes]] = None
 
@@ -223,11 +236,15 @@ class ElasticsearchLogReader(LogReader):
         assert self._scan
         async for doc in self._scan:
             source = doc["_source"]
-            time = iso8601.parse_date(source["time"])
+            time_str = source["time"]
+            time = iso8601.parse_date(time_str)
             if self._since is not None and time <= self._since:
                 continue
             self.last_time = time
-            yield source["log"].encode()
+            log = source["log"]
+            if self._timestamps:
+                log = f"{time_str} {log}"
+            yield log.encode()
 
 
 class S3LogReader(LogReader):
@@ -241,6 +258,8 @@ class S3LogReader(LogReader):
         container_name: str,
         *,
         since: Optional[datetime] = None,
+        timestamps: bool = False,
+        debug: bool = False,
     ) -> None:
         self._s3_client = s3_client
         self._bucket_name = bucket_name
@@ -249,6 +268,8 @@ class S3LogReader(LogReader):
         self._pod_name = pod_name
         self._container_name = container_name
         self._since = since
+        self._debug = debug
+        self._timestamps = timestamps
         self._iterator: Optional[AsyncIterator[bytes]] = None
 
     @staticmethod
@@ -298,32 +319,32 @@ class S3LogReader(LogReader):
 
     async def _iterate(self) -> AsyncIterator[bytes]:
         since = self._since
-        while True:
-            last_time = None
-            keys = await self._load_log_keys(since)
-            for key in keys:
-                response = await self._s3_client.get_object(
-                    Bucket=self._bucket_name, Key=key
-                )
-                response_body = response["Body"]
-                async with response_body:
-                    if response["ContentType"] == "application/x-gzip":
-                        line_iterator = self._iter_decompressed_lines(response_body)
-                    else:
-                        line_iterator = response_body.iter_lines()
-                    async with aclosing(line_iterator):
-                        async for line in line_iterator:
-                            event = json.loads(line)
-                            time = iso8601.parse_date(event["time"])
-                            if since is not None and time <= since:
-                                continue
-                            last_time = time
-                            self.last_time = time
-                            yield event["log"].encode()
-            if last_time is None:
-                # No new lines
-                break
-            since = time
+        keys = await self._load_log_keys(since)
+        for key in keys:
+            response = await self._s3_client.get_object(
+                Bucket=self._bucket_name, Key=key
+            )
+            response_body = response["Body"]
+            async with response_body:
+                if response["ContentType"] == "application/x-gzip":
+                    line_iterator = self._iter_decompressed_lines(response_body)
+                else:
+                    line_iterator = response_body.iter_lines()
+                async with aclosing(line_iterator):
+                    async for line in line_iterator:
+                        event = json.loads(line)
+                        time_str = event["time"]
+                        time = iso8601.parse_date(time_str)
+                        if since is not None and time <= since:
+                            continue
+                        self.last_time = time
+                        if self._debug and key:
+                            yield f"=== From file {basename(key)}\n".encode()
+                            key = ""
+                        log = event["log"]
+                        if self._timestamps:
+                            log = f"{time_str} {log}"
+                        yield log.encode()
 
     @classmethod
     async def _iter_decompressed_lines(
@@ -351,27 +372,47 @@ class LogsService(abc.ABC):
         pod_name: str,
         *,
         separator: Optional[bytes] = None,
+        timestamps: bool = False,
         timeout_s: float = 10.0 * 60,
         interval_s: float = 1.0,
         archive_delay_s: float = 3.0 * 60,
+        debug: bool = False,
     ) -> AsyncIterator[bytes]:
         archive_delay = timedelta(seconds=archive_delay_s)
         since: Optional[datetime] = None
         try:
             status = await self.get_container_status(pod_name)
-            start = status.started_at if status.is_running else None
-            first_run = status.is_running and status.restart_count == 0
+            if status.is_running:
+                start = status.started_at
+                read_archive = status.restart_count != 0
+            elif (
+                status.is_terminated
+                and not status.can_restart
+                and status.restart_count == 0
+                and status.finished_at is not None
+                and _utcnow() - status.finished_at < archive_delay
+            ):
+                start = status.started_at
+                read_archive = False
+            else:
+                start = None
+                read_archive = True
         except JobNotFoundException:
             start = None
-            first_run = False
+            read_archive = True
 
         has_archive = False
-        if not first_run:
+        if read_archive:
             last_archived_time = _utcnow()
             while True:
                 old_start = start
-                until = start or _utcnow()
-                log_reader = self.get_pod_archive_log_reader(pod_name, since=since)
+                request_time = _utcnow()
+                until = start or request_time
+                log_reader = self.get_pod_archive_log_reader(
+                    pod_name, since=since, timestamps=timestamps, debug=debug
+                )
+                if debug:
+                    yield f"=== Archive logs from {since} to {until}\n".encode()
                 async with log_reader as it:
                     async for chunk in it:
                         assert log_reader.last_time
@@ -396,7 +437,7 @@ class LogsService(abc.ABC):
                         # There is an archived entry from the current
                         # running container.
                         break
-                    if _utcnow() - last_archived_time > archive_delay:
+                    if request_time - last_archived_time > archive_delay:
                         # Last entry from the previous running container was
                         # archived long time ago.
                         break
@@ -408,44 +449,60 @@ class LogsService(abc.ABC):
         try:
             if start is None:
                 status = await self.wait_pod_is_running(
-                    pod_name, timeout_s=timeout_s, interval_s=interval_s
+                    pod_name, start, timeout_s=timeout_s, interval_s=interval_s
                 )
                 start = status.started_at
 
             while True:
-                async with self.get_pod_live_log_reader(pod_name) as it:
+                async with self.get_pod_live_log_reader(
+                    pod_name, timestamps=timestamps, debug=debug
+                ) as it:
+                    if debug:
+                        if separator:
+                            yield separator + b"\n"
+                            separator = None
+                        yield f"=== Live logs from {start}\n".encode()
                     async for chunk in it:
                         if separator:
                             yield separator + b"\n"
                             separator = None
                         yield chunk
 
-                since = start
-                while True:
-                    status = await self.wait_pod_is_running(
-                        pod_name, timeout_s=timeout_s, interval_s=interval_s
-                    )
-                    if not status.can_restart:
-                        return
-                    start = status.started_at
-                    if start != since:
-                        break
-                    await asyncio.sleep(interval_s)
+                if not status.can_restart:
+                    break
+                status = await self.wait_pod_is_running(
+                    pod_name, start, timeout_s=timeout_s, interval_s=interval_s
+                )
+                start = status.started_at
         except JobNotFoundException:
             pass
+
+    async def wait_pod_is_running(
+        self,
+        name: str,
+        since: Optional[datetime],
+        *,
+        timeout_s: float = 10.0 * 60,
+        interval_s: float = 1.0,
+    ) -> ContainerStatus:
+        async with timeout(timeout_s):
+            while True:
+                status = await self.get_container_status(name)
+                if not status.is_waiting:
+                    if status.started_at != since:
+                        return status
+                    if status.is_terminated and not status.can_restart:
+                        raise JobNotFoundException
+                await asyncio.sleep(interval_s)
 
     @abc.abstractmethod
     async def get_container_status(self, name: str) -> ContainerStatus:
         pass  # pragma: no cover
 
     @abc.abstractmethod
-    async def wait_pod_is_running(
-        self, name: str, *, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
-    ) -> ContainerStatus:
-        pass  # pragma: no cover
-
-    @abc.abstractmethod
-    def get_pod_live_log_reader(self, pod_name: str) -> LogReader:
+    def get_pod_live_log_reader(
+        self, pod_name: str, *, timestamps: bool = False, debug: bool = False
+    ) -> LogReader:
         pass  # pragma: no cover
 
     @abc.abstractmethod
@@ -454,6 +511,8 @@ class LogsService(abc.ABC):
         pod_name: str,
         *,
         since: Optional[datetime] = None,
+        timestamps: bool = False,
+        debug: bool = False,
     ) -> LogReader:
         pass  # pragma: no cover
 
@@ -471,18 +530,15 @@ class BaseLogsService(LogsService):
     async def get_container_status(self, name: str) -> ContainerStatus:
         return await self._kube_client.get_container_status(name)
 
-    async def wait_pod_is_running(
-        self, name: str, *, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
-    ) -> ContainerStatus:
-        return await self._kube_client.wait_pod_is_running(
-            name, timeout_s=timeout_s, interval_s=interval_s
-        )
-
-    def get_pod_live_log_reader(self, pod_name: str) -> LogReader:
+    def get_pod_live_log_reader(
+        self, pod_name: str, *, timestamps: bool = False, debug: bool = False
+    ) -> LogReader:
         return PodContainerLogReader(
             client=self._kube_client,
             pod_name=pod_name,
             container_name=pod_name,
+            timestamps=timestamps,
+            debug=debug,
         )
 
 
@@ -500,6 +556,8 @@ class ElasticsearchLogsService(BaseLogsService):
         pod_name: str,
         *,
         since: Optional[datetime] = None,
+        timestamps: bool = False,
+        debug: bool = False,
     ) -> LogReader:
         return ElasticsearchLogReader(
             es_client=self._es_client,
@@ -531,6 +589,8 @@ class S3LogsService(BaseLogsService):
         pod_name: str,
         *,
         since: Optional[datetime] = None,
+        timestamps: bool = False,
+        debug: bool = False,
     ) -> LogReader:
         return S3LogReader(
             s3_client=self._s3_client,
@@ -540,6 +600,8 @@ class S3LogsService(BaseLogsService):
             pod_name=pod_name,
             container_name=pod_name,
             since=since,
+            timestamps=timestamps,
+            debug=debug,
         )
 
     async def drop_logs(self, pod_name: str) -> None:

@@ -99,12 +99,7 @@ class MyKubeClient(KubeClient):
             async with timeout(timeout_s):
                 while True:
                     status = await self.get_container_status(name)
-                    restart_count = status.restart_count
-                    if restart_count is None:
-                        print(f"restart_count is None!!! status = {status.__dict__}")
-                        break
-                    assert restart_count is not None
-                    if restart_count >= count:
+                    if status.restart_count >= count:
                         break
                     await asyncio.sleep(interval_s)
         except asyncio.TimeoutError:
