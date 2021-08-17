@@ -9,7 +9,6 @@ from os.path import basename
 from typing import Any, AsyncContextManager, AsyncIterator, Dict, List, Optional, Tuple
 
 import aiohttp
-import iso8601
 from aiobotocore.client import AioBaseClient
 from aiobotocore.response import StreamingBody
 from aioelasticsearch import Elasticsearch
@@ -19,7 +18,7 @@ from neuro_logging import trace
 
 from .base import LogReader
 from .kube_client import ContainerStatus, JobNotFoundException, KubeClient
-from .utils import aclosing, asyncgeneratorcontextmanager
+from .utils import aclosing, asyncgeneratorcontextmanager, parse_date
 
 
 logger = logging.getLogger(__name__)
@@ -127,6 +126,7 @@ class PodContainerLogReader(LogReader):
         client_read_timeout_s: Optional[float] = None,
         *,
         previous: bool = False,
+        since: Optional[datetime] = None,
         timestamps: bool = False,
         debug: bool = False,
     ) -> None:
@@ -136,6 +136,7 @@ class PodContainerLogReader(LogReader):
         self._client_conn_timeout_s = client_conn_timeout_s
         self._client_read_timeout_s = client_read_timeout_s
         self._previous = previous
+        self._since = since
         self._timestamps = timestamps
         self._debug = debug
 
@@ -144,13 +145,15 @@ class PodContainerLogReader(LogReader):
 
     async def __aenter__(self) -> AsyncIterator[bytes]:
         await self._client.wait_pod_is_not_waiting(self._pod_name)
-        kwargs = {}
+        kwargs: Dict[str, Any] = {}
         if self._client_conn_timeout_s is not None:
             kwargs["conn_timeout_s"] = self._client_conn_timeout_s
         if self._client_read_timeout_s is not None:
             kwargs["read_timeout_s"] = self._client_read_timeout_s
         if self._previous:
             kwargs["previous"] = True
+        if self._since:
+            kwargs["since"] = self._since
         if self._timestamps:
             kwargs["timestamps"] = True
         self._stream_cm = self._client.create_pod_container_logs_stream(
@@ -237,7 +240,7 @@ class ElasticsearchLogReader(LogReader):
         async for doc in self._scan:
             source = doc["_source"]
             time_str = source["time"]
-            time = iso8601.parse_date(time_str)
+            time = parse_date(time_str)
             if self._since is not None and time <= self._since:
                 continue
             self.last_time = time
@@ -334,7 +337,7 @@ class S3LogReader(LogReader):
                     async for line in line_iterator:
                         event = json.loads(line)
                         time_str = event["time"]
-                        time = iso8601.parse_date(time_str)
+                        time = parse_date(time_str)
                         if since is not None and time <= since:
                             continue
                         self.last_time = time
@@ -371,6 +374,7 @@ class LogsService(abc.ABC):
         self,
         pod_name: str,
         *,
+        since: Optional[datetime] = None,
         separator: Optional[bytes] = None,
         timestamps: bool = False,
         timeout_s: float = 10.0 * 60,
@@ -379,7 +383,6 @@ class LogsService(abc.ABC):
         debug: bool = False,
     ) -> AsyncIterator[bytes]:
         archive_delay = timedelta(seconds=archive_delay_s)
-        since: Optional[datetime] = None
         try:
             status = await self.get_container_status(pod_name)
             if status.is_running:
@@ -455,7 +458,7 @@ class LogsService(abc.ABC):
 
             while True:
                 async with self.get_pod_live_log_reader(
-                    pod_name, timestamps=timestamps, debug=debug
+                    pod_name, since=since, timestamps=timestamps, debug=debug
                 ) as it:
                     if debug:
                         if separator:
@@ -480,7 +483,7 @@ class LogsService(abc.ABC):
     async def wait_pod_is_running(
         self,
         name: str,
-        since: Optional[datetime],
+        old_start: Optional[datetime],
         *,
         timeout_s: float = 10.0 * 60,
         interval_s: float = 1.0,
@@ -489,7 +492,7 @@ class LogsService(abc.ABC):
             while True:
                 status = await self.get_container_status(name)
                 if not status.is_waiting:
-                    if status.started_at != since:
+                    if status.started_at != old_start:
                         return status
                     if status.is_terminated and not status.can_restart:
                         raise JobNotFoundException
@@ -501,7 +504,12 @@ class LogsService(abc.ABC):
 
     @abc.abstractmethod
     def get_pod_live_log_reader(
-        self, pod_name: str, *, timestamps: bool = False, debug: bool = False
+        self,
+        pod_name: str,
+        *,
+        since: Optional[datetime] = None,
+        timestamps: bool = False,
+        debug: bool = False,
     ) -> LogReader:
         pass  # pragma: no cover
 
@@ -531,12 +539,18 @@ class BaseLogsService(LogsService):
         return await self._kube_client.get_container_status(name)
 
     def get_pod_live_log_reader(
-        self, pod_name: str, *, timestamps: bool = False, debug: bool = False
+        self,
+        pod_name: str,
+        *,
+        since: Optional[datetime] = None,
+        timestamps: bool = False,
+        debug: bool = False,
     ) -> LogReader:
         return PodContainerLogReader(
             client=self._kube_client,
             pod_name=pod_name,
             container_name=pod_name,
+            since=since,
             timestamps=timestamps,
             debug=debug,
         )

@@ -1,8 +1,10 @@
 import functools
 import sys
+from datetime import datetime
 from types import TracebackType
 from typing import Any, AsyncContextManager, Callable, Optional, Type, TypeVar
 
+import iso8601
 from neuro_sdk import JobDescription as Job, JobStatus
 
 
@@ -55,3 +57,11 @@ class KubeHelper:
         # TODO (A Danshyn 11/15/18): we will need to start storing jobs'
         #  kube pod names explicitly at some point
         return job.id
+
+
+def parse_date(s: str) -> datetime:
+    return iso8601.parse_date(s)
+
+
+def format_date(dt: datetime) -> str:
+    return dt.isoformat().replace("+00:00", "Z")

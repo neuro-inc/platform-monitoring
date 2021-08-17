@@ -1,6 +1,7 @@
 import asyncio
 import re
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncContextManager, AsyncIterator, Dict
 from unittest import mock
 from uuid import uuid4
@@ -28,6 +29,7 @@ from platform_monitoring.logs import (
     S3LogReader,
     S3LogsService,
 )
+from platform_monitoring.utils import parse_date
 from tests.integration.conftest import ApiAddress, create_local_app_server
 
 from .conftest_kube import MyKubeClient, MyPodDescriptor
@@ -586,6 +588,44 @@ class TestLogReader:
         payload = self._remove_timestamps(payload)
         expected_payload = "\n".join(str(i) for i in range(1, 6)) + "\n"
         assert payload == expected_payload.encode()
+
+    @pytest.mark.asyncio
+    async def test_read_since(
+        self,
+        kube_client: MyKubeClient,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        command = "bash -c 'echo first; sleep 3; echo second; sleep 3; echo third'"
+        job_pod.set_command(command)
+        await kube_client.create_pod(job_pod.payload)
+        log_reader = PodContainerLogReader(
+            client=kube_client,
+            pod_name=job_pod.name,
+            container_name=job_pod.name,
+            timestamps=True,
+        )
+        payload = await self._consume_log_reader(log_reader)
+        assert self._remove_timestamps(payload) == b"first\nsecond\nthird\n"
+        lines = payload.splitlines()
+        second_ts = parse_date(lines[1].split()[0].decode())
+
+        log_reader = PodContainerLogReader(
+            client=kube_client,
+            pod_name=job_pod.name,
+            container_name=job_pod.name,
+            since=second_ts,
+        )
+        payload = await self._consume_log_reader(log_reader)
+        assert payload == b"second\nthird\n"
+
+        log_reader = PodContainerLogReader(
+            client=kube_client,
+            pod_name=job_pod.name,
+            container_name=job_pod.name,
+            since=second_ts + timedelta(seconds=1),
+        )
+        payload = await self._consume_log_reader(log_reader)
+        assert payload == b"third\n"
 
     @pytest.mark.asyncio
     async def test_read_cancelled(
@@ -1148,6 +1188,106 @@ class TestLogReader:
         job_pod: MyPodDescriptor,
     ) -> None:
         await self._test_merged_log_reader_restarted(
+            kube_client, job_pod, s3_log_service
+        )
+
+    async def _test_merged_log_reader_restarted_since(
+        self,
+        kube_client: MyKubeClient,
+        job_pod: MyPodDescriptor,
+        factory: LogsService,
+    ) -> None:
+        command = "bash -c 'echo begin; sleep 5; echo end; false'"
+        job_pod.set_command(command)
+        job_pod.set_restart_policy("OnFailure")
+        starts = []
+        tasks = []
+
+        def run_log_reader(since: datetime) -> None:
+            async def coro() -> bytes:
+                log_reader = factory.get_pod_log_reader(
+                    job_pod.name, since=since, separator=b"===", archive_delay_s=20.0
+                )
+                return await self._consume_log_reader(log_reader)
+
+            starts.append(since)
+            task = asyncio.ensure_future(coro())
+            tasks.append(task)
+
+        try:
+            await kube_client.create_pod(job_pod.payload)
+            await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=60.0)
+            await kube_client.wait_pod_is_terminated(job_pod.name)
+            status = await kube_client.get_container_status(job_pod.name)
+            finished1 = status.finished_at
+            assert finished1
+
+            await kube_client.wait_container_is_restarted(job_pod.name, 1)
+            status = await kube_client.get_container_status(job_pod.name)
+            started2 = status.started_at
+            assert started2
+            run_log_reader(since=started2)
+            run_log_reader(since=datetime.now(tz=timezone.utc))
+
+            await kube_client.wait_pod_is_terminated(job_pod.name)
+            status = await kube_client.get_container_status(job_pod.name)
+            assert status.started_at == started2
+            finished2 = status.finished_at
+            assert finished2
+
+            await kube_client.wait_container_is_restarted(job_pod.name, 2)
+            run_log_reader(since=finished1 - timedelta(seconds=2))
+            run_log_reader(since=started2)
+            run_log_reader(since=finished2 - timedelta(seconds=2))
+            run_log_reader(since=finished2 + timedelta(seconds=2))
+            await kube_client.wait_pod_is_terminated(job_pod.name)
+        finally:
+            await kube_client.delete_pod(job_pod.name)
+        await kube_client.wait_pod_is_deleted(job_pod.name)
+        run_log_reader(since=finished1 - timedelta(seconds=2))
+        run_log_reader(since=started2)
+        run_log_reader(since=finished2 - timedelta(seconds=2))
+        run_log_reader(since=finished2 + timedelta(seconds=2))
+
+        payloads = await asyncio.gather(*tasks)
+
+        # Output for debugging
+        for i, (since, payload) in enumerate(zip(starts, payloads)):
+            print(f"{i}. [{since:%T}] {payload!r}")
+        assert payloads == [
+            b"begin\nend\nbegin\nend\n",
+            b"end\nbegin\nend\n",
+            b"end\nbegin\nend\n===\nbegin\nend\n",
+            b"begin\nend\n===\nbegin\nend\n",
+            b"end\n===\nbegin\nend\n",
+            b"begin\nend\n",
+            b"end\nbegin\nend\nbegin\nend\n",
+            b"begin\nend\nbegin\nend\n",
+            b"end\nbegin\nend\n",
+            b"begin\nend\n",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_elasticsearch_merged_log_reader_restarted_since(
+        self,
+        kube_client: MyKubeClient,
+        elasticsearch_log_service: LogsService,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        await self._test_merged_log_reader_restarted_since(
+            kube_client,
+            job_pod,
+            elasticsearch_log_service,
+        )
+
+    @pytest.mark.asyncio
+    async def test_s3_merged_log_reader_restarted_since(
+        self,
+        kube_client: MyKubeClient,
+        s3_log_service: LogsService,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        await self._test_merged_log_reader_restarted_since(
             kube_client, job_pod, s3_log_service
         )
 

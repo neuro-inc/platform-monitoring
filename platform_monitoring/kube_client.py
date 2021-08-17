@@ -8,16 +8,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional, Sequence
-from urllib.parse import urlsplit
+from urllib.parse import quote_plus, urlsplit
 
 import aiohttp
-import iso8601
 from aiohttp import ContentTypeError
 from async_timeout import timeout
 from yarl import URL
 
 from .base import JobStats, Telemetry
 from .config import KubeClientAuthType, KubeConfig
+from .utils import format_date, parse_date
 
 
 logger = logging.getLogger(__name__)
@@ -259,7 +259,7 @@ class ContainerStatus:
             except KeyError:
                 # waiting
                 return None
-        return iso8601.parse_date(date_str)
+        return parse_date(date_str)
 
     @property
     def finished_at(self) -> Optional[datetime]:
@@ -270,7 +270,7 @@ class ContainerStatus:
         except KeyError:
             # running or waiting
             return None
-        return iso8601.parse_date(date_str)
+        return parse_date(date_str)
 
 
 class KubeClient:
@@ -405,13 +405,9 @@ class KubeClient:
         proxy_url = self._generate_node_proxy_url(name, self._kubelet_port)
         return f"{proxy_url}/stats/summary"
 
-    def _generate_pod_log_url(
-        self, pod_name: str, container_name: str, previous: bool
-    ) -> str:
+    def _generate_pod_log_url(self, pod_name: str, container_name: str) -> str:
         url = self._generate_pod_url(pod_name)
         url = f"{url}/log?container={pod_name}&follow=true"
-        if previous:
-            url = f"{url}&previous=true"
         return url
 
     async def _request(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
@@ -523,12 +519,19 @@ class KubeClient:
         self,
         pod_name: str,
         container_name: str,
+        *,
         conn_timeout_s: float = 60 * 5,
         read_timeout_s: float = 60 * 30,
         previous: bool = False,
+        since: Optional[datetime] = None,
         timestamps: bool = False,
     ) -> AsyncIterator[aiohttp.StreamReader]:
-        url = self._generate_pod_log_url(pod_name, container_name, previous)
+        url = self._generate_pod_log_url(pod_name, container_name)
+        if previous:
+            url = f"{url}&previous=true"
+        if since is not None:
+            since_str = quote_plus(format_date(since))
+            url = f"{url}&sinceTime={since_str}"
         if timestamps:
             url = f"{url}&timestamps=true"
         client_timeout = aiohttp.ClientTimeout(
