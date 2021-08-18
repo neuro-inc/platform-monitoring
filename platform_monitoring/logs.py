@@ -299,7 +299,7 @@ class S3LogReader(LogReader):
 
     @trace
     async def _load_log_keys(self, since: Optional[datetime]) -> List[str]:
-        since_time_str = f"{since:%Y%m%d%H%M%S}" if since else ""
+        since_time_str = f"{since:%Y%m%d%H%M}" if since else ""
         paginator = self._s3_client.get_paginator("list_objects_v2")
         keys: List[Tuple[int, int, str]] = []
         async for page in paginator.paginate(
