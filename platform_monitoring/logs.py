@@ -241,7 +241,7 @@ class ElasticsearchLogReader(LogReader):
             source = doc["_source"]
             time_str = source["time"]
             time = parse_date(time_str)
-            if self._since is not None and time <= self._since:
+            if self._since is not None and time < self._since:
                 continue
             self.last_time = time
             log = source["log"]
@@ -338,11 +338,11 @@ class S3LogReader(LogReader):
                         event = json.loads(line)
                         time_str = event["time"]
                         time = parse_date(time_str)
-                        if since is not None and time <= since:
+                        if since is not None and time < since:
                             continue
                         self.last_time = time
                         if self._debug and key:
-                            yield f"=== From file {basename(key)}\n".encode()
+                            yield f"~~~ From file {basename(key)}\n".encode()
                             key = ""
                         log = event["log"]
                         if self._timestamps:
@@ -415,18 +415,21 @@ class LogsService(abc.ABC):
                     pod_name, since=since, timestamps=timestamps, debug=debug
                 )
                 if debug:
-                    yield f"=== Archive logs from {since} to {until}\n".encode()
+                    yield (
+                        f"~~~ Archive logs from {since} to {until} "
+                        f"(started at {start})\n"
+                    ).encode()
                 async with log_reader as it:
                     async for chunk in it:
                         assert log_reader.last_time
-                        if log_reader.last_time > until:
+                        if log_reader.last_time >= until:
                             since = until
                             break
                         has_archive = True
                         yield chunk
                     else:
                         if log_reader.last_time:
-                            since = log_reader.last_time
+                            since = log_reader.last_time + datetime.resolution
                 if log_reader.last_time:
                     last_archived_time = log_reader.last_time
 
@@ -455,6 +458,8 @@ class LogsService(abc.ABC):
                     pod_name, start, timeout_s=timeout_s, interval_s=interval_s
                 )
                 start = status.started_at
+            if start is not None and (since is None or since < start):
+                since = start
 
             while True:
                 async with self.get_pod_live_log_reader(
@@ -464,7 +469,9 @@ class LogsService(abc.ABC):
                         if separator:
                             yield separator + b"\n"
                             separator = None
-                        yield f"=== Live logs from {start}\n".encode()
+                        yield (
+                            f"~~~ Live logs from {since} (started at {start})\n"
+                        ).encode()
                     async for chunk in it:
                         if separator:
                             yield separator + b"\n"
@@ -476,7 +483,7 @@ class LogsService(abc.ABC):
                 status = await self.wait_pod_is_running(
                     pod_name, start, timeout_s=timeout_s, interval_s=interval_s
                 )
-                start = status.started_at
+                since = start = status.started_at
         except JobNotFoundException:
             pass
 
