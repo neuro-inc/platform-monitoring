@@ -1223,197 +1223,6 @@ class TestSaveApi:
 
 class TestAttachApi:
     @pytest.mark.asyncio
-    async def test_attach_nontty(
-        self,
-        platform_api: PlatformApiEndpoints,
-        monitoring_api: MonitoringApiEndpoints,
-        client: aiohttp.ClientSession,
-        jobs_client: JobsClient,
-        wait_for_job_docker_client: None,
-        job_submit: Dict[str, Any],
-    ) -> None:
-        command = 'bash -c "for i in {0..9}; do echo $i; sleep 1; done"'
-        job_submit["container"]["command"] = command
-        headers = jobs_client.headers
-
-        url = platform_api.jobs_base_url
-        async with client.post(url, headers=headers, json=job_submit) as response:
-            assert response.status == 202
-            result = await response.json()
-            assert result["status"] in ["pending"]
-            job_id = result["id"]
-
-        await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
-
-        url1 = monitoring_api.generate_attach_url(
-            job_id=job_id, stdin=False, stdout=True, stderr=True, logs=True
-        )
-
-        content = []
-        async with client.ws_connect(url1, method="POST", headers=headers) as ws:
-            async for msg in ws:
-                content.append(msg.data)
-
-        expected = b"".join(f"\x01{i}\n".encode("ascii") for i in range(10))
-        assert b"".join(content) == expected
-
-    @pytest.mark.asyncio
-    async def test_attach_tty(
-        self,
-        platform_api: PlatformApiEndpoints,
-        monitoring_api: MonitoringApiEndpoints,
-        client: aiohttp.ClientSession,
-        jobs_client: JobsClient,
-        wait_for_job_docker_client: None,
-        job_submit: Dict[str, Any],
-    ) -> None:
-        command = "sh"
-        job_submit["container"]["command"] = command
-        job_submit["container"]["tty"] = True
-        headers = jobs_client.headers
-
-        url = platform_api.jobs_base_url
-        async with client.post(url, headers=headers, json=job_submit) as response:
-            assert response.status == 202
-            result = await response.json()
-            assert result["status"] in ["pending"]
-            job_id = result["id"]
-
-        await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
-
-        url1 = monitoring_api.generate_resize_url(job_id=job_id, w=70, h=20)
-
-        async with client.post(url1, headers=headers) as response:
-            assert response.status == 200
-
-        url2 = monitoring_api.generate_attach_url(
-            job_id=job_id, stdin=True, stdout=True, stderr=True, logs=True
-        )
-
-        async with client.ws_connect(url2, method="POST", headers=headers) as ws:
-            # We can't be sure if we connect before inital prompt or after
-            try:
-                await asyncio.wait_for(ws.receive_bytes(), timeout=0.2)
-            except asyncio.TimeoutError:
-                pass
-
-            await ws.send_bytes(b"\n")
-            assert await expect_prompt(ws) == b"\r\n# "
-            await ws.send_bytes(b"echo 'abc'\n")
-            assert await expect_prompt(ws) == b"echo 'abc'\r\nabc\r\n# "
-            await ws.send_bytes(b"exit 1\n")
-            assert await expect_prompt(ws) == b"exit 1\r\n"
-
-        result = await jobs_client.long_polling_by_job_id(job_id, status="failed")
-        assert result["history"]["exit_code"] == 1, result
-
-    @pytest.mark.asyncio
-    async def test_reattach_just_after_exit(
-        self,
-        platform_api: PlatformApiEndpoints,
-        monitoring_api: MonitoringApiEndpoints,
-        client: aiohttp.ClientSession,
-        jobs_client: JobsClient,
-        wait_for_job_docker_client: None,
-        job_submit: Dict[str, Any],
-    ) -> None:
-        command = "sh"
-        job_submit["container"]["command"] = command
-        job_submit["container"]["tty"] = True
-        headers = jobs_client.headers
-
-        url = platform_api.jobs_base_url
-        async with client.post(url, headers=headers, json=job_submit) as response:
-            assert response.status == 202
-            result = await response.json()
-            assert result["status"] in ["pending"]
-            job_id = result["id"]
-
-        await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
-
-        url1 = monitoring_api.generate_resize_url(job_id=job_id, w=70, h=20)
-
-        async with client.post(url1, headers=headers) as response:
-            assert response.status == 200
-
-        url2 = monitoring_api.generate_attach_url(
-            job_id=job_id, stdin=True, stdout=True, stderr=True, logs=True
-        )
-
-        async with client.ws_connect(url2, method="POST", headers=headers) as ws:
-            # We can't be sure if we connect before inital prompt or after
-            try:
-                await asyncio.wait_for(ws.receive_bytes(), timeout=0.2)
-            except asyncio.TimeoutError:
-                pass
-
-            await ws.send_bytes(b"\n")
-            assert await expect_prompt(ws) == b"\r\n# "
-            await ws.send_bytes(b"exit 1\n")
-            assert await expect_prompt(ws) == b"exit 1\r\n"
-
-        with pytest.raises(WSServerHandshakeError) as err:
-            async with client.ws_connect(url2, method="POST", headers=headers):
-                pass
-        assert err.value.status == 404
-
-        await asyncio.sleep(2)  # Allow poller to collect pod
-
-        with pytest.raises(WSServerHandshakeError) as err:
-            async with client.ws_connect(url2, method="POST", headers=headers):
-                pass
-        assert err.value.status == 404
-
-        await jobs_client.long_polling_by_job_id(job_id, status="failed")
-
-    @pytest.mark.asyncio
-    async def test_attach_nontty_shared_by_name(
-        self,
-        platform_api: PlatformApiEndpoints,
-        monitoring_api: MonitoringApiEndpoints,
-        client: aiohttp.ClientSession,
-        jobs_client: JobsClient,
-        wait_for_job_docker_client: None,
-        job_submit: Dict[str, Any],
-        job_name: str,
-        regular_user_factory: Callable[..., Awaitable[_User]],
-        share_job: Callable[..., Awaitable[None]],
-    ) -> None:
-        user2 = await regular_user_factory()
-
-        command = 'bash -c "for i in {0..9}; do echo $i; sleep 1; done"'
-        job_submit["container"]["command"] = command
-        job_submit["name"] = job_name
-
-        url = platform_api.jobs_base_url
-        async with client.post(
-            url, headers=jobs_client.headers, json=job_submit
-        ) as response:
-            assert response.status == 202, await response.text()
-            result = await response.json()
-            assert result["status"] in ["pending"]
-            job_id = result["id"]
-            assert result["name"] == job_name
-
-        await share_job(jobs_client.user, user2, job_name, action="write")
-
-        await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
-
-        url1 = monitoring_api.generate_attach_url(
-            job_id=job_id, stdin=False, stdout=True, stderr=True, logs=True
-        )
-
-        content = []
-        async with client.ws_connect(url1, method="POST", headers=user2.headers) as ws:
-            async for msg in ws:
-                content.append(msg.data)
-
-        expected = b"".join(f"\x01{i}\n".encode("ascii") for i in range(10))
-        assert b"".join(content) == expected
-
-
-class TestAttachV2Api:
-    @pytest.mark.asyncio
     async def test_attach_nontty_stdout(
         self,
         platform_api: PlatformApiEndpoints,
@@ -1439,10 +1248,6 @@ class TestAttachV2Api:
         url = monitoring_api.generate_attach_url(
             job_id=job_id, stdout=True, stderr=True
         )
-        headers = {
-            aiohttp.hdrs.SEC_WEBSOCKET_PROTOCOL: "v2.channels.neu.ro",
-            **headers,
-        }
 
         async with client.ws_connect(url, headers=headers) as ws:
             await ws.receive_bytes(timeout=5)  # empty message is sent to stdout
@@ -1493,12 +1298,8 @@ class TestAttachV2Api:
         url = monitoring_api.generate_attach_url(
             job_id=job_id, stdout=True, stderr=True
         )
-        headers: Dict[str, str] = {
-            aiohttp.hdrs.SEC_WEBSOCKET_PROTOCOL: "v2.channels.neu.ro",
-            **user2.headers,
-        }
 
-        async with client.ws_connect(url, headers=headers) as ws:
+        async with client.ws_connect(url, headers=user2.headers) as ws:
             await ws.receive_bytes(timeout=5)  # empty message is sent to stdout
 
             content = []
@@ -1539,10 +1340,6 @@ class TestAttachV2Api:
         url = monitoring_api.generate_attach_url(
             job_id=job_id, stdout=True, stderr=True
         )
-        headers = {
-            aiohttp.hdrs.SEC_WEBSOCKET_PROTOCOL: "v2.channels.neu.ro",
-            **headers,
-        }
 
         async with client.ws_connect(url, headers=headers) as ws:
             await ws.receive_bytes(timeout=5)  # empty message is sent to stdout
@@ -1586,10 +1383,6 @@ class TestAttachV2Api:
         url = monitoring_api.generate_attach_url(
             job_id=job_id, tty=True, stdin=True, stdout=True, stderr=False
         )
-        headers = {
-            aiohttp.hdrs.SEC_WEBSOCKET_PROTOCOL: "v2.channels.neu.ro",
-            **headers,
-        }
 
         async with client.ws_connect(url, headers=headers) as ws:
             await ws.receive_bytes(timeout=5)  # empty message is sent to stdout
@@ -1628,10 +1421,6 @@ class TestAttachV2Api:
         url = monitoring_api.generate_attach_url(
             job_id=job_id, tty=True, stdin=True, stdout=True, stderr=False
         )
-        headers = {
-            aiohttp.hdrs.SEC_WEBSOCKET_PROTOCOL: "v2.channels.neu.ro",
-            **headers,
-        }
 
         async with client.ws_connect(url, headers=headers) as ws:
             await ws.receive_bytes(timeout=5)  # empty message is sent to stdout
@@ -1686,10 +1475,6 @@ class TestAttachV2Api:
         url = monitoring_api.generate_attach_url(
             job_id=job_id, tty=True, stdin=True, stdout=True, stderr=False
         )
-        headers = {
-            aiohttp.hdrs.SEC_WEBSOCKET_PROTOCOL: "v2.channels.neu.ro",
-            **headers,
-        }
 
         async with client.ws_connect(url, headers=headers) as ws:
             await ws.receive_bytes(timeout=5)  # empty message is sent to stdout
@@ -1712,155 +1497,6 @@ class TestAttachV2Api:
 
 
 class TestExecApi:
-    @pytest.mark.asyncio
-    async def test_exec_notty_stdout(
-        self,
-        monitoring_api: MonitoringApiEndpoints,
-        client: aiohttp.ClientSession,
-        jobs_client: JobsClient,
-        infinite_job: str,
-    ) -> None:
-
-        headers = jobs_client.headers
-
-        url1 = monitoring_api.generate_exec_create_url(infinite_job)
-        async with client.post(
-            url1,
-            headers=headers,
-            json={
-                "command": "sh -c 'sleep 5; echo abc'",
-                "stdin": False,
-                "stdout": True,
-                "stderr": True,
-                "tty": False,
-            },
-        ) as response:
-            assert response.status == 200, await response.text()
-            content = await response.json()
-            exec_id = content["exec_id"]
-
-        url2 = monitoring_api.generate_exec_start_url(infinite_job, exec_id)
-        async with client.ws_connect(url2, method="POST", headers=headers) as ws:
-            data = await ws.receive_bytes()
-            assert data == b"\x01abc\n"
-
-    @pytest.mark.asyncio
-    async def test_exec_notty_stderr(
-        self,
-        monitoring_api: MonitoringApiEndpoints,
-        client: aiohttp.ClientSession,
-        jobs_client: JobsClient,
-        infinite_job: str,
-    ) -> None:
-
-        headers = jobs_client.headers
-
-        url1 = monitoring_api.generate_exec_create_url(infinite_job)
-        async with client.post(
-            url1,
-            headers=headers,
-            json={
-                "command": "sh -c 'sleep 5; echo abc 1>&2'",
-                "stdin": False,
-                "stdout": True,
-                "stderr": True,
-                "tty": False,
-            },
-        ) as response:
-            assert response.status == 200, await response.text()
-            content = await response.json()
-            exec_id = content["exec_id"]
-
-        url2 = monitoring_api.generate_exec_start_url(infinite_job, exec_id)
-        async with client.ws_connect(url2, method="POST", headers=headers) as ws:
-            data = await ws.receive_bytes()
-            assert data == b"\x02abc\n"
-
-    @pytest.mark.asyncio
-    async def test_exec_tty(
-        self,
-        monitoring_api: MonitoringApiEndpoints,
-        client: aiohttp.ClientSession,
-        jobs_client: JobsClient,
-        infinite_job: str,
-    ) -> None:
-
-        headers = jobs_client.headers
-
-        url1 = monitoring_api.generate_exec_create_url(infinite_job)
-        async with client.post(
-            url1,
-            headers=headers,
-            json={
-                "command": "sh",
-                "stdin": True,
-                "stdout": True,
-                "stderr": True,
-                "tty": True,
-            },
-        ) as response:
-            assert response.status == 200, await response.text()
-            content = await response.json()
-            exec_id = content["exec_id"]
-
-        url2 = monitoring_api.generate_exec_start_url(infinite_job, exec_id)
-        async with client.ws_connect(url2, method="POST", headers=headers) as ws:
-            assert (await expect_prompt(ws)).strip() == b"#"
-            await ws.send_bytes(b"echo 'abc'\n")
-            assert await expect_prompt(ws) == b"echo 'abc'\r\nabc\r\n# "
-            await ws.send_bytes(b"exit 1\n")
-            assert await expect_prompt(ws) == b"exit 1\r\n"
-            # give a time to finish exec session
-            await asyncio.sleep(5)
-
-        async with timeout(90):
-            async with client.get(
-                monitoring_api.generate_exec_inspect_url(infinite_job, exec_id),
-                headers=headers,
-            ) as resp:
-                data = await resp.json()
-                while data["running"] and data["exit_code"] is not None:
-                    data = await resp.json()
-                    await asyncio.sleep(1)
-                assert data["exit_code"] == 1, data
-
-    @pytest.mark.asyncio
-    async def test_exec_notty_stdout_shared_by_name(
-        self,
-        monitoring_api: MonitoringApiEndpoints,
-        client: aiohttp.ClientSession,
-        jobs_client: JobsClient,
-        job_name: str,
-        named_infinite_job: str,
-        regular_user_factory: Callable[..., Awaitable[_User]],
-        share_job: Callable[..., Awaitable[None]],
-    ) -> None:
-        user2 = await regular_user_factory()
-        await share_job(jobs_client.user, user2, job_name, action="write")
-
-        url1 = monitoring_api.generate_exec_create_url(named_infinite_job)
-        async with client.post(
-            url1,
-            headers=user2.headers,
-            json={
-                "command": "sh -c 'sleep 5; echo abc'",
-                "stdin": False,
-                "stdout": True,
-                "stderr": True,
-                "tty": False,
-            },
-        ) as response:
-            assert response.status == 200, await response.text()
-            content = await response.json()
-            exec_id = content["exec_id"]
-
-        url2 = monitoring_api.generate_exec_start_url(named_infinite_job, exec_id)
-        async with client.ws_connect(url2, method="POST", headers=user2.headers) as ws:
-            data = await ws.receive_bytes()
-            assert data == b"\x01abc\n"
-
-
-class TestExecV2Api:
     @pytest.mark.asyncio
     async def test_exec_notty_stdout(
         self,
@@ -2023,25 +1659,6 @@ class TestKillApi:
         headers = jobs_client.headers
 
         url = monitoring_api.generate_kill_url(infinite_job)
-        url = url.with_query(signal=int(signal.SIGKILL))
-        async with client.post(url, headers=headers) as response:
-            assert response.status == 204, await response.text()
-
-        result = await jobs_client.long_polling_by_job_id(infinite_job, status="failed")
-        assert result["history"]["exit_code"] == 128 + signal.SIGKILL, result
-
-    @pytest.mark.asyncio
-    async def test_kill_v2(
-        self,
-        monitoring_api: MonitoringApiEndpoints,
-        client: aiohttp.ClientSession,
-        jobs_client: JobsClient,
-        infinite_job: str,
-    ) -> None:
-
-        headers = jobs_client.headers
-
-        url = monitoring_api.generate_kill_url(infinite_job)
         async with client.post(url, headers=headers) as response:
             assert response.status == 204, await response.text()
 
@@ -2063,7 +1680,6 @@ class TestKillApi:
         await share_job(jobs_client.user, user2, job_name, action="write")
 
         url = monitoring_api.generate_kill_url(named_infinite_job)
-        url = url.with_query(signal=int(signal.SIGKILL))
         async with client.post(url, headers=user2.headers) as response:
             assert response.status == 204, await response.text()
 
