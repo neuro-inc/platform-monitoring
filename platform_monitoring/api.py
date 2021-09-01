@@ -64,7 +64,7 @@ from .container_runtime_client import (
     ContainerNotFoundError,
     ContainerRuntimeClientRegistry,
 )
-from .jobs_service import Container, JobException, JobNotRunningException, JobsService
+from .jobs_service import JobException, JobNotRunningException, JobsService
 from .kube_client import JobError, KubeClient, KubeTelemetry
 from .log_cleanup_poller import LogCleanupPoller
 from .logs import ElasticsearchLogsService, LogsService, S3LogsService
@@ -297,7 +297,10 @@ class MonitoringApiHandler:
         user = await untrusted_user(request)
         job = await self._resolve_job(request, "write")
 
-        container = await self._parse_save_container(request)
+        payload = await request.json()
+        payload = self._save_request_payload_validator.check(payload)
+
+        image = payload["container"]["image"]
 
         # Following docker engine API, the response should conform ndjson
         # see https://github.com/ndjson/ndjson-spec
@@ -309,13 +312,13 @@ class MonitoringApiHandler:
         await response.prepare(request)
 
         try:
-            async with self._jobs_service.save(job, user, container) as it:
+            async with self._jobs_service.save(job, user, image) as it:
                 async for chunk in it:
-                    await response.write(self._serialize_chunk(chunk, encoding))
+                    await response.write(chunk)
         except JobException as e:
             # Serialize an exception in a similar way as docker does:
-            chunk = {"error": str(e), "errorDetail": {"message": str(e)}}
-            await response.write(self._serialize_chunk(chunk, encoding))
+            error = {"error": str(e), "errorDetail": {"message": str(e)}}
+            await response.write(self._serialize_chunk(error, encoding))
         except asyncio.CancelledError:
             raise
         except Exception as e:
@@ -323,24 +326,14 @@ class MonitoringApiHandler:
             # catch a general exception and send it as a chunk
             msg_str = f"Unexpected error: {e}"
             logging.exception(msg_str)
-            chunk = {"error": msg_str}
-            await response.write(self._serialize_chunk(chunk, encoding))
+            error = {"error": msg_str}
+            await response.write(self._serialize_chunk(error, encoding))
         finally:
             return response
 
     def _serialize_chunk(self, chunk: Dict[str, Any], encoding: str = "utf-8") -> bytes:
         chunk_str = json.dumps(chunk) + "\r\n"
         return chunk_str.encode(encoding)
-
-    async def _parse_save_container(self, request: Request) -> Container:
-        payload = await request.json()
-        payload = self._save_request_payload_validator.check(payload)
-
-        image = payload["container"]["image"]
-        if image.domain != self._config.registry.host:
-            raise ValueError("Unknown registry host")
-
-        return Container(image=image)
 
     async def kill(self, request: Request) -> Response:
         job = await self._resolve_job(request, "write")
@@ -761,7 +754,6 @@ async def create_app(config: Config) -> aiohttp.web.Application:
                 config_client=config_client,
                 jobs_client=platform_client.jobs,
                 kube_client=kube_client,
-                docker_config=config.docker,
                 container_runtime_client_registry=container_runtime_client_registry,
                 cluster_name=config.cluster_name,
                 kube_job_label=config.kube.job_label,

@@ -5,9 +5,6 @@ from typing import Optional, Sequence
 from yarl import URL
 
 
-DOCKER_API_VERSION = "v1.39"
-
-
 @dataclass(frozen=True)
 class ServerConfig:
     host: str = "0.0.0.0"
@@ -101,11 +98,6 @@ class RegistryConfig:
 
 
 @dataclass(frozen=True)
-class DockerConfig:
-    docker_engine_api_port: int = 2375
-
-
-@dataclass(frozen=True)
 class ContainerRuntimeConfig:
     port: int = 9000
 
@@ -134,7 +126,6 @@ class Config:
     platform_config: PlatformConfig
     logs: LogsConfig
     kube: KubeConfig
-    docker: DockerConfig
     container_runtime: ContainerRuntimeConfig
     registry: RegistryConfig
     cors: CORSConfig

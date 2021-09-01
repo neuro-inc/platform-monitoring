@@ -3,7 +3,6 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import reduce
 from typing import (
-    Any,
     AsyncContextManager,
     AsyncIterator,
     Dict,
@@ -12,29 +11,23 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
-    cast,
 )
 
 import aiohttp
-from aiodocker.exceptions import DockerError
 from elasticsearch.client import logger
 from neuro_sdk import JobDescription as Job, Jobs as JobsClient
 from platform_config_client import ConfigClient
 from platform_config_client.models import ResourcePoolType
 
-from platform_monitoring.config import DockerConfig
-
-from .config import DOCKER_API_VERSION, KubeConfig
-from .container_runtime_client import ContainerRuntimeClientRegistry
-from .docker_client import Docker, ImageReference
+from .config import KubeConfig
+from .container_runtime_client import (
+    ContainerNotFoundError,
+    ContainerRuntimeClientRegistry,
+    ContainerRuntimeError,
+)
 from .kube_client import JobNotFoundException, KubeClient, Pod, Resources
 from .user import User
 from .utils import KubeHelper, asyncgeneratorcontextmanager
-
-
-@dataclass(frozen=True)
-class Container:
-    image: ImageReference
 
 
 @dataclass(frozen=True)
@@ -66,7 +59,6 @@ class JobsService:
         jobs_client: JobsClient,
         kube_client: KubeClient,
         container_runtime_client_registry: ContainerRuntimeClientRegistry,
-        docker_config: DockerConfig,
         cluster_name: str,
         kube_job_label: str = KubeConfig.job_label,
         kube_node_pool_label: str = KubeConfig.node_pool_label,
@@ -75,7 +67,6 @@ class JobsService:
         self._jobs_client = jobs_client
         self._kube_client = kube_client
         self._kube_helper = KubeHelper()
-        self._docker_config = docker_config
         self._container_runtime_client_registry = container_runtime_client_registry
         self._cluster_name = cluster_name
         self._kube_job_label = kube_job_label
@@ -101,35 +92,27 @@ class JobsService:
             pass
 
     @asyncgeneratorcontextmanager
-    async def save(
-        self, job: Job, user: User, container: Container
-    ) -> AsyncIterator[Dict[str, Any]]:
+    async def save(self, job: Job, user: User, image: str) -> AsyncIterator[bytes]:
         pod_name = self._kube_helper.get_job_pod_name(job)
-
         pod = await self._get_running_jobs_pod(pod_name)
         cont_id = pod.get_container_id(pod_name)
         assert cont_id
-        async with self._get_docker_client(pod) as docker:
-            try:
-                repo = container.image.repository
-                tag = container.image.tag
 
-                yield {
-                    "status": "CommitStarted",
-                    "details": {"container": cont_id, "image": f"{repo}:{tag}"},
-                }
-                await docker.images.commit(container=cont_id, repo=repo, tag=tag)  # type: ignore  # noqa
-                # TODO (A.Yushkovskiy) check result of commit() and break if failed
-                yield {"status": "CommitFinished"}
+        runtime_client = await self._container_runtime_client_registry.get(pod.host_ip)
 
-                push_auth = dict(username=user.name, password=user.token)
-                async for chunk in docker.images.push(
-                    name=repo, tag=tag, auth=push_auth, stream=True
-                ):
+        try:
+            async with runtime_client.commit(
+                container_id=cont_id,
+                image=image,
+                username=user.name,
+                password=user.token,
+            ) as commit:
+                async for chunk in commit:
                     yield chunk
-
-            except DockerError as error:
-                raise JobException(f"Failed to save job '{job.id}': {error}")
+        except ContainerNotFoundError:
+            raise
+        except ContainerRuntimeError as ex:
+            raise JobException(f"Failed to save job '{job.id}': {ex}")
 
     @asynccontextmanager
     async def attach(
@@ -226,27 +209,6 @@ class JobsService:
             raise JobNotRunningException(f"Job '{job_id}' is not running.")
 
         return pod
-
-    @asynccontextmanager
-    async def _get_docker_client(
-        self, pod: Pod, force_close: bool = True
-    ) -> AsyncIterator[Docker]:
-        # NOTE: because Docker socket is wrapped in a proxy it may delay socket
-        # disconnects, making the keep-alive socket taken from pool not reliable (it
-        # may have already disconnected). We did see some examples of such behaviour
-        # with Nginx. Thus we end up with "force-close" to recycle the socket after
-        # each connection to be sure we can execute the command safely.
-
-        url = f"http://{pod.host_ip}:{self._docker_config.docker_engine_api_port}"
-        session = await self._kube_client.create_http_client(force_close=force_close)
-        async with Docker(
-            url=url,
-            session=session,
-            connector=session.connector,
-            api_version=DOCKER_API_VERSION,
-        ) as docker:
-            # from "aiodocker.docker.Docker" to ".docker_client.Docker"
-            yield cast(Docker, docker)
 
     async def get_available_jobs_counts(self) -> Mapping[str, int]:
         result: Dict[str, int] = {}

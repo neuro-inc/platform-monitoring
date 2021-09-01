@@ -9,7 +9,6 @@ from .config import (
     Config,
     ContainerRuntimeConfig,
     CORSConfig,
-    DockerConfig,
     ElasticsearchConfig,
     KubeClientAuthType,
     KubeConfig,
@@ -45,7 +44,6 @@ class EnvironConfigFactory:
             logs=self._create_logs(),
             kube=self._create_kube(),
             registry=self._create_registry(),
-            docker=self._create_docker(),
             container_runtime=self._create_container_runtime(),
             cors=self.create_cors(),
             zipkin=self.create_zipkin(),
@@ -156,9 +154,6 @@ class EnvironConfigFactory:
 
     def _create_registry(self) -> RegistryConfig:
         return RegistryConfig(url=URL(self._environ["NP_MONITORING_REGISTRY_URL"]))
-
-    def _create_docker(self) -> DockerConfig:
-        return DockerConfig()
 
     def _create_container_runtime(self) -> ContainerRuntimeConfig:
         return ContainerRuntimeConfig()

@@ -38,12 +38,6 @@ nodeLabels:
   job: platform.neuromation.io/job
   nodePool: platform.neuromation.io/nodepool
 
-dockerEngine:
-  image:
-    repository: $DOCKER_SERVER/nginx # nginx
-    tag: latest
-  port: 2375
-
 fluentbit:
   image:
     repository: $DOCKER_SERVER/fluent/fluent-bit # fluent/fluent-bit

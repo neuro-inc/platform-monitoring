@@ -1,6 +1,5 @@
 import asyncio
 import json
-import logging
 import re
 import signal
 import textwrap
@@ -26,13 +25,7 @@ from async_timeout import timeout
 from yarl import URL
 
 from platform_monitoring.api import create_app
-from platform_monitoring.config import (
-    DOCKER_API_VERSION,
-    Config,
-    DockerConfig,
-    PlatformApiConfig,
-)
-from platform_monitoring.docker_client import Docker
+from platform_monitoring.config import Config, ContainerRuntimeConfig, PlatformApiConfig
 from platform_monitoring.kube_client import JobNotFoundException
 from tests.integration.conftest_kube import MyKubeClient
 
@@ -375,39 +368,6 @@ async def named_infinite_job(
     job_factory: Callable[[str, str], Awaitable[str]], job_name: str
 ) -> str:
     return await job_factory("tail -f /dev/null", job_name)
-
-
-@pytest.fixture
-async def wait_for_job_docker_client(
-    kube_client: MyKubeClient,
-    docker_config: DockerConfig,
-    job_factory: Callable[[str], Awaitable[str]],
-) -> None:
-    timeout_s: float = 60
-    interval_s: float = 1
-
-    job_id = await job_factory("sleep 5m")
-    pod_name = job_id
-    async with timeout(timeout_s):
-        pod = await kube_client.get_pod(pod_name)
-        async with kube_client.get_node_proxy_client(
-            pod.node_name, docker_config.docker_engine_api_port
-        ) as proxy_client:
-            docker = Docker(
-                url=str(proxy_client.url),
-                session=proxy_client.session,
-                connector=proxy_client.session.connector,
-                api_version=DOCKER_API_VERSION,
-            )
-            while True:
-                try:
-                    await docker.ping()
-                    return
-                except aiohttp.ClientError as e:
-                    logging.info(
-                        f"Failed to ping docker client: {proxy_client.url}: {e}"
-                    )
-                    await asyncio.sleep(interval_s)
 
 
 class TestApi:
@@ -1065,7 +1025,6 @@ class TestSaveApi:
     @pytest.mark.asyncio
     async def test_save_unknown_registry_host(
         self,
-        platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
@@ -1116,13 +1075,12 @@ class TestSaveApi:
     async def test_save_push_failed_job_exception_raised(
         self,
         config_factory: Callable[..., Config],
-        platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
         infinite_job: str,
     ) -> None:
-        invalid_docker_config = DockerConfig(docker_engine_api_port=1)
-        config = config_factory(docker=invalid_docker_config)
+        invalid_runtime_config = ContainerRuntimeConfig(port=1)
+        config = config_factory(container_runtime=invalid_runtime_config)
 
         app = await create_app(config)
         async with create_local_app_server(app, port=8080) as address:
@@ -1141,30 +1099,20 @@ class TestSaveApi:
                 ]
                 debug = f"Received chunks: `{chunks}`"
 
-                assert len(chunks) == 2, debug
+                assert len(chunks) == 1, debug
 
-                assert chunks[0]["status"] == "CommitStarted", debug
-                assert chunks[0]["details"]["image"] == image, debug
-                assert re.match(r"\w{64}", chunks[0]["details"]["container"]), debug
-
-                error = chunks[1]["error"]
-                assert (
-                    f"Failed to save job '{infinite_job}': DockerError(900" in error
-                ), debug
+                error = chunks[0]["error"]
+                assert "Unexpected error: Cannot connect to host" in error, debug
                 assert "Connect call failed" in error, debug
 
     @pytest.mark.asyncio
     async def test_save_ok(
         self,
-        platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
         infinite_job: str,
-        kube_client: MyKubeClient,
-        docker_config: DockerConfig,
         config: Config,
-        wait_for_job_docker_client: None,
     ) -> None:
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
