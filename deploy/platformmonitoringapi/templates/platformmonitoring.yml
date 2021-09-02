@@ -2,8 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: platformmonitoringapi
-  labels:
-{{ include "platform-monitoring.labels.standard" . | indent 4 }}
+  labels: {{ include "platform-monitoring.labels.standard" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicas }}
   selector:
@@ -19,9 +18,10 @@ spec:
       labels:
         service: platformmonitoringapi
       annotations:
-{{- if .Values.secrets }}
+        checksum/logs-secret: {{ include (print $.Template.BasePath "/logs-storage-key-secret.yaml") . | sha256sum }}
+        {{- if .Values.secrets }}
         checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
-{{- end }}
+        {{- end }}
 {{- if .Values.podAnnotations }}
 {{ toYaml .Values.podAnnotations | indent 8 }}
 {{- end }}
@@ -45,9 +45,9 @@ spec:
           - containerPort: 8080
             name: tcp-web
             protocol: TCP
-{{- if .Values.resources }}
+        {{- if .Values.resources }}
         resources: {{ toYaml .Values.resources | nindent 10 }}
-{{- end }}
+        {{- end }}
         env:
         - name: NP_MONITORING_CLUSTER_NAME
           value: {{ .Values.NP_MONITORING_CLUSTER_NAME }}
@@ -99,18 +99,18 @@ spec:
         - name: NP_SENTRY_SAMPLE_RATE
           value: {{ .Values.sentry.sampleRate | default 0 | quote }}
         {{- end }}
-{{- if .Values.nodeLabels.job }}
+        {{- if .Values.nodeLabels.job }}
         - name: NP_MONITORING_NODE_LABEL_JOB
           value: {{ .Values.nodeLabels.job }}
-{{- end }}
-{{- if .Values.nodeLabels.nodePool }}
+        {{- end }}
+        {{- if .Values.nodeLabels.nodePool }}
         - name: NP_MONITORING_NODE_LABEL_NODE_POOL
           value: {{ .Values.nodeLabels.nodePool }}
-{{- end }}
-
+        {{- end }}
         - name: NP_MONITORING_LOGS_CLEANUP_INTERVAL_SEC
           value: {{ .Values.logs.cleanup_interval_sec | quote }}
-{{- if eq .Values.logs.persistence.type "aws" }}
+
+        {{- if eq .Values.logs.persistence.type "aws" }}
         - name: NP_MONITORING_LOGS_STORAGE_TYPE
           value: s3
         - name: NP_MONITORING_S3_REGION
@@ -129,9 +129,9 @@ spec:
           value: {{ .Values.logs.persistence.aws.bucket | quote }}
         - name: NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT
           value: {{ include "platform-monitoring.logs.storage.s3.keyPrefixFormat" . | quote }}
-{{- end }}
+        {{- end }}
 
-{{- if eq .Values.logs.persistence.type "gcp" }}
+      {{- if eq .Values.logs.persistence.type "gcp" }}
         - name: NP_MONITORING_LOGS_STORAGE_TYPE
           value: s3
         - name: NP_MONITORING_S3_REGION
@@ -170,9 +170,9 @@ spec:
       - name: gcs-credentials
         secret:
           secretName: {{ include "platform-monitoring.logs.storage.key" . }}
-{{- end }}
+      {{- end }}
 
-{{- if eq .Values.logs.persistence.type "azure" }}
+      {{- if eq .Values.logs.persistence.type "azure" }}
         - name: NP_MONITORING_LOGS_STORAGE_TYPE
           value: s3
         - name: NP_MONITORING_S3_REGION
@@ -212,9 +212,9 @@ spec:
               key: account_key
 {{ include "platform-monitoring.minio.resources" . | indent 8 }}
 {{ include "platform-monitoring.minio.probes" . | indent 8 }}
-{{- end }}
+      {{- end }}
 
-{{- if eq .Values.logs.persistence.type "minio" }}
+        {{- if eq .Values.logs.persistence.type "minio" }}
         - name: NP_MONITORING_LOGS_STORAGE_TYPE
           value: s3
         - name: NP_MONITORING_S3_ENDPOINT_URL
@@ -235,16 +235,16 @@ spec:
           value: {{ .Values.logs.persistence.minio.bucket | quote }}
         - name: NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT
           value: {{ include "platform-monitoring.logs.storage.s3.keyPrefixFormat" . | quote }}
-{{- end }}
+        {{- end }}
 
-{{- if eq .Values.logs.persistence.type "es" }}
+        {{- if eq .Values.logs.persistence.type "es" }}
         - name: NP_MONITORING_LOGS_STORAGE_TYPE
           value: elasticsearch
         - name: NP_MONITORING_ES_HOSTS
-{{- with .Values.logs.persistence.es }}
+        {{- with .Values.logs.persistence.es }}
           value: "http://{{ .host }}:{{ .port }}"
-{{- end }}
-{{- end }}
+        {{- end }}
+        {{- end }}
 
       {{- if .Values.imagePullSecrets }}
       imagePullSecrets: {{ toYaml .Values.imagePullSecrets | nindent 6 }}
