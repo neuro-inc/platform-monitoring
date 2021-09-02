@@ -1,7 +1,6 @@
 import pytest
 import trafaret as t
 
-from platform_monitoring.jobs_service import ImageReference
 from platform_monitoring.validators import create_save_request_payload_validator
 
 
@@ -29,6 +28,4 @@ class TestSaveRequest:
     def test_parsed(self) -> None:
         validator = create_save_request_payload_validator("localhost:5000")
         payload = validator.check({"container": {"image": "localhost:5000/test"}})
-        assert payload["container"]["image"] == ImageReference(
-            domain="localhost:5000", path="test"
-        )
+        assert payload["container"]["image"] == "localhost:5000/test"

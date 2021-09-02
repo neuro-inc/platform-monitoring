@@ -1,13 +1,11 @@
 import asyncio
 import contextlib
+import json
 import re
 import uuid
 from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
-import aiohttp
 import pytest
-from aiodocker import Docker
-from aiodocker.stream import Stream
 from async_timeout import timeout
 from neuro_sdk import (
     Client as PlatformApiClient,
@@ -19,14 +17,8 @@ from neuro_sdk import (
 )
 from platform_config_client import ConfigClient
 
-from platform_monitoring.config import DOCKER_API_VERSION, DockerConfig
 from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
-from platform_monitoring.jobs_service import (
-    Container,
-    ImageReference,
-    JobException,
-    JobsService,
-)
+from platform_monitoring.jobs_service import JobException, JobsService
 from platform_monitoring.user import User
 
 from .conftest_kube import MyKubeClient
@@ -62,53 +54,6 @@ async def job_factory(
             await platform_api_client.jobs.kill(job.id)
 
 
-@pytest.fixture
-async def wait_for_job_docker_client(
-    kube_client: MyKubeClient, docker_config: DockerConfig
-) -> Callable[[str], Awaitable[None]]:
-    async def go(job_id: str) -> None:
-        timeout_s: float = 60
-        interval_s: float = 1
-
-        pod_name = job_id
-        async with timeout(timeout_s):
-            pod = await kube_client.get_pod(pod_name)
-            async with kube_client.get_node_proxy_client(
-                pod.node_name, docker_config.docker_engine_api_port
-            ) as proxy_client:
-                docker = Docker(
-                    url=str(proxy_client.url),
-                    session=proxy_client.session,
-                    connector=proxy_client.session.connector,
-                    api_version=DOCKER_API_VERSION,
-                )
-                while True:
-                    try:
-                        await docker.version()
-                        return
-                    except aiohttp.ClientError as e:
-                        print(f"Failed to ping docker client: {proxy_client.url}: {e}")
-                        await asyncio.sleep(interval_s)
-
-    return go
-
-
-async def expect_prompt(stream: Stream) -> bytes:
-    _ansi_re = re.compile(br"\033\[[;?0-9]*[a-zA-Z]")
-    try:
-        ret: bytes = b""
-        async with timeout(3):
-            while not ret.strip().endswith(b"/ #"):
-                msg = await stream.read_out()
-                if msg is None:
-                    break
-                assert msg.stream == 1
-                ret += _ansi_re.sub(b"", msg.data)
-            return ret
-    except asyncio.TimeoutError:
-        raise AssertionError(f"[Timeout] {ret!r}")
-
-
 @pytest.mark.usefixtures("cluster_name")
 class TestJobsService:
     @pytest.fixture
@@ -117,7 +62,6 @@ class TestJobsService:
         platform_config_client: ConfigClient,
         platform_api_client: PlatformApiClient,
         kube_client: MyKubeClient,
-        docker_config: DockerConfig,
         container_runtime_client_registry: ContainerRuntimeClientRegistry,
         cluster_name: str,
     ) -> JobsService:
@@ -125,7 +69,6 @@ class TestJobsService:
             config_client=platform_config_client,
             jobs_client=platform_api_client.jobs,
             kube_client=kube_client,
-            docker_config=docker_config,
             container_runtime_client_registry=container_runtime_client_registry,
             cluster_name=cluster_name,
         )
@@ -216,18 +159,14 @@ class TestJobsService:
         )
         await self.wait_for_job_running(job, platform_api_client)
 
-        container = Container(
-            image=ImageReference(
-                domain=registry_host, path=f"{user.name}/alpine", tag=image_tag
-            )
-        )
+        image = f"{registry_host}/{user.name}/alpine:{image_tag}"
 
-        async with jobs_service.save(job, user, container) as it:
+        async with jobs_service.save(job, user, image) as it:
             async for chunk in it:
                 pass
 
         new_job = await job_factory(
-            str(container.image), 'sh -c \'[ "$(cat /test)" = "123" ]\'', resources
+            image, 'sh -c \'[ "$(cat /test)" = "123" ]\'', resources
         )
         await self.wait_for_job_succeeded(new_job, platform_api_client)
 
@@ -242,7 +181,7 @@ class TestJobsService:
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=16,
+            memory_mb=32,
             cpu=0.1,
             gpu=None,
             shm=False,
@@ -257,16 +196,14 @@ class TestJobsService:
         )
         await self.wait_for_job_running(job, platform_api_client)
 
-        container = Container(
-            image=ImageReference(domain=registry_host, path=f"{user.name}/alpine")
-        )
+        image = f"{registry_host}/{user.name}/alpine"
 
-        async with jobs_service.save(job, user, container) as it:
+        async with jobs_service.save(job, user, image) as it:
             async for chunk in it:
                 pass
 
         new_job = await job_factory(
-            str(container.image),
+            image,
             f'sh -c \'[ "$(cat /test)" = "{image_tag}" ]\'',
             resources,
         )
@@ -293,14 +230,10 @@ class TestJobsService:
         )
         job = await job_factory("alpine:latest", None, resources)
 
-        container = Container(
-            image=ImageReference(
-                domain=registry_host, path=f"{user.name}/alpine", tag=image_tag
-            )
-        )
+        image = f"{registry_host}/{user.name}/alpine:{image_tag}"
 
         with pytest.raises(JobException, match="is not running"):
-            async with jobs_service.save(job, user, container) as it:
+            async with jobs_service.save(job, user, image) as it:
                 async for chunk in it:
                     pass
 
@@ -314,7 +247,7 @@ class TestJobsService:
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=16,
+            memory_mb=32,
             cpu=0.1,
             gpu=None,
             shm=False,
@@ -326,15 +259,11 @@ class TestJobsService:
         await self.wait_for_job_running(job, platform_api_client)
 
         registry_host = "unknown:5000"
-        container = Container(
-            image=ImageReference(
-                domain=registry_host, path=f"{user.name}/alpine", tag=image_tag
-            )
-        )
+        image = f"{registry_host}/{user.name}/alpine:{image_tag}"
         repository = f"{registry_host}/{user.name}/alpine"
 
-        async with jobs_service.save(job, user, container) as it:
-            data = [chunk async for chunk in it]
+        async with jobs_service.save(job, user, image) as it:
+            data = [json.loads(chunk) async for chunk in it]
         assert len(data) == 4, str(data)
 
         assert data[0]["status"] == "CommitStarted"
@@ -360,7 +289,7 @@ class TestJobsService:
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=16,
+            memory_mb=32,
             cpu=0.1,
             gpu=None,
             shm=False,
@@ -372,17 +301,12 @@ class TestJobsService:
         await self.wait_for_job_running(job, platform_api_client)
 
         registry_host = "localhost:5000"
-        container = Container(
-            image=ImageReference(
-                domain=registry_host, path="InvalidImageName", tag=image_tag
-            )
-        )
+        image = f"{registry_host}/InvalidImageName:{image_tag}"
 
         with pytest.raises(
-            JobException,
-            match="invalid reference format: repository name must be lowercase",
+            JobException, match="error: repository name must be lowercase"
         ):
-            async with jobs_service.save(job, user, container) as it:
+            async with jobs_service.save(job, user, image) as it:
                 async for chunk in it:
                     pass
 

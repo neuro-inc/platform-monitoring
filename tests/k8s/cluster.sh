@@ -47,7 +47,6 @@ function k8s::apply_all_configurations {
     kubectl apply -f tests/k8s/platformconfig.yml
     kubectl apply -f tests/k8s/platformapi.yml
     kubectl apply -f tests/k8s/platformnotifications.yml
-    kubectl apply -f tests/k8s/dockerengineapi.yml
     kubectl apply -f tests/k8s/platformcontainerruntime.yml
 }
 

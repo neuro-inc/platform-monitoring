@@ -27,7 +27,6 @@ from platform_monitoring.config import (
     Config,
     ContainerRuntimeConfig,
     CORSConfig,
-    DockerConfig,
     ElasticsearchConfig,
     KubeConfig,
     LogsConfig,
@@ -240,11 +239,6 @@ async def registry_config(request: FixtureRequest, in_minikube: bool) -> Registr
 
 
 @pytest.fixture
-def docker_config() -> DockerConfig:
-    return DockerConfig()
-
-
-@pytest.fixture
 def config_factory(
     auth_config: PlatformAuthConfig,
     platform_api_config: PlatformApiConfig,
@@ -252,7 +246,6 @@ def config_factory(
     es_config: ElasticsearchConfig,
     kube_config: KubeConfig,
     registry_config: RegistryConfig,
-    docker_config: DockerConfig,
     container_runtime_config: ContainerRuntimeConfig,
     cluster_name: str,
 ) -> Callable[..., Config]:
@@ -269,7 +262,6 @@ def config_factory(
             ),
             kube=kube_config,
             registry=registry_config,
-            docker=docker_config,
             container_runtime=container_runtime_config,
             cors=CORSConfig(allowed_origins=["https://neu.ro"]),
         )

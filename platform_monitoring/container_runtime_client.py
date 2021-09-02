@@ -6,11 +6,17 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Union
 import aiohttp
 from yarl import URL
 
+from .utils import asyncgeneratorcontextmanager
+
 
 logger = logging.getLogger(__name__)
 
 
-class ContainerNotFoundError(Exception):
+class ContainerRuntimeError(Exception):
+    pass
+
+
+class ContainerNotFoundError(ContainerRuntimeError):
     def __init__(self, id: str) -> None:
         super().__init__(f"Container {id!r} not found")
 
@@ -49,7 +55,9 @@ class ContainerRuntimeClient:
             if ex.status == 404:
                 logger.warning("Container %r not found", container_id)
                 raise ContainerNotFoundError(container_id)
-            raise
+            raise ContainerRuntimeError(
+                f"Attach container {container_id!r} error: {ex}"
+            )
 
     @asynccontextmanager
     async def exec(
@@ -82,7 +90,7 @@ class ContainerRuntimeClient:
             if ex.status == 404:
                 logger.warning("Container %r not found", container_id)
                 raise ContainerNotFoundError(container_id)
-            raise
+            raise ContainerRuntimeError(f"Exec container {container_id!r} error: {ex}")
 
     async def kill(self, container_id: str) -> None:
         async with self._client.post(
@@ -90,7 +98,33 @@ class ContainerRuntimeClient:
         ) as resp:
             if resp.status == 404:
                 raise ContainerNotFoundError(container_id)
-            resp.raise_for_status()
+            if resp.status >= 400:
+                error = await _get_error(resp)
+                raise ContainerRuntimeError(
+                    f"Kill container {container_id!r} error: {error}"
+                )
+
+    @asyncgeneratorcontextmanager
+    async def commit(
+        self, container_id: str, image: str, username: str = "", password: str = ""
+    ) -> AsyncIterator[bytes]:
+        payload = {"image": image, "push": True}
+        if username and password:
+            payload["auth"] = {"username": username, "password": password}
+
+        async with self._client.post(
+            self._containers_url / _encode_container_id(container_id) / "commit",
+            json=payload,
+        ) as resp:
+            if resp.status == 404:
+                raise ContainerNotFoundError(container_id)
+            if resp.status >= 400:
+                error = await _get_error(resp)
+                raise ContainerRuntimeError(
+                    f"Commit container {container_id!r} error: {error}"
+                )
+            async for chunk in resp.content:
+                yield chunk
 
 
 def _encode_container_id(id: str) -> str:
@@ -99,6 +133,14 @@ def _encode_container_id(id: str) -> str:
 
 def _bool_to_str(value: bool) -> str:
     return str(value).lower()
+
+
+async def _get_error(resp: aiohttp.ClientResponse) -> str:
+    try:
+        payload = await resp.json()
+        return payload["error"]
+    except Exception:
+        return await resp.text()
 
 
 class ContainerRuntimeClientRegistry:
