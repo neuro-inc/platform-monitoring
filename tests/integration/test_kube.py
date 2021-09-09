@@ -28,6 +28,7 @@ from platform_monitoring.logs import (
     PodContainerLogReader,
     S3LogReader,
     S3LogsService,
+    get_first_log_entry_time,
 )
 from platform_monitoring.utils import parse_date
 from tests.integration.conftest import ApiAddress, create_local_app_server
@@ -195,6 +196,18 @@ class TestKubeClient:
             assert status.finished_at is None
             first_started_at = status.started_at
 
+            await kube_client.wait_pod_is_terminated(job_pod.name)
+            status = await kube_client.get_container_status(job_pod.name)
+            assert status.can_restart
+            assert not status.is_waiting
+            assert not status.is_running
+            assert status.is_terminated
+            assert status.restart_count == 0
+            assert status.started_at is not None
+            assert status.started_at == first_started_at
+            assert status.finished_at is not None
+            first_finished_at = status.finished_at
+
             await kube_client.wait_container_is_restarted(job_pod.name)
             status = await kube_client.get_container_status(job_pod.name)
             assert status.can_restart
@@ -203,8 +216,9 @@ class TestKubeClient:
             assert not status.is_terminated
             assert status.restart_count == 1
             assert status.started_at is not None
-            assert status.finished_at is None
+            assert status.finished_at is not None
             assert status.started_at != first_started_at
+            assert status.finished_at == first_finished_at
         finally:
             await kube_client.delete_pod(job_pod.name)
 
@@ -283,6 +297,18 @@ class TestKubeClient:
             assert status.finished_at is None
             first_started_at = status.started_at
 
+            await kube_client.wait_pod_is_terminated(job_pod.name)
+            status = await kube_client.get_container_status(job_pod.name)
+            assert status.can_restart
+            assert not status.is_waiting
+            assert not status.is_running
+            assert status.is_terminated
+            assert status.restart_count == 0
+            assert status.started_at is not None
+            assert status.started_at == first_started_at
+            assert status.finished_at is not None
+            first_finished_at = status.finished_at
+
             await kube_client.wait_container_is_restarted(job_pod.name)
             status = await kube_client.get_container_status(job_pod.name)
             assert status.can_restart
@@ -291,8 +317,9 @@ class TestKubeClient:
             assert not status.is_terminated
             assert status.restart_count == 1
             assert status.started_at is not None
-            assert status.finished_at is None
+            assert status.finished_at is not None
             assert status.started_at != first_started_at
+            assert status.finished_at == first_finished_at
         finally:
             await kube_client.delete_pod(job_pod.name)
 
@@ -1322,3 +1349,29 @@ class TestLogReader:
         job_pod: MyPodDescriptor,
     ) -> None:
         await self._test_large_log_reader(kube_client, job_pod, s3_log_service)
+
+    @pytest.mark.asyncio
+    async def test_get_first_log_entry_time(
+        self,
+        kube_client: MyKubeClient,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        pod_name = job_pod.name
+        command = "bash -c 'sleep 5; echo first; sleep 5; echo second'"
+        job_pod.set_command(command)
+        await kube_client.create_pod(job_pod.payload)
+        first_ts = await get_first_log_entry_time(kube_client, pod_name, timeout_s=1)
+        assert first_ts is None
+        await kube_client.wait_pod_is_running(pod_name)
+        first_ts = await get_first_log_entry_time(kube_client, pod_name, timeout_s=1)
+        assert first_ts is None
+        first_ts = await get_first_log_entry_time(kube_client, pod_name, timeout_s=5)
+        assert first_ts is not None
+        await kube_client.wait_pod_is_terminated(pod_name)
+        status = await kube_client.get_container_status(pod_name)
+        assert status.started_at is not None
+        assert status.finished_at is not None
+        assert first_ts > status.started_at
+        assert first_ts < status.finished_at
+        first_ts2 = await get_first_log_entry_time(kube_client, pod_name, timeout_s=1)
+        assert first_ts2 == first_ts

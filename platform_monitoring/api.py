@@ -67,7 +67,12 @@ from .container_runtime_client import (
 from .jobs_service import JobException, JobNotRunningException, JobsService
 from .kube_client import JobError, KubeClient, KubeTelemetry
 from .log_cleanup_poller import LogCleanupPoller
-from .logs import ElasticsearchLogsService, LogsService, S3LogsService
+from .logs import (
+    DEFAULT_ARCHIVE_DELAY,
+    ElasticsearchLogsService,
+    LogsService,
+    S3LogsService,
+)
 from .user import untrusted_user
 from .utils import JobsHelper, KubeHelper, parse_date
 from .validators import (
@@ -163,6 +168,9 @@ class MonitoringApiHandler:
         debug = _get_bool_param(request, "debug", False)
         since_str = request.query.get("since")
         since = parse_date(since_str) if since_str else None
+        archive_delay_s = float(
+            request.query.get("archive_delay", DEFAULT_ARCHIVE_DELAY)
+        )
         job = await self._resolve_job(request, "read")
 
         pod_name = self._kube_helper.get_job_pod_name(job)
@@ -184,6 +192,7 @@ class MonitoringApiHandler:
             since=since,
             timestamps=timestamps,
             debug=debug,
+            archive_delay_s=archive_delay_s,
         ) as it:
             async for chunk in it:
                 await response.write(chunk)

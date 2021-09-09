@@ -250,25 +250,28 @@ class ContainerStatus:
     @property
     def started_at(self) -> Optional[datetime]:
         try:
-            date_str = self._payload["state"]["running"]["startedAt"]
-        except KeyError:
-            try:
+            if self.is_running:
+                date_str = self._payload["state"]["running"]["startedAt"]
+            else:
                 date_str = self._payload["state"]["terminated"]["startedAt"]
                 if not date_str:
                     return None
-            except KeyError:
-                # waiting
-                return None
+        except KeyError:
+            # waiting
+            return None
         return parse_date(date_str)
 
     @property
     def finished_at(self) -> Optional[datetime]:
         try:
-            date_str = self._payload["state"]["terminated"]["finishedAt"]
+            if self.is_terminated:
+                date_str = self._payload["state"]["terminated"]["finishedAt"]
+            else:
+                date_str = self._payload["lastState"]["terminated"]["finishedAt"]
             if not date_str:
                 return None
         except KeyError:
-            # running or waiting
+            # first run
             return None
         return parse_date(date_str)
 
