@@ -24,6 +24,8 @@ from .utils import aclosing, asyncgeneratorcontextmanager, parse_date
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_ARCHIVE_DELAY = 3.0 * 60
+
 error_prefixes = (
     b"rpc error: code =",
     # failed to try resolving symlinks in path "/var/log/pods/xxx.log":
@@ -379,7 +381,7 @@ class LogsService(abc.ABC):
         timestamps: bool = False,
         timeout_s: float = 10.0 * 60,
         interval_s: float = 1.0,
-        archive_delay_s: float = 3.0 * 60,
+        archive_delay_s: float = DEFAULT_ARCHIVE_DELAY,
         debug: bool = False,
     ) -> AsyncIterator[bytes]:
         archive_delay = timedelta(seconds=archive_delay_s)
@@ -405,12 +407,13 @@ class LogsService(abc.ABC):
             read_archive = True
 
         has_archive = False
+        is_finished = False
         if read_archive:
-            last_archived_time = _utcnow()
+            prev_finish = _utcnow()
+            until = start
             while True:
-                old_start = start
                 request_time = _utcnow()
-                until = start or request_time
+                until = until or request_time
                 log_reader = self.get_pod_archive_log_reader(
                     pod_name, since=since, timestamps=timestamps, debug=debug
                 )
@@ -423,31 +426,70 @@ class LogsService(abc.ABC):
                     async for chunk in it:
                         assert log_reader.last_time
                         if log_reader.last_time >= until:
-                            since = until
-                            break
+                            try:
+                                status = await self.get_container_status(pod_name)
+                                start = status.started_at if status.is_running else None
+                            except JobNotFoundException:
+                                start = None
+                            if start is not None:
+                                if start > until:
+                                    until = start
+                                else:
+                                    first = await self.get_first_log_entry_time(
+                                        pod_name, timeout_s=archive_delay_s
+                                    )
+                                    until = first or start
+                                    if log_reader.last_time >= until:
+                                        since = until
+                                        # There is a line in the container logs,
+                                        # and it is already archived. All lines
+                                        # before that line are already read from
+                                        # archive and output. Stop reading from
+                                        # archive and start reading from container.
+                                        break
+                            else:
+                                until = _utcnow()
                         has_archive = True
                         yield chunk
                     else:
+                        # No log line with timestamp >= until is found.
                         if log_reader.last_time:
+                            prev_finish = log_reader.last_time
                             since = log_reader.last_time + datetime.resolution
-                if log_reader.last_time:
-                    last_archived_time = log_reader.last_time
+                        try:
+                            status = await self.get_container_status(pod_name)
+                            start = status.started_at if status.is_running else None
+                            prev_finish = status.finished_at or prev_finish
+                            is_finished = (
+                                status.is_terminated and not status.can_restart
+                            )
+                        except JobNotFoundException:
+                            start = None
+                        if start is not None:
+                            if start > until:
+                                until = start
+                                continue
+                            first = await self.get_first_log_entry_time(
+                                pod_name, timeout_s=archive_delay_s
+                            )
+                            if first is not None:
+                                if first > until:
+                                    until = first
+                                    continue
+                                # Start reading from container.
+                                break
 
-                try:
-                    status = await self.get_container_status(pod_name)
-                    start = status.started_at if status.is_running else None
-                except JobNotFoundException:
-                    start = None
-                if start == old_start:  # Either both None or same time.
-                    if start and last_archived_time > start:
-                        # There is an archived entry from the current
-                        # running container.
+                        if request_time - prev_finish < archive_delay:
+                            until = None
+                            await asyncio.sleep(interval_s)
+                            continue
+                        # Start reading from container.
                         break
-                    if request_time - last_archived_time > archive_delay:
-                        # Last entry from the previous running container was
-                        # archived long time ago.
-                        break
-                await asyncio.sleep(interval_s)
+                # Start reading from container.
+                break
+
+        if is_finished:
+            return
 
         if not has_archive:
             separator = None
@@ -486,6 +528,12 @@ class LogsService(abc.ABC):
                 since = start = status.started_at
         except JobNotFoundException:
             pass
+
+    @abc.abstractmethod
+    async def get_first_log_entry_time(
+        self, pod_name: str, *, timeout_s: float = 2.0 * 60
+    ) -> Optional[datetime]:
+        pass  # pragma: no cover
 
     async def wait_pod_is_running(
         self,
@@ -560,6 +608,13 @@ class BaseLogsService(LogsService):
             since=since,
             timestamps=timestamps,
             debug=debug,
+        )
+
+    async def get_first_log_entry_time(
+        self, pod_name: str, *, timeout_s: float = 2.0 * 60
+    ) -> Optional[datetime]:
+        return await get_first_log_entry_time(
+            self._kube_client, pod_name, timeout_s=timeout_s
         )
 
 
@@ -641,6 +696,43 @@ class S3LogsService(BaseLogsService):
                 await self._s3_client.delete_object(
                     Bucket=self._bucket_name, Key=obj["Key"]
                 )
+
+
+async def get_first_log_entry_time(
+    kube_client: KubeClient, pod_name: str, *, timeout_s: float = 60 * 2.0
+) -> Optional[datetime]:
+    """Return the timestamp of the first container log line from Kubernetes.
+
+    Return None if the container is not created yet, or there are no logs yet,
+    or if it takes too long for reading the first timestamp.
+    """
+    time_str = b""
+    try:
+        async with kube_client.create_pod_container_logs_stream(
+            pod_name=pod_name,
+            container_name=pod_name,
+            timestamps=True,
+            read_timeout_s=timeout_s,
+        ) as stream:
+            async with timeout(timeout_s):
+                while True:
+                    chunk = await stream.readany()
+                    if not chunk:
+                        break
+                    pos = chunk.find(b" ")
+                    if pos >= 0:
+                        time_str += chunk[:pos]
+                        break
+                    else:
+                        time_str += chunk
+                else:
+                    return None
+    except (asyncio.TimeoutError, JobNotFoundException):
+        return None
+    try:
+        return parse_date(time_str.decode())
+    except ValueError:
+        return None
 
 
 def _utcnow() -> datetime:
