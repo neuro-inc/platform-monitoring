@@ -21,7 +21,7 @@ install_requires = (
 
 setup(
     name="platform-monitoring",
-    url="https://github.com/neuromation/platform-monitoring",
+    url="https://github.com/neuro-inc/platform-monitoring",
     use_scm_version={
         "git_describe_command": "git describe --dirty --tags --long --match v*.*.*",
     },
