@@ -232,6 +232,10 @@ class ContainerStatus:
         return "terminated" in state if state else False
 
     @property
+    def is_pod_terminated(self) -> bool:
+        return self.is_terminated and not self.can_restart
+
+    @property
     def can_restart(self) -> bool:
         if self._restart_policy == "Never":
             return False

@@ -154,6 +154,7 @@ class TestKubeClient:
         assert not status.is_waiting
         assert not status.is_running
         assert status.is_terminated
+        assert status.is_pod_terminated
         assert status.restart_count == 0
         assert status.started_at is not None
         assert status.finished_at is not None
@@ -202,6 +203,7 @@ class TestKubeClient:
             assert not status.is_waiting
             assert not status.is_running
             assert status.is_terminated
+            assert not status.is_pod_terminated
             assert status.restart_count == 0
             assert status.started_at is not None
             assert status.started_at == first_started_at
@@ -256,6 +258,7 @@ class TestKubeClient:
         assert not status.is_waiting
         assert not status.is_running
         assert status.is_terminated
+        assert status.is_pod_terminated
         assert status.restart_count == 0
         assert status.started_at is not None
         assert status.finished_at is not None
@@ -303,6 +306,7 @@ class TestKubeClient:
             assert not status.is_waiting
             assert not status.is_running
             assert status.is_terminated
+            assert not status.is_pod_terminated
             assert status.restart_count == 0
             assert status.started_at is not None
             assert status.started_at == first_started_at
