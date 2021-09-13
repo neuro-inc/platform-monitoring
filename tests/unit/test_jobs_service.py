@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 from typing import Any, Awaitable, Callable, Dict, Optional, Sequence
 from unittest import mock
 
@@ -101,14 +102,14 @@ def cluster() -> Cluster:
             resource_presets=[
                 ResourcePreset(
                     name="cpu",
-                    credits_per_hour=10,
+                    credits_per_hour=Decimal(10),
                     cpu=0.2,
                     memory_mb=100,
                     resource_affinity=["minikube-cpu"],
                 ),
                 ResourcePreset(
                     name="cpu-p",
-                    credits_per_hour=10,
+                    credits_per_hour=Decimal(10),
                     cpu=0.2,
                     memory_mb=100,
                     scheduler_enabled=True,
@@ -116,7 +117,7 @@ def cluster() -> Cluster:
                 ),
                 ResourcePreset(
                     name="gpu",
-                    credits_per_hour=10,
+                    credits_per_hour=Decimal(10),
                     cpu=0.2,
                     memory_mb=100,
                     gpu=1,
