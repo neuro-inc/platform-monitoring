@@ -98,7 +98,7 @@ async def regular_user_factory(
             "POST", f"/api/v1/users/{name}/permissions", headers=headers, json=payload
         ) as p:
             assert p.status == 201
-        return _User(name=user.name, token=token_factory(user.name))  # type: ignore
+        return _User(name=user.name, token=token_factory(user.name))
 
     yield _factory
 
