@@ -21,12 +21,9 @@ ARTIFACTORY_IMAGE = $(ARTIFACTORY_DOCKER_REPO)/$(IMAGE_NAME)
 HELM_ENV ?= dev
 HELM_CHART = platformmonitoringapi
 
-export PIP_EXTRA_INDEX_URL ?= $(shell python pip_extra_index_url.py)
-
 include k8s.mk
 
 setup:
-	@echo "Using extra pip index: $(PIP_EXTRA_INDEX_URL)"
 	pip install -U pip
 	pip install -r requirements/test.txt
 	pip install -e .
@@ -55,7 +52,6 @@ test_integration_minikube: docker_build_tests
 docker_build:
 	python setup.py sdist
 	docker build -f Dockerfile.k8s \
-		--build-arg PIP_EXTRA_INDEX_URL \
 		--build-arg DIST_FILENAME=`python setup.py --fullname`.tar.gz \
 		-t $(IMAGE_NAME):latest .
 
