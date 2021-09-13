@@ -7,6 +7,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
 import pytest
 from async_timeout import timeout
+from neuro_config_client import ConfigClient
 from neuro_sdk import (
     Client as PlatformApiClient,
     Container as JobContainer,
@@ -15,7 +16,6 @@ from neuro_sdk import (
     JobStatus,
     Resources,
 )
-from platform_config_client import ConfigClient
 
 from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
 from platform_monitoring.jobs_service import JobException, JobsService

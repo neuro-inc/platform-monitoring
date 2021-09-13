@@ -15,9 +15,9 @@ from typing import (
 
 import aiohttp
 from elasticsearch.client import logger
+from neuro_config_client import ConfigClient
+from neuro_config_client.models import ResourcePoolType
 from neuro_sdk import JobDescription as Job, Jobs as JobsClient
-from platform_config_client import ConfigClient
-from platform_config_client.models import ResourcePoolType
 
 from .config import KubeConfig
 from .container_runtime_client import (
@@ -213,6 +213,7 @@ class JobsService:
     async def get_available_jobs_counts(self) -> Mapping[str, int]:
         result: Dict[str, int] = {}
         cluster = await self._config_client.get_cluster(self._cluster_name)
+        assert cluster.orchestrator is not None
         resource_requests = await self._get_resource_requests_by_node_pool()
         pool_types = {p.name: p for p in cluster.orchestrator.resource_pool_types}
         for preset in cluster.orchestrator.resource_presets:

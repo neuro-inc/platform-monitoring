@@ -3,13 +3,13 @@ from typing import Any, Awaitable, Callable, Dict, Optional, Sequence
 from unittest import mock
 
 import pytest
-from neuro_sdk import Jobs as JobsClient
-from platform_config_client import (
+from neuro_config_client import (
     Cluster,
     ConfigClient,
     OrchestratorConfig,
     ResourcePoolType,
 )
+from neuro_sdk import Jobs as JobsClient
 from platform_config_client.models import ResourcePreset
 
 from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry

@@ -2,7 +2,7 @@ import asyncio
 from typing import AsyncIterator, Callable
 
 import pytest
-from platform_config_client import ConfigClient
+from neuro_config_client import ConfigClient
 from yarl import URL
 
 from platform_monitoring.api import create_platform_api_client
