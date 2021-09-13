@@ -9,8 +9,8 @@ from neuro_config_client import (
     OrchestratorConfig,
     ResourcePoolType,
 )
+from neuro_config_client.models import ResourcePreset
 from neuro_sdk import Jobs as JobsClient
-from platform_config_client.models import ResourcePreset
 
 from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
 from platform_monitoring.jobs_service import JobsService, NodeNotFoundException
