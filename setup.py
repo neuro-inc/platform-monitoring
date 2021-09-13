@@ -5,8 +5,8 @@ setup_requires = ("setuptools_scm",)
 
 install_requires = (
     "aiohttp==3.7.4.post0",
-    "neuro_auth_client==21.5.17",
-    "platform_config_client==21.5.18",
+    "neuro-auth-client==21.5.17",
+    "neuro-config-client==21.9.14",
     "neuro-sdk==21.7.12a1",
     "aioelasticsearch==0.7.0",
     "docker-image-py==0.1.10",
