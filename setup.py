@@ -9,7 +9,7 @@ install_requires = (
     "neuro-config-client==21.9.14",
     "neuro-sdk==21.7.12a1",
     "aioelasticsearch==0.7.0",
-    "docker-image-py==0.1.10",
+    "docker-image-py==0.1.12",
     "trafaret==2.1.0",
     "neuro-logging==21.8.4.1",
     "aiohttp-cors==0.7.0",
