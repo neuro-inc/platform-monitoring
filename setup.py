@@ -13,7 +13,7 @@ install_requires = (
     "trafaret==2.1.0",
     "neuro-logging==21.8.4.1",
     "aiohttp-cors==0.7.0",
-    "aiobotocore==1.3.0",
+    "aiobotocore==1.4.1",
     "aiozipkin==1.1.0",
     "sentry-sdk==1.3.1",
     "iso8601==0.1.16",
