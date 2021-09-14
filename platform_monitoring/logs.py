@@ -385,110 +385,99 @@ class LogsService(abc.ABC):
         debug: bool = False,
     ) -> AsyncIterator[bytes]:
         archive_delay = timedelta(seconds=archive_delay_s)
+
+        def get_last_start(status: ContainerStatus) -> Optional[datetime]:
+            if status.is_running:
+                return status.started_at
+            elif status.is_pod_terminated:
+                finish = status.finished_at
+                if finish is not None and _utcnow() - finish < archive_delay:
+                    return status.started_at
+            return None
+
         try:
             status = await self.get_container_status(pod_name)
-            if status.is_running:
-                start = status.started_at
-                read_archive = status.restart_count != 0
-            elif (
-                status.is_terminated
-                and not status.can_restart
-                and status.restart_count == 0
-                and status.finished_at is not None
-                and _utcnow() - status.finished_at < archive_delay
-            ):
-                start = status.started_at
-                read_archive = False
-            else:
-                start = None
-                read_archive = True
+            start = get_last_start(status)
         except JobNotFoundException:
             start = None
-            read_archive = True
 
         has_archive = False
-        is_finished = False
-        if read_archive:
-            prev_finish = _utcnow()
-            until = start
-            while True:
-                request_time = _utcnow()
-                until = until or request_time
-                log_reader = self.get_pod_archive_log_reader(
-                    pod_name, since=since, timestamps=timestamps, debug=debug
-                )
-                if debug:
-                    yield (
-                        f"~~~ Archive logs from {since} to {until} "
-                        f"(started at {start})\n"
-                    ).encode()
-                async with log_reader as it:
-                    async for chunk in it:
-                        assert log_reader.last_time
-                        if log_reader.last_time >= until:
-                            try:
-                                status = await self.get_container_status(pod_name)
-                                start = status.started_at if status.is_running else None
-                            except JobNotFoundException:
-                                start = None
-                            if start is not None:
-                                if start > until:
-                                    until = start
-                                else:
-                                    first = await self.get_first_log_entry_time(
-                                        pod_name, timeout_s=archive_delay_s
-                                    )
-                                    until = first or start
-                                    if log_reader.last_time >= until:
-                                        since = until
-                                        # There is a line in the container logs,
-                                        # and it is already archived. All lines
-                                        # before that line are already read from
-                                        # archive and output. Stop reading from
-                                        # archive and start reading from container.
-                                        break
-                            else:
-                                until = _utcnow()
-                        has_archive = True
-                        yield chunk
-                    else:
-                        # No log line with timestamp >= until is found.
-                        if log_reader.last_time:
-                            prev_finish = log_reader.last_time
-                            since = log_reader.last_time + datetime.resolution
+        is_pod_terminated = False
+        prev_finish = _utcnow()
+        until = start
+        while True:
+            request_time = _utcnow()
+            until = until or request_time
+            log_reader = self.get_pod_archive_log_reader(
+                pod_name, since=since, timestamps=timestamps, debug=debug
+            )
+            if debug:
+                yield (
+                    f"~~~ Archive logs from {since} to {until} (started at {start})\n"
+                ).encode()
+            async with log_reader as it:
+                async for chunk in it:
+                    assert log_reader.last_time
+                    if log_reader.last_time >= until:
                         try:
                             status = await self.get_container_status(pod_name)
-                            start = status.started_at if status.is_running else None
-                            prev_finish = status.finished_at or prev_finish
-                            is_finished = (
-                                status.is_terminated and not status.can_restart
-                            )
+                            start = get_last_start(status)
                         except JobNotFoundException:
                             start = None
                         if start is not None:
                             if start > until:
                                 until = start
-                                continue
-                            first = await self.get_first_log_entry_time(
-                                pod_name, timeout_s=archive_delay_s
-                            )
-                            if first is not None:
-                                if first > until:
-                                    until = first
-                                    continue
-                                # Start reading from container.
-                                break
-
-                        if request_time - prev_finish < archive_delay:
-                            until = None
-                            await asyncio.sleep(interval_s)
+                            else:
+                                first = await self.get_first_log_entry_time(
+                                    pod_name, timeout_s=archive_delay_s
+                                )
+                                until = first or start
+                                if log_reader.last_time >= until:
+                                    since = until
+                                    # There is a line in the container logs,
+                                    # and it is already archived. All lines
+                                    # before that line are already read from
+                                    # archive and output. Stop reading from
+                                    # archive and start reading from container.
+                                    break
+                        else:
+                            until = _utcnow()
+                    has_archive = True
+                    yield chunk
+                else:
+                    # No log line with timestamp >= until is found.
+                    if log_reader.last_time:
+                        prev_finish = log_reader.last_time
+                        since = log_reader.last_time + datetime.resolution
+                    try:
+                        status = await self.get_container_status(pod_name)
+                        start = get_last_start(status)
+                        prev_finish = status.finished_at or prev_finish
+                        is_pod_terminated = status.is_pod_terminated
+                    except JobNotFoundException:
+                        start = None
+                    if start is not None:
+                        if start > until:
+                            until = start
                             continue
-                        # Start reading from container.
-                        break
-                # Start reading from container.
-                break
+                        first = await self.get_first_log_entry_time(
+                            pod_name, timeout_s=archive_delay_s
+                        )
+                        if first is not None:
+                            if first > until:
+                                until = first
+                                continue
+                            # Start reading from container.
+                            break
 
-        if is_finished:
+                    if request_time - prev_finish < archive_delay:
+                        until = None
+                        await asyncio.sleep(interval_s)
+                        continue
+            # Start reading from container.
+            break
+
+        if is_pod_terminated and start is None:
             return
 
         if not has_archive:
@@ -549,7 +538,7 @@ class LogsService(abc.ABC):
                 if not status.is_waiting:
                     if status.started_at != old_start:
                         return status
-                    if status.is_terminated and not status.can_restart:
+                    if status.is_pod_terminated:
                         raise JobNotFoundException
                 await asyncio.sleep(interval_s)
 
