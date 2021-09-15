@@ -303,9 +303,7 @@ class TestJobsService:
         registry_host = "localhost:5000"
         image = f"{registry_host}/InvalidImageName:{image_tag}"
 
-        with pytest.raises(
-            JobException, match="error: repository name must be lowercase"
-        ):
+        with pytest.raises(JobException, match="repository name must be lowercase"):
             async with jobs_service.save(job, user, image) as it:
                 async for chunk in it:
                     pass
