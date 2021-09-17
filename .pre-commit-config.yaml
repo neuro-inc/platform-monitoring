@@ -52,3 +52,4 @@ repos:
   rev: v1.6.3
   hooks:
   - id: actionlint-docker
+    args: ["-ignore 'SC2155:'", "-ignore 'SC2186:'"]
