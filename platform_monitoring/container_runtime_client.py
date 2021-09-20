@@ -16,11 +16,11 @@ class ContainerRuntimeError(Exception):
     pass
 
 
-class ContainerRuntimeClientError(Exception):
+class ContainerRuntimeClientError(ContainerRuntimeError):
     pass
 
 
-class ContainerNotFoundError(ContainerRuntimeError):
+class ContainerNotFoundError(ContainerRuntimeClientError):
     def __init__(self, id: str) -> None:
         super().__init__(f"Container {id!r} not found")
 
