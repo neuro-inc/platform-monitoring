@@ -16,7 +16,11 @@ class ContainerRuntimeError(Exception):
     pass
 
 
-class ContainerNotFoundError(ContainerRuntimeError):
+class ContainerRuntimeClientError(ContainerRuntimeError):
+    pass
+
+
+class ContainerNotFoundError(ContainerRuntimeClientError):
     def __init__(self, id: str) -> None:
         super().__init__(f"Container {id!r} not found")
 
@@ -55,6 +59,10 @@ class ContainerRuntimeClient:
             if ex.status == 404:
                 logger.warning("Container %r not found", container_id)
                 raise ContainerNotFoundError(container_id)
+            if 400 <= ex.status < 500:
+                raise ContainerRuntimeClientError(
+                    f"Attach container {container_id!r} client error: {ex}"
+                )
             raise ContainerRuntimeError(
                 f"Attach container {container_id!r} error: {ex}"
             )
@@ -90,6 +98,10 @@ class ContainerRuntimeClient:
             if ex.status == 404:
                 logger.warning("Container %r not found", container_id)
                 raise ContainerNotFoundError(container_id)
+            if 400 <= ex.status < 500:
+                raise ContainerRuntimeClientError(
+                    f"Attach container {container_id!r} client error: {ex}"
+                )
             raise ContainerRuntimeError(f"Exec container {container_id!r} error: {ex}")
 
     async def kill(self, container_id: str) -> None:
@@ -98,7 +110,12 @@ class ContainerRuntimeClient:
         ) as resp:
             if resp.status == 404:
                 raise ContainerNotFoundError(container_id)
-            if resp.status >= 400:
+            if 400 <= resp.status < 500:
+                error = await _get_error(resp)
+                raise ContainerRuntimeClientError(
+                    f"Attach container {container_id!r} client error: {error}"
+                )
+            if resp.status >= 500:
                 error = await _get_error(resp)
                 raise ContainerRuntimeError(
                     f"Kill container {container_id!r} error: {error}"
@@ -118,7 +135,12 @@ class ContainerRuntimeClient:
         ) as resp:
             if resp.status == 404:
                 raise ContainerNotFoundError(container_id)
-            if resp.status >= 400:
+            if 400 <= resp.status < 500:
+                error = await _get_error(resp)
+                raise ContainerRuntimeClientError(
+                    f"Attach container {container_id!r} client error: {error}"
+                )
+            if resp.status >= 500:
                 error = await _get_error(resp)
                 raise ContainerRuntimeError(
                     f"Commit container {container_id!r} error: {error}"
