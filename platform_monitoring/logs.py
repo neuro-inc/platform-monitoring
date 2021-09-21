@@ -240,16 +240,20 @@ class ElasticsearchLogReader(LogReader):
     async def _iterate(self) -> AsyncIterator[bytes]:
         assert self._scan
         async for doc in self._scan:
-            source = doc["_source"]
-            time_str = source["time"]
-            time = parse_date(time_str)
-            if self._since is not None and time < self._since:
-                continue
-            self.last_time = time
-            log = source["log"]
-            if self._timestamps:
-                log = f"{time_str} {log}"
-            yield log.encode()
+            try:
+                source = doc["_source"]
+                time_str = source["time"]
+                time = parse_date(time_str)
+                if self._since is not None and time < self._since:
+                    continue
+                self.last_time = time
+                log = source["log"]
+                if self._timestamps:
+                    log = f"{time_str} {log}"
+                yield log.encode()
+            except Exception:
+                logger.exception("Invalid log entry: %r", doc)
+                raise
 
 
 class S3LogReader(LogReader):
@@ -337,19 +341,23 @@ class S3LogReader(LogReader):
                     line_iterator = response_body.iter_lines()
                 async with aclosing(line_iterator):
                     async for line in line_iterator:
-                        event = json.loads(line)
-                        time_str = event["time"]
-                        time = parse_date(time_str)
-                        if since is not None and time < since:
-                            continue
-                        self.last_time = time
-                        if self._debug and key:
-                            yield f"~~~ From file {basename(key)}\n".encode()
-                            key = ""
-                        log = event["log"]
-                        if self._timestamps:
-                            log = f"{time_str} {log}"
-                        yield log.encode()
+                        try:
+                            event = json.loads(line)
+                            time_str = event["time"]
+                            time = parse_date(time_str)
+                            if since is not None and time < since:
+                                continue
+                            self.last_time = time
+                            if self._debug and key:
+                                yield f"~~~ From file {basename(key)}\n".encode()
+                                key = ""
+                            log = event["log"]
+                            if self._timestamps:
+                                log = f"{time_str} {log}"
+                            yield log.encode()
+                        except Exception:
+                            logger.exception("Invalid log entry: %r", line)
+                            raise
 
     @classmethod
     async def _iter_decompressed_lines(
