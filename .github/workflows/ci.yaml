@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches: [master]
-    tags: [v*.*.*]
+    tags: [v*.*, v*.*.*]
   pull_request:
     branches: [master]
   pull_request_target:
@@ -108,6 +108,15 @@ jobs:
         file: .coverage-integration.xml
         flags: integration
         name: codecov-integration
+    - name: Build Docker image
+      run: make docker_build
+      env:
+        TAG: latest
+    - name: Upload image artifact
+      uses: neuro-inc/upload-image-action@v21.9.2
+      with:
+        image: platformmonitoringapi
+        token: ${{ secrets.GITHUB_TOKEN }}
 
   deploy_dev:
     name: Deploy on dev
