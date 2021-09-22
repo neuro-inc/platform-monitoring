@@ -15,7 +15,7 @@ install_requires = (
     "aiohttp-cors==0.7.0",
     "aiobotocore==1.4.1",
     "aiozipkin==1.1.0",
-    "sentry-sdk==1.3.1",
+    "sentry-sdk==1.4.0",
     "iso8601==0.1.16",
 )
 
