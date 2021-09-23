@@ -79,14 +79,17 @@ async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
 
 @pytest.fixture
 def elasticsearch_log_service(
-    kube_client: MyKubeClient, es_client: Elasticsearch
+    kube_client: MyKubeClient, es_client: Elasticsearch, kube_container_runtime: str
 ) -> ElasticsearchLogsService:
-    return ElasticsearchLogsService(kube_client, es_client)
+    return ElasticsearchLogsService(
+        kube_client, es_client, container_runtime=kube_container_runtime
+    )
 
 
 @pytest.fixture
 def s3_log_service(
     kube_client: MyKubeClient,
+    kube_container_runtime: str,
     s3_client: AioBaseClient,
     s3_logs_bucket: str,
     s3_logs_key_prefix_format: str,
@@ -94,6 +97,7 @@ def s3_log_service(
     return S3LogsService(
         kube_client,
         s3_client,
+        container_runtime=kube_container_runtime,
         bucket_name=s3_logs_bucket,
         key_prefix_format=s3_logs_key_prefix_format,
     )
@@ -737,6 +741,7 @@ class TestLogReader:
         self,
         kube_config: KubeConfig,
         kube_client: MyKubeClient,
+        kube_container_runtime: str,
         job_pod: MyPodDescriptor,
         es_client: Elasticsearch,
     ) -> None:
@@ -757,6 +762,7 @@ class TestLogReader:
         for timestamps in [False, True]:
             await self._check_es_logs(
                 es_client,
+                container_runtime=kube_container_runtime,
                 namespace_name=kube_config.namespace,
                 pod_name=job_pod.name,
                 container_name=job_pod.name,
@@ -769,6 +775,7 @@ class TestLogReader:
         self,
         kube_config: KubeConfig,
         kube_client: MyKubeClient,
+        kube_container_runtime: str,
         job_pod: MyPodDescriptor,
         es_client: Elasticsearch,
     ) -> None:
@@ -784,6 +791,7 @@ class TestLogReader:
 
         await self._check_es_logs(
             es_client,
+            container_runtime=kube_container_runtime,
             namespace_name=kube_config.namespace,
             pod_name=job_pod.name,
             container_name=job_pod.name,
@@ -795,6 +803,7 @@ class TestLogReader:
         self,
         kube_config: KubeConfig,
         kube_client: MyKubeClient,
+        kube_container_runtime: str,
         job_pod: MyPodDescriptor,
         s3_client: AioBaseClient,
         s3_logs_bucket: str,
@@ -817,6 +826,7 @@ class TestLogReader:
         for timestamps in [False, True]:
             await self._check_s3_logs(
                 s3_client,
+                container_runtime=kube_container_runtime,
                 bucket_name=s3_logs_bucket,
                 prefix_format=s3_logs_key_prefix_format,
                 namespace_name=kube_config.namespace,
@@ -831,6 +841,7 @@ class TestLogReader:
         self,
         kube_config: KubeConfig,
         kube_client: MyKubeClient,
+        kube_container_runtime: str,
         job_pod: MyPodDescriptor,
         s3_client: AioBaseClient,
         s3_logs_bucket: str,
@@ -848,6 +859,7 @@ class TestLogReader:
 
         await self._check_s3_logs(
             s3_client,
+            container_runtime=kube_container_runtime,
             bucket_name=s3_logs_bucket,
             prefix_format=s3_logs_key_prefix_format,
             namespace_name=kube_config.namespace,
@@ -861,6 +873,7 @@ class TestLogReader:
         self,
         kube_config: KubeConfig,
         kube_client: MyKubeClient,
+        kube_container_runtime: str,
         job_pod: MyPodDescriptor,
         s3_client: AioBaseClient,
         s3_logs_bucket: str,
@@ -874,6 +887,7 @@ class TestLogReader:
 
         await self._check_s3_logs(
             s3_client,
+            container_runtime=kube_container_runtime,
             bucket_name=s3_logs_bucket,
             prefix_format=s3_logs_key_prefix_format,
             namespace_name=kube_config.namespace,
@@ -885,6 +899,7 @@ class TestLogReader:
         service = S3LogsService(
             kube_client,
             s3_client,
+            container_runtime=kube_container_runtime,
             bucket_name=s3_logs_bucket,
             key_prefix_format=s3_logs_key_prefix_format,
         )
@@ -893,6 +908,7 @@ class TestLogReader:
 
         await self._check_s3_logs(
             s3_client,
+            container_runtime=kube_container_runtime,
             bucket_name=s3_logs_bucket,
             prefix_format=s3_logs_key_prefix_format,
             namespace_name=kube_config.namespace,
@@ -919,6 +935,7 @@ class TestLogReader:
     async def _check_es_logs(
         self,
         es_client: Elasticsearch,
+        container_runtime: str,
         namespace_name: str,
         pod_name: str,
         container_name: str,
@@ -933,6 +950,7 @@ class TestLogReader:
                 while True:
                     log_reader = ElasticsearchLogReader(
                         es_client,
+                        container_runtime=container_runtime,
                         namespace_name=namespace_name,
                         pod_name=pod_name,
                         container_name=container_name,
@@ -950,6 +968,7 @@ class TestLogReader:
     async def _check_s3_logs(
         self,
         s3_client: AioBaseClient,
+        container_runtime: str,
         bucket_name: str,
         prefix_format: str,
         namespace_name: str,
@@ -966,6 +985,7 @@ class TestLogReader:
                 while True:
                     log_reader = S3LogReader(
                         s3_client,
+                        container_runtime=container_runtime,
                         bucket_name=bucket_name,
                         prefix_format=prefix_format,
                         namespace_name=namespace_name,
@@ -984,11 +1004,12 @@ class TestLogReader:
 
     @pytest.mark.asyncio
     async def test_elasticsearch_log_reader_empty(
-        self, es_client: Elasticsearch
+        self, es_client: Elasticsearch, kube_container_runtime: str
     ) -> None:
         namespace_name = pod_name = container_name = str(uuid.uuid4())
         log_reader = ElasticsearchLogReader(
             es_client,
+            container_runtime=kube_container_runtime,
             namespace_name=namespace_name,
             pod_name=pod_name,
             container_name=container_name,
@@ -999,6 +1020,7 @@ class TestLogReader:
     @pytest.mark.asyncio
     async def test_s3_log_reader_empty(
         self,
+        kube_container_runtime: str,
         s3_client: AioBaseClient,
         s3_logs_bucket: str,
         s3_logs_key_prefix_format: str,
@@ -1006,6 +1028,7 @@ class TestLogReader:
         namespace_name = pod_name = container_name = str(uuid.uuid4())
         log_reader = S3LogReader(
             s3_client,
+            container_runtime=kube_container_runtime,
             bucket_name=s3_logs_bucket,
             prefix_format=s3_logs_key_prefix_format,
             namespace_name=namespace_name,

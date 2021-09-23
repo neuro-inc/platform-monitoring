@@ -1079,7 +1079,7 @@ class TestSaveApi:
         jobs_client: JobsClient,
         infinite_job: str,
     ) -> None:
-        invalid_runtime_config = ContainerRuntimeConfig(port=1)
+        invalid_runtime_config = ContainerRuntimeConfig(name="docker", port=1)
         config = config_factory(container_runtime=invalid_runtime_config)
 
         app = await create_app(config)
