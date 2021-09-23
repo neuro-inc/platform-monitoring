@@ -10,6 +10,10 @@ image:
 
 imagePullSecrets: []
 
+containerRuntime:
+  name: docker # containerd, cri-o
+  port: 9000
+
 replicas: 2
 
 platform:

@@ -129,7 +129,9 @@ async def platform_api_config(
 
 
 @pytest.fixture
-async def container_runtime_config(in_minikube: bool) -> ContainerRuntimeConfig:
+async def container_runtime_config(
+    in_minikube: bool, kube_container_runtime: str
+) -> ContainerRuntimeConfig:
     if in_minikube:
         url = URL("http://platform-container-runtime:9000")
     else:
@@ -139,7 +141,7 @@ async def container_runtime_config(in_minikube: bool) -> ContainerRuntimeConfig:
         "platform-container-runtime", url / "api/v1/ping", timeout_s=120
     )
     assert url.port
-    return ContainerRuntimeConfig(port=url.port)
+    return ContainerRuntimeConfig(name=kube_container_runtime, port=url.port)
 
 
 @pytest.fixture

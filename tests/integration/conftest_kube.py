@@ -14,6 +14,7 @@ from platform_monitoring.kube_client import (
     JobNotFoundException,
     KubeClient,
     KubeClientAuthType,
+    Node,
 )
 
 
@@ -229,6 +230,8 @@ async def kube_client(kube_config: KubeConfig) -> AsyncIterator[MyKubeClient]:
         cert_authority_path=None,  # disabled, see `cert_authority_data_pem`
         auth_cert_path=kube_config.auth_cert_path,
         auth_cert_key_path=kube_config.auth_cert_key_path,
+        token_path=kube_config.token_path,
+        token=kube_config.token,
         namespace=kube_config.namespace,
         conn_timeout_s=kube_config.client_conn_timeout_s,
         read_timeout_s=kube_config.client_read_timeout_s,
@@ -236,3 +239,17 @@ async def kube_client(kube_config: KubeConfig) -> AsyncIterator[MyKubeClient]:
     )
     async with client:
         yield client
+
+
+@pytest.fixture
+async def _kube_node(kube_client: KubeClient) -> Node:
+    nodes = await kube_client.get_nodes()
+    assert len(nodes) == 1, "Should be exactly one minikube node"
+    return nodes[0]
+
+
+@pytest.fixture
+async def kube_container_runtime(_kube_node: Node) -> str:
+    version = _kube_node.container_runtime_version
+    end = version.find("://")
+    return version[0:end]

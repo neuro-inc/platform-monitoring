@@ -6,7 +6,13 @@ from aiobotocore.client import AioBaseClient
 from aioelasticsearch import Elasticsearch
 
 from platform_monitoring.api import create_logs_service
-from platform_monitoring.config import Config, LogsConfig, LogsStorageType, S3Config
+from platform_monitoring.config import (
+    Config,
+    ContainerRuntimeConfig,
+    LogsConfig,
+    LogsStorageType,
+    S3Config,
+)
 from platform_monitoring.kube_client import KubeClient
 from platform_monitoring.logs import ElasticsearchLogsService, S3LogsService
 
@@ -26,7 +32,7 @@ def config_factory() -> Callable[[LogsStorageType], Config]:
             platform_auth=None,  # type: ignore
             platform_config=None,  # type: ignore
             kube=None,  # type: ignore
-            container_runtime=None,  # type: ignore
+            container_runtime=ContainerRuntimeConfig(name="docker"),
             registry=None,  # type: ignore
             cors=None,  # type: ignore
             logs=LogsConfig(storage_type=storage_type),

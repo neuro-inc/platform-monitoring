@@ -183,6 +183,7 @@ class ElasticsearchLogReader(LogReader):
     def __init__(
         self,
         es_client: Elasticsearch,
+        container_runtime: str,
         namespace_name: str,
         pod_name: str,
         container_name: str,
@@ -190,6 +191,8 @@ class ElasticsearchLogReader(LogReader):
         since: Optional[datetime] = None,
         timestamps: bool = False,
     ) -> None:
+        super().__init__(container_runtime=container_runtime, timestamps=timestamps)
+
         self._es_client = es_client
         self._index = "logstash-*"
         self._doc_type = "fluent-bit"
@@ -197,7 +200,6 @@ class ElasticsearchLogReader(LogReader):
         self._pod_name = pod_name
         self._container_name = container_name
         self._since = since
-        self._timestamps = timestamps
         self._scan: Optional[Scan] = None
         self._iterator: Optional[AsyncIterator[bytes]] = None
 
@@ -248,9 +250,7 @@ class ElasticsearchLogReader(LogReader):
                     continue
                 self.last_time = time
                 log = source["log"]
-                if self._timestamps:
-                    log = f"{time_str} {log}"
-                yield log.encode()
+                yield self.encode_log(time_str, log)
             except Exception:
                 logger.exception("Invalid log entry: %r", doc)
                 raise
@@ -260,6 +260,7 @@ class S3LogReader(LogReader):
     def __init__(
         self,
         s3_client: AioBaseClient,
+        container_runtime: str,
         bucket_name: str,
         prefix_format: str,
         namespace_name: str,
@@ -270,6 +271,8 @@ class S3LogReader(LogReader):
         timestamps: bool = False,
         debug: bool = False,
     ) -> None:
+        super().__init__(container_runtime=container_runtime, timestamps=timestamps)
+
         self._s3_client = s3_client
         self._bucket_name = bucket_name
         self._prefix_format = prefix_format
@@ -278,7 +281,6 @@ class S3LogReader(LogReader):
         self._container_name = container_name
         self._since = since
         self._debug = debug
-        self._timestamps = timestamps
         self._iterator: Optional[AsyncIterator[bytes]] = None
 
     @staticmethod
@@ -352,9 +354,7 @@ class S3LogReader(LogReader):
                                 yield f"~~~ From file {basename(key)}\n".encode()
                                 key = ""
                             log = event["log"]
-                            if self._timestamps:
-                                log = f"{time_str} {log}"
-                            yield log.encode()
+                            yield self.encode_log(time_str, log)
                         except Exception:
                             logger.exception("Invalid log entry: %r", line)
                             raise
@@ -620,9 +620,12 @@ class ElasticsearchLogsService(BaseLogsService):
     #  kube-client and elasticsearch-client (in platform-api it's KubeOrchestrator)
     #  and move there method `get_pod_log_reader`
 
-    def __init__(self, kube_client: KubeClient, es_client: Elasticsearch) -> None:
+    def __init__(
+        self, kube_client: KubeClient, es_client: Elasticsearch, container_runtime: str
+    ) -> None:
         super().__init__(kube_client)
         self._es_client = es_client
+        self._container_runtime = container_runtime
 
     def get_pod_archive_log_reader(
         self,
@@ -634,10 +637,12 @@ class ElasticsearchLogsService(BaseLogsService):
     ) -> LogReader:
         return ElasticsearchLogReader(
             es_client=self._es_client,
+            container_runtime=self._container_runtime,
             namespace_name=self._kube_client.namespace,
             pod_name=pod_name,
             container_name=pod_name,
             since=since,
+            timestamps=timestamps,
         )
 
     async def drop_logs(self, pod_name: str) -> None:
@@ -649,11 +654,13 @@ class S3LogsService(BaseLogsService):
         self,
         kube_client: KubeClient,
         s3_client: AioBaseClient,
+        container_runtime: str,
         bucket_name: str,
         key_prefix_format: str,
     ) -> None:
         super().__init__(kube_client)
         self._s3_client = s3_client
+        self._container_runtime = container_runtime
         self._bucket_name = bucket_name
         self._key_prefix_format = key_prefix_format
 
@@ -667,6 +674,7 @@ class S3LogsService(BaseLogsService):
     ) -> LogReader:
         return S3LogReader(
             s3_client=self._s3_client,
+            container_runtime=self._container_runtime,
             bucket_name=self._bucket_name,
             prefix_format=self._key_prefix_format,
             namespace_name=self._kube_client.namespace,

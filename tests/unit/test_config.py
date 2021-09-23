@@ -47,6 +47,8 @@ def token_path(tmp_path: Path) -> str:
 def environ(cert_authority_path: str, token_path: str) -> Dict[str, Any]:
     return {
         "NP_MONITORING_CLUSTER_NAME": "default",
+        "NP_MONITORING_CONTAINER_RUNTIME_NAME": "docker",
+        "NP_MONITORING_CONTAINER_RUNTIME_PORT": "1234",
         "NP_MONITORING_API_HOST": "0.0.0.0",
         "NP_MONITORING_API_PORT": 8080,
         "NP_MONITORING_PLATFORM_API_URL": "http://platformapi/api/v1",
@@ -105,7 +107,7 @@ def test_create(environ: Dict[str, Any]) -> None:
             kubelet_node_port=12321,
         ),
         registry=RegistryConfig(url=URL("http://testhost:5000")),
-        container_runtime=ContainerRuntimeConfig(),
+        container_runtime=ContainerRuntimeConfig(name="docker", port=1234),
         cors=CORSConfig(["https://domain1.com", "http://do.main"]),
         zipkin=ZipkinConfig(url=URL("https://zipkin:9411")),
         sentry=SentryConfig(dsn=URL("https://sentry"), cluster_name="test"),

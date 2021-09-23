@@ -82,6 +82,9 @@ from .validators import (
 )
 
 
+WS_ATTACH_PROTOCOL = "v2.channels.neu.ro"
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -364,7 +367,7 @@ class MonitoringApiHandler:
 
         job = await self._resolve_job(request, "write")
 
-        response = WebSocketResponse()
+        response = WebSocketResponse(protocols=[WS_ATTACH_PROTOCOL])
 
         async with self._jobs_service.attach(
             job, tty=tty, stdin=stdin, stdout=stdout, stderr=stderr
@@ -393,7 +396,7 @@ class MonitoringApiHandler:
 
         job = await self._resolve_job(request, "write")
 
-        response = WebSocketResponse()
+        response = WebSocketResponse(protocols=[WS_ATTACH_PROTOCOL])
 
         async with self._jobs_service.exec(
             job, cmd=cmd, tty=tty, stdin=stdin, stdout=stdout, stderr=stderr
@@ -596,7 +599,7 @@ async def create_kube_client(
         auth_cert_path=config.auth_cert_path,
         auth_cert_key_path=config.auth_cert_key_path,
         token=config.token,
-        token_path=None,  # TODO (A Yushkovskiy) add support for token_path or drop
+        token_path=config.token_path,
         conn_timeout_s=config.client_conn_timeout_s,
         read_timeout_s=config.client_read_timeout_s,
         conn_pool_size=config.client_conn_pool_size,
@@ -639,7 +642,11 @@ def create_logs_service(
 ) -> LogsService:
     if config.logs.storage_type == LogsStorageType.ELASTICSEARCH:
         assert es_client
-        return ElasticsearchLogsService(kube_client, es_client)
+        return ElasticsearchLogsService(
+            kube_client,
+            es_client,
+            container_runtime=config.container_runtime.name,
+        )
 
     if config.logs.storage_type == LogsStorageType.S3:
         assert config.s3
@@ -647,6 +654,7 @@ def create_logs_service(
         return S3LogsService(
             kube_client,
             s3_client,
+            container_runtime=config.container_runtime.name,
             bucket_name=config.s3.job_logs_bucket_name,
             key_prefix_format=config.s3.job_logs_key_prefix_format,
         )
