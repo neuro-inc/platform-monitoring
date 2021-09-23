@@ -207,6 +207,10 @@ class Node:
     def name(self) -> str:
         return self._payload["metadata"]["name"]
 
+    @property
+    def container_runtime_version(self) -> str:
+        return self._payload["status"]["nodeInfo"]["containerRuntimeVersion"]
+
     def get_label(self, key: str) -> Optional[str]:
         return self._payload["metadata"].get("labels", {}).get(key)
 
@@ -391,6 +395,9 @@ class KubeClient:
     def _nodes_url(self) -> str:
         return f"{self._api_v1_url}/nodes"
 
+    def _generate_node_url(self, name: str) -> str:
+        return f"{self._nodes_url}/{name}"
+
     def _generate_namespace_url(self, namespace_name: str) -> str:
         return f"{self._api_v1_url}/namespaces/{namespace_name}"
 
@@ -564,6 +571,14 @@ class KubeClient:
             payload = await response.json()
             self._assert_resource_kind("PodList", payload)
             return [Pod(p) for p in payload["items"]]
+
+    async def get_node(self, name: str) -> Node:
+        assert self._client
+        async with self._client.get(self._generate_node_url(name)) as response:
+            await self._check_response_status(response)
+            payload = await response.json()
+            self._assert_resource_kind("Node", payload)
+            return Node(payload)
 
     async def get_nodes(self, label_selector: str = "") -> Sequence[Node]:
         assert self._client

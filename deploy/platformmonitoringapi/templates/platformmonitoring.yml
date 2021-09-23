@@ -51,6 +51,10 @@ spec:
         env:
         - name: NP_MONITORING_CLUSTER_NAME
           value: {{ .Values.NP_MONITORING_CLUSTER_NAME }}
+        - name: NP_MONITORING_CONTAINER_RUNTIME_NAME
+          value: {{ .Values.containerRuntime.name }}
+        - name: NP_MONITORING_CONTAINER_RUNTIME_PORT
+          value: {{ .Values.containerRuntime.port | quote }}
         - name: NP_MONITORING_PLATFORM_API_TOKEN
 {{- if .Values.platform.token }}
 {{ toYaml .Values.platform.token | indent 10 }}

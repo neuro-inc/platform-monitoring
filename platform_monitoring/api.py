@@ -639,7 +639,11 @@ def create_logs_service(
 ) -> LogsService:
     if config.logs.storage_type == LogsStorageType.ELASTICSEARCH:
         assert es_client
-        return ElasticsearchLogsService(kube_client, es_client)
+        return ElasticsearchLogsService(
+            kube_client,
+            es_client,
+            container_runtime=config.container_runtime.name,
+        )
 
     if config.logs.storage_type == LogsStorageType.S3:
         assert config.s3
@@ -647,6 +651,7 @@ def create_logs_service(
         return S3LogsService(
             kube_client,
             s3_client,
+            container_runtime=config.container_runtime.name,
             bucket_name=config.s3.job_logs_bucket_name,
             key_prefix_format=config.s3.job_logs_key_prefix_format,
         )

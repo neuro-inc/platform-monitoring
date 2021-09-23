@@ -99,6 +99,7 @@ class RegistryConfig:
 
 @dataclass(frozen=True)
 class ContainerRuntimeConfig:
+    name: str
     port: int = 9000
 
 

@@ -156,7 +156,14 @@ class EnvironConfigFactory:
         return RegistryConfig(url=URL(self._environ["NP_MONITORING_REGISTRY_URL"]))
 
     def _create_container_runtime(self) -> ContainerRuntimeConfig:
-        return ContainerRuntimeConfig()
+        return ContainerRuntimeConfig(
+            name=self._environ["NP_MONITORING_CONTAINER_RUNTIME_NAME"],
+            port=int(
+                self._environ.get(
+                    "NP_MONITORING_CONTAINER_RUNTIME_PORT", ContainerRuntimeConfig.port
+                )
+            ),
+        )
 
     def create_cors(self) -> CORSConfig:
         origins: Sequence[str] = CORSConfig.allowed_origins

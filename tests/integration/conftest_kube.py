@@ -14,6 +14,7 @@ from platform_monitoring.kube_client import (
     JobNotFoundException,
     KubeClient,
     KubeClientAuthType,
+    Node,
 )
 
 
@@ -236,3 +237,17 @@ async def kube_client(kube_config: KubeConfig) -> AsyncIterator[MyKubeClient]:
     )
     async with client:
         yield client
+
+
+@pytest.fixture
+async def _kube_node(kube_client: KubeClient) -> Node:
+    nodes = await kube_client.get_nodes()
+    assert len(nodes) == 1, "Should be exactly one minikube node"
+    return nodes[0]
+
+
+@pytest.fixture
+async def kube_container_runtime(_kube_node: Node) -> str:
+    version = _kube_node.container_runtime_version
+    end = version.find("://")
+    return version[0:end]
