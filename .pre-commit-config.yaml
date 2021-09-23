@@ -53,3 +53,11 @@ repos:
   hooks:
   - id: actionlint-docker
     args: ["-ignore", "SC2155:", "-ignore", "SC2086:"]
+- repo: https://github.com/sirosen/check-jsonschema
+  rev: v0.4.1
+  hooks:
+  - id: check-github-workflows
+  - id: check-github-actions
+ci:
+  skip:
+  - actionlint-docker
