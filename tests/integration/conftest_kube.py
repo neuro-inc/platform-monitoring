@@ -230,6 +230,8 @@ async def kube_client(kube_config: KubeConfig) -> AsyncIterator[MyKubeClient]:
         cert_authority_path=None,  # disabled, see `cert_authority_data_pem`
         auth_cert_path=kube_config.auth_cert_path,
         auth_cert_key_path=kube_config.auth_cert_key_path,
+        token_path=kube_config.token_path,
+        token=kube_config.token,
         namespace=kube_config.namespace,
         conn_timeout_s=kube_config.client_conn_timeout_s,
         read_timeout_s=kube_config.client_read_timeout_s,
