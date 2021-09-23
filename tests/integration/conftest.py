@@ -167,9 +167,9 @@ async def es_config(
     request: FixtureRequest, in_minikube: bool, token_factory: Callable[[str], str]
 ) -> AsyncIterator[ElasticsearchConfig]:
     if in_minikube:
-        es_host = "http://elasticsearch-logging.kube-system:9200"
+        es_host = "http://elasticsearch-logging:9200"
     else:
-        es_host = get_service_url("elasticsearch-logging", namespace="kube-system")
+        es_host = get_service_url("elasticsearch-logging")
     async with Elasticsearch(hosts=[es_host]) as client:
         async with timeout(120):
             while True:
