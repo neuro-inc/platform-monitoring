@@ -82,6 +82,9 @@ from .validators import (
 )
 
 
+WS_ATTACH_PROTOCOL = "v2.channels.neu.ro"
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -364,7 +367,7 @@ class MonitoringApiHandler:
 
         job = await self._resolve_job(request, "write")
 
-        response = WebSocketResponse()
+        response = WebSocketResponse(protocols=[WS_ATTACH_PROTOCOL])
 
         async with self._jobs_service.attach(
             job, tty=tty, stdin=stdin, stdout=stdout, stderr=stderr
@@ -393,7 +396,7 @@ class MonitoringApiHandler:
 
         job = await self._resolve_job(request, "write")
 
-        response = WebSocketResponse()
+        response = WebSocketResponse(protocols=[WS_ATTACH_PROTOCOL])
 
         async with self._jobs_service.exec(
             job, cmd=cmd, tty=tty, stdin=stdin, stdout=stdout, stderr=stderr
