@@ -7,8 +7,6 @@ export GKE_PROJECT_ID=light-reality-205619
 
 function minikube::start {
     echo "Starting minikube..."
-    mkdir -p ~/.minikube/files/files
-    cp tests/k8s/files/* ~/.minikube/files/files/
     minikube config set WantUpdateNotification false
     minikube start \
         --kubernetes-version=v1.14.10 \

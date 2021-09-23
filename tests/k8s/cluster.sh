@@ -23,9 +23,6 @@ function k8s::start {
     sudo -E minikube config set WantReportErrorPrompt false
     sudo -E minikube config set WantNoneDriverWarning false
 
-    sudo -E mkdir -p ~/.minikube/files/files
-    sudo -E cp tests/k8s/files/* ~/.minikube/files/files/
-
     sudo -E minikube start \
         --vm-driver=none \
         --kubernetes-version=v1.14.10 \
