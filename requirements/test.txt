@@ -3,5 +3,5 @@ async-generator==1.10
 codecov==2.1.12
 pytest==6.2.5
 pytest-asyncio==0.15.1
-pytest-cov==2.12.1
+pytest-cov==3.0.0
 python-jose==3.3.0
