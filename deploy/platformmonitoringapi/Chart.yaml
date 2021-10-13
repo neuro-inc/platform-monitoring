@@ -1,3 +1,4 @@
+apiVersion: v2
 name: platformmonitoringapi
 description: Deploy platformmonitoringapi
 version: 0.0.1
