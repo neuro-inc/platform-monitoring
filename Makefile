@@ -25,12 +25,11 @@ include k8s.mk
 
 setup:
 	pip install -U pip
-	pip install -r requirements/test.txt
-	pip install -e .
+	pip install -e .[dev]
 	pre-commit install
 
 lint: format
-	mypy platform_monitoring tests setup.py
+	mypy platform_monitoring tests
 
 format:
 ifdef CI_LINT_RUN
@@ -45,20 +44,16 @@ test_unit:
 test_integration:
 	pytest -vv --maxfail=3 --cov=platform_monitoring --cov-report xml:.coverage-integration.xml tests/integration -m "not minikube"
 
-test_integration_minikube: docker_build_tests
-	if [ "$$GITHUB_ACTIONS" = "true" ]; then FLAGS="-i"; else FLAGS="-it"; fi; \
-	kubectl run --restart=Never --image-pull-policy=Never $$FLAGS --rm --image=platformmonitoringapi-tests:latest tests -- pytest -vv --log-cli-level=debug -s tests/integration/ -m minikube
+test_integration_minikube:
+	pytest -vv --log-cli-level=debug tests/integration -m minikube
 
 docker_build:
-	python setup.py sdist
-	docker build -f Dockerfile.k8s \
-		--build-arg DIST_FILENAME=`python setup.py --fullname`.tar.gz \
+	rm -rf build dist
+	pip install -U build
+	python -m build
+	docker build \
+		--build-arg PYTHON_BASE=slim-buster \
 		-t $(IMAGE_NAME):latest .
-
-docker_build_tests:
-	@eval $$(minikube docker-env); \
-	    make docker_build; \
-	    docker build -f tests.Dockerfile -t $(IMAGE_NAME)-tests:latest .
 
 gke_k8s_login:
 	sudo chown circleci:circleci -R $$HOME
