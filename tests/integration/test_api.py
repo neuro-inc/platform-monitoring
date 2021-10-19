@@ -1638,7 +1638,6 @@ class TestKillApi:
 
 
 class TestPortForward:
-    @pytest.mark.minikube
     @pytest.mark.asyncio
     async def test_port_forward_bad_port(
         self,
@@ -1655,7 +1654,6 @@ class TestPortForward:
         async with client.get(url, headers=headers) as response:
             assert response.status == 400, await response.text()
 
-    @pytest.mark.minikube
     @pytest.mark.asyncio
     async def test_port_forward_cannot_connect(
         self,

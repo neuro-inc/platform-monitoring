@@ -207,7 +207,10 @@ spec:
               "secrets": {"url": "http://platformapi/api/v1/secrets"},
               "metrics": {"url": "http://platformapi/api/v1/metrics"},
               "disks": {"url": "http://platformapi/api/v1/disk"},
-              "buckets": {"url": "http://platformapi/api/v1/buckets"},
+              "buckets": {
+                  "url": "http://platformapi/api/v1/buckets",
+                  "disable_creation": false
+              },
               "ingress": {"acme_environment": "staging"}
           }
           EOM
