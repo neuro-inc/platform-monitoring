@@ -414,12 +414,10 @@ class TestKubeClient:
             ):
                 pass
 
+    @pytest.mark.xfail
     @pytest.mark.asyncio
     async def test_create_log_stream_creating(
-        self,
-        kube_config: KubeConfig,
-        kube_client: MyKubeClient,
-        job_pod: MyPodDescriptor,
+        self, kube_client: MyKubeClient, job_pod: MyPodDescriptor
     ) -> None:
         await kube_client.create_pod(job_pod.payload)
 
