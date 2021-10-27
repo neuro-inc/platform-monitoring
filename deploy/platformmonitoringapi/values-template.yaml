@@ -127,7 +127,7 @@ logs:
     # gcp:
     #   serviceAccountKeyBase64:
     #   project: project
-    #   region: us
+    #   location: us
     #   bucket: logs
 
     # azure:
