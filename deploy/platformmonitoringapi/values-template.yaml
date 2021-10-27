@@ -127,13 +127,12 @@ logs:
     # gcp:
     #   serviceAccountKeyBase64:
     #   project: project
-    #   region: us-central1
+    #   region: us
     #   bucket: logs
 
     # azure:
     #   storageAccountName: account_name
     #   storageAccountKey: account_key
-    #   region: eastus
     #   bucket: logs
 
     ## minio is for on_prem clusters which do not have

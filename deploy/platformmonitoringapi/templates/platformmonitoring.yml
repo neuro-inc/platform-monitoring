@@ -139,7 +139,7 @@ spec:
         - name: NP_MONITORING_LOGS_STORAGE_TYPE
           value: s3
         - name: NP_MONITORING_S3_REGION
-          value: {{ .Values.logs.persistence.gcp.region | quote }}
+          value: {{ .Values.logs.persistence.gcp.location | quote }}
         - name: NP_MONITORING_S3_ACCESS_KEY_ID
           value: minio_access_key
         - name: NP_MONITORING_S3_SECRET_ACCESS_KEY
@@ -180,7 +180,7 @@ spec:
         - name: NP_MONITORING_LOGS_STORAGE_TYPE
           value: s3
         - name: NP_MONITORING_S3_REGION
-          value: {{ .Values.logs.persistence.azure.region | quote }}
+          value: minio
         - name: NP_MONITORING_S3_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:
