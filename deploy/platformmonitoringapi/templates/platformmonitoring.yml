@@ -129,6 +129,10 @@ spec:
             secretKeyRef:
               name: {{ include "platform-monitoring.logs.storage.key" . }}
               key: secret_access_key
+        {{- if .Values.logs.persistence.aws.url }}
+        - name: NP_MONITORING_S3_ENDPOINT_URL
+          value: {{ .Values.logs.persistence.aws.url | quote }}
+        {{- end }}
         - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
           value: {{ .Values.logs.persistence.aws.bucket | quote }}
         - name: NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT
