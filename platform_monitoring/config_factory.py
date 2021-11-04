@@ -81,7 +81,7 @@ class EnvironConfigFactory:
             return None
         endpoint_url = self._environ.get("NP_MONITORING_S3_ENDPOINT_URL", "")
         return S3Config(
-            region=self._environ["NP_MONITORING_S3_REGION"],
+            region=self._environ.get("NP_MONITORING_S3_REGION", ""),
             access_key_id=self._environ["NP_MONITORING_S3_ACCESS_KEY_ID"],
             secret_access_key=self._environ["NP_MONITORING_S3_SECRET_ACCESS_KEY"],
             endpoint_url=URL(endpoint_url) if endpoint_url else None,

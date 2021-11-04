@@ -630,8 +630,10 @@ def create_s3_client(config: S3Config) -> AioBaseClient:
         kwargs["aws_secret_access_key"] = config.secret_access_key
     if config.endpoint_url:
         kwargs["endpoint_url"] = str(config.endpoint_url)
+    if config.region:
+        kwargs["region_name"] = config.region
     session = aiobotocore.get_session()
-    return session.create_client("s3", region_name=config.region, **kwargs)
+    return session.create_client("s3", **kwargs)
 
 
 def create_logs_service(

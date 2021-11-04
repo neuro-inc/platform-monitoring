@@ -117,8 +117,6 @@ spec:
         {{- if eq .Values.logs.persistence.type "aws" }}
         - name: NP_MONITORING_LOGS_STORAGE_TYPE
           value: s3
-        - name: NP_MONITORING_S3_REGION
-          value: {{ .Values.logs.persistence.aws.region | quote }}
         - name: NP_MONITORING_S3_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:
@@ -129,6 +127,10 @@ spec:
             secretKeyRef:
               name: {{ include "platform-monitoring.logs.storage.key" . }}
               key: secret_access_key
+        {{- if .Values.logs.persistence.aws.region }}
+        - name: NP_MONITORING_S3_REGION
+          value: {{ .Values.logs.persistence.aws.region | quote }}
+        {{- end }}
         {{- if .Values.logs.persistence.aws.url }}
         - name: NP_MONITORING_S3_ENDPOINT_URL
           value: {{ .Values.logs.persistence.aws.url | quote }}
