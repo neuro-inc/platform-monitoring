@@ -131,9 +131,9 @@ spec:
         - name: NP_MONITORING_S3_REGION
           value: {{ .Values.logs.persistence.aws.region | quote }}
         {{- end }}
-        {{- if .Values.logs.persistence.aws.url }}
+        {{- if .Values.logs.persistence.aws.endpoint }}
         - name: NP_MONITORING_S3_ENDPOINT_URL
-          value: {{ .Values.logs.persistence.aws.url | quote }}
+          value: {{ .Values.logs.persistence.aws.endpoint | quote }}
         {{- end }}
         - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
           value: {{ .Values.logs.persistence.aws.bucket | quote }}
