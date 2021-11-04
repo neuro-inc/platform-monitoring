@@ -119,11 +119,11 @@ logs:
       port: 9200
 
     # aws:
-    #   access_key_id: access_key # optional
-    #   secret_access_key: access_key # optional
+    #   accessKeyId: access_key # optional
+    #   secretAccessKey: access_key # optional
     #   region: us-east-1
     #   bucket: logs
-    #   url: ""
+    #   endpoint: ""
     #   forcePathStyle: false
 
     # gcp:
