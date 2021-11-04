@@ -123,6 +123,8 @@ logs:
     #   secret_access_key: access_key # optional
     #   region: us-east-1
     #   bucket: logs
+    #   endpoint: ""
+    #   forcePathStyle: false
 
     # gcp:
     #   serviceAccountKeyBase64:
