@@ -4,7 +4,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: fluent-bit-config
-  labels: {{ include "platformMonitoring.labels.standard" . | indent 4 }}
+  labels: {{ include "platformMonitoring.labels.standard" . | nindent 4 }}
     service: fluent-bit
 data:
 {{ $config | indent 2 }}
