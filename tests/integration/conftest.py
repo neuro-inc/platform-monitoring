@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any, AsyncIterator, Callable, Iterator
 from uuid import uuid1
 
-import aiobotocore
+import aiobotocore.session
 import aiohttp
 import aiohttp.web
 import pytest
@@ -207,7 +207,7 @@ def s3_config(s3_logs_bucket: str, s3_logs_key_prefix_format: str) -> S3Config:
 
 @pytest.fixture
 async def s3_client(s3_config: S3Config) -> AsyncIterator[AioBaseClient]:
-    session = aiobotocore.get_session()
+    session = aiobotocore.session.get_session()
     async with session.create_client(
         "s3",
         endpoint_url=str(s3_config.endpoint_url),

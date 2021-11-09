@@ -7,7 +7,7 @@ from pathlib import Path
 from tempfile import mktemp
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional, Union
 
-import aiobotocore
+import aiobotocore.session
 import aiohttp
 import aiohttp.hdrs
 import aiohttp.web
@@ -632,7 +632,7 @@ def create_s3_client(config: S3Config) -> AioBaseClient:
         kwargs["endpoint_url"] = str(config.endpoint_url)
     if config.region:
         kwargs["region_name"] = config.region
-    session = aiobotocore.get_session()
+    session = aiobotocore.session.get_session()
     return session.create_client("s3", **kwargs)
 
 
