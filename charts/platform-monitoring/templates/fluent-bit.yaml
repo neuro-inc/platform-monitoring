@@ -3,7 +3,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: fluent-bit-config
+  name: {{ include "platformMonitoring.fluentbit.fullname" . }}
   labels: {{ include "platformMonitoring.labels.standard" . | nindent 4 }}
     service: fluent-bit
 data:
@@ -12,7 +12,7 @@ data:
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: fluent-bit
+  name: {{ include "platformMonitoring.fluentbit.fullname" . }}
   labels: {{ include "platformMonitoring.labels.standard" . | nindent 4 }}
     service: fluent-bit
 spec:
@@ -73,7 +73,7 @@ spec:
       {{- end }}
       - name: config
         configMap:
-          name: fluent-bit-config
+          name: {{ include "platformMonitoring.fluentbit.fullname" . }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

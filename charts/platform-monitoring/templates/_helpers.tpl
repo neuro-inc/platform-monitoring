@@ -15,6 +15,32 @@
 {{- end -}}
 {{- end -}}
 
+{{- define "platformMonitoring.fluentbit.fullname" -}}
+{{- if .Values.fluentbit.fullnameOverride -}}
+{{- .Values.fluentbit.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- $name := default "fluent-bit" .Values.fluentbit.nameOverride -}}
+{{- if contains $name .Release.Name -}}
+{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "platformMonitoring.fluentd.fullname" -}}
+{{- if .Values.fluentd.fullnameOverride -}}
+{{- .Values.fluentd.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- $name := default "fluent-bit" .Values.fluentd.nameOverride -}}
+{{- if contains $name .Release.Name -}}
+{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "platformMonitoring.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" -}}
 {{- end -}}
