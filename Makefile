@@ -1,25 +1,34 @@
-IMAGE_NAME ?= platformmonitoringapi
+AWS_ACCOUNT_ID ?= 771188043543
+AWS_REGION ?= us-east-1
+
+AZURE_RG_NAME ?= dev
+AZURE_ACR_NAME ?= crc570d91c95c6aac0ea80afb1019a0c6f
+
+GITHUB_OWNER ?= neuro-inc
+
 TAG ?= latest
 
-CLOUD_IMAGE_gke   ?= $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)/$(IMAGE_NAME)
-CLOUD_IMAGE_aws   ?= $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com/$(IMAGE_NAME)
-CLOUD_IMAGE_azure ?= $(AZURE_ACR_NAME).azurecr.io/$(IMAGE_NAME)
+IMAGE_REPO_gke    = $(GKE_DOCKER_REGISTRY)/$(GKE_PROJECT_ID)
+IMAGE_REPO_aws    = $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com
+IMAGE_REPO_azure  = $(AZURE_ACR_NAME).azurecr.io
+IMAGE_REPO_github = ghcr.io/$(GITHUB_OWNER)
 
-CLOUD_IMAGE = ${CLOUD_IMAGE_${CLOUD_PROVIDER}}
+IMAGE_REGISTRY ?= aws
+
+IMAGE_NAME      = platformmonitoringapi
+IMAGE_REPO_BASE = $(IMAGE_REPO_$(IMAGE_REGISTRY))
+IMAGE_REPO      = $(IMAGE_REPO_BASE)/$(IMAGE_NAME)
+
+HELM_ENV           ?= dev
+HELM_CHART          = platform-monitoring
+HELM_CHART_VERSION ?= 1.0.0
+HELM_APP_VERSION   ?= 1.0.0
 
 PLATFORMAPI_IMAGE = $(shell cat PLATFORMAPI_IMAGE)
 PLATFORMAUTHAPI_IMAGE = $(shell cat PLATFORMAUTHAPI_IMAGE)
 PLATFORMCONFIG_IMAGE = $(shell cat PLATFORMCONFIG_IMAGE)
 PLATFORMNOTIFICATIONS_IMAGE = $(shell cat PLATFORMNOTIFICATIONS_IMAGE)
 PLATFORMCONTAINERRUNTIME_IMAGE = $(shell cat PLATFORMCONTAINERRUNTIME_IMAGE)
-
-ARTIFACTORY_DOCKER_REPO ?= neuro-docker-local-public.jfrog.io
-ARTIFACTORY_HELM_REPO ?= https://neuro.jfrog.io/artifactory/helm-local-public
-
-ARTIFACTORY_IMAGE = $(ARTIFACTORY_DOCKER_REPO)/$(IMAGE_NAME)
-
-HELM_ENV ?= dev
-HELM_CHART = platformmonitoringapi
 
 include k8s.mk
 
@@ -55,6 +64,13 @@ docker_build:
 		--build-arg PYTHON_BASE=slim-buster \
 		-t $(IMAGE_NAME):latest .
 
+docker_push: docker_build
+	docker tag $(IMAGE_NAME):latest $(IMAGE_REPO):$(TAG)
+	docker push $(IMAGE_REPO):$(TAG)
+
+	docker tag $(IMAGE_NAME):latest $(IMAGE_REPO):latest
+	docker push $(IMAGE_REPO):latest
+
 gke_k8s_login:
 	sudo chown circleci:circleci -R $$HOME
 	@echo $(GKE_ACCT_AUTH) | base64 --decode > $(HOME)//gcloud-service-key.json
@@ -85,46 +101,17 @@ docker_pull_test_images:
 	    docker tag $(PLATFORMNOTIFICATIONS_IMAGE) platformnotifications:latest; \
 	    docker tag $(PLATFORMCONTAINERRUNTIME_IMAGE) platformcontainerruntime:latest
 
-gcr_login:
-	@echo $(GKE_ACCT_AUTH) | base64 --decode | docker login -u _json_key --password-stdin https://gcr.io
-
-docker_push: docker_build
-	docker tag $(IMAGE_NAME):latest $(CLOUD_IMAGE):$(TAG)
-	docker push $(CLOUD_IMAGE):$(TAG)
-
-	docker tag $(IMAGE_NAME):latest $(CLOUD_IMAGE):latest
-	docker push $(CLOUD_IMAGE):latest
-
-artifactory_docker_push: docker_build
-	docker tag $(IMAGE_NAME):latest $(ARTIFACTORY_IMAGE):$(TAG)
-	docker push $(ARTIFACTORY_IMAGE):$(TAG)
-
-helm_install:
-	curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash -s -- -v $(HELM_VERSION)
-	helm plugin install https://github.com/belitre/helm-push-artifactory-plugin --version 1.0.2
-
-_helm_fetch:
-	rm -rf temp_deploy/$(HELM_CHART)
-	mkdir -p temp_deploy/$(HELM_CHART)
-	cp -Rf deploy/$(HELM_CHART) temp_deploy/
-	find temp_deploy/$(HELM_CHART) -type f -name 'values*' -delete
-
-_helm_expand_vars:
-	export IMAGE_REPO=$(ARTIFACTORY_IMAGE); \
+helm_create_chart:
+	export IMAGE_REPO=$(IMAGE_REPO); \
 	export IMAGE_TAG=$(TAG); \
-	export DOCKER_SERVER=$(ARTIFACTORY_DOCKER_REPO); \
-	cat deploy/$(HELM_CHART)/values-template.yaml | envsubst > temp_deploy/$(HELM_CHART)/values.yaml
+	export CHART_VERSION=$(HELM_CHART_VERSION); \
+	export APP_VERSION=$(HELM_APP_VERSION); \
+	VALUES=$$(cat charts/$(HELM_CHART)/values.yaml | envsubst); \
+	echo "$$VALUES" > charts/$(HELM_CHART)/values.yaml; \
+	CHART=$$(cat charts/$(HELM_CHART)/Chart.yaml | envsubst); \
+	echo "$$CHART" > charts/$(HELM_CHART)/Chart.yaml
 
-helm_deploy: _helm_fetch _helm_expand_vars
-	helm upgrade platformmonitoringapi temp_deploy/$(HELM_CHART) \
-		--namespace platform \
-		-f deploy/$(HELM_CHART)/values-$(HELM_ENV)-$(CLOUD_PROVIDER).yaml \
-		--set "image.repository=$(CLOUD_IMAGE)" \
-		--install --wait --timeout 600s
-
-artifactory_helm_push: _helm_fetch _helm_expand_vars
-	helm package --app-version=$(TAG) --version=$(TAG) temp_deploy/$(HELM_CHART)
-	helm push-artifactory $(HELM_CHART)-$(TAG).tgz $(ARTIFACTORY_HELM_REPO) \
-		--username $(ARTIFACTORY_USERNAME) \
-		--password $(ARTIFACTORY_PASSWORD)
-	rm $(HELM_CHART)-$(TAG).tgz
+helm_deploy: helm_create_chart
+	helm upgrade $(HELM_CHART) charts/$(HELM_CHART) \
+		-f charts/$(HELM_CHART)/values-$(HELM_ENV).yaml \
+		--namespace platform --install --wait --timeout 600s

@@ -4,9 +4,8 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: fluent-bit-config
-  labels:
-{{ include "platform-monitoring.labels.standard" . | indent 4 }}
-    component: fluent-bit
+  labels: {{ include "platformMonitoring.labels.standard" . | indent 4 }}
+    service: fluent-bit
 data:
 {{ $config | indent 2 }}
 ---
@@ -14,15 +13,14 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: fluent-bit
-  labels:
-{{ include "platform-monitoring.labels.standard" . | indent 4 }}
-    component: fluent-bit
+  labels: {{ include "platformMonitoring.labels.standard" . | nindent 4 }}
+    service: fluent-bit
 spec:
   selector:
     matchLabels:
-      app: {{ include "platform-monitoring.name" . }}
+      app: {{ include "platformMonitoring.name" . }}
       release: {{ .Release.Name | quote }}
-      component: fluent-bit
+      service: fluent-bit
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
@@ -30,9 +28,9 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ include "platform-monitoring.name" . }}
+        app: {{ include "platformMonitoring.name" . }}
         release: {{ .Release.Name | quote }}
-        component: fluent-bit
+        service: fluent-bit
       annotations:
         checksum/config: {{ $config | sha256sum }}
     spec:

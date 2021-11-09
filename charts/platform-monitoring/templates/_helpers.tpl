@@ -1,19 +1,32 @@
-{{- define "platform-monitoring.name" -}}
+{{- define "platformMonitoring.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "platform-monitoring.chart" -}}
+{{- define "platformMonitoring.fullname" -}}
+{{- if .Values.fullnameOverride -}}
+{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- $name := default .Chart.Name .Values.nameOverride -}}
+{{- if contains $name .Release.Name -}}
+{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "platformMonitoring.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" -}}
 {{- end -}}
 
-{{- define "platform-monitoring.labels.standard" -}}
-app: {{ include "platform-monitoring.name" . }}
-chart: {{ include "platform-monitoring.chart" . }}
+{{- define "platformMonitoring.labels.standard" -}}
+app: {{ include "platformMonitoring.name" . }}
+chart: {{ include "platformMonitoring.chart" . }}
 heritage: {{ .Release.Service | quote }}
 release: {{ .Release.Name | quote }}
 {{- end -}}
 
-{{- define "platform-monitoring.minio.probes" -}}
+{{- define "platformMonitoring.minio.probes" -}}
 livenessProbe:
   httpGet:
     path: /minio/health/live
@@ -40,17 +53,17 @@ readinessProbe:
 {{- end }}
 {{- end -}}
 
-{{- define "platform-monitoring.minio.resources" -}}
+{{- define "platformMonitoring.minio.resources" -}}
 {{- if .Values.minio.resources }}
 resources:
 {{ toYaml .Values.minio.resources | indent 2 }}
 {{- end }}
 {{- end -}}
 
-{{- define "platform-monitoring.logs.storage.s3.keyPrefixFormat" -}}
+{{- define "platformMonitoring.logs.storage.s3.keyPrefixFormat" -}}
 kube.var.log.containers.{pod_name}_{namespace_name}_{container_name}
 {{- end -}}
 
-{{- define "platform-monitoring.logs.storage.key" -}}
-platform-monitoring-logs-storage-key
+{{- define "platformMonitoring.logs.storage.key" -}}
+{{ include "platformMonitoring.fullname" . }}-logs-storage-key
 {{- end -}}

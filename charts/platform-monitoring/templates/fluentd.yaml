@@ -4,8 +4,8 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: fluentd-config
-  labels: {{ include "platform-monitoring.labels.standard" . | nindent 4 }}
-    component: fluentd
+  labels: {{ include "platformMonitoring.labels.standard" . | nindent 4 }}
+    service: fluentd
 data:
 {{ $config | indent 2 }}
 ---
@@ -13,8 +13,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: fluentd
-  labels: {{ include "platform-monitoring.labels.standard" . | nindent 4 }}
-    component: fluentd
+  labels: {{ include "platformMonitoring.labels.standard" . | nindent 4 }}
+    service: fluentd
 spec:
   type: ClusterIP
   clusterIP: None
@@ -22,46 +22,46 @@ spec:
   - port: {{ .Values.fluentd.forwardPort }}
     targetPort: {{ .Values.fluentd.forwardPort }}
   selector:
-    app: {{ include "platform-monitoring.name" . }}
+    app: {{ include "platformMonitoring.name" . }}
     release: {{ .Release.Name | quote }}
-    component: fluentd
+    service: fluentd
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: fluentd-service
-  labels: {{ include "platform-monitoring.labels.standard" . | nindent 4 }}
-    component: fluentd
+  labels: {{ include "platformMonitoring.labels.standard" . | nindent 4 }}
+    service: fluentd
 spec:
   type: ClusterIP
   ports:
   - port: {{ .Values.fluentd.forwardPort }}
     targetPort: {{ .Values.fluentd.forwardPort }}
   selector:
-    app: {{ include "platform-monitoring.name" . }}
+    app: {{ include "platformMonitoring.name" . }}
     release: {{ .Release.Name | quote }}
-    component: fluentd
+    service: fluentd
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: fluentd
-  labels: {{ include "platform-monitoring.labels.standard" . | nindent 4 }}
-    component: fluentd
+  labels: {{ include "platformMonitoring.labels.standard" . | nindent 4 }}
+    service: fluentd
 spec:
   replicas: 1
   serviceName: fluentd
   selector:
     matchLabels:
-      app: {{ include "platform-monitoring.name" . }}
+      app: {{ include "platformMonitoring.name" . }}
       release: {{ .Release.Name | quote }}
-      component: fluentd
+      service: fluentd
   template:
     metadata:
       labels:
-        app: {{ include "platform-monitoring.name" . }}
+        app: {{ include "platformMonitoring.name" . }}
         release: {{ .Release.Name | quote }}
-        component: fluentd
+        service: fluentd
       annotations:
         checksum/config: {{ $config | sha256sum }}
         checksum/logs-secret: {{ include (print $.Template.BasePath "/logs-storage-key-secret.yaml") . | sha256sum }}
@@ -102,12 +102,12 @@ spec:
         - name: S3_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:
-              name: {{ include "platform-monitoring.logs.storage.key" . }}
+              name: {{ include "platformMonitoring.logs.storage.key" . }}
               key: access_key_id
         - name: S3_SECRET_ACCESS_KEY
           valueFrom:
             secretKeyRef:
-              name: {{ include "platform-monitoring.logs.storage.key" . }}
+              name: {{ include "platformMonitoring.logs.storage.key" . }}
               key: secret_access_key
         {{- end }}
 
@@ -133,20 +133,20 @@ spec:
         - name: gcs-credentials
           mountPath: /accounts
           readOnly: true
-{{ include "platform-monitoring.minio.resources" . | indent 8 }}
-{{ include "platform-monitoring.minio.probes" . | indent 8 }}
+{{ include "platformMonitoring.minio.resources" . | indent 8 }}
+{{ include "platformMonitoring.minio.probes" . | indent 8 }}
       {{- end }}
 
       {{- if eq .Values.logs.persistence.type "azure" }}
         - name: S3_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:
-              name: {{ include "platform-monitoring.logs.storage.key" . }}
+              name: {{ include "platformMonitoring.logs.storage.key" . }}
               key: account_name
         - name: S3_SECRET_ACCESS_KEY
           valueFrom:
             secretKeyRef:
-              name: {{ include "platform-monitoring.logs.storage.key" . }}
+              name: {{ include "platformMonitoring.logs.storage.key" . }}
               key: account_key
       - name: minio
         image: {{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}
@@ -157,27 +157,27 @@ spec:
         - name: MINIO_ACCESS_KEY
           valueFrom:
             secretKeyRef:
-              name: {{ include "platform-monitoring.logs.storage.key" . }}
+              name: {{ include "platformMonitoring.logs.storage.key" . }}
               key: account_name
         - name: MINIO_SECRET_KEY
           valueFrom:
             secretKeyRef:
-              name: {{ include "platform-monitoring.logs.storage.key" . }}
+              name: {{ include "platformMonitoring.logs.storage.key" . }}
               key: account_key
-{{ include "platform-monitoring.minio.resources" . | indent 8 }}
-{{ include "platform-monitoring.minio.probes" . | indent 8 }}
+{{ include "platformMonitoring.minio.resources" . | indent 8 }}
+{{ include "platformMonitoring.minio.probes" . | indent 8 }}
       {{- end }}
 
         {{- if eq .Values.logs.persistence.type "minio" }}
         - name: S3_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:
-              name: {{ include "platform-monitoring.logs.storage.key" . }}
+              name: {{ include "platformMonitoring.logs.storage.key" . }}
               key: access_key
         - name: S3_SECRET_ACCESS_KEY
           valueFrom:
             secretKeyRef:
-              name: {{ include "platform-monitoring.logs.storage.key" . }}
+              name: {{ include "platformMonitoring.logs.storage.key" . }}
               key: secret_key
         {{- end }}
 
@@ -189,7 +189,7 @@ spec:
       {{- if eq .Values.logs.persistence.type "gcp" }}
       - name: gcs-credentials
         secret:
-          secretName: {{ include "platform-monitoring.logs.storage.key" . }}
+          secretName: {{ include "platformMonitoring.logs.storage.key" . }}
       {{- end }}
       {{- if not .Values.fluentd.persistence.enabled }}
       - name: fluentd-buffer
