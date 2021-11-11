@@ -37,40 +37,6 @@ spec:
 apiVersion: apps/v1
 kind: ReplicaSet
 metadata:
-  name: platformauthapi
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      service: platformauthapi
-  template:
-    metadata:
-      labels:
-        service: platformauthapi
-    spec:
-      containers:
-      - name: platformauthapi
-        image: platformauthapi:latest
-        imagePullPolicy: Never
-        env:
-        - name: NP_JWT_SECRET
-          value: secret
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: platformauthapi
-spec:
-  type: LoadBalancer
-  ports:
-  - port: 8080
-    targetPort: 8080
-  selector:
-    service: platformauthapi
----
-apiVersion: apps/v1
-kind: ReplicaSet
-metadata:
   name: platformapi
 spec:
   replicas: 1
@@ -116,6 +82,8 @@ spec:
         image: platformapi:latest
         imagePullPolicy: Never
         env:
+        - name: NP_LOG_LEVEL
+          value: INFO
         - name: NP_OAUTH_AUTH_URL
           value: not-important-NP_OAUTH_AUTH_URL
         - name: NP_OAUTH_TOKEN_URL
@@ -145,7 +113,7 @@ spec:
         - name: NP_AUTH_TOKEN
           value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZGVudGl0eSI6ImNvbXB1dGUifQ.IJDlKCfbiuNGZH9Sh6p-CdUL5KxEK5JStqzfDk4-RAA
         - name: NP_ADMIN_URL
-          value: not-important-NP_ADMIN_URL
+          value: http://platformadmin:8080/apis/admin/v1
         - name: NP_API_URL
           value: http://platformapi/api/v1
         - name: NP_PLATFORM_CONFIG_URI
@@ -175,6 +143,8 @@ spec:
         imagePullPolicy: Never
         command: [platform-api-poller]
         env:
+        - name: NP_LOG_LEVEL
+          value: INFO
         - name: NP_AUTH_URL
           value: http://platformauthapi:8080
         - name: NP_AUTH_TOKEN
@@ -183,6 +153,8 @@ spec:
           value: http://platformapi:8080/api/v1
         - name: NP_PLATFORM_CONFIG_URI
           value: http://platformconfig:8080/api/v1
+        - name: NP_PLATFORM_ADMIN_URI
+          value: http://platformadmin:8080/apis/admin/v1
         - name: NP_AUTH_PUBLIC_URL
           value: http://platformauthapi:8080
         - name: NP_AUTH_TOKEN

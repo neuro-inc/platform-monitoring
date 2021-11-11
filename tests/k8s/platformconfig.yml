@@ -38,6 +38,8 @@ spec:
         image: platformconfig:latest
         imagePullPolicy: Never
         env:
+        - name: NP_LOG_LEVEL
+          value: INFO
         - name: NP_API_PORT
           value: "8080"
         - name: NP_PLATFORM_AUTH_URL
@@ -137,85 +139,3 @@ spec:
    - port: 5432
   selector:
    service: platformconfig-postgres
----
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: create-cluster
-spec:
-  template:
-    spec:
-      restartPolicy: Never
-      initContainers:
-      - name: wait-for-platform-config
-        image: curlimages/curl
-        command: [sh]
-        args:
-        - -c
-        - |
-          code=-1
-
-          while [ $code != 0 ]
-          do
-            curl -f "$NP_PLATFORM_CONFIG_URL/healthchecks/liveness"
-            code=$?
-          done
-        env:
-        - name: NP_PLATFORM_CONFIG_URL
-          value: http://platformconfig:8080
-      containers:
-      - name: create-cluster
-        image: curlimages/curl
-        command: [sh]
-        args:
-        - -ec
-        - |
-          curl -vv -X POST \
-            -H "Authorization: Bearer $NP_TOKEN" \
-            -d @- \
-            "$NP_PLATFORM_CONFIG_URL/api/v1/clusters" <<EOM
-          {
-              "name": "default",
-              "orchestrator": {
-                  "is_http_ingress_secure": true,
-                  "job_hostname_template": "{job_id}.jobs.neu.ro",
-                  "job_internal_hostname_template": "{job_id}.default",
-                  "resource_pool_types": [
-                      {
-                          "name": "minikube",
-                          "min_size": 1,
-                          "max_size": 1,
-                          "cpu": 1.0,
-                          "available_cpu": 1.0,
-                          "memory_mb": 1024,
-                          "available_memory_mb": 1024
-                      }
-                  ],
-                  "resource_presets": [
-                      {
-                          "name": "cpu-small",
-                          "credits_per_hour": "0.0",
-                          "cpu": 0.1,
-                          "memory_mb": 100
-                      }
-                  ]
-              },
-              "storage": {"url": "http://platformapi/api/v1/storage"},
-              "blob_storage": {"url": "http://platformapi/api/v1/blob"},
-              "registry": {"url": "http://localhost:5000"},
-              "monitoring": {"url": "http://platformapi/api/v1/jobs"},
-              "secrets": {"url": "http://platformapi/api/v1/secrets"},
-              "metrics": {"url": "http://platformapi/api/v1/metrics"},
-              "disks": {"url": "http://platformapi/api/v1/disk"},
-              "buckets": {
-                  "url": "http://platformapi/api/v1/buckets",
-                  "disable_creation": false
-              },
-              "ingress": {"acme_environment": "staging"}
-          }
-          EOM
-        env:
-        - name: NP_PLATFORM_CONFIG_URL
-          value: http://platformconfig:8080
-        - name: NP_TOKEN
-          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImNsdXN0ZXIifQ.kZG6EyaHMa2gNzrgKQlwVnZ0OZ5mruFZ0xVAbntm-dU

@@ -1,22 +1,14 @@
 from dataclasses import dataclass
-from typing import (
-    AsyncGenerator,
-    AsyncIterator,
-    Awaitable,
-    Callable,
-    Dict,
-    Iterator,
-    Optional,
-)
+from typing import AsyncGenerator, AsyncIterator, Awaitable, Callable, Dict, Iterator
 
 import pytest
 from aiohttp.hdrs import AUTHORIZATION
 from jose import jwt
-from neuro_auth_client import AuthClient, Cluster, Permission, User as AuthClientUser
+from neuro_auth_client import AuthClient, Permission, User as AuthClientUser
 from yarl import URL
 
 from platform_monitoring.config import PlatformAuthConfig
-from tests.integration.conftest import get_service_url, random_str
+from tests.integration.conftest import get_service_url
 
 
 @pytest.fixture(scope="session")
@@ -68,39 +60,6 @@ class _User(AuthClientUser):
     @property
     def headers(self) -> Dict[str, str]:
         return {AUTHORIZATION: f"Bearer {self.token}"}
-
-
-@pytest.fixture
-async def regular_user_factory(
-    auth_client: AuthClient,
-    token_factory: Callable[[str], str],
-    admin_token: str,
-    compute_token: str,
-    cluster_name: str,
-) -> AsyncIterator[Callable[[Optional[str], Optional[str]], Awaitable[_User]]]:
-    default_cluster_name = cluster_name
-
-    async def _factory(
-        name: Optional[str] = None, cluster_name: Optional[str] = None
-    ) -> _User:
-        if not name:
-            name = f"user-{random_str(8)}"
-        if not cluster_name:
-            cluster_name = default_cluster_name
-        user = AuthClientUser(name=name, clusters=[Cluster(name=cluster_name)])
-        await auth_client.add_user(user, token=admin_token)
-        # Grant permissions to the user home directory
-        headers = auth_client._generate_headers(compute_token)
-        payload = [
-            {"uri": f"job://{cluster_name}/{name}", "action": "manage"},
-        ]
-        async with auth_client._request(
-            "POST", f"/api/v1/users/{name}/permissions", headers=headers, json=payload
-        ) as p:
-            assert p.status == 201
-        return _User(name=user.name, token=token_factory(user.name))
-
-    yield _factory
 
 
 @pytest.fixture

@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: platformauthapi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: platformauthapi
+  template:
+    metadata:
+      labels:
+        service: platformauthapi
+    spec:
+      containers:
+      - name: platformauthapi
+        image: platformauthapi:latest
+        imagePullPolicy: Never
+        env:
+        - name: NP_LOG_LEVEL
+          value: INFO
+        - name: NP_JWT_SECRET
+          value: secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: platformauthapi
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8080
+    targetPort: 8080
+  selector:
+    service: platformauthapi

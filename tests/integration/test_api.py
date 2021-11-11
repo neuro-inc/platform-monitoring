@@ -512,7 +512,7 @@ class TestApi:
         client: aiohttp.ClientSession,
         cluster_name: str,
     ) -> None:
-        user = await regular_user_factory(cluster_name="other-cluster")
+        user = await regular_user_factory(cluster_name="default2")
         async with client.get(
             monitoring_api.jobs_capacity_url, headers=user.headers
         ) as resp:

@@ -30,7 +30,9 @@ function minikube::apply_all_configurations {
     kubectl config use-context minikube
     kubectl apply -f tests/k8s/rbac.yml
     kubectl apply -f tests/k8s/logging.yml
+    kubectl apply -f tests/k8s/platformauth.yml
     kubectl apply -f tests/k8s/platformconfig.yml
+    kubectl apply -f tests/k8s/platformadmin.yml
     kubectl apply -f tests/k8s/platformapi.yml
     kubectl apply -f tests/k8s/platformnotifications.yml
     kubectl apply -f tests/k8s/platformcontainerruntime.yml
