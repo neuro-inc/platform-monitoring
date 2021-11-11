@@ -287,11 +287,10 @@ def jobs_client_factory(
 
 @pytest.fixture
 async def jobs_client(
-    regular_user_factory: Callable[..., Awaitable[_User]],
+    regular_user1: _User,
     jobs_client_factory: Callable[[_User], JobsClient],
 ) -> JobsClient:
-    regular_user = await regular_user_factory()
-    return jobs_client_factory(regular_user)
+    return jobs_client_factory(regular_user1)
 
 
 @pytest.fixture
@@ -492,13 +491,12 @@ class TestApi:
     async def test_get_capacity(
         self,
         monitoring_api: MonitoringApiEndpoints,
-        regular_user_factory: Callable[..., Awaitable[_User]],
+        regular_user1: _User,
         client: aiohttp.ClientSession,
     ) -> None:
-        user = await regular_user_factory()
         async with client.get(
             monitoring_api.jobs_capacity_url,
-            headers=user.headers,
+            headers=regular_user1.headers,
         ) as resp:
             assert resp.status == HTTPOk.status_code, await resp.text()
             result = await resp.json()
@@ -512,7 +510,7 @@ class TestApi:
         client: aiohttp.ClientSession,
         cluster_name: str,
     ) -> None:
-        user = await regular_user_factory(cluster_name="other-cluster")
+        user = await regular_user_factory(cluster_name="default2")
         async with client.get(
             monitoring_api.jobs_capacity_url, headers=user.headers
         ) as resp:
@@ -571,14 +569,13 @@ class TestTopApi:
         jobs_client: JobsClient,
         job_name: str,
         named_infinite_job: str,
-        regular_user_factory: Callable[..., Awaitable[_User]],
+        regular_user2: _User,
         share_job: Callable[..., Awaitable[None]],
     ) -> None:
-        user2 = await regular_user_factory()
-        await share_job(jobs_client.user, user2, job_name)
+        await share_job(jobs_client.user, regular_user2, job_name)
 
         url = monitoring_api.generate_top_url(named_infinite_job)
-        async with client.ws_connect(url, headers=user2.headers) as ws:
+        async with client.ws_connect(url, headers=regular_user2.headers) as ws:
             proto = ws._writer.protocol
             assert proto.transport is not None
             proto.transport.close()
@@ -590,29 +587,27 @@ class TestTopApi:
         platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
         job_submit: Dict[str, Any],
-        regular_user_factory: Callable[..., Awaitable[_User]],
+        regular_user1: _User,
+        regular_user2: _User,
     ) -> None:
-        user1 = await regular_user_factory()
-        user2 = await regular_user_factory()
-
         url = platform_api.jobs_base_url
-        async with client.post(url, headers=user1.headers, json=job_submit) as resp:
+        async with client.post(
+            url, headers=regular_user1.headers, json=job_submit
+        ) as resp:
             assert resp.status == HTTPAccepted.status_code
             payload = await resp.json()
             job_id = payload["id"]
 
         url = monitoring_api.generate_top_url(job_id)
         with pytest.raises(WSServerHandshakeError, match="Invalid response status"):
-            async with client.ws_connect(url, headers=user2.headers):
+            async with client.ws_connect(url, headers=regular_user2.headers):
                 pass
 
     @pytest.mark.asyncio
     async def test_top_no_auth_token_provided_unauthorized(
         self,
         monitoring_api: MonitoringApiEndpoints,
-        platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
-        jobs_client: JobsClient,
         infinite_job: str,
     ) -> None:
         url = monitoring_api.generate_top_url(job_id=infinite_job)
@@ -778,26 +773,26 @@ class TestLogApi:
         platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
         job_submit: Dict[str, Any],
-        regular_user_factory: Callable[..., Awaitable[_User]],
+        regular_user1: _User,
+        regular_user2: _User,
         cluster_name: str,
     ) -> None:
-        user1 = await regular_user_factory()
-        user2 = await regular_user_factory()
-
         url = platform_api.jobs_base_url
-        async with client.post(url, headers=user1.headers, json=job_submit) as resp:
+        async with client.post(
+            url, headers=regular_user1.headers, json=job_submit
+        ) as resp:
             assert resp.status == HTTPAccepted.status_code
             payload = await resp.json()
             job_id = payload["id"]
 
         url = monitoring_api.generate_log_url(job_id)
-        async with client.get(url, headers=user2.headers) as resp:
+        async with client.get(url, headers=regular_user2.headers) as resp:
             assert resp.status == HTTPForbidden.status_code
             result = await resp.json()
             assert result == {
                 "missing": [
                     {
-                        "uri": f"job://{cluster_name}/{user1.name}/{job_id}",
+                        "uri": f"job://{cluster_name}/{regular_user1.name}/{job_id}",
                         "action": "read",
                     }
                 ]
@@ -856,25 +851,25 @@ class TestLogApi:
         client: aiohttp.ClientSession,
         job_submit: Dict[str, Any],
         job_name: str,
-        regular_user_factory: Callable[..., Awaitable[_User]],
+        regular_user1: _User,
+        regular_user2: _User,
         share_job: Callable[[_User, _User, str], Awaitable[None]],
     ) -> None:
-        user1 = await regular_user_factory()
-        user2 = await regular_user_factory()
-
         job_submit["name"] = job_name
 
         url = platform_api.jobs_base_url
-        async with client.post(url, headers=user1.headers, json=job_submit) as resp:
+        async with client.post(
+            url, headers=regular_user1.headers, json=job_submit
+        ) as resp:
             assert resp.status == HTTPAccepted.status_code, await resp.text()
             payload = await resp.json()
             job_id = payload["id"]
             assert payload["name"] == job_name
 
-        await share_job(user1, user2, job_name)
+        await share_job(regular_user1, regular_user2, job_name)
 
         url = monitoring_api.generate_log_url(job_id)
-        async with client.get(url, headers=user2.headers) as resp:
+        async with client.get(url, headers=regular_user2.headers) as resp:
             assert resp.status == HTTPOk.status_code
 
     @pytest.mark.asyncio
@@ -969,26 +964,26 @@ class TestSaveApi:
         platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
         job_submit: Dict[str, Any],
-        regular_user_factory: Callable[..., Awaitable[_User]],
+        regular_user1: _User,
+        regular_user2: _User,
         cluster_name: str,
     ) -> None:
-        user1 = await regular_user_factory()
-        user2 = await regular_user_factory()
-
         url = platform_api.jobs_base_url
-        async with client.post(url, headers=user1.headers, json=job_submit) as resp:
+        async with client.post(
+            url, headers=regular_user1.headers, json=job_submit
+        ) as resp:
             assert resp.status == HTTPAccepted.status_code
             payload = await resp.json()
             job_id = payload["id"]
 
         url = monitoring_api.generate_save_url(job_id)
-        async with client.post(url, headers=user2.headers) as resp:
+        async with client.post(url, headers=regular_user2.headers) as resp:
             assert resp.status == HTTPForbidden.status_code
             result = await resp.json()
             assert result == {
                 "missing": [
                     {
-                        "uri": f"job://{cluster_name}/{user1.name}/{job_id}",
+                        "uri": f"job://{cluster_name}/{regular_user1.name}/{job_id}",
                         "action": "write",
                     }
                 ]
@@ -1153,19 +1148,20 @@ class TestSaveApi:
         jobs_client: JobsClient,
         job_name: str,
         named_infinite_job: str,
-        regular_user_factory: Callable[..., Awaitable[_User]],
+        regular_user2: _User,
         share_job: Callable[..., Awaitable[None]],
         config: Config,
     ) -> None:
-        user2 = await regular_user_factory()
-        await share_job(jobs_client.user, user2, job_name, action="write")
+        await share_job(jobs_client.user, regular_user2, job_name, action="write")
 
         url = monitoring_api.generate_save_url(job_id=named_infinite_job)
         repository = f"{config.registry.host}/alpine"
         image = f"{repository}:{named_infinite_job}"
         payload = {"container": {"image": image}}
 
-        async with client.post(url, headers=user2.headers, json=payload) as resp:
+        async with client.post(
+            url, headers=regular_user2.headers, json=payload
+        ) as resp:
             assert resp.status == HTTPOk.status_code, await resp.text()
 
 
@@ -1221,11 +1217,9 @@ class TestAttachApi:
         jobs_client: JobsClient,
         job_submit: Dict[str, Any],
         job_name: str,
-        regular_user_factory: Callable[..., Awaitable[_User]],
+        regular_user2: _User,
         share_job: Callable[..., Awaitable[None]],
     ) -> None:
-        user2 = await regular_user_factory()
-
         command = 'bash -c "for i in {0..9}; do echo $i; sleep 1; done"'
         job_submit["container"]["command"] = command
         job_submit["name"] = job_name
@@ -1239,7 +1233,7 @@ class TestAttachApi:
             job_id = result["id"]
             assert result["name"] == job_name
 
-        await share_job(jobs_client.user, user2, job_name, action="write")
+        await share_job(jobs_client.user, regular_user2, job_name, action="write")
 
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
 
@@ -1247,7 +1241,7 @@ class TestAttachApi:
             job_id=job_id, stdout=True, stderr=True
         )
 
-        async with client.ws_connect(url, headers=user2.headers) as ws:
+        async with client.ws_connect(url, headers=regular_user2.headers) as ws:
             await ws.receive_bytes(timeout=5)  # empty message is sent to stdout
 
             content = []
@@ -1478,11 +1472,10 @@ class TestExecApi:
         jobs_client: JobsClient,
         job_name: str,
         named_infinite_job: str,
-        regular_user_factory: Callable[..., Awaitable[_User]],
+        regular_user2: _User,
         share_job: Callable[..., Awaitable[None]],
     ) -> None:
-        user2 = await regular_user_factory()
-        await share_job(jobs_client.user, user2, job_name, action="write")
+        await share_job(jobs_client.user, regular_user2, job_name, action="write")
 
         url = monitoring_api.generate_exec_url(
             named_infinite_job,
@@ -1492,7 +1485,7 @@ class TestExecApi:
             stdout=True,
             stderr=True,
         )
-        async with client.ws_connect(url, headers=user2.headers) as ws:
+        async with client.ws_connect(url, headers=regular_user2.headers) as ws:
             await ws.receive_bytes(timeout=5)
             data = await ws.receive_bytes()
             assert data == b"\x01abc\n"
@@ -1621,14 +1614,13 @@ class TestKillApi:
         jobs_client: JobsClient,
         job_name: str,
         named_infinite_job: str,
-        regular_user_factory: Callable[..., Awaitable[_User]],
+        regular_user2: _User,
         share_job: Callable[..., Awaitable[None]],
     ) -> None:
-        user2 = await regular_user_factory()
-        await share_job(jobs_client.user, user2, job_name, action="write")
+        await share_job(jobs_client.user, regular_user2, job_name, action="write")
 
         url = monitoring_api.generate_kill_url(named_infinite_job)
-        async with client.post(url, headers=user2.headers) as response:
+        async with client.post(url, headers=regular_user2.headers) as response:
             assert response.status == 204, await response.text()
 
         result = await jobs_client.long_polling_by_job_id(

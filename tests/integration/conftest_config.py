@@ -10,9 +10,8 @@ from platform_monitoring.config import PlatformApiConfig, PlatformConfig
 from tests.integration.conftest import get_service_url
 
 
-@pytest.fixture
-async def cluster_name(platform_api_config: PlatformApiConfig) -> str:
-    await asyncio.wait_for(_wait_for_platform_api_config(platform_api_config), 30)
+@pytest.fixture(scope="session")
+async def cluster_name() -> str:
     return "default"
 
 
@@ -22,7 +21,10 @@ def cluster_token(token_factory: Callable[[str], str]) -> str:
 
 
 @pytest.fixture
-def platform_config_url(in_minikube: bool) -> URL:
+async def platform_config_url(
+    platform_api_config: PlatformApiConfig, in_minikube: bool
+) -> URL:
+    await asyncio.wait_for(_wait_for_platform_api_config(platform_api_config), 30)
     if in_minikube:
         return URL("http://platformconfig.default:8080")
     return URL(get_service_url("platformconfig", namespace="default"))
@@ -49,7 +51,9 @@ async def _wait_for_platform_api_config(
 ) -> None:
     while True:
         try:
-            async with create_platform_api_client(platform_api_config):
+            async with create_platform_api_client(
+                platform_api_config.url, platform_api_config.token
+            ):
                 return
         except Exception:
             pass

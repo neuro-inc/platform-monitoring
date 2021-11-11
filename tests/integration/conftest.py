@@ -16,13 +16,9 @@ from _pytest.fixtures import FixtureRequest
 from aiobotocore.client import AioBaseClient
 from aioelasticsearch import Elasticsearch
 from async_timeout import timeout
-from neuro_sdk import Client as PlatformApiClient
 from yarl import URL
 
-from platform_monitoring.api import (
-    create_elasticsearch_client,
-    create_platform_api_client,
-)
+from platform_monitoring.api import create_elasticsearch_client
 from platform_monitoring.config import (
     Config,
     ContainerRuntimeConfig,
@@ -152,14 +148,6 @@ async def container_runtime_client_registry(
         container_runtime_port=container_runtime_config.port
     ) as registry:
         yield registry
-
-
-@pytest.fixture
-async def platform_api_client(
-    platform_api_config: PlatformApiConfig,
-) -> AsyncIterator[PlatformApiClient]:
-    async with create_platform_api_client(platform_api_config) as client:
-        yield client
 
 
 @pytest.fixture

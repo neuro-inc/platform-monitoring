@@ -17,10 +17,13 @@ from neuro_sdk import (
     Resources,
 )
 
+from platform_monitoring.api import create_platform_api_client
+from platform_monitoring.config import PlatformApiConfig
 from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
 from platform_monitoring.jobs_service import JobException, JobsService
 from platform_monitoring.user import User
 
+from .conftest_auth import _User
 from .conftest_kube import MyKubeClient
 
 
@@ -56,6 +59,27 @@ async def job_factory(
 
 @pytest.mark.usefixtures("cluster_name")
 class TestJobsService:
+    @pytest.fixture
+    def user(self, regular_user1: _User) -> User:
+        return User(name=regular_user1.name, token=regular_user1.token)
+
+    @pytest.fixture
+    def registry_host(self) -> str:
+        return "localhost:5000"
+
+    @pytest.fixture
+    def image_tag(self) -> str:
+        return str(uuid.uuid4())[:8]
+
+    @pytest.fixture
+    async def platform_api_client(
+        self, platform_api_config: PlatformApiConfig, user: User
+    ) -> AsyncIterator[PlatformApiClient]:
+        async with create_platform_api_client(
+            platform_api_config.url, user.token
+        ) as client:
+            yield client
+
     @pytest.fixture
     async def jobs_service(
         self,
@@ -122,18 +146,6 @@ class TestJobsService:
             return job.status == JobStatus.SUCCEEDED
 
         await self.wait_for_job(job, platform_api_client, _condition, *args, **kwargs)
-
-    @pytest.fixture
-    def user(self) -> User:
-        return User(name="compute", token="testtoken")
-
-    @pytest.fixture
-    def registry_host(self) -> str:
-        return "localhost:5000"
-
-    @pytest.fixture
-    def image_tag(self) -> str:
-        return str(uuid.uuid4())[:8]
 
     @pytest.mark.asyncio
     async def test_save_ok(

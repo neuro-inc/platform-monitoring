@@ -25,6 +25,7 @@ HELM_CHART_VERSION ?= 1.0.0
 HELM_APP_VERSION   ?= 1.0.0
 
 PLATFORMAPI_IMAGE = $(shell cat PLATFORMAPI_IMAGE)
+PLATFORMADMIN_IMAGE = $(shell cat PLATFORMADMIN_IMAGE)
 PLATFORMAUTHAPI_IMAGE = $(shell cat PLATFORMAUTHAPI_IMAGE)
 PLATFORMCONFIG_IMAGE = $(shell cat PLATFORMCONFIG_IMAGE)
 PLATFORMNOTIFICATIONS_IMAGE = $(shell cat PLATFORMNOTIFICATIONS_IMAGE)
@@ -91,11 +92,13 @@ azure_k8s_login:
 docker_pull_test_images:
 	@eval $$(minikube docker-env); \
 	    docker pull $(PLATFORMAPI_IMAGE); \
+	    docker pull $(PLATFORMADMIN_IMAGE); \
 	    docker pull $(PLATFORMAUTHAPI_IMAGE); \
 	    docker pull $(PLATFORMCONFIG_IMAGE); \
 	    docker pull $(PLATFORMNOTIFICATIONS_IMAGE); \
 	    docker pull $(PLATFORMCONTAINERRUNTIME_IMAGE); \
 	    docker tag $(PLATFORMAPI_IMAGE) platformapi:latest; \
+	    docker tag $(PLATFORMADMIN_IMAGE) platformadmin:latest; \
 	    docker tag $(PLATFORMAUTHAPI_IMAGE) platformauthapi:latest; \
 	    docker tag $(PLATFORMCONFIG_IMAGE) platformconfig:latest; \
 	    docker tag $(PLATFORMNOTIFICATIONS_IMAGE) platformnotifications:latest; \
