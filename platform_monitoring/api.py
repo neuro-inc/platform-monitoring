@@ -56,7 +56,6 @@ from .config import (
     ElasticsearchConfig,
     KubeConfig,
     LogsStorageType,
-    PlatformApiConfig,
     S3Config,
 )
 from .config_factory import EnvironConfigFactory
@@ -570,13 +569,13 @@ async def create_monitoring_app(config: Config) -> aiohttp.web.Application:
 
 @asynccontextmanager
 async def create_platform_api_client(
-    config: PlatformApiConfig, trace_configs: Optional[List[aiohttp.TraceConfig]] = None
+    url: URL, token: str, trace_configs: Optional[List[aiohttp.TraceConfig]] = None
 ) -> AsyncIterator[PlatformApiClient]:
     tmp_config = Path(mktemp())
     platform_api_factory = PlatformClientFactory(
         tmp_config, trace_configs=trace_configs
     )
-    await platform_api_factory.login_with_token(url=config.url, token=config.token)
+    await platform_api_factory.login_with_token(url=url, token=token)
     client = None
     try:
         client = await platform_api_factory.get()
@@ -712,7 +711,9 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             logger.info("Initializing Platform API client")
             platform_client = await exit_stack.enter_async_context(
                 create_platform_api_client(
-                    config.platform_api, make_tracing_trace_configs(config)
+                    config.platform_api.url,
+                    config.platform_api.token,
+                    make_tracing_trace_configs(config),
                 )
             )
 

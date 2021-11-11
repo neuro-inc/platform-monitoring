@@ -51,7 +51,9 @@ async def _wait_for_platform_api_config(
 ) -> None:
     while True:
         try:
-            async with create_platform_api_client(platform_api_config):
+            async with create_platform_api_client(
+                platform_api_config.url, platform_api_config.token
+            ):
                 return
         except Exception:
             pass
