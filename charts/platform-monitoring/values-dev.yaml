@@ -2,9 +2,9 @@ jobsNamespace: platform-jobs
 
 platform:
   clusterName: default
-  apiUrl: http://platformapi:8080/api/v1
-  authUrl: http://platformauthapi:8080
-  configUrl: http://platformconfig:8080
+  apiUrl: http://platform-api:8080/api/v1
+  authUrl: http://platform-auth:8080
+  configUrl: http://platform-config:8080
   registryUrl: https://registry-dev.neu.ro
   token:
     valueFrom:
