@@ -160,7 +160,10 @@ class MonitoringApiHandler:
             [
                 Permission(
                     uri=f"job://{self._config.cluster_name}/{user.name}", action="read"
-                )
+                ),
+                Permission(
+                    uri=f"cluster://{self._config.cluster_name}/access", action="read"
+                ),
             ],
         )
         result = await self._jobs_service.get_available_jobs_counts()
