@@ -516,12 +516,14 @@ class TestApi:
         ) as resp:
             assert resp.status == HTTPForbidden.status_code, await resp.text()
             result = await resp.json()
-            assert result == {
-                "missing": [
-                    {"uri": f"cluster://{cluster_name}/access", "action": "read"},
-                    {"uri": f"job://{cluster_name}/{user.name}", "action": "read"},
-                ]
-            }
+            assert {
+                "uri": f"job://{cluster_name}/{user.name}",
+                "action": "read",
+            } in result["missing"]
+            assert {
+                "uri": f"cluster://{cluster_name}/access",
+                "action": "read",
+            } in result["missing"]
 
 
 class TestTopApi:
