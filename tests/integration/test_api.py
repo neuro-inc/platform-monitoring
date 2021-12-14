@@ -518,8 +518,8 @@ class TestApi:
             result = await resp.json()
             assert result == {
                 "missing": [
-                    {"uri": f"job://{cluster_name}/{user.name}", "action": "read"},
                     {"uri": f"cluster://{cluster_name}/access", "action": "read"},
+                    {"uri": f"job://{cluster_name}/{user.name}", "action": "read"},
                 ]
             }
 
