@@ -723,7 +723,7 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             logger.info("Initializing Auth client")
             auth_client = await exit_stack.enter_async_context(
                 AuthClient(
-                    config.platform_auth.url,
+                    config.platform_auth.url or None,
                     config.platform_auth.token,
                     make_tracing_trace_configs(config),
                 )
