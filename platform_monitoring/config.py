@@ -19,7 +19,7 @@ class PlatformApiConfig:
 
 @dataclass(frozen=True)
 class PlatformAuthConfig:
-    url: URL
+    url: Optional[URL]
     token: str
 
 

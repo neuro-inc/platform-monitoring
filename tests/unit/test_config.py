@@ -114,6 +114,14 @@ def test_create(environ: Dict[str, Any]) -> None:
     )
 
 
+def test_create_without_auth_url(environ: Dict[str, Any]) -> None:
+    environ["NP_MONITORING_PLATFORM_AUTH_URL"] = "-"
+
+    config = EnvironConfigFactory(environ).create()
+
+    assert config.platform_auth.url is None
+
+
 def test_create_with_kubernetes_labels(environ: Dict[str, Any]) -> None:
     environ["NP_MONITORING_NODE_LABEL_JOB"] = "job"
     environ["NP_MONITORING_NODE_LABEL_NODE_POOL"] = "node-pool"
