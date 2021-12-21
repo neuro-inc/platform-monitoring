@@ -81,15 +81,15 @@ spec:
         - name: NP_MONITORING_K8S_TOKEN_PATH
           value: /var/run/secrets/kubernetes.io/serviceaccount/token
         - name: NP_MONITORING_PLATFORM_API_URL
-          value: {{ .Values.platform.apiUrl }}
+          value: {{ .Values.platform.apiUrl | quote }}
         - name: NP_MONITORING_PLATFORM_AUTH_URL
-          value: {{ .Values.platform.authUrl }}
+          value: {{ .Values.platform.authUrl | quote }}
         - name: NP_MONITORING_PLATFORM_CONFIG_URL
-          value: {{ .Values.platform.configUrl }}
+          value: {{ .Values.platform.configUrl | quote }}
         - name: NP_MONITORING_K8S_NS
           value: {{ .Values.jobsNamespace }}
         - name: NP_MONITORING_REGISTRY_URL
-          value: {{ .Values.platform.registryUrl }}
+          value: {{ .Values.platform.registryUrl | quote }}
         - name: NP_MONITORING_K8S_KUBELET_PORT
           value: {{ .Values.kubeletPort | quote }}
         {{- if .Values.cors.origins }}
