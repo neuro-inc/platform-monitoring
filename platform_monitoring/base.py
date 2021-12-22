@@ -1,8 +1,9 @@
 import time
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, AsyncIterator, Optional
+from typing import Any, Optional
 
 
 class LogReader(ABC):

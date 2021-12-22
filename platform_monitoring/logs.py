@@ -4,9 +4,11 @@ import io
 import json
 import logging
 import zlib
+from collections.abc import AsyncIterator
+from contextlib import AbstractAsyncContextManager
 from datetime import datetime, timedelta, timezone
 from os.path import basename
-from typing import Any, AsyncContextManager, AsyncIterator, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import aiohttp
 from aiobotocore.client import AioBaseClient
@@ -47,7 +49,7 @@ async def filter_out_rpc_error(stream: aiohttp.StreamReader) -> AsyncIterator[by
     _is_line_start = True
     unread_buffer = b""
 
-    async def read_chunk(*, min_line_length: int) -> Tuple[bytes, bool]:
+    async def read_chunk(*, min_line_length: int) -> tuple[bytes, bool]:
         nonlocal _is_line_start, unread_buffer
         chunk = io.BytesIO()
         is_line_start = _is_line_start
@@ -142,12 +144,14 @@ class PodContainerLogReader(LogReader):
         self._timestamps = timestamps
         self._debug = debug
 
-        self._stream_cm: Optional[AsyncContextManager[aiohttp.StreamReader]] = None
+        self._stream_cm: Optional[
+            AbstractAsyncContextManager[aiohttp.StreamReader]
+        ] = None
         self._iterator: Optional[AsyncIterator[bytes]] = None
 
     async def __aenter__(self) -> AsyncIterator[bytes]:
         await self._client.wait_pod_is_not_waiting(self._pod_name)
-        kwargs: Dict[str, Any] = {}
+        kwargs: dict[str, Any] = {}
         if self._client_conn_timeout_s is not None:
             kwargs["conn_timeout_s"] = self._client_conn_timeout_s
         if self._client_read_timeout_s is not None:
@@ -203,7 +207,7 @@ class ElasticsearchLogReader(LogReader):
         self._scan: Optional[Scan] = None
         self._iterator: Optional[AsyncIterator[bytes]] = None
 
-    def _combine_search_query(self) -> Dict[str, Any]:
+    def _combine_search_query(self) -> dict[str, Any]:
         terms = [
             {"term": {"kubernetes.namespace_name.keyword": self._namespace_name}},
             {"term": {"kubernetes.pod_name.keyword": self._pod_name}},
@@ -306,10 +310,10 @@ class S3LogReader(LogReader):
         return self._iterator
 
     @trace
-    async def _load_log_keys(self, since: Optional[datetime]) -> List[str]:
+    async def _load_log_keys(self, since: Optional[datetime]) -> list[str]:
         since_time_str = f"{since:%Y%m%d%H%M}" if since else ""
         paginator = self._s3_client.get_paginator("list_objects_v2")
-        keys: List[Tuple[int, int, str]] = []
+        keys: list[tuple[int, int, str]] = []
         async for page in paginator.paginate(
             Bucket=self._bucket_name, Prefix=self._get_prefix()
         ):

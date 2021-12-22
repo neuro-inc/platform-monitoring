@@ -1,5 +1,5 @@
 import asyncio
-from typing import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable
 
 import pytest
 from neuro_config_client import ConfigClient

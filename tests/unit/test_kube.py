@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Dict, List
+from typing import Any
 from unittest import mock
 
 import aiohttp
@@ -148,7 +148,7 @@ class TestPod:
 
 class TestPodContainerStats:
     def test_from_primitive_no_keys(self) -> None:
-        payload: Dict[str, Any] = {"memory": {}}
+        payload: dict[str, Any] = {"memory": {}}
         stats = PodContainerStats.from_primitive(payload)
         empty_stats = PodContainerStats(cpu=0.0, memory=0.0)
         assert stats == empty_stats
@@ -160,7 +160,7 @@ class TestPodContainerStats:
         assert stats == empty_stats
 
     def test_from_primitive_empty(self) -> None:
-        payload: Dict[str, Any] = {"cpu": {}, "memory": {}}
+        payload: dict[str, Any] = {"cpu": {}, "memory": {}}
         stats = PodContainerStats.from_primitive(payload)
         assert stats == PodContainerStats(cpu=0.0, memory=0.0)
 
@@ -181,7 +181,7 @@ class TestPodContainerStats:
 
 class TestStatsSummary:
     def test_get_pod_container_stats_error_response(self) -> None:
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "kind": "Status",
             "apiVersion": "v1",
             "metadata": {},
@@ -195,7 +195,7 @@ class TestStatsSummary:
             StatsSummary(payload)
 
     def test_get_pod_container_stats_no_pod(self) -> None:
-        payload: Dict[str, Any] = {"pods": []}
+        payload: dict[str, Any] = {"pods": []}
         stats = StatsSummary(payload).get_pod_container_stats(
             "namespace", "pod", "container"
         )
@@ -304,7 +304,7 @@ class TestFilterOutRPCError:
         reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
         it = filter_out_rpc_error(reader)
 
-        async def _read_all() -> List[bytes]:
+        async def _read_all() -> list[bytes]:
             return [chunk async for chunk in it]
 
         async def _feed_raw_chunk(data: bytes) -> None:

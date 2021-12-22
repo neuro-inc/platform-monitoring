@@ -1,17 +1,9 @@
 import asyncio
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Mapping, Sequence
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from functools import reduce
-from typing import (
-    AsyncContextManager,
-    AsyncIterator,
-    Dict,
-    List,
-    Mapping,
-    Optional,
-    Sequence,
-    Tuple,
-)
+from typing import Optional
 
 import aiohttp
 from elasticsearch.client import logger
@@ -75,7 +67,9 @@ class JobsService:
     async def get(self, job_id: str) -> Job:
         return await self._jobs_client.status(job_id)
 
-    def get_jobs_for_log_removal(self) -> AsyncContextManager[AsyncIterator[Job]]:
+    def get_jobs_for_log_removal(
+        self,
+    ) -> AbstractAsyncContextManager[AsyncIterator[Job]]:
         return self._jobs_client.list(
             cluster_name=self._cluster_name,
             _being_dropped=True,
@@ -189,7 +183,7 @@ class JobsService:
 
     async def port_forward(
         self, job: Job, port: int
-    ) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         pod_name = self._kube_helper.get_job_pod_name(job)
         pod = await self._get_running_jobs_pod(pod_name)
         reader, writer = await asyncio.open_connection(pod.pod_ip, port)
@@ -211,7 +205,7 @@ class JobsService:
         return pod
 
     async def get_available_jobs_counts(self) -> Mapping[str, int]:
-        result: Dict[str, int] = {}
+        result: dict[str, int] = {}
         cluster = await self._config_client.get_cluster(self._cluster_name)
         assert cluster.orchestrator is not None
         resource_requests = await self._get_resource_requests_by_node_pool()
@@ -243,8 +237,8 @@ class JobsService:
             result[preset.name] = available_jobs_count
         return result
 
-    async def _get_resource_requests_by_node_pool(self) -> Dict[str, List[Resources]]:
-        result: Dict[str, List[Resources]] = {}
+    async def _get_resource_requests_by_node_pool(self) -> dict[str, list[Resources]]:
+        result: dict[str, list[Resources]] = {}
         pods = await self._kube_client.get_pods(
             label_selector=self._kube_job_label,
             field_selector=",".join(
@@ -274,8 +268,8 @@ class JobsService:
 
     def _group_pods_by_node(
         self, pods: Sequence[Pod]
-    ) -> Dict[Optional[str], List[Pod]]:
-        result: Dict[Optional[str], List[Pod]] = {}
+    ) -> dict[Optional[str], list[Pod]]:
+        result: dict[Optional[str], list[Pod]] = {}
         for pod in pods:
             group = result.get(pod.node_name)
             if not group:

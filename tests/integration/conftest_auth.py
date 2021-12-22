@@ -1,5 +1,5 @@
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator
 from dataclasses import dataclass
-from typing import AsyncGenerator, AsyncIterator, Awaitable, Callable, Dict, Iterator
 
 import pytest
 from aiohttp.hdrs import AUTHORIZATION
@@ -58,7 +58,7 @@ class _User(AuthClientUser):
     token: str = ""
 
     @property
-    def headers(self) -> Dict[str, str]:
+    def headers(self) -> dict[str, str]:
         return {AUTHORIZATION: f"Bearer {self.token}"}
 
 

@@ -1,5 +1,6 @@
+from collections.abc import AsyncIterator, Callable, Sequence
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Callable, Dict, Sequence
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -15,11 +16,11 @@ class TestS3LogReader:
     @pytest.fixture
     def setup_s3_pages(
         self, s3_client: mock.Mock
-    ) -> Callable[[Sequence[Dict[str, Any]]], None]:
-        def _setup(pages: Sequence[Dict[str, Any]]) -> None:
+    ) -> Callable[[Sequence[dict[str, Any]]], None]:
+        def _setup(pages: Sequence[dict[str, Any]]) -> None:
             async def paginate(
                 *args: Any, **kwargs: Any
-            ) -> AsyncIterator[Dict[str, Any]]:
+            ) -> AsyncIterator[dict[str, Any]]:
                 for page in pages:
                     yield page
 
@@ -37,7 +38,7 @@ class TestS3LogReader:
     async def test_keys_sorted_by_time(
         self,
         log_reader: S3LogReader,
-        setup_s3_pages: Callable[[Sequence[Dict[str, Any]]], None],
+        setup_s3_pages: Callable[[Sequence[dict[str, Any]]], None],
     ) -> None:
         setup_s3_pages(
             [

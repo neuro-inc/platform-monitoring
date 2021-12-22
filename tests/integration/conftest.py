@@ -3,9 +3,10 @@ import logging
 import os
 import subprocess
 import time
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Callable, Iterator
+from typing import Any
 from uuid import uuid1
 
 import aiobotocore.session

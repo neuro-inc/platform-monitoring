@@ -1,8 +1,10 @@
 import functools
 import sys
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 from datetime import datetime
 from types import TracebackType
-from typing import Any, AsyncContextManager, Callable, Optional, Type, TypeVar
+from typing import Any, Optional, TypeVar
 
 import iso8601
 from neuro_sdk import JobDescription as Job, JobStatus
@@ -14,7 +16,7 @@ if sys.version_info >= (3, 10):
     from contextlib import aclosing
 else:
 
-    class aclosing(AsyncContextManager[T_co]):
+    class aclosing(AbstractAsyncContextManager[T_co]):
         def __init__(self, thing: T_co):
             self.thing = thing
 
@@ -23,7 +25,7 @@ else:
 
         async def __aexit__(
             self,
-            exc_type: Optional[Type[BaseException]],
+            exc_type: Optional[type[BaseException]],
             exc: Optional[BaseException],
             tb: Optional[TracebackType],
         ) -> None:
@@ -32,9 +34,9 @@ else:
 
 def asyncgeneratorcontextmanager(
     func: Callable[..., T_co]
-) -> Callable[..., AsyncContextManager[T_co]]:
+) -> Callable[..., AbstractAsyncContextManager[T_co]]:
     @functools.wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> AsyncContextManager[T_co]:
+    def wrapper(*args: Any, **kwargs: Any) -> AbstractAsyncContextManager[T_co]:
         return aclosing(func(*args, **kwargs))
 
     return wrapper
