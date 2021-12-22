@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 from yarl import URL
@@ -44,7 +44,7 @@ def token_path(tmp_path: Path) -> str:
 
 
 @pytest.fixture
-def environ(cert_authority_path: str, token_path: str) -> Dict[str, Any]:
+def environ(cert_authority_path: str, token_path: str) -> dict[str, Any]:
     return {
         "NP_MONITORING_CLUSTER_NAME": "default",
         "NP_MONITORING_CONTAINER_RUNTIME_NAME": "docker",
@@ -77,7 +77,7 @@ def environ(cert_authority_path: str, token_path: str) -> Dict[str, Any]:
     }
 
 
-def test_create(environ: Dict[str, Any]) -> None:
+def test_create(environ: dict[str, Any]) -> None:
     config = EnvironConfigFactory(environ).create()
     assert config == Config(
         cluster_name="default",
@@ -114,7 +114,7 @@ def test_create(environ: Dict[str, Any]) -> None:
     )
 
 
-def test_create_without_auth_url(environ: Dict[str, Any]) -> None:
+def test_create_without_auth_url(environ: dict[str, Any]) -> None:
     environ["NP_MONITORING_PLATFORM_AUTH_URL"] = "-"
 
     config = EnvironConfigFactory(environ).create()
@@ -122,7 +122,7 @@ def test_create_without_auth_url(environ: Dict[str, Any]) -> None:
     assert config.platform_auth.url is None
 
 
-def test_create_with_kubernetes_labels(environ: Dict[str, Any]) -> None:
+def test_create_with_kubernetes_labels(environ: dict[str, Any]) -> None:
     environ["NP_MONITORING_NODE_LABEL_JOB"] = "job"
     environ["NP_MONITORING_NODE_LABEL_NODE_POOL"] = "node-pool"
 
@@ -132,7 +132,7 @@ def test_create_with_kubernetes_labels(environ: Dict[str, Any]) -> None:
     assert config.kube.node_pool_label == "node-pool"
 
 
-def test_create_with_s3(environ: Dict[str, Any]) -> None:
+def test_create_with_s3(environ: dict[str, Any]) -> None:
     environ["NP_MONITORING_S3_REGION"] = "us-east-1"
     environ["NP_MONITORING_S3_ACCESS_KEY_ID"] = "access_key"
     environ["NP_MONITORING_S3_SECRET_ACCESS_KEY"] = "secret_access_key"
@@ -157,7 +157,7 @@ def test_create_with_s3(environ: Dict[str, Any]) -> None:
     assert config.s3.endpoint_url == URL("http://minio:9000")
 
 
-def test_create_without_es_and_s3(environ: Dict[str, Any]) -> None:
+def test_create_without_es_and_s3(environ: dict[str, Any]) -> None:
     del environ["NP_MONITORING_ES_HOSTS"]
 
     config = EnvironConfigFactory(environ).create()
@@ -166,7 +166,7 @@ def test_create_without_es_and_s3(environ: Dict[str, Any]) -> None:
     assert config.s3 is None
 
 
-def test_create_with_es_logs(environ: Dict[str, Any]) -> None:
+def test_create_with_es_logs(environ: dict[str, Any]) -> None:
     environ["NP_MONITORING_LOGS_STORAGE_TYPE"] = "elasticsearch"
 
     config = EnvironConfigFactory(environ).create()
@@ -174,7 +174,7 @@ def test_create_with_es_logs(environ: Dict[str, Any]) -> None:
     assert config.logs == LogsConfig(storage_type=LogsStorageType.ELASTICSEARCH)
 
 
-def test_create_with_s3_logs(environ: Dict[str, Any]) -> None:
+def test_create_with_s3_logs(environ: dict[str, Any]) -> None:
     environ["NP_MONITORING_LOGS_STORAGE_TYPE"] = "s3"
 
     config = EnvironConfigFactory(environ).create()
@@ -182,7 +182,7 @@ def test_create_with_s3_logs(environ: Dict[str, Any]) -> None:
     assert config.logs == LogsConfig(storage_type=LogsStorageType.S3)
 
 
-def test_create_with_logs_interval_custom(environ: Dict[str, Any]) -> None:
+def test_create_with_logs_interval_custom(environ: dict[str, Any]) -> None:
     environ["NP_MONITORING_LOGS_CLEANUP_INTERVAL_SEC"] = "10"
 
     config = EnvironConfigFactory(environ).create()

@@ -2,17 +2,18 @@ import asyncio
 import json
 import logging
 import random
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
+from importlib.metadata import version
 from pathlib import Path
 from tempfile import mktemp
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import aiobotocore.session
 import aiohttp
 import aiohttp.hdrs
 import aiohttp.web
 import aiohttp_cors
-import pkg_resources
 from aiobotocore.client import AioBaseClient
 from aioelasticsearch import Elasticsearch
 from aiohttp.client_ws import ClientWebSocketResponse
@@ -88,7 +89,7 @@ logger = logging.getLogger(__name__)
 
 
 class ApiHandler:
-    def register(self, app: aiohttp.web.Application) -> List[AbstractRoute]:
+    def register(self, app: aiohttp.web.Application) -> list[AbstractRoute]:
         return app.add_routes(
             [
                 aiohttp.web.get("/ping", self.handle_ping),
@@ -296,7 +297,7 @@ class MonitoringApiHandler:
             container_name=pod_name,
         )
 
-    def _convert_job_stats_to_ws_message(self, job_stats: JobStats) -> Dict[str, Any]:
+    def _convert_job_stats_to_ws_message(self, job_stats: JobStats) -> dict[str, Any]:
         message = {
             "cpu": job_stats.cpu,
             "memory": job_stats.memory,
@@ -346,7 +347,7 @@ class MonitoringApiHandler:
         finally:
             return response
 
-    def _serialize_chunk(self, chunk: Dict[str, Any], encoding: str = "utf-8") -> bytes:
+    def _serialize_chunk(self, chunk: dict[str, Any], encoding: str = "utf-8") -> bytes:
         chunk_str = json.dumps(chunk) + "\r\n"
         return chunk_str.encode(encoding)
 
@@ -572,7 +573,7 @@ async def create_monitoring_app(config: Config) -> aiohttp.web.Application:
 
 @asynccontextmanager
 async def create_platform_api_client(
-    url: URL, token: str, trace_configs: Optional[List[aiohttp.TraceConfig]] = None
+    url: URL, token: str, trace_configs: Optional[list[aiohttp.TraceConfig]] = None
 ) -> AsyncIterator[PlatformApiClient]:
     tmp_config = Path(mktemp())
     platform_api_factory = PlatformClientFactory(
@@ -590,7 +591,7 @@ async def create_platform_api_client(
 
 @asynccontextmanager
 async def create_kube_client(
-    config: KubeConfig, trace_configs: Optional[List[aiohttp.TraceConfig]] = None
+    config: KubeConfig, trace_configs: Optional[list[aiohttp.TraceConfig]] = None
 ) -> AsyncIterator[KubeClient]:
     client = KubeClient(
         base_url=config.endpoint_url,
@@ -625,7 +626,7 @@ async def create_elasticsearch_client(
 
 
 def create_s3_client(config: S3Config) -> AioBaseClient:
-    kwargs: Dict[str, str] = {}
+    kwargs: dict[str, str] = {}
     if config.access_key_id:
         kwargs["aws_access_key_id"] = config.access_key_id
     if config.secret_access_key:
@@ -686,14 +687,14 @@ def _setup_cors(app: aiohttp.web.Application, config: CORSConfig) -> None:
         cors.add(route)
 
 
-package_version = pkg_resources.get_distribution("platform-monitoring").version
+package_version = version(__package__)
 
 
 async def add_version_to_header(request: Request, response: StreamResponse) -> None:
     response.headers["X-Service-Version"] = f"platform-monitoring/{package_version}"
 
 
-def make_tracing_trace_configs(config: Config) -> List[aiohttp.TraceConfig]:
+def make_tracing_trace_configs(config: Config) -> list[aiohttp.TraceConfig]:
     trace_configs = []
 
     if config.zipkin:
@@ -850,7 +851,7 @@ def main() -> None:  # pragma: no coverage
 
 
 async def check_any_permissions(
-    request: aiohttp.web.Request, permissions: List[Permission]
+    request: aiohttp.web.Request, permissions: list[Permission]
 ) -> None:
     user_name = await check_authorized(request)
     auth_policy = request.config_dict.get(AUTZ_KEY)
@@ -870,7 +871,7 @@ async def check_any_permissions(
         )
 
 
-def _permission_to_primitive(perm: Permission) -> Dict[str, str]:
+def _permission_to_primitive(perm: Permission) -> dict[str, str]:
     return {"uri": perm.uri, "action": perm.action}
 
 

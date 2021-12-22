@@ -1,8 +1,10 @@
 import asyncio
 import re
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import AbstractAsyncContextManager
 from datetime import datetime, timedelta, timezone
-from typing import Any, AsyncContextManager, AsyncIterator, Dict
+from typing import Any
 from unittest import mock
 from uuid import uuid4
 
@@ -44,7 +46,7 @@ def job_pod() -> MyPodDescriptor:
 @pytest.fixture
 async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
     async def _get_pod(request: web.Request) -> web.Response:
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "kind": "Pod",
             "metadata": {"name": "testname"},
             "spec": {
@@ -511,7 +513,9 @@ class TestKubeClient:
 
 class TestLogReader:
     async def _consume_log_reader(
-        self, log_reader: AsyncContextManager[AsyncIterator[bytes]], delay: float = 0
+        self,
+        log_reader: AbstractAsyncContextManager[AsyncIterator[bytes]],
+        delay: float = 0,
     ) -> bytes:
         buffer = bytearray()
         try:

@@ -3,11 +3,12 @@ import enum
 import json
 import logging
 import ssl
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, AsyncIterator, Dict, List, Optional, Sequence
+from typing import Any, Optional
 from urllib.parse import quote_plus, urlsplit
 
 import aiohttp
@@ -100,7 +101,7 @@ class ProxyClient:
 
 
 class Pod:
-    def __init__(self, payload: Dict[str, Any]) -> None:
+    def __init__(self, payload: dict[str, Any]) -> None:
         self._payload = payload
 
     @property
@@ -116,13 +117,13 @@ class Pod:
         return self._payload["spec"].get("restartPolicy") or "Never"
 
     @property
-    def _status_payload(self) -> Dict[str, Any]:
+    def _status_payload(self) -> dict[str, Any]:
         payload = self._payload.get("status")
         if not payload:
             raise ValueError("Missing pod status")
         return payload
 
-    def get_container_status(self, name: str) -> Dict[str, Any]:
+    def get_container_status(self, name: str) -> dict[str, Any]:
         for payload in self._status_payload.get("containerStatuses", []):
             if payload["name"] == name:
                 return payload
@@ -200,7 +201,7 @@ class Pod:
 
 
 class Node:
-    def __init__(self, payload: Dict[str, Any]) -> None:
+    def __init__(self, payload: dict[str, Any]) -> None:
         self._payload = payload
 
     @property
@@ -216,7 +217,7 @@ class Node:
 
 
 class ContainerStatus:
-    def __init__(self, payload: Dict[str, Any], restart_policy: str) -> None:
+    def __init__(self, payload: dict[str, Any], restart_policy: str) -> None:
         self._payload = payload
         self._restart_policy = restart_policy
 
@@ -301,7 +302,7 @@ class KubeClient:
         read_timeout_s: int = 100,
         conn_pool_size: int = 100,
         kubelet_node_port: int = KubeConfig.kubelet_node_port,
-        trace_configs: Optional[List[aiohttp.TraceConfig]] = None,
+        trace_configs: Optional[list[aiohttp.TraceConfig]] = None,
     ) -> None:
         self._base_url = base_url
         self._namespace = namespace
@@ -424,7 +425,7 @@ class KubeClient:
         url = f"{url}/log?container={pod_name}&follow=true"
         return url
 
-    async def _request(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+    async def _request(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         assert self._client, "client is not initialized"
         async with self._client.request(*args, **kwargs) as response:
             await self._check_response_status(response)
@@ -432,7 +433,7 @@ class KubeClient:
             logger.debug("k8s response payload: %s", payload)
             return payload
 
-    async def get_raw_pod(self, pod_name: str) -> Dict[str, Any]:
+    async def get_raw_pod(self, pod_name: str) -> dict[str, Any]:
         url = self._generate_pod_url(pod_name)
         payload = await self._request(method="GET", url=url)
         self._assert_resource_kind(
@@ -443,7 +444,7 @@ class KubeClient:
     async def get_pod(self, pod_name: str) -> Pod:
         return Pod(await self.get_raw_pod(pod_name))
 
-    async def _get_raw_container_state(self, pod_name: str) -> Dict[str, Any]:
+    async def _get_raw_container_state(self, pod_name: str) -> dict[str, Any]:
         pod = await self.get_pod(pod_name)
         container_status = pod.get_container_status(pod_name)
         return container_status.get("state", {})
@@ -604,7 +605,7 @@ class KubeClient:
             raise KubeClientException(payload)
 
     def _assert_resource_kind(
-        self, expected_kind: str, payload: Dict[str, Any], job_id: str = ""
+        self, expected_kind: str, payload: dict[str, Any], job_id: str = ""
     ) -> None:
         kind = payload["kind"]
         if kind == "Status":
@@ -614,7 +615,7 @@ class KubeClient:
             raise ValueError(f"unknown kind: {kind}")
 
     def _raise_status_job_exception(
-        self, pod: Dict[str, Any], job_id: Optional[str]
+        self, pod: dict[str, Any], job_id: Optional[str]
     ) -> None:
         if pod["code"] == 409:
             raise JobError(f"job '{job_id}' already exist")
@@ -640,7 +641,7 @@ class PodContainerStats:
     gpu_memory: Optional[float] = None
 
     @classmethod
-    def from_primitive(cls, payload: Dict[str, Any]) -> "PodContainerStats":
+    def from_primitive(cls, payload: dict[str, Any]) -> "PodContainerStats":
         cpu = payload.get("cpu", {}).get("usageNanoCores", 0) / (10 ** 9)
         memory = payload.get("memory", {}).get("workingSetBytes", 0) / (2 ** 20)  # MB
         gpu_memory = None
@@ -658,19 +659,19 @@ class PodContainerStats:
 
 
 class StatsSummary:
-    def __init__(self, payload: Dict[str, Any]) -> None:
+    def __init__(self, payload: dict[str, Any]) -> None:
         self._validate_payload(payload)
         self._payload = payload
 
-    def _validate_payload(self, payload: Dict[str, Any]) -> None:
+    def _validate_payload(self, payload: dict[str, Any]) -> None:
         if "pods" not in payload:
             err_msg = "Invalid stats summary response"
             logging.error(err_msg + f": `{payload}`")
             raise JobError(err_msg)
 
     def _find_pod_in_stats_summary(
-        self, stats_summary: Dict[str, Any], namespace_name: str, name: str
-    ) -> Dict[str, Any]:
+        self, stats_summary: dict[str, Any], namespace_name: str, name: str
+    ) -> dict[str, Any]:
         for pod_stats in stats_summary["pods"]:
             ref = pod_stats["podRef"]
             if ref["namespace"] == namespace_name and ref["name"] == name:
@@ -678,8 +679,8 @@ class StatsSummary:
         return {}
 
     def _find_container_in_pod_stats(
-        self, pod_stats: Dict[str, Any], name: str
-    ) -> Dict[str, Any]:
+        self, pod_stats: dict[str, Any], name: str
+    ) -> dict[str, Any]:
         containers = pod_stats.get("containers") or []
         for container_stats in containers:
             if container_stats["name"] == name:

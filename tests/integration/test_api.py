@@ -4,8 +4,9 @@ import re
 import signal
 import textwrap
 import time
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Union
+from typing import Any, Union
 from unittest import mock
 from uuid import uuid4
 
@@ -211,10 +212,10 @@ class JobsClient:
         return self._user
 
     @property
-    def headers(self) -> Dict[str, str]:
+    def headers(self) -> dict[str, str]:
         return self._user.headers
 
-    async def get_job_by_id(self, job_id: str) -> Dict[str, Any]:
+    async def get_job_by_id(self, job_id: str) -> dict[str, Any]:
         url = self._platform_api.generate_job_url(job_id)
         async with self._client.get(url, headers=self.headers) as response:
             response_text = await response.text()
@@ -236,7 +237,7 @@ class JobsClient:
 
     async def long_polling_by_job_id(
         self, job_id: str, status: str, interval_s: float = 0.5, max_time: float = 180
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         t0 = time.monotonic()
         while True:
             response = await self.get_job_by_id(job_id)
@@ -294,8 +295,8 @@ async def jobs_client(
 
 
 @pytest.fixture
-def job_request_factory() -> Callable[[], Dict[str, Any]]:
-    def _factory() -> Dict[str, Any]:
+def job_request_factory() -> Callable[[], dict[str, Any]]:
+    def _factory() -> dict[str, Any]:
         return {
             "container": {
                 "image": "ubuntu",
@@ -309,8 +310,8 @@ def job_request_factory() -> Callable[[], Dict[str, Any]]:
 
 @pytest.fixture
 async def job_submit(
-    job_request_factory: Callable[[], Dict[str, Any]]
-) -> Dict[str, Any]:
+    job_request_factory: Callable[[], dict[str, Any]]
+) -> dict[str, Any]:
     return job_request_factory()
 
 
@@ -319,9 +320,9 @@ async def job_factory(
     platform_api: PlatformApiEndpoints,
     client: aiohttp.ClientSession,
     jobs_client: JobsClient,
-    job_request_factory: Callable[[], Dict[str, Any]],
+    job_request_factory: Callable[[], dict[str, Any]],
 ) -> AsyncIterator[Callable[[str], Awaitable[str]]]:
-    jobs: List[str] = []
+    jobs: list[str] = []
 
     async def _f(command: str, name: str = "") -> str:
         request_payload = job_request_factory()
@@ -589,7 +590,7 @@ class TestTopApi:
         monitoring_api: MonitoringApiEndpoints,
         platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
-        job_submit: Dict[str, Any],
+        job_submit: dict[str, Any],
         regular_user1: _User,
         regular_user2: _User,
     ) -> None:
@@ -682,7 +683,7 @@ class TestTopApi:
         platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        job_submit: Dict[str, Any],
+        job_submit: dict[str, Any],
     ) -> None:
         command = 'bash -c "for i in {1..10}; do echo $i; sleep 1; done"'
         job_submit["container"]["command"] = command
@@ -741,7 +742,7 @@ class TestTopApi:
         platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        job_submit: Dict[str, Any],
+        job_submit: dict[str, Any],
     ) -> None:
 
         command = 'bash -c "for i in {1..2}; do echo $i; sleep 1; done"'
@@ -775,7 +776,7 @@ class TestLogApi:
         monitoring_api: MonitoringApiEndpoints,
         platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
-        job_submit: Dict[str, Any],
+        job_submit: dict[str, Any],
         regular_user1: _User,
         regular_user2: _User,
         cluster_name: str,
@@ -820,7 +821,7 @@ class TestLogApi:
         platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        job_submit: Dict[str, Any],
+        job_submit: dict[str, Any],
     ) -> None:
         command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
         request_payload = job_submit
@@ -852,7 +853,7 @@ class TestLogApi:
         monitoring_api: MonitoringApiEndpoints,
         platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
-        job_submit: Dict[str, Any],
+        job_submit: dict[str, Any],
         job_name: str,
         regular_user1: _User,
         regular_user2: _User,
@@ -882,7 +883,7 @@ class TestLogApi:
         platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        job_submit: Dict[str, Any],
+        job_submit: dict[str, Any],
         kube_client: MyKubeClient,
     ) -> None:
         command = 'bash -c "for i in {1..5}; do echo $i; done; sleep 100"'
@@ -929,7 +930,7 @@ class TestLogApi:
         platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        job_submit: Dict[str, Any],
+        job_submit: dict[str, Any],
         kube_client: MyKubeClient,
     ) -> None:
         command = 'bash -c "exit 0"'
@@ -966,7 +967,7 @@ class TestSaveApi:
         monitoring_api: MonitoringApiEndpoints,
         platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
-        job_submit: Dict[str, Any],
+        job_submit: dict[str, Any],
         regular_user1: _User,
         regular_user2: _User,
         cluster_name: str,
@@ -1176,7 +1177,7 @@ class TestAttachApi:
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        job_submit: Dict[str, Any],
+        job_submit: dict[str, Any],
     ) -> None:
         command = 'bash -c "for i in {0..9}; do echo $i; sleep 1; done"'
         job_submit["container"]["command"] = command
@@ -1218,7 +1219,7 @@ class TestAttachApi:
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        job_submit: Dict[str, Any],
+        job_submit: dict[str, Any],
         job_name: str,
         regular_user2: _User,
         share_job: Callable[..., Awaitable[None]],
@@ -1266,7 +1267,7 @@ class TestAttachApi:
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        job_submit: Dict[str, Any],
+        job_submit: dict[str, Any],
     ) -> None:
         command = 'bash -c "for i in {0..9}; do echo $i >&2; sleep 1; done"'
         job_submit["container"]["command"] = command
@@ -1308,7 +1309,7 @@ class TestAttachApi:
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        job_submit: Dict[str, Any],
+        job_submit: dict[str, Any],
     ) -> None:
         command = "sh"
         job_submit["container"]["command"] = command
@@ -1346,7 +1347,7 @@ class TestAttachApi:
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        job_submit: Dict[str, Any],
+        job_submit: dict[str, Any],
     ) -> None:
         command = "sh"
         job_submit["container"]["command"] = command
@@ -1401,7 +1402,7 @@ class TestAttachApi:
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        job_submit: Dict[str, Any],
+        job_submit: dict[str, Any],
     ) -> None:
         command = "sh"
         job_submit["container"]["command"] = command
@@ -1672,7 +1673,7 @@ class TestPortForward:
         platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
-        job_submit: Dict[str, Any],
+        job_submit: dict[str, Any],
         jobs_client: JobsClient,
     ) -> None:
         headers = jobs_client.headers

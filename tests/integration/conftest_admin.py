@@ -1,5 +1,6 @@
 import asyncio
-from typing import Awaitable, Callable, Optional
+from collections.abc import Awaitable, Callable
+from typing import Optional
 
 import aiohttp
 import pytest

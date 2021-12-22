@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any
 
 import trafaret as t
 from docker_image.reference import InvalidReference, Reference
@@ -30,7 +30,7 @@ def create_exec_create_request_payload_validator() -> t.Trafaret:
     )
 
 
-def _validate_gpu(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _validate_gpu(payload: dict[str, Any]) -> dict[str, Any]:
     if bool(payload["gpu"]) is not bool(payload["gpu_model"]):
         return t.DataError({"gpu": "Invalid number of gpu"}, value=payload["gpu"])
     return payload

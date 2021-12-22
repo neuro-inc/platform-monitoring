@@ -3,7 +3,8 @@ import contextlib
 import json
 import re
 import uuid
-from typing import Any, AsyncIterator, Awaitable, Callable, Optional
+from collections.abc import AsyncIterator, Callable
+from typing import Any, Awaitable, Optional
 
 import pytest
 from async_timeout import timeout

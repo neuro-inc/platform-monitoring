@@ -1,7 +1,8 @@
 import logging
 from asyncio.locks import Lock
+from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
-from typing import Any, AsyncIterator, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import aiohttp
 from yarl import URL
@@ -169,11 +170,11 @@ class ContainerRuntimeClientRegistry:
     def __init__(
         self,
         container_runtime_port: int,
-        trace_configs: Optional[List[aiohttp.TraceConfig]] = None,
+        trace_configs: Optional[list[aiohttp.TraceConfig]] = None,
     ) -> None:
         self._port = container_runtime_port
         self._exit_stack = AsyncExitStack()
-        self._registry: Dict[str, ContainerRuntimeClient] = {}
+        self._registry: dict[str, ContainerRuntimeClient] = {}
         self._trace_configs = trace_configs
         self._lock = Lock()
 

@@ -1,6 +1,7 @@
 import uuid
+from collections.abc import Awaitable, Callable, Sequence
 from decimal import Decimal
-from typing import Any, Awaitable, Callable, Dict, Optional, Sequence
+from typing import Any, Optional
 from unittest import mock
 
 import pytest
@@ -60,7 +61,7 @@ def create_pod(
     }
     if gpu:
         resources["nvidia.com/gpu"] = str(gpu)
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "metadata": {
             "name": job_id,
             "labels": {"job": job_id, "platform.neuromation.io/job": job_id},

@@ -2,8 +2,9 @@ import asyncio
 import json
 import shlex
 import subprocess
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, AsyncIterator, Dict, Optional
+from typing import Any, Optional
 
 import pytest
 from _pytest.fixtures import FixtureRequest
@@ -22,7 +23,7 @@ class MyKubeClient(KubeClient):
 
     # TODO (A Yushkovskiy, 30-May-2019) delete pods automatically
 
-    async def create_pod(self, job_pod_descriptor: Dict[str, Any]) -> str:
+    async def create_pod(self, job_pod_descriptor: dict[str, Any]) -> str:
         payload = await self._request(
             method="POST", url=self._pods_url, json=job_pod_descriptor
         )
@@ -42,7 +43,7 @@ class MyKubeClient(KubeClient):
         self._assert_resource_kind(expected_kind="Pod", payload=payload)
         return self._parse_pod_status(payload)
 
-    def _parse_pod_status(self, payload: Dict[str, Any]) -> str:
+    def _parse_pod_status(self, payload: dict[str, Any]) -> str:
         if "status" in payload:
             return payload["status"]
         raise ValueError(f"Missing pod status: `{payload}`")
@@ -84,7 +85,7 @@ class MyKubeClient(KubeClient):
         except asyncio.TimeoutError:
             pytest.fail(f"Pod {pod_name} has not deleted yet")
 
-    async def get_node_list(self) -> Dict[str, Any]:
+    async def get_node_list(self) -> dict[str, Any]:
         url = f"{self._api_v1_url}/nodes"
         return await self._request(method="GET", url=url)
 
@@ -108,8 +109,8 @@ class MyKubeClient(KubeClient):
 
 
 class MyPodDescriptor:
-    def __init__(self, job_id: str, **kwargs: Dict[str, Any]) -> None:
-        self._payload: Dict[str, Any] = {
+    def __init__(self, job_id: str, **kwargs: dict[str, Any]) -> None:
+        self._payload: dict[str, Any] = {
             "kind": "Pod",
             "apiVersion": "v1",
             "metadata": {"name": job_id, "labels": {"job": job_id}},
@@ -149,7 +150,7 @@ class MyPodDescriptor:
         self._payload["spec"]["restartPolicy"] = policy
 
     @property
-    def payload(self) -> Dict[str, Any]:
+    def payload(self) -> dict[str, Any]:
         return self._payload
 
     @property
@@ -158,7 +159,7 @@ class MyPodDescriptor:
 
 
 @pytest.fixture(scope="session")
-def kube_config_payload() -> Dict[str, Any]:
+def kube_config_payload() -> dict[str, Any]:
     result = subprocess.run(
         ["kubectl", "config", "view", "-o", "json"], stdout=subprocess.PIPE
     )
@@ -167,7 +168,7 @@ def kube_config_payload() -> Dict[str, Any]:
 
 
 @pytest.fixture(scope="session")
-def kube_config_cluster_payload(kube_config_payload: Dict[str, Any]) -> Any:
+def kube_config_cluster_payload(kube_config_payload: dict[str, Any]) -> Any:
     cluster_name = "minikube"
     clusters = {
         cluster["name"]: cluster["cluster"]
@@ -177,7 +178,7 @@ def kube_config_cluster_payload(kube_config_payload: Dict[str, Any]) -> Any:
 
 
 @pytest.fixture(scope="session")
-def kube_config_user_payload(kube_config_payload: Dict[str, Any]) -> Any:
+def kube_config_user_payload(kube_config_payload: dict[str, Any]) -> Any:
     user_name = "minikube"
     users = {user["name"]: user["user"] for user in kube_config_payload["users"]}
     return users[user_name]
@@ -185,7 +186,7 @@ def kube_config_user_payload(kube_config_payload: Dict[str, Any]) -> Any:
 
 @pytest.fixture(scope="session")
 def cert_authority_data_pem(
-    kube_config_cluster_payload: Dict[str, Any]
+    kube_config_cluster_payload: dict[str, Any]
 ) -> Optional[str]:
     ca_path = kube_config_cluster_payload["certificate-authority"]
     if ca_path:
