@@ -28,10 +28,10 @@ from yarl import URL
 from platform_monitoring.api import create_app
 from platform_monitoring.config import Config, ContainerRuntimeConfig, PlatformApiConfig
 from platform_monitoring.kube_client import JobNotFoundException
-from tests.integration.conftest_kube import MyKubeClient
 
 from .conftest import ApiAddress, create_local_app_server, random_str
 from .conftest_auth import _User
+from tests.integration.conftest_kube import MyKubeClient
 
 
 async def expect_prompt(ws: aiohttp.ClientWebSocketResponse) -> bytes:

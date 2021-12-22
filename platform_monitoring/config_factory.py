@@ -25,7 +25,6 @@ from .config import (
     ZipkinConfig,
 )
 
-
 logger = logging.getLogger(__name__)
 
 

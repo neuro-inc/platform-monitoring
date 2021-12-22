@@ -37,7 +37,6 @@ from platform_monitoring.config import (
 )
 from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -102,7 +101,6 @@ async def wait_for_service(
                     f"Failed to ping service '{service_name}' "
                     f"via url '{service_ping_url}': {e}"
                 )
-                pass
             await asyncio.sleep(interval_s)
 
 

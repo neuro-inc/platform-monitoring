@@ -22,7 +22,6 @@ from .base import LogReader
 from .kube_client import ContainerStatus, JobNotFoundException, KubeClient
 from .utils import aclosing, asyncgeneratorcontextmanager, parse_date
 
-
 logger = logging.getLogger(__name__)
 
 

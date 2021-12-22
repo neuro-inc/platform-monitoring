@@ -81,7 +81,6 @@ from .validators import (
     create_save_request_payload_validator,
 )
 
-
 WS_ATTACH_PROTOCOL = "v2.channels.neu.ro"
 
 

@@ -20,7 +20,6 @@ from .base import JobStats, Telemetry
 from .config import KubeClientAuthType, KubeConfig
 from .utils import format_date, parse_date
 
-
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_PODS_PER_NODE = 110
