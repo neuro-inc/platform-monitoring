@@ -7,6 +7,7 @@ from yarl import URL
 
 from platform_monitoring.api import create_platform_api_client
 from platform_monitoring.config import PlatformApiConfig, PlatformConfig
+
 from tests.integration.conftest import get_service_url
 
 

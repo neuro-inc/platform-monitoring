@@ -27,7 +27,6 @@ from platform_monitoring.user import User
 from .conftest_auth import _User
 from .conftest_kube import MyKubeClient
 
-
 # arguments: (image, command, resources)
 JobFactory = Callable[..., Awaitable[Job]]
 

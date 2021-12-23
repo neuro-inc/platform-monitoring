@@ -33,9 +33,9 @@ from platform_monitoring.logs import (
     get_first_log_entry_time,
 )
 from platform_monitoring.utils import parse_date
-from tests.integration.conftest import ApiAddress, create_local_app_server
 
 from .conftest_kube import MyKubeClient, MyPodDescriptor
+from tests.integration.conftest import ApiAddress, create_local_app_server
 
 
 @pytest.fixture

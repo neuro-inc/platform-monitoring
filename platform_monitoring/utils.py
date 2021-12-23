@@ -9,7 +9,6 @@ from typing import Any, Optional, TypeVar
 import iso8601
 from neuro_sdk import JobDescription as Job, JobStatus
 
-
 T_co = TypeVar("T_co", covariant=True)
 
 if sys.version_info >= (3, 10):

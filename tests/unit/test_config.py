@@ -24,7 +24,6 @@ from platform_monitoring.config import (
 )
 from platform_monitoring.config_factory import EnvironConfigFactory
 
-
 CA_DATA_PEM = "this-is-certificate-authority-public-key"
 TOKEN = "this-is-token"
 

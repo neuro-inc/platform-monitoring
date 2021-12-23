@@ -9,7 +9,6 @@ from yarl import URL
 
 from .utils import asyncgeneratorcontextmanager
 
-
 logger = logging.getLogger(__name__)
 
 
