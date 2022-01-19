@@ -34,7 +34,6 @@ class TestS3LogReader:
     def log_reader(self, s3_client: mock.Mock) -> S3LogReader:
         return S3LogReader(s3_client, "", "", "", "", "", "")
 
-    @pytest.mark.asyncio
     async def test_keys_sorted_by_time(
         self,
         log_reader: S3LogReader,
