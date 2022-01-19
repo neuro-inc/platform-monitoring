@@ -371,7 +371,6 @@ async def named_infinite_job(
 
 
 class TestApi:
-    @pytest.mark.asyncio
     async def test_ping(
         self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
     ) -> None:
@@ -380,7 +379,6 @@ class TestApi:
             text = await resp.text()
             assert text == "Pong"
 
-    @pytest.mark.asyncio
     async def test_ping_includes_version(
         self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
     ) -> None:
@@ -388,7 +386,6 @@ class TestApi:
             assert resp.status == HTTPOk.status_code
             assert "platform-monitoring" in resp.headers["X-Service-Version"]
 
-    @pytest.mark.asyncio
     async def test_secured_ping(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -401,7 +398,6 @@ class TestApi:
             text = await resp.text()
             assert text == "Secured Pong"
 
-    @pytest.mark.asyncio
     async def test_secured_ping_no_token_provided_unauthorized(
         self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
     ) -> None:
@@ -409,7 +405,6 @@ class TestApi:
         async with client.get(url) as resp:
             assert resp.status == HTTPUnauthorized.status_code
 
-    @pytest.mark.asyncio
     async def test_secured_ping_non_existing_token_unauthorized(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -422,7 +417,6 @@ class TestApi:
         async with client.get(url, headers=headers) as resp:
             assert resp.status == HTTPUnauthorized.status_code
 
-    @pytest.mark.asyncio
     async def test_ping_unknown_origin(
         self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
     ) -> None:
@@ -432,7 +426,6 @@ class TestApi:
             assert response.status == HTTPOk.status_code, await response.text()
             assert "Access-Control-Allow-Origin" not in response.headers
 
-    @pytest.mark.asyncio
     async def test_ping_allowed_origin(
         self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
     ) -> None:
@@ -444,7 +437,6 @@ class TestApi:
             assert resp.headers["Access-Control-Allow-Credentials"] == "true"
             assert resp.headers["Access-Control-Expose-Headers"]
 
-    @pytest.mark.asyncio
     async def test_ping_options_no_headers(
         self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
     ) -> None:
@@ -455,7 +447,6 @@ class TestApi:
                 "origin header is not specified in the request"
             )
 
-    @pytest.mark.asyncio
     async def test_ping_options_unknown_origin(
         self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
     ) -> None:
@@ -472,7 +463,6 @@ class TestApi:
                 "origin 'http://unknown' is not allowed"
             )
 
-    @pytest.mark.asyncio
     async def test_ping_options(
         self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
     ) -> None:
@@ -488,7 +478,6 @@ class TestApi:
             assert resp.headers["Access-Control-Allow-Credentials"] == "true"
             assert resp.headers["Access-Control-Allow-Methods"] == "GET"
 
-    @pytest.mark.asyncio
     async def test_get_capacity(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -503,7 +492,6 @@ class TestApi:
             result = await resp.json()
             assert "cpu-small" in result
 
-    @pytest.mark.asyncio
     async def test_get_capacity_forbidden(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -528,7 +516,6 @@ class TestApi:
 
 
 class TestTopApi:
-    @pytest.mark.asyncio
     async def test_top_ok(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -565,7 +552,6 @@ class TestTopApi:
                 "timestamp": mock.ANY,
             }
 
-    @pytest.mark.asyncio
     async def test_top_shared_by_name(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -584,7 +570,6 @@ class TestTopApi:
             assert proto.transport is not None
             proto.transport.close()
 
-    @pytest.mark.asyncio
     async def test_top_no_permissions_unauthorized(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -607,7 +592,6 @@ class TestTopApi:
             async with client.ws_connect(url, headers=regular_user2.headers):
                 pass
 
-    @pytest.mark.asyncio
     async def test_top_no_auth_token_provided_unauthorized(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -619,7 +603,6 @@ class TestTopApi:
             async with client.ws_connect(url):
                 pass
 
-    @pytest.mark.asyncio
     async def test_top_non_running_job(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -654,7 +637,6 @@ class TestTopApi:
 
         assert not records
 
-    @pytest.mark.asyncio
     async def test_top_non_existing_job(
         self,
         platform_api: PlatformApiEndpoints,
@@ -676,7 +658,6 @@ class TestTopApi:
             async with client.ws_connect(url, headers=headers):
                 pass
 
-    @pytest.mark.asyncio
     async def test_top_silently_wait_when_job_pending(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -735,7 +716,6 @@ class TestTopApi:
 
         await jobs_client.delete_job(job_id=job_id)
 
-    @pytest.mark.asyncio
     async def test_top_close_when_job_succeeded(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -770,7 +750,6 @@ class TestTopApi:
 
 
 class TestLogApi:
-    @pytest.mark.asyncio
     async def test_log_no_permissions_forbidden(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -802,7 +781,6 @@ class TestLogApi:
                 ]
             }
 
-    @pytest.mark.asyncio
     async def test_log_no_auth_token_provided_unauthorized(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -814,7 +792,6 @@ class TestLogApi:
         async with client.get(url) as resp:
             assert resp.status == HTTPUnauthorized.status_code
 
-    @pytest.mark.asyncio
     async def test_job_log(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -847,7 +824,6 @@ class TestLogApi:
             expected_payload = "\n".join(str(i) for i in range(1, 6)) + "\n"
             assert actual_payload == expected_payload.encode()
 
-    @pytest.mark.asyncio
     async def test_log_shared_by_name(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -876,7 +852,6 @@ class TestLogApi:
         async with client.get(url, headers=regular_user2.headers) as resp:
             assert resp.status == HTTPOk.status_code
 
-    @pytest.mark.asyncio
     async def test_job_log_cleanup(
         self,
         monitoring_api_s3_storage: MonitoringApiEndpoints,
@@ -923,7 +898,6 @@ class TestLogApi:
             actual_payload = await response.read()
             assert actual_payload == b""
 
-    @pytest.mark.asyncio
     async def test_job_logs_removed_on_drop(
         self,
         monitoring_api_s3_storage: MonitoringApiEndpoints,
@@ -961,7 +935,6 @@ class TestLogApi:
 
 
 class TestSaveApi:
-    @pytest.mark.asyncio
     async def test_save_no_permissions_forbidden(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -993,7 +966,6 @@ class TestSaveApi:
                 ]
             }
 
-    @pytest.mark.asyncio
     async def test_save_no_auth_token_provided_unauthorized(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -1005,7 +977,6 @@ class TestSaveApi:
         async with client.post(url) as resp:
             assert resp.status == HTTPUnauthorized.status_code
 
-    @pytest.mark.asyncio
     async def test_save_non_existing_job(
         self,
         platform_api: PlatformApiEndpoints,
@@ -1021,7 +992,6 @@ class TestSaveApi:
             assert resp.status == HTTPBadRequest.status_code, str(resp)
             assert "no such job" in await resp.text()
 
-    @pytest.mark.asyncio
     async def test_save_unknown_registry_host(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -1037,7 +1007,6 @@ class TestSaveApi:
             resp_payload = await resp.json()
             assert "Unknown registry host" in resp_payload["error"]
 
-    @pytest.mark.asyncio
     async def test_save_not_running_job(
         self,
         platform_api: PlatformApiEndpoints,
@@ -1070,7 +1039,6 @@ class TestSaveApi:
             assert len(chunks) == 1, debug
             assert "not running" in chunks[0]["error"], debug
 
-    @pytest.mark.asyncio
     async def test_save_push_failed_job_exception_raised(
         self,
         config_factory: Callable[..., Config],
@@ -1104,7 +1072,6 @@ class TestSaveApi:
                 assert "Unexpected error: Cannot connect to host" in error, debug
                 assert "Connect call failed" in error, debug
 
-    @pytest.mark.asyncio
     async def test_save_ok(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -1144,7 +1111,6 @@ class TestSaveApi:
 
             assert chunks[-1].get("aux", {}).get("Tag") == infinite_job, debug
 
-    @pytest.mark.asyncio
     async def test_save_shared_by_name(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -1170,7 +1136,6 @@ class TestSaveApi:
 
 
 class TestAttachApi:
-    @pytest.mark.asyncio
     async def test_attach_nontty_stdout(
         self,
         platform_api: PlatformApiEndpoints,
@@ -1212,7 +1177,6 @@ class TestAttachApi:
 
         await jobs_client.delete_job(job_id)
 
-    @pytest.mark.asyncio
     async def test_attach_nontty_stdout_shared_by_name(
         self,
         platform_api: PlatformApiEndpoints,
@@ -1260,7 +1224,6 @@ class TestAttachApi:
 
         await jobs_client.delete_job(job_id)
 
-    @pytest.mark.asyncio
     async def test_attach_nontty_stderr(
         self,
         platform_api: PlatformApiEndpoints,
@@ -1302,7 +1265,6 @@ class TestAttachApi:
 
         await jobs_client.delete_job(job_id)
 
-    @pytest.mark.asyncio
     async def test_attach_tty(
         self,
         platform_api: PlatformApiEndpoints,
@@ -1340,7 +1302,6 @@ class TestAttachApi:
 
         await jobs_client.delete_job(job_id)
 
-    @pytest.mark.asyncio
     async def test_attach_tty_exit_code(
         self,
         platform_api: PlatformApiEndpoints,
@@ -1395,7 +1356,6 @@ class TestAttachApi:
 
         await jobs_client.delete_job(job_id)
 
-    @pytest.mark.asyncio
     async def test_reattach_just_after_exit(
         self,
         platform_api: PlatformApiEndpoints,
@@ -1443,7 +1403,6 @@ class TestAttachApi:
 
 
 class TestExecApi:
-    @pytest.mark.asyncio
     async def test_exec_notty_stdout(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -1468,7 +1427,6 @@ class TestExecApi:
 
         await jobs_client.delete_job(infinite_job)
 
-    @pytest.mark.asyncio
     async def test_exec_notty_stdout_shared_by_name(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -1496,7 +1454,6 @@ class TestExecApi:
 
         await jobs_client.delete_job(named_infinite_job)
 
-    @pytest.mark.asyncio
     async def test_exec_notty_stderr(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -1521,7 +1478,6 @@ class TestExecApi:
 
         await jobs_client.delete_job(infinite_job)
 
-    @pytest.mark.asyncio
     async def test_exec_tty(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -1548,7 +1504,6 @@ class TestExecApi:
 
         await jobs_client.delete_job(infinite_job)
 
-    @pytest.mark.asyncio
     async def test_exec_tty_exit_code(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -1592,7 +1547,6 @@ class TestExecApi:
 
 
 class TestKillApi:
-    @pytest.mark.asyncio
     async def test_kill(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -1610,7 +1564,6 @@ class TestKillApi:
         result = await jobs_client.long_polling_by_job_id(infinite_job, status="failed")
         assert result["history"]["exit_code"] == 128 + signal.SIGKILL, result
 
-    @pytest.mark.asyncio
     async def test_kill_shared_by_name(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -1634,7 +1587,6 @@ class TestKillApi:
 
 
 class TestPortForward:
-    @pytest.mark.asyncio
     async def test_port_forward_bad_port(
         self,
         platform_api: PlatformApiEndpoints,
@@ -1650,7 +1602,6 @@ class TestPortForward:
         async with client.get(url, headers=headers) as response:
             assert response.status == 400, await response.text()
 
-    @pytest.mark.asyncio
     async def test_port_forward_cannot_connect(
         self,
         platform_api: PlatformApiEndpoints,
@@ -1667,7 +1618,6 @@ class TestPortForward:
             assert response.status == 400, await response.text()
 
     @pytest.mark.minikube
-    @pytest.mark.asyncio
     async def test_port_forward_ok(
         self,
         platform_api: PlatformApiEndpoints,

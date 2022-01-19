@@ -182,7 +182,6 @@ def service(
 
 
 class TestJobsService:
-    @pytest.mark.asyncio
     async def test_get_available_jobs_count(
         self, service: JobsService, kube_client: mock.Mock
     ) -> None:
@@ -196,7 +195,6 @@ class TestJobsService:
 
         assert result == {"cpu": 8, "gpu": 1, "cpu-p": 0}
 
-    @pytest.mark.asyncio
     async def test_get_available_jobs_count_free_nodes(
         self, service: JobsService
     ) -> None:
@@ -204,7 +202,6 @@ class TestJobsService:
 
         assert result == {"cpu": 10, "gpu": 2, "cpu-p": 0}
 
-    @pytest.mark.asyncio
     async def test_get_available_jobs_count_busy_nodes(
         self, service: JobsService, kube_client: mock.Mock
     ) -> None:
@@ -219,7 +216,6 @@ class TestJobsService:
 
         assert result == {"cpu": 0, "gpu": 0, "cpu-p": 0}
 
-    @pytest.mark.asyncio
     async def test_get_available_jobs_count_for_pods_without_nodes(
         self, service: JobsService, kube_client: mock.Mock
     ) -> None:
@@ -231,7 +227,6 @@ class TestJobsService:
 
         assert result == {"cpu": 10, "gpu": 2, "cpu-p": 0}
 
-    @pytest.mark.asyncio
     async def test_get_available_jobs_count_node_not_found(
         self, service: JobsService, kube_client: mock.Mock
     ) -> None:

@@ -147,7 +147,6 @@ class TestJobsService:
 
         await self.wait_for_job(job, platform_api_client, _condition, *args, **kwargs)
 
-    @pytest.mark.asyncio
     async def test_save_ok(
         self,
         job_factory: JobFactory,
@@ -182,7 +181,6 @@ class TestJobsService:
         )
         await self.wait_for_job_succeeded(new_job, platform_api_client)
 
-    @pytest.mark.asyncio
     async def test_save_no_tag(
         self,
         job_factory: JobFactory,
@@ -221,7 +219,6 @@ class TestJobsService:
         )
         await self.wait_for_job_succeeded(new_job, platform_api_client)
 
-    @pytest.mark.asyncio
     async def test_save_pending_job(
         self,
         job_factory: JobFactory,
@@ -249,7 +246,6 @@ class TestJobsService:
                 async for chunk in it:
                     pass
 
-    @pytest.mark.asyncio
     async def test_save_push_failure(
         self,
         job_factory: JobFactory,
@@ -291,7 +287,6 @@ class TestJobsService:
         msg = f"Get https://{registry_host}/v2/: dial tcp: lookup unknown"
         assert msg in data[3]["error"]
 
-    @pytest.mark.asyncio
     async def test_save_commit_fails_with_exception(
         self,
         job_factory: JobFactory,
@@ -320,12 +315,10 @@ class TestJobsService:
                 async for chunk in it:
                     pass
 
-    @pytest.mark.asyncio
     async def test_get_available_jobs_count(self, jobs_service: JobsService) -> None:
         result = await jobs_service.get_available_jobs_counts()
         assert result and "cpu-small" in result
 
-    @pytest.mark.asyncio
     async def test_mark_logs_dropped(
         self,
         job_factory: JobFactory,

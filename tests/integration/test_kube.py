@@ -106,14 +106,12 @@ def s3_log_service(
 
 
 class TestKubeClient:
-    @pytest.mark.asyncio
     async def test_wait_pod_is_running_not_found(
         self, kube_client: MyKubeClient
     ) -> None:
         with pytest.raises(JobNotFoundException):
             await kube_client.wait_pod_is_running(pod_name="unknown")
 
-    @pytest.mark.asyncio
     async def test_wait_pod_is_running_timed_out(
         self,
         kube_config: KubeConfig,
@@ -126,7 +124,6 @@ class TestKubeClient:
             await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=0.1)
         await kube_client.delete_pod(job_pod.name)
 
-    @pytest.mark.asyncio
     async def test_status_restart_never(
         self,
         kube_config: KubeConfig,
@@ -170,7 +167,6 @@ class TestKubeClient:
         with pytest.raises(JobNotFoundException):
             await kube_client.get_container_status(job_pod.name)
 
-    @pytest.mark.asyncio
     async def test_status_restart_always(
         self,
         kube_config: KubeConfig,
@@ -230,7 +226,6 @@ class TestKubeClient:
         finally:
             await kube_client.delete_pod(job_pod.name)
 
-    @pytest.mark.asyncio
     async def test_status_restart_on_failure_success(
         self,
         kube_config: KubeConfig,
@@ -274,7 +269,6 @@ class TestKubeClient:
         with pytest.raises(JobNotFoundException):
             await kube_client.get_container_status(job_pod.name)
 
-    @pytest.mark.asyncio
     async def test_status_restart_on_failure_failure(
         self,
         kube_config: KubeConfig,
@@ -333,7 +327,6 @@ class TestKubeClient:
         finally:
             await kube_client.delete_pod(job_pod.name)
 
-    @pytest.mark.asyncio
     async def test_get_pod_container_stats_error_json_response_parsing(
         self, mock_kubernetes_server: ApiAddress
     ) -> None:
@@ -344,7 +337,6 @@ class TestKubeClient:
             stats = await client.get_pod_container_stats("whatever", "whenever")
             assert stats is None
 
-    @pytest.mark.asyncio
     async def test_get_pod_container_stats(
         self,
         kube_config: KubeConfig,
@@ -372,7 +364,6 @@ class TestKubeClient:
         assert pod_metrics[0].cpu >= 0.0
         assert pod_metrics[0].memory > 0.0
 
-    @pytest.mark.asyncio
     async def test_get_pod_container_stats_no_pod(
         self, kube_config: KubeConfig, kube_client: MyKubeClient
     ) -> None:
@@ -380,7 +371,6 @@ class TestKubeClient:
         with pytest.raises(JobNotFoundException):
             await kube_client.get_pod_container_stats(pod_name, pod_name)
 
-    @pytest.mark.asyncio
     async def test_get_pod_container_stats_not_scheduled_yet(
         self,
         kube_config: KubeConfig,
@@ -392,7 +382,6 @@ class TestKubeClient:
         stats = await kube_client.get_pod_container_stats(job_pod.name, job_pod.name)
         assert stats is None
 
-    @pytest.mark.asyncio
     async def test_check_pod_exists_true(
         self, kube_client: MyKubeClient, job_pod: MyPodDescriptor
     ) -> None:
@@ -401,14 +390,12 @@ class TestKubeClient:
         assert does_exist is True
         await kube_client.delete_pod(job_pod.name)
 
-    @pytest.mark.asyncio
     async def test_check_pod_exists_false(
         self, kube_client: MyKubeClient, job_pod: MyPodDescriptor
     ) -> None:
         does_exist = await kube_client.check_pod_exists(pod_name="unknown")
         assert does_exist is False
 
-    @pytest.mark.asyncio
     async def test_create_log_stream_not_found(self, kube_client: KubeClient) -> None:
         with pytest.raises(JobNotFoundException):
             async with kube_client.create_pod_container_logs_stream(
@@ -417,7 +404,6 @@ class TestKubeClient:
                 pass
 
     @pytest.mark.xfail
-    @pytest.mark.asyncio
     async def test_create_log_stream_creating(
         self, kube_client: MyKubeClient, job_pod: MyPodDescriptor
     ) -> None:
@@ -435,7 +421,6 @@ class TestKubeClient:
                     break
                 await asyncio.sleep(0.1)
 
-    @pytest.mark.asyncio
     async def test_create_log_stream(
         self,
         kube_config: KubeConfig,
@@ -451,7 +436,6 @@ class TestKubeClient:
             payload = await stream.read()
             assert payload == b""
 
-    @pytest.mark.asyncio
     async def test_get_node_proxy_client(
         self, kube_config: KubeConfig, kube_client: MyKubeClient
     ) -> None:
@@ -470,7 +454,6 @@ class TestKubeClient:
                 payload = await resp.json()
                 assert "node" in payload
 
-    @pytest.mark.asyncio
     async def test_get_nodes(self, kube_client: MyKubeClient) -> None:
         nodes = await kube_client.get_nodes()
         assert nodes
@@ -479,7 +462,6 @@ class TestKubeClient:
         assert nodes
         assert all(node.get_label("kubernetes.io/os") == "linux" for node in nodes)
 
-    @pytest.mark.asyncio
     async def test_get_pods(
         self, kube_client: MyKubeClient, job_pod: MyPodDescriptor
     ) -> None:
@@ -539,7 +521,6 @@ class TestLogReader:
             result.append(rest)
         return b"".join(result)
 
-    @pytest.mark.asyncio
     async def test_read_instantly_succeeded(
         self,
         kube_config: KubeConfig,
@@ -553,7 +534,6 @@ class TestLogReader:
         payload = await self._consume_log_reader(log_reader)
         assert payload == b""
 
-    @pytest.mark.asyncio
     async def test_read_instantly_failed(
         self,
         kube_config: KubeConfig,
@@ -569,7 +549,6 @@ class TestLogReader:
         payload = await self._consume_log_reader(log_reader)
         assert payload == b"Failure!"
 
-    @pytest.mark.asyncio
     async def test_read_timed_out(
         self,
         kube_config: KubeConfig,
@@ -588,7 +567,6 @@ class TestLogReader:
         with pytest.raises(asyncio.TimeoutError):
             await self._consume_log_reader(log_reader)
 
-    @pytest.mark.asyncio
     async def test_read_succeeded(
         self,
         kube_config: KubeConfig,
@@ -605,7 +583,6 @@ class TestLogReader:
         expected_payload = "\n".join(str(i) for i in range(1, 6)) + "\n"
         assert payload == expected_payload.encode()
 
-    @pytest.mark.asyncio
     async def test_read_with_timestamps(
         self,
         kube_config: KubeConfig,
@@ -626,7 +603,6 @@ class TestLogReader:
         expected_payload = "\n".join(str(i) for i in range(1, 6)) + "\n"
         assert payload == expected_payload.encode()
 
-    @pytest.mark.asyncio
     async def test_read_since(
         self,
         kube_client: MyKubeClient,
@@ -664,7 +640,6 @@ class TestLogReader:
         payload = await self._consume_log_reader(log_reader)
         assert payload == b"third\n"
 
-    @pytest.mark.asyncio
     async def test_read_cancelled(
         self,
         kube_config: KubeConfig,
@@ -685,7 +660,6 @@ class TestLogReader:
         expected_payload = "\n".join(str(i) for i in range(1, 6))
         assert payload.startswith(expected_payload.encode())
 
-    @pytest.mark.asyncio
     async def test_read_restarted(
         self,
         kube_config: KubeConfig,
@@ -738,7 +712,6 @@ class TestLogReader:
         finally:
             await kube_client.delete_pod(job_pod.name)
 
-    @pytest.mark.asyncio
     async def test_elasticsearch_log_reader(
         self,
         kube_config: KubeConfig,
@@ -772,7 +745,6 @@ class TestLogReader:
                 timestamps=timestamps,
             )
 
-    @pytest.mark.asyncio
     async def test_elasticsearch_log_reader_restarted(
         self,
         kube_config: KubeConfig,
@@ -800,7 +772,6 @@ class TestLogReader:
             expected_payload=expected_payload * 2,
         )
 
-    @pytest.mark.asyncio
     async def test_s3_log_reader(
         self,
         kube_config: KubeConfig,
@@ -838,7 +809,6 @@ class TestLogReader:
                 timestamps=timestamps,
             )
 
-    @pytest.mark.asyncio
     async def test_s3_log_reader_restarted(
         self,
         kube_config: KubeConfig,
@@ -870,7 +840,6 @@ class TestLogReader:
             expected_payload=expected_payload * 2,
         )
 
-    @pytest.mark.asyncio
     async def test_s3_logs_cleanup(
         self,
         kube_config: KubeConfig,
@@ -1004,7 +973,6 @@ class TestLogReader:
         except asyncio.TimeoutError:
             pytest.fail(f"Pod logs did not match. Last payload: {payload!r}")
 
-    @pytest.mark.asyncio
     async def test_elasticsearch_log_reader_empty(
         self, es_client: Elasticsearch, kube_container_runtime: str
     ) -> None:
@@ -1019,7 +987,6 @@ class TestLogReader:
         payload = await self._consume_log_reader(log_reader)
         assert payload == b""
 
-    @pytest.mark.asyncio
     async def test_s3_log_reader_empty(
         self,
         kube_container_runtime: str,
@@ -1040,7 +1007,6 @@ class TestLogReader:
         payload = await self._consume_log_reader(log_reader)
         assert payload == b""
 
-    @pytest.mark.asyncio
     async def _test_get_job_log_reader(
         self,
         kube_config: KubeConfig,
@@ -1066,7 +1032,6 @@ class TestLogReader:
         payload = await self._consume_log_reader(log_reader)
         assert payload == b"hello\n"
 
-    @pytest.mark.asyncio
     async def test_get_job_elasticsearch_log_reader(
         self,
         kube_config: KubeConfig,
@@ -1078,7 +1043,6 @@ class TestLogReader:
             kube_config, kube_client, elasticsearch_log_service, job_pod
         )
 
-    @pytest.mark.asyncio
     async def test_get_job_s3_log_reader(
         self,
         kube_config: KubeConfig,
@@ -1137,7 +1101,6 @@ class TestLogReader:
         for name, payload in zip(names, payloads):
             assert payload == expected_payload, name
 
-    @pytest.mark.asyncio
     async def test_elasticsearch_merged_log_reader(
         self,
         kube_client: MyKubeClient,
@@ -1148,7 +1111,6 @@ class TestLogReader:
             kube_client, job_pod, elasticsearch_log_service
         )
 
-    @pytest.mark.asyncio
     async def test_s3_merged_log_reader(
         self,
         kube_client: MyKubeClient,
@@ -1223,7 +1185,6 @@ class TestLogReader:
             payload = payload.replace(b"===\n", b"")
             assert payload == payload0, name
 
-    @pytest.mark.asyncio
     async def test_elasticsearch_merged_log_reader_restarted(
         self,
         kube_client: MyKubeClient,
@@ -1236,7 +1197,6 @@ class TestLogReader:
             elasticsearch_log_service,
         )
 
-    @pytest.mark.asyncio
     async def test_s3_merged_log_reader_restarted(
         self,
         kube_client: MyKubeClient,
@@ -1323,7 +1283,6 @@ class TestLogReader:
             b"begin\nend\n",
         ]
 
-    @pytest.mark.asyncio
     async def test_elasticsearch_merged_log_reader_restarted_since(
         self,
         kube_client: MyKubeClient,
@@ -1336,7 +1295,6 @@ class TestLogReader:
             elasticsearch_log_service,
         )
 
-    @pytest.mark.asyncio
     async def test_s3_merged_log_reader_restarted_since(
         self,
         kube_client: MyKubeClient,
@@ -1370,7 +1328,6 @@ class TestLogReader:
         expected_payload = "".join(f"{i + 1}\n" for i in range(num))
         assert payload == expected_payload
 
-    @pytest.mark.asyncio
     async def test_large_log_reader(
         self,
         kube_client: MyKubeClient,
@@ -1379,7 +1336,6 @@ class TestLogReader:
     ) -> None:
         await self._test_large_log_reader(kube_client, job_pod, s3_log_service)
 
-    @pytest.mark.asyncio
     async def test_get_first_log_entry_time(
         self,
         kube_client: MyKubeClient,

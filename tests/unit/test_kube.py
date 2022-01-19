@@ -224,7 +224,6 @@ class TestStatsSummary:
 
 
 class TestFilterOutRPCError:
-    @pytest.mark.asyncio
     async def test_iter_eof(self) -> None:
         reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
         reader.feed_eof()
@@ -232,7 +231,6 @@ class TestFilterOutRPCError:
         chunks = [chunk async for chunk in it]
         assert chunks == []
 
-    @pytest.mark.asyncio
     async def test_read_two_lines_eof(self) -> None:
         reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
         reader.feed_data(b"line1\n")
@@ -242,7 +240,6 @@ class TestFilterOutRPCError:
         chunks = [chunk async for chunk in it]
         assert chunks == [b"line1\n", b"line2"]
 
-    @pytest.mark.asyncio
     async def test_filtered_single_rpc_error(self) -> None:
         reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
         reader.feed_data(b"line1\n")
@@ -252,7 +249,6 @@ class TestFilterOutRPCError:
         chunks = [chunk async for chunk in it]
         assert chunks == [b"line1\n"]
 
-    @pytest.mark.asyncio
     async def test_filtered_single_rpc_error2(self) -> None:
         reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
         reader.feed_data(b"line1\n")
@@ -264,7 +260,6 @@ class TestFilterOutRPCError:
         chunks = [chunk async for chunk in it]
         assert chunks == [b"line1\n"]
 
-    @pytest.mark.asyncio
     async def test_filtered_single_rpc_error3(self) -> None:
         reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
         reader.feed_data(b"line1\n")
@@ -277,7 +272,6 @@ class TestFilterOutRPCError:
         chunks = [chunk async for chunk in it]
         assert chunks == [b"line1\n"]
 
-    @pytest.mark.asyncio
     async def test_filtered_two_rpc_errors(self) -> None:
         reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
         reader.feed_data(b"line1\n")
@@ -288,7 +282,6 @@ class TestFilterOutRPCError:
         chunks = [chunk async for chunk in it]
         assert chunks == [b"line1\n", b"rpc error: code = whatever\n"]
 
-    @pytest.mark.asyncio
     async def test_not_filtered_single_rpc_not_eof(self) -> None:
         reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
         reader.feed_data(b"line1\n")
@@ -299,7 +292,6 @@ class TestFilterOutRPCError:
         chunks = [chunk async for chunk in it]
         assert chunks == [b"line1\n", b"rpc error: code = whatever\n", b"line2\n"]
 
-    @pytest.mark.asyncio
     async def test_min_line_chunk(self) -> None:
         reader = aiohttp.StreamReader(mock.Mock(_reading_paused=False), 1024)
         it = filter_out_rpc_error(reader)
