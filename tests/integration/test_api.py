@@ -86,6 +86,9 @@ class MonitoringApiEndpoints:
     def generate_log_url(self, job_id: str) -> URL:
         return self.endpoint / job_id / "log"
 
+    def generate_log_ws_url(self, job_id: str) -> URL:
+        return self.endpoint / job_id / "log_ws"
+
     def generate_save_url(self, job_id: str) -> URL:
         return self.endpoint / job_id / "save"
 
@@ -823,6 +826,38 @@ class TestLogApi:
             actual_payload = await response.read()
             expected_payload = "\n".join(str(i) for i in range(1, 6)) + "\n"
             assert actual_payload == expected_payload.encode()
+
+    async def test_job_log_ws(
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        platform_api: PlatformApiEndpoints,
+        client: aiohttp.ClientSession,
+        jobs_client: JobsClient,
+        job_submit: dict[str, Any],
+    ) -> None:
+        command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
+        request_payload = job_submit
+        request_payload["container"]["command"] = command
+        headers = jobs_client.headers
+
+        url = platform_api.jobs_base_url
+        async with client.post(url, headers=headers, json=request_payload) as response:
+            assert response.status == HTTPAccepted.status_code, await response.text()
+            result = await response.json()
+            job_id = result["id"]
+
+        await jobs_client.long_polling_by_job_id(job_id, "succeeded")
+
+        url = monitoring_api.generate_log_ws_url(job_id)
+
+        async with client.ws_connect(url, headers=headers) as ws:
+            ws_data = []
+            async for msg in ws:
+                ws_data.append(msg.data)
+
+        actual_payload = b"".join(ws_data)
+        expected_payload = "\n".join(str(i) for i in range(1, 6)) + "\n"
+        assert actual_payload == expected_payload.encode()
 
     async def test_log_shared_by_name(
         self,

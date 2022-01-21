@@ -127,6 +127,7 @@ class MonitoringApiHandler:
                 aiohttp.web.post("/available", self.get_capacity),  # deprecated
                 aiohttp.web.get("/capacity", self.get_capacity),
                 aiohttp.web.get("/{job_id}/log", self.stream_log),
+                aiohttp.web.get("/{job_id}/log_ws", self.ws_log),
                 aiohttp.web.delete("/{job_id}/log", self.drop_log),
                 aiohttp.web.get("/{job_id}/top", self.stream_top),
                 aiohttp.web.post("/{job_id}/save", self.stream_save),
@@ -204,6 +205,37 @@ class MonitoringApiHandler:
                 await response.write(chunk)
 
         await response.write_eof()
+        return response
+
+    async def ws_log(self, request: Request) -> StreamResponse:
+        timestamps = _get_bool_param(request, "timestamps", False)
+        debug = _get_bool_param(request, "debug", False)
+        since_str = request.query.get("since")
+        since = parse_date(since_str) if since_str else None
+        archive_delay_s = float(
+            request.query.get("archive_delay", DEFAULT_ARCHIVE_DELAY)
+        )
+        job = await self._resolve_job(request, "read")
+
+        pod_name = self._kube_helper.get_job_pod_name(job)
+        separator = request.query.get("separator")
+        if separator is None:
+            separator = "=== Live logs ===" + _getrandbytes(30).hex()
+
+        response = WebSocketResponse(protocols=[WS_ATTACH_PROTOCOL])
+
+        async with self._logs_service.get_pod_log_reader(
+            pod_name,
+            separator=separator.encode(),
+            since=since,
+            timestamps=timestamps,
+            debug=debug,
+            archive_delay_s=archive_delay_s,
+        ) as it:
+            await response.prepare(request)
+            async for chunk in it:
+                await response.send_bytes(chunk)
+
         return response
 
     async def drop_log(self, request: Request) -> Response:
