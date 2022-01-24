@@ -222,7 +222,7 @@ class MonitoringApiHandler:
         if separator is None:
             separator = "=== Live logs ===" + _getrandbytes(30).hex()
 
-        response = WebSocketResponse(protocols=[WS_ATTACH_PROTOCOL])
+        response = WebSocketResponse(protocols=[WS_ATTACH_PROTOCOL], heartbeat=30)
 
         async with self._logs_service.get_pod_log_reader(
             pod_name,
@@ -401,7 +401,7 @@ class MonitoringApiHandler:
 
         job = await self._resolve_job(request, "write")
 
-        response = WebSocketResponse(protocols=[WS_ATTACH_PROTOCOL])
+        response = WebSocketResponse(protocols=[WS_ATTACH_PROTOCOL], heartbeat=30)
 
         async with self._jobs_service.attach(
             job, tty=tty, stdin=stdin, stdout=stdout, stderr=stderr
@@ -430,7 +430,7 @@ class MonitoringApiHandler:
 
         job = await self._resolve_job(request, "write")
 
-        response = WebSocketResponse(protocols=[WS_ATTACH_PROTOCOL])
+        response = WebSocketResponse(protocols=[WS_ATTACH_PROTOCOL], heartbeat=30)
 
         async with self._jobs_service.exec(
             job, cmd=cmd, tty=tty, stdin=stdin, stdout=stdout, stderr=stderr
@@ -470,7 +470,7 @@ class MonitoringApiHandler:
             )
 
         try:
-            response = WebSocketResponse()
+            response = WebSocketResponse(heartbeat=30)
             await response.prepare(request)
 
             tasks = []
