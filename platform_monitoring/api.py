@@ -434,7 +434,6 @@ class MonitoringApiHandler:
             raise aiohttp.web.HTTPBadRequest(
                 text=payload,
                 content_type="application/json",
-                headers={"X-Error": payload},
             )
 
         try:
@@ -538,29 +537,55 @@ class Transfer:
 async def handle_exceptions(
     request: Request, handler: Callable[[Request], Awaitable[StreamResponse]]
 ) -> StreamResponse:
+    ws_request = (
+        request.headers.get("Connection", "").lower() == "upgrade"
+        and request.headers.get("Upgrade", "").lower() == "websocket"
+    )
     try:
         return await handler(request)
     except ValueError as e:
         payload = {"error": str(e)}
-        return json_response(payload, status=HTTPBadRequest.status_code)
+        return json_response(
+            payload,
+            status=HTTPBadRequest.status_code,
+            headers={"X-Error": json.dumps(payload)} if ws_request else None,
+        )
     except ContainerNotFoundError as e:
         payload = {"error": str(e)}
-        return json_response(payload, status=HTTPNotFound.status_code)
+        return json_response(
+            payload,
+            status=HTTPNotFound.status_code,
+            headers={"X-Error": json.dumps(payload)} if ws_request else None,
+        )
     except JobNotRunningException as e:
         payload = {"error": str(e)}
-        return json_response(payload, status=HTTPNotFound.status_code)
+        return json_response(
+            payload,
+            status=HTTPNotFound.status_code,
+            headers={"X-Error": json.dumps(payload)} if ws_request else None,
+        )
     except JobException as e:
         payload = {"error": str(e)}
-        return json_response(payload, status=HTTPBadRequest.status_code)
-    except aiohttp.web.HTTPException:
-        raise
+        return json_response(
+            payload,
+            status=HTTPBadRequest.status_code,
+            headers={"X-Error": json.dumps(payload)} if ws_request else None,
+        )
+    except aiohttp.web.HTTPException as e:
+        if ws_request and e.text:
+            e.headers["X-Error"] = e.text
+        raise e
     except Exception as e:
         msg_str = (
             f"Unexpected exception: {str(e)}. " f"Path with query: {request.path_qs}."
         )
         logging.exception(msg_str)
         payload = {"error": msg_str}
-        return json_response(payload, status=HTTPInternalServerError.status_code)
+        return json_response(
+            payload,
+            status=HTTPInternalServerError.status_code,
+            headers={"X-Error": json.dumps(payload)} if ws_request else None,
+        )
 
 
 async def create_monitoring_app(config: Config) -> aiohttp.web.Application:

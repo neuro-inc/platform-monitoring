@@ -1136,6 +1136,21 @@ class TestSaveApi:
 
 
 class TestAttachApi:
+    async def test_attach_forbidden(
+        self,
+        platform_api: PlatformApiEndpoints,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+    ) -> None:
+        url = monitoring_api.generate_attach_url(
+            job_id="anything", stdout=True, stderr=True
+        )
+        try:
+            async with client.ws_connect(url):
+                pass
+        except WSServerHandshakeError as e:
+            assert e.headers and e.headers.get("X-Error")
+
     async def test_attach_nontty_stdout(
         self,
         platform_api: PlatformApiEndpoints,
