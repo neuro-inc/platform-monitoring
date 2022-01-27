@@ -224,6 +224,10 @@ class MonitoringApiHandler:
 
         response = WebSocketResponse(protocols=[WS_ATTACH_PROTOCOL], heartbeat=30)
 
+        async def _ws_reader() -> None:
+            while True:
+                await response.receive()
+
         async with self._logs_service.get_pod_log_reader(
             pod_name,
             separator=separator.encode(),
@@ -233,8 +237,14 @@ class MonitoringApiHandler:
             archive_delay_s=archive_delay_s,
         ) as it:
             await response.prepare(request)
-            async for chunk in it:
-                await response.send_bytes(chunk)
+            ws_reader_task = asyncio.create_task(_ws_reader())
+            try:
+                async for chunk in it:
+                    await response.send_bytes(chunk)
+            finally:
+                ws_reader_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await ws_reader_task
 
         return response
 
