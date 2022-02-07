@@ -35,8 +35,8 @@ from tests.integration.conftest_kube import MyKubeClient
 
 
 async def expect_prompt(ws: aiohttp.ClientWebSocketResponse) -> bytes:
-    _ansi_re = re.compile(br"\033\[[;?0-9]*[a-zA-Z]")
-    _exit_re = re.compile(br"exit \d+\Z")
+    _ansi_re = re.compile(rb"\033\[[;?0-9]*[a-zA-Z]")
+    _exit_re = re.compile(rb"exit \d+\Z")
     try:
         ret: bytes = b""
         async with timeout(3):

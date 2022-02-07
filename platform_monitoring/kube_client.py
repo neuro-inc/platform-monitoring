@@ -641,14 +641,14 @@ class PodContainerStats:
 
     @classmethod
     def from_primitive(cls, payload: dict[str, Any]) -> "PodContainerStats":
-        cpu = payload.get("cpu", {}).get("usageNanoCores", 0) / (10 ** 9)
-        memory = payload.get("memory", {}).get("workingSetBytes", 0) / (2 ** 20)  # MB
+        cpu = payload.get("cpu", {}).get("usageNanoCores", 0) / (10**9)
+        memory = payload.get("memory", {}).get("workingSetBytes", 0) / (2**20)  # MB
         gpu_memory = None
         gpu_duty_cycle = None
         accelerators = payload.get("accelerators") or []
         if accelerators:
             gpu_memory = sum(acc["memoryUsed"] for acc in accelerators) / (
-                2 ** 20
+                2**20
             )  # MB
             gpu_duty_cycle_total = sum(acc["dutyCycle"] for acc in accelerators)
             gpu_duty_cycle = int(gpu_duty_cycle_total / len(accelerators))  # %
