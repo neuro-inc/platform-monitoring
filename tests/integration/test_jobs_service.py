@@ -229,7 +229,7 @@ class TestJobsService:
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=16 ** 10,
+            memory_mb=16**10,
             cpu=0.1,
             gpu=None,
             shm=False,
