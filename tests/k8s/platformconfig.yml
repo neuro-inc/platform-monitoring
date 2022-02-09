@@ -1,3 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: platformconfig-cloud-providers
+data:
+  config.yaml: |
+    aws:
+      node_pools:
+      - machine_type: m5.large
+        cpu: 2
+        available_cpu: 1
+        memory_mb: 8192
+        available_memory_mb: 6144
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -86,6 +100,15 @@ spec:
           value: postgres
         - name: NP_POSTGRES_DB_NAME
           value: postgres
+        - name: NP_CLOUD_PROVIDERS_PATH
+          value: /etc/platform-config/config.yaml
+        volumeMounts:
+        - name: cloud-providers
+          mountPath: /etc/platform-config
+      volumes:
+      - name: cloud-providers
+        configMap:
+          name: platformconfig-cloud-providers
 ---
 apiVersion: v1
 kind: Service
