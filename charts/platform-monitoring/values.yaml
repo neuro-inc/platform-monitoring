@@ -32,6 +32,10 @@ resources:
 
 ingress:
   enabled: false
+  # annotations:
+
+service:
+  # annotations:
 
 secrets: []
 
