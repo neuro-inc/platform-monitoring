@@ -4,9 +4,9 @@ metadata:
   name: {{ include "platformMonitoring.fullname" . }}
   labels: {{ include "platformMonitoring.labels.standard" . | nindent 4 }}
     service: platform-monitoring
-  annotations:
-    traefik.ingress.kubernetes.io/affinity: "true"
-    traefik.ingress.kubernetes.io/session-cookie-name: NEURO_MONITORINGAPI_SESSION
+{{- with .Values.service.annotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+{{- end }}
 spec:
   type: ClusterIP
   ports:

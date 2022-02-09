@@ -17,9 +17,20 @@ podAnnotations:
 
 ingress:
   enabled: true
-  extraAnnotations:
-    external-dns.platform.neuromation.io: "true"
   hosts: [monitoring-dev.neu.ro]
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    external-dns.platform.neuromation.io: "true"
+    # TODO: remove traefik v1 annotations
+    traefik.frontend.rule.type: PathPrefix
+
+service:
+  annotations:
+    traefik.ingress.kubernetes.io/service.sticky.cookie: "true"
+    traefik.ingress.kubernetes.io/service.sticky.cookie.name: NEURO_MONITORINGAPI_SESSION
+    # TODO: remove traefik v1 annotations
+    traefik.ingress.kubernetes.io/affinity: "true"
+    traefik.ingress.kubernetes.io/session-cookie-name: NEURO_MONITORINGAPI_SESSION
 
 cors:
   origins:
