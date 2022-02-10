@@ -6,7 +6,6 @@ from functools import reduce
 from typing import Optional
 
 import aiohttp
-from elasticsearch.client import logger
 from neuro_config_client import ConfigClient
 from neuro_config_client.models import ResourcePoolType
 from neuro_sdk import JobDescription as Job, Jobs as JobsClient
@@ -137,8 +136,6 @@ class JobsService:
 
         if not pod.tty:
             tty = False
-
-        logger.info(pod.host_ip)
 
         runtime_client = await self._container_runtime_client_registry.get(pod.host_ip)
 
