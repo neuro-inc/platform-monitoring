@@ -30,8 +30,7 @@ from aiohttp.web import (
 )
 from aiohttp.web_urldispatcher import AbstractRoute
 from aiohttp_security import check_authorized
-from aiohttp_security.api import AUTZ_KEY
-from neuro_auth_client import AuthClient, Permission
+from neuro_auth_client import AuthClient, Permission, check_permissions
 from neuro_auth_client.security import AuthScheme, setup_security
 from neuro_config_client import ConfigClient
 from neuro_logging import (
@@ -156,17 +155,15 @@ class MonitoringApiHandler:
     async def get_capacity(self, request: Request) -> Response:
         # Check that user has access to the cluster
         user = await untrusted_user(request)
-        await check_any_permissions(
-            request,
-            [
-                Permission(
-                    uri=f"job://{self._config.cluster_name}/{user.name}", action="read"
-                ),
-                Permission(
-                    uri=f"cluster://{self._config.cluster_name}/access", action="read"
-                ),
-            ],
-        )
+        permissions = [
+            Permission(
+                uri=f"job://{self._config.cluster_name}/{user.name}", action="read"
+            ),
+            Permission(
+                uri=f"cluster://{self._config.cluster_name}/access", action="read"
+            ),
+        ]
+        await check_permissions(request, [permissions])
         result = await self._jobs_service.get_available_jobs_counts()
         return json_response(result)
 
@@ -326,7 +323,7 @@ class MonitoringApiHandler:
                 )
             )
         logger.info("Checking whether %r has %r", user, permissions)
-        await check_any_permissions(request, permissions)
+        await check_permissions(request, [permissions])
         return job
 
     async def _get_job_telemetry(self, job: Job) -> Telemetry:
@@ -914,27 +911,6 @@ def main() -> None:  # pragma: no coverage
     aiohttp.web.run_app(
         create_app(config), host=config.server.host, port=config.server.port
     )
-
-
-async def check_any_permissions(
-    request: aiohttp.web.Request, permissions: list[Permission]
-) -> None:
-    user_name = await check_authorized(request)
-    auth_policy = request.config_dict.get(AUTZ_KEY)
-    if not auth_policy:
-        raise RuntimeError("Auth policy not configured")
-
-    try:
-        missing = await auth_policy.get_missing_permissions(user_name, permissions)
-    except aiohttp.ClientError as e:
-        # re-wrap in order not to expose the client
-        raise RuntimeError(e) from e
-
-    if len(missing) >= len(permissions):
-        payload = {"missing": [_permission_to_primitive(p) for p in missing]}
-        raise aiohttp.web.HTTPForbidden(
-            text=json.dumps(payload), content_type="application/json"
-        )
 
 
 def _permission_to_primitive(perm: Permission) -> dict[str, str]:
