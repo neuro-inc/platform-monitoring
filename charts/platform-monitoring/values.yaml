@@ -32,10 +32,12 @@ resources:
 
 ingress:
   enabled: false
-  # annotations:
+  ingressClassName: traefik
+  hosts: []
+  annotations: {}
 
 service:
-  # annotations:
+  annotations: {}
 
 secrets: []
 
