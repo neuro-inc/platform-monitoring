@@ -10,7 +10,7 @@ metadata:
     service: platform-monitoring
   annotations:
     {{- if not $ingressSupportsIngressClassName }}
-    kubernetes.io/ingress.class: traefik
+    kubernetes.io/ingress.class: {{ .Values.ingress.ingressClassName }}
     {{- end }}
 {{- with .Values.ingress.annotations }}
 {{ toYaml . | indent 4 }}
