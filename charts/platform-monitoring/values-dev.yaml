@@ -20,7 +20,6 @@ ingress:
   ingressClassName: traefik
   hosts: [monitoring-dev.neu.ro]
   annotations:
-    kubernetes.io/ingress.class: traefik
     traefik.ingress.kubernetes.io/router.pathmatcher: PathPrefix
     external-dns.platform.neuromation.io: "true"
 

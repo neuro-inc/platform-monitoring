@@ -8,11 +8,15 @@ metadata:
   name: {{ include "platformMonitoring.fullname" . }}
   labels: {{ include "platformMonitoring.labels.standard" . | nindent 4 }}
     service: platform-monitoring
+  annotations:
+    {{- if not $ingressSupportsIngressClassName }}
+    kubernetes.io/ingress.class: traefik
+    {{- end }}
 {{- with .Values.ingress.annotations }}
-  annotations: {{ toYaml . | nindent 4 }}
+{{ toYaml . | indent 4 }}
 {{- end }}
 spec:
-  {{- if and $ingressSupportsIngressClassName .Values.ingress.ingressClassName }}
+  {{- if $ingressSupportsIngressClassName }}
   ingressClassName: {{ .Values.ingress.ingressClassName }}
   {{- end }}
   rules:

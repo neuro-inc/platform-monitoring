@@ -32,7 +32,7 @@ resources:
 
 ingress:
   enabled: false
-  ingressClassName: traefik
+  ingressClassName: ""
   hosts: []
   annotations: {}
 
