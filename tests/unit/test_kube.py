@@ -6,6 +6,8 @@ import aiohttp
 import pytest
 
 from platform_monitoring.kube_client import (
+    GPUCounter,
+    GPUCounters,
     JobError,
     Node,
     Pod,
@@ -168,15 +170,9 @@ class TestPodContainerStats:
         payload = {
             "cpu": {"usageNanoCores": 1000},
             "memory": {"workingSetBytes": 1024 * 1024},
-            "accelerators": [
-                {"dutyCycle": 20, "memoryUsed": 2 * 1024 * 1024},
-                {"dutyCycle": 30, "memoryUsed": 4 * 1024 * 1024},
-            ],
         }
         stats = PodContainerStats.from_primitive(payload)
-        assert stats == PodContainerStats(
-            cpu=0.000001, memory=1.0, gpu_duty_cycle=25, gpu_memory=6.0
-        )
+        assert stats == PodContainerStats(cpu=0.000001, memory=1.0)
 
 
 class TestStatsSummary:
@@ -221,6 +217,214 @@ class TestStatsSummary:
             "namespace", "pod", "container"
         )
         assert stats
+
+
+class TestGPUCounters:
+    def test_parse(self) -> None:
+        metrics = """
+# HELP DCGM_FI_DEV_GPU_UTIL GPU utilization (in %).
+# TYPE DCGM_FI_DEV_GPU_UTIL gauge
+
+# HELP DCGM_FI_DEV_FB_USED Framebuffer memory used (in MiB).
+# TYPE DCGM_FI_DEV_FB_USED gauge
+
+
+DCGM_FI_DEV_GPU_UTIL{gpu="0",container="job-0",namespace="platform-jobs",pod="job-0"} 1
+DCGM_FI_DEV_FB_USED{gpu="0",container="job-0",namespace="platform-jobs",pod="job-0"} 10
+
+DCGM_FI_DEV_GPU_UTIL{gpu="1",container="job-0",namespace="platform-jobs",pod="job-0"} 2
+DCGM_FI_DEV_FB_USED{gpu="1",container="job-0",namespace="platform-jobs",pod="job-0"} 20
+
+DCGM_FI_DEV_GPU_UTIL{gpu="2",container="job-1",namespace="platform-jobs",pod="job-1"} 3
+DCGM_FI_DEV_FB_USED{gpu="2",container="job-1",namespace="platform-jobs",pod="job-1"} 30
+"""
+
+        counters = GPUCounters.parse(metrics)
+
+        assert counters == GPUCounters(
+            counters=[
+                GPUCounter(
+                    name="DCGM_FI_DEV_GPU_UTIL",
+                    value=1,
+                    labels={
+                        "gpu": "0",
+                        "namespace": "platform-jobs",
+                        "pod": "job-0",
+                        "container": "job-0",
+                    },
+                ),
+                GPUCounter(
+                    name="DCGM_FI_DEV_FB_USED",
+                    value=10,
+                    labels={
+                        "gpu": "0",
+                        "namespace": "platform-jobs",
+                        "pod": "job-0",
+                        "container": "job-0",
+                    },
+                ),
+                GPUCounter(
+                    name="DCGM_FI_DEV_GPU_UTIL",
+                    value=2,
+                    labels={
+                        "gpu": "1",
+                        "namespace": "platform-jobs",
+                        "pod": "job-0",
+                        "container": "job-0",
+                    },
+                ),
+                GPUCounter(
+                    name="DCGM_FI_DEV_FB_USED",
+                    value=20,
+                    labels={
+                        "gpu": "1",
+                        "namespace": "platform-jobs",
+                        "pod": "job-0",
+                        "container": "job-0",
+                    },
+                ),
+                GPUCounter(
+                    name="DCGM_FI_DEV_GPU_UTIL",
+                    value=3,
+                    labels={
+                        "gpu": "2",
+                        "namespace": "platform-jobs",
+                        "pod": "job-1",
+                        "container": "job-1",
+                    },
+                ),
+                GPUCounter(
+                    name="DCGM_FI_DEV_FB_USED",
+                    value=30,
+                    labels={
+                        "gpu": "2",
+                        "namespace": "platform-jobs",
+                        "pod": "job-1",
+                        "container": "job-1",
+                    },
+                ),
+            ]
+        )
+
+    def test_get_pod_container_stats_utilization(self) -> None:
+        counters = GPUCounters(
+            counters=[
+                GPUCounter(
+                    name="DCGM_FI_DEV_GPU_UTIL",
+                    value=1,
+                    labels={
+                        "gpu": "0",
+                        "namespace": "platform-jobs",
+                        "pod": "job-0",
+                        "container": "job-0",
+                    },
+                ),
+                GPUCounter(
+                    name="DCGM_FI_DEV_GPU_UTIL",
+                    value=4,
+                    labels={
+                        "gpu": "1",
+                        "namespace": "platform-jobs",
+                        "pod": "job-0",
+                        "container": "job-0",
+                    },
+                ),
+                GPUCounter(
+                    name="DCGM_FI_DEV_GPU_UTIL",
+                    value=2,
+                    labels={
+                        "gpu": "2",
+                        "namespace": "platform-jobs",
+                        "pod": "job-1",
+                        "container": "job-1",
+                    },
+                ),
+            ]
+        )
+
+        stats = counters.get_pod_container_stats(
+            namespace_name="platform-jobs", pod_name="job-0", container_name="job-0"
+        )
+        assert stats.utilization == 2
+
+        stats = counters.get_pod_container_stats(
+            namespace_name="platform-jobs", pod_name="job-1", container_name="job-1"
+        )
+        assert stats.utilization == 2
+
+    def test_get_pod_container_stats_memory_used(self) -> None:
+        counters = GPUCounters(
+            counters=[
+                GPUCounter(
+                    name="DCGM_FI_DEV_FB_USED",
+                    value=1,
+                    labels={
+                        "gpu": "0",
+                        "namespace": "platform-jobs",
+                        "pod": "job-0",
+                        "container": "job-0",
+                    },
+                ),
+                GPUCounter(
+                    name="DCGM_FI_DEV_FB_USED",
+                    value=2,
+                    labels={
+                        "gpu": "1",
+                        "namespace": "platform-jobs",
+                        "pod": "job-0",
+                        "container": "job-0",
+                    },
+                ),
+                GPUCounter(
+                    name="DCGM_FI_DEV_FB_USED",
+                    value=3,
+                    labels={
+                        "gpu": "2",
+                        "namespace": "platform-jobs",
+                        "pod": "job-1",
+                        "container": "job-1",
+                    },
+                ),
+            ]
+        )
+
+        stats = counters.get_pod_container_stats(
+            namespace_name="platform-jobs", pod_name="job-0", container_name="job-0"
+        )
+        assert stats.utilization == 0
+        assert stats.memory_used_mb == 3
+
+    def test_get_pod_container_stats_unknown_job(self) -> None:
+        counters = GPUCounters(
+            counters=[
+                GPUCounter(
+                    name="DCGM_FI_DEV_GPU_UTIL",
+                    value=1,
+                    labels={
+                        "gpu": "0",
+                        "namespace": "platform-jobs",
+                        "pod": "job-0",
+                        "container": "job-0",
+                    },
+                ),
+                GPUCounter(
+                    name="DCGM_FI_DEV_FB_USED",
+                    value=1,
+                    labels={
+                        "gpu": "0",
+                        "namespace": "platform-jobs",
+                        "pod": "job-0",
+                        "container": "job-0",
+                    },
+                ),
+            ]
+        )
+
+        stats = counters.get_pod_container_stats(
+            namespace_name="platform-jobs", pod_name="job-1", container_name="job-1"
+        )
+        assert stats.utilization == 0
+        assert stats.memory_used_mb == 0
 
 
 class TestFilterOutRPCError:

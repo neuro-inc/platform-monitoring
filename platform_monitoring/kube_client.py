@@ -2,10 +2,11 @@ import asyncio
 import enum
 import json
 import logging
+import re
 import ssl
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -301,6 +302,7 @@ class KubeClient:
         read_timeout_s: int = 100,
         conn_pool_size: int = 100,
         kubelet_node_port: int = KubeConfig.kubelet_node_port,
+        nvidia_dcgm_node_port: int = KubeConfig.nvidia_dcgm_node_port,
         trace_configs: Optional[list[aiohttp.TraceConfig]] = None,
     ) -> None:
         self._base_url = base_url
@@ -320,6 +322,7 @@ class KubeClient:
         self._conn_pool_size = conn_pool_size
 
         self._kubelet_port = kubelet_node_port
+        self._nvidia_dcgm_port = nvidia_dcgm_node_port
 
         self._trace_configs = trace_configs
 
@@ -419,6 +422,10 @@ class KubeClient:
         proxy_url = self._generate_node_proxy_url(name, self._kubelet_port)
         return f"{proxy_url}/stats/summary"
 
+    def _generate_node_gpu_metrics_url(self, name: str) -> str:
+        proxy_url = self._generate_node_proxy_url(name, self._nvidia_dcgm_port)
+        return f"{proxy_url}/metrics"
+
     def _generate_pod_log_url(self, pod_name: str, container_name: str) -> str:
         url = self._generate_pod_url(pod_name)
         url = f"{url}/log?container={pod_name}&follow=true"
@@ -505,11 +512,11 @@ class KubeClient:
         """
         https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/apis/stats/v1alpha1/types.go
         """
-        pod = await self.get_pod(pod_name)
-        if not pod.node_name:
-            return None
-        url = self._generate_node_stats_summary_url(pod.node_name)
         try:
+            pod = await self.get_pod(pod_name)
+            if not pod.node_name:
+                return None
+            url = self._generate_node_stats_summary_url(pod.node_name)
             payload = await self._request(method="GET", url=url)
             summary = StatsSummary(payload)
             return summary.get_pod_container_stats(
@@ -519,6 +526,29 @@ class KubeClient:
             return None
         except ContentTypeError as e:
             logger.info(f"Failed to parse response: {e}", exc_info=True)
+            return None
+
+    async def get_pod_container_gpu_stats(
+        self, pod_name: str, container_name: str
+    ) -> Optional["PodContainerGPUStats"]:
+        """
+        https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/apis/stats/v1alpha1/types.go
+        """
+        try:
+            pod = await self.get_pod(pod_name)
+            if not pod.node_name:
+                return None
+            url = self._generate_node_gpu_metrics_url(pod.node_name)
+            assert self._client
+            async with self._client.get(url, raise_for_status=True) as resp:
+                text = await resp.text()
+                gpu_counters = GPUCounters.parse(text)
+            return gpu_counters.get_pod_container_stats(
+                self._namespace, pod_name, container_name
+            )
+        except JobNotFoundException:
+            return None
+        except aiohttp.ClientError:
             return None
 
     async def check_pod_exists(self, pod_name: str) -> bool:
@@ -635,25 +665,76 @@ class KubeClient:
 class PodContainerStats:
     cpu: float
     memory: float
-    # TODO (A Danshyn): group into a single attribute
-    gpu_duty_cycle: Optional[int] = None
-    gpu_memory: Optional[float] = None
 
     @classmethod
     def from_primitive(cls, payload: dict[str, Any]) -> "PodContainerStats":
         cpu = payload.get("cpu", {}).get("usageNanoCores", 0) / (10**9)
         memory = payload.get("memory", {}).get("workingSetBytes", 0) / (2**20)  # MB
-        gpu_memory = None
-        gpu_duty_cycle = None
-        accelerators = payload.get("accelerators") or []
-        if accelerators:
-            gpu_memory = sum(acc["memoryUsed"] for acc in accelerators) / (
-                2**20
-            )  # MB
-            gpu_duty_cycle_total = sum(acc["dutyCycle"] for acc in accelerators)
-            gpu_duty_cycle = int(gpu_duty_cycle_total / len(accelerators))  # %
-        return cls(
-            cpu=cpu, memory=memory, gpu_duty_cycle=gpu_duty_cycle, gpu_memory=gpu_memory
+        return cls(cpu=cpu, memory=memory)
+
+
+@dataclass(frozen=True)
+class PodContainerGPUStats:
+    utilization: int
+    memory_used_mb: int
+
+
+GPU_COUNTER_RE = r"^(?P<name>[A-Z_]+)\s*\{(?P<labels>.+)\}\s+(?P<value>\d+)"
+
+
+@dataclass(frozen=True)
+class GPUCounter:
+    name: str
+    value: int
+    labels: dict[str, str]
+
+
+@dataclass(frozen=True)
+class GPUCounters:
+    counters: list[GPUCounter] = field(default_factory=list)
+
+    @classmethod
+    def parse(cls, text: str) -> "GPUCounters":
+        counters = []
+        for m in re.finditer(GPU_COUNTER_RE, text, re.MULTILINE):
+            groups = m.groupdict()
+            labels = {}
+            for label in groups["labels"].split(","):
+                k, v = label.strip().split("=")
+                labels[k.strip()] = v.strip().strip('"')
+            counters.append(
+                GPUCounter(
+                    name=groups["name"],
+                    value=int(groups["value"]),
+                    labels=labels,
+                )
+            )
+        return cls(counters=counters)
+
+    def get_pod_container_stats(
+        self, namespace_name: str, pod_name: str, container_name: str
+    ) -> PodContainerGPUStats:
+        gpu_count = 0
+        utilization = 0
+        memory_used_mb = 0
+        for c in self.counters:
+            if (
+                c.labels["namespace"] != namespace_name
+                or c.labels["pod"] != pod_name
+                or c.labels["container"] != container_name
+            ):
+                continue
+            if c.name == "DCGM_FI_DEV_GPU_UTIL":
+                gpu_count += 1
+                utilization += c.value
+            if c.name == "DCGM_FI_DEV_FB_USED":
+                memory_used_mb += c.value
+        try:
+            utilization = int(utilization / gpu_count)
+        except ZeroDivisionError:
+            utilization = 0
+        return PodContainerGPUStats(
+            utilization=utilization, memory_used_mb=memory_used_mb
         )
 
 
@@ -722,10 +803,14 @@ class KubeTelemetry(Telemetry):
         )
         if not pod_stats:
             return None
-
+        pod_gpu_stats = await self._kube_client.get_pod_container_gpu_stats(
+            self._pod_name, self._container_name
+        )
+        if not pod_gpu_stats:
+            return JobStats(cpu=pod_stats.cpu, memory=pod_stats.memory)
         return JobStats(
             cpu=pod_stats.cpu,
             memory=pod_stats.memory,
-            gpu_duty_cycle=pod_stats.gpu_duty_cycle,
-            gpu_memory=pod_stats.gpu_memory,
+            gpu_utilization=pod_gpu_stats.utilization,
+            gpu_memory_used_mb=pod_gpu_stats.memory_used_mb,
         )

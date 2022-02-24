@@ -341,10 +341,10 @@ class MonitoringApiHandler:
             "memory": job_stats.memory,
             "timestamp": job_stats.timestamp,
         }
-        if job_stats.gpu_duty_cycle is not None:
-            message["gpu_duty_cycle"] = job_stats.gpu_duty_cycle
-        if job_stats.gpu_memory is not None:
-            message["gpu_memory"] = job_stats.gpu_memory
+        if job_stats.gpu_utilization is not None:
+            message["gpu_duty_cycle"] = job_stats.gpu_utilization
+        if job_stats.gpu_memory_used_mb is not None:
+            message["gpu_memory"] = job_stats.gpu_memory_used_mb
         return message
 
     async def stream_save(self, request: Request) -> StreamResponse:
