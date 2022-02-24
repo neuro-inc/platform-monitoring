@@ -397,18 +397,6 @@ class TestKubeClient:
         assert pod_metrics[0].cpu >= 0.0
         assert pod_metrics[0].memory > 0.0
 
-    async def test_get_pod_container_stats_no_pod(
-        self,
-        kube_config: KubeConfig,
-        kube_client: MyKubeClient,
-        kube_node_name: str,
-    ) -> None:
-        pod_name = str(uuid.uuid4())
-        with pytest.raises(JobNotFoundException):
-            await kube_client.get_pod_container_stats(
-                kube_node_name, pod_name, pod_name
-            )
-
     async def test_check_pod_exists_true(
         self, kube_client: MyKubeClient, job_pod: MyPodDescriptor
     ) -> None:
