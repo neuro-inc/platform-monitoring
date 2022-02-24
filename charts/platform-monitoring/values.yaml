@@ -13,6 +13,7 @@ replicas: 2
 jobsNamespace: default
 
 kubeletPort: 10250
+nvidiaDCGMPort: 9400
 
 platform:
   clusterName: ""

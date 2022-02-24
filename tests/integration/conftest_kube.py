@@ -250,6 +250,11 @@ async def _kube_node(kube_client: KubeClient) -> Node:
 
 
 @pytest.fixture
+async def kube_node_name(_kube_node: Node) -> str:
+    return _kube_node.name
+
+
+@pytest.fixture
 async def kube_container_runtime(_kube_node: Node) -> str:
     version = _kube_node.container_runtime_version
     end = version.find("://")

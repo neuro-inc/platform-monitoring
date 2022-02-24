@@ -302,7 +302,7 @@ class KubeClient:
         read_timeout_s: int = 100,
         conn_pool_size: int = 100,
         kubelet_node_port: int = KubeConfig.kubelet_node_port,
-        nvidia_dcgm_node_port: int = KubeConfig.nvidia_dcgm_node_port,
+        nvidia_dcgm_node_port: Optional[int] = KubeConfig.nvidia_dcgm_node_port,
         trace_configs: Optional[list[aiohttp.TraceConfig]] = None,
     ) -> None:
         self._base_url = base_url
@@ -422,7 +422,9 @@ class KubeClient:
         proxy_url = self._generate_node_proxy_url(name, self._kubelet_port)
         return f"{proxy_url}/stats/summary"
 
-    def _generate_node_gpu_metrics_url(self, name: str) -> str:
+    def _generate_node_gpu_metrics_url(self, name: str) -> Optional[str]:
+        if not self._nvidia_dcgm_port:
+            return None
         proxy_url = self._generate_node_proxy_url(name, self._nvidia_dcgm_port)
         return f"{proxy_url}/metrics"
 
@@ -506,17 +508,18 @@ class KubeClient:
             url=self._get_node_proxy_url(host, port), session=self._client
         )
 
+    async def get_pod_node_name(self, pod_name: str) -> Optional[str]:
+        pod = await self.get_pod(pod_name)
+        return pod.node_name
+
     async def get_pod_container_stats(
-        self, pod_name: str, container_name: str
+        self, node_name: str, pod_name: str, container_name: str
     ) -> Optional["PodContainerStats"]:
         """
         https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/apis/stats/v1alpha1/types.go
         """
         try:
-            pod = await self.get_pod(pod_name)
-            if not pod.node_name:
-                return None
-            url = self._generate_node_stats_summary_url(pod.node_name)
+            url = self._generate_node_stats_summary_url(node_name)
             payload = await self._request(method="GET", url=url)
             summary = StatsSummary(payload)
             return summary.get_pod_container_stats(
@@ -529,16 +532,15 @@ class KubeClient:
             return None
 
     async def get_pod_container_gpu_stats(
-        self, pod_name: str, container_name: str
+        self, node_name: str, pod_name: str, container_name: str
     ) -> Optional["PodContainerGPUStats"]:
         """
         https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/apis/stats/v1alpha1/types.go
         """
         try:
-            pod = await self.get_pod(pod_name)
-            if not pod.node_name:
+            url = self._generate_node_gpu_metrics_url(node_name)
+            if not url:
                 return None
-            url = self._generate_node_gpu_metrics_url(pod.node_name)
             assert self._client
             async with self._client.get(url, raise_for_status=True) as resp:
                 text = await resp.text()
@@ -798,13 +800,16 @@ class KubeTelemetry(Telemetry):
         self._container_name = container_name
 
     async def get_latest_stats(self) -> Optional[JobStats]:
+        node_name = await self._kube_client.get_pod_node_name(self._pod_name)
+        if not node_name:
+            return None
         pod_stats = await self._kube_client.get_pod_container_stats(
-            self._pod_name, self._container_name
+            node_name, self._pod_name, self._container_name
         )
         if not pod_stats:
             return None
         pod_gpu_stats = await self._kube_client.get_pod_container_gpu_stats(
-            self._pod_name, self._container_name
+            node_name, self._pod_name, self._container_name
         )
         if not pod_gpu_stats:
             return JobStats(cpu=pod_stats.cpu, memory=pod_stats.memory)

@@ -92,6 +92,8 @@ spec:
           value: {{ .Values.platform.registryUrl | quote }}
         - name: NP_MONITORING_K8S_KUBELET_PORT
           value: {{ .Values.kubeletPort | quote }}
+        - name: NP_MONITORING_K8S_NVIDIA_DCGM_PORT
+          value: {{ .Values.nvidiaDCGMPort | quote }}
         {{- if .Values.cors.origins }}
         - name: NP_CORS_ORIGINS
           value: {{ join "," .Values.cors.origins | quote }}
