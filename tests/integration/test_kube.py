@@ -348,12 +348,26 @@ class TestKubeClient:
     ) -> None:
         srv = mock_kubernetes_server
         async with KubeClient(
-            base_url=str(f"http://{srv.host}:{srv.port}"), namespace="mock"
+            base_url=str(f"http://{srv.host}:{srv.port}"),
+            namespace="mock",
+            nvidia_dcgm_node_port=9400,
         ) as client:
             stats = await client.get_pod_container_gpu_stats(
                 "whatever", "whatever", "whenever"
             )
             assert stats is not None
+
+    async def test_get_pod_container_gpu_stats_no_nvidia_dcgm_port(
+        self, mock_kubernetes_server: ApiAddress
+    ) -> None:
+        srv = mock_kubernetes_server
+        async with KubeClient(
+            base_url=str(f"http://{srv.host}:{srv.port}"), namespace="mock"
+        ) as client:
+            stats = await client.get_pod_container_gpu_stats(
+                "whatever", "whatever", "whenever"
+            )
+            assert stats is None
 
     async def test_get_pod_container_stats(
         self,
