@@ -803,14 +803,23 @@ class KubeTelemetry(Telemetry):
         node_name = await self._kube_client.get_pod_node_name(self._pod_name)
         if not node_name:
             return None
-        pod_stats = await self._kube_client.get_pod_container_stats(
-            node_name, self._pod_name, self._container_name
+        pod_stats_task = asyncio.create_task(
+            self._kube_client.get_pod_container_stats(
+                node_name, self._pod_name, self._container_name
+            )
         )
+        pod_gpu_stats_task = asyncio.create_task(
+            self._kube_client.get_pod_container_gpu_stats(
+                node_name, self._pod_name, self._container_name
+            )
+        )
+        await asyncio.wait(
+            (pod_stats_task, pod_gpu_stats_task), return_when=asyncio.FIRST_EXCEPTION
+        )
+        pod_stats = pod_stats_task.result()
+        pod_gpu_stats = pod_gpu_stats_task.result()
         if not pod_stats:
             return None
-        pod_gpu_stats = await self._kube_client.get_pod_container_gpu_stats(
-            node_name, self._pod_name, self._container_name
-        )
         if not pod_gpu_stats:
             return JobStats(cpu=pod_stats.cpu, memory=pod_stats.memory)
         return JobStats(
