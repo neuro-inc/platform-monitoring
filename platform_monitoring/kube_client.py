@@ -800,9 +800,22 @@ class KubeTelemetry(Telemetry):
         self._container_name = container_name
 
     async def get_latest_stats(self) -> Optional[JobStats]:
-        node_name = await self._kube_client.get_pod_node_name(self._pod_name)
-        if not node_name:
+        pod = await self._kube_client.get_pod(self._pod_name)
+        if not pod.node_name:
             return None
+        if pod.resource_requests.gpu:
+            return await self._get_latest_gpu_pod_stats(pod.node_name)
+        return await self._get_latest_cpu_pod_stats(pod.node_name)
+
+    async def _get_latest_cpu_pod_stats(self, node_name: str) -> Optional[JobStats]:
+        pod_stats = await self._kube_client.get_pod_container_stats(
+            node_name, self._pod_name, self._container_name
+        )
+        if not pod_stats:
+            return None
+        return JobStats(cpu=pod_stats.cpu, memory=pod_stats.memory)
+
+    async def _get_latest_gpu_pod_stats(self, node_name: str) -> Optional[JobStats]:
         pod_stats_task = asyncio.create_task(
             self._kube_client.get_pod_container_stats(
                 node_name, self._pod_name, self._container_name
