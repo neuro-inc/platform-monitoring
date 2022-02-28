@@ -508,10 +508,6 @@ class KubeClient:
             url=self._get_node_proxy_url(host, port), session=self._client
         )
 
-    async def get_pod_node_name(self, pod_name: str) -> Optional[str]:
-        pod = await self.get_pod(pod_name)
-        return pod.node_name
-
     async def get_pod_container_stats(
         self, node_name: str, pod_name: str, container_name: str
     ) -> Optional["PodContainerStats"]:
@@ -534,10 +530,10 @@ class KubeClient:
     async def get_pod_container_gpu_stats(
         self, node_name: str, pod_name: str, container_name: str
     ) -> Optional["PodContainerGPUStats"]:
+        url = self._generate_node_gpu_metrics_url(node_name)
+        if not url:
+            return None
         try:
-            url = self._generate_node_gpu_metrics_url(node_name)
-            if not url:
-                return None
             assert self._client
             async with self._client.get(url, raise_for_status=True) as resp:
                 text = await resp.text()
@@ -545,8 +541,6 @@ class KubeClient:
             return gpu_counters.get_pod_container_stats(
                 self._namespace, pod_name, container_name
             )
-        except JobNotFoundException:
-            return None
         except aiohttp.ClientError:
             return None
 
