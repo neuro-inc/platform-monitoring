@@ -678,7 +678,7 @@ class PodContainerGPUStats:
     memory_used_mb: int
 
 
-GPU_COUNTER_RE = r"^(?P<name>[a-zA-Z_]+)\s*\{(?P<labels>.+)\}\s+(?P<value>\d+)"
+GPU_COUNTER_RE = r"^(?P<name>[A-Z_]+)\s*\{(?P<labels>.+)\}\s+(?P<value>\d+)"
 
 
 @dataclass(frozen=True)
