@@ -534,9 +534,6 @@ class KubeClient:
     async def get_pod_container_gpu_stats(
         self, node_name: str, pod_name: str, container_name: str
     ) -> Optional["PodContainerGPUStats"]:
-        """
-        https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/apis/stats/v1alpha1/types.go
-        """
         try:
             url = self._generate_node_gpu_metrics_url(node_name)
             if not url:
