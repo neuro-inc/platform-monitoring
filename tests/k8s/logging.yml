@@ -54,12 +54,10 @@ spec:
             - server
             - /data
           env:
-            - name: MINIO_ACCESS_KEY
+            - name: MINIO_ROOT_USER
               value: access_key
-            - name: MINIO_SECRET_KEY
+            - name: MINIO_ROOT_PASSWORD
               value: secret_key
-            - name: MINIO_REGION_NAME
-              value: region-1
             - name: MINIO_STORAGE_CLASS_STANDARD
               value: EC:4
           volumeMounts:
@@ -123,7 +121,7 @@ data:
 
     aws_key_id access_key
     aws_sec_key secret_key
-    s3_region region-1
+    s3_region minio
     s3_bucket logs
     s3_endpoint http://minio:9000
     force_path_style true

@@ -183,7 +183,7 @@ async def es_client(es_config: ElasticsearchConfig) -> AsyncIterator[Elasticsear
 def s3_config(s3_logs_bucket: str, s3_logs_key_prefix_format: str) -> S3Config:
     s3_url = get_service_url(service_name="minio")
     return S3Config(
-        region="region-1",
+        region="minio",
         access_key_id="access_key",
         secret_access_key="secret_key",
         endpoint_url=URL(s3_url),
