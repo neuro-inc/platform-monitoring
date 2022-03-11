@@ -56,7 +56,7 @@ spec:
           env:
             - name: MINIO_ROOT_USER
               value: access_key
-            - name: MINIO_SECRET_KEY
+            - name: MINIO_ROOT_PASSWORD
               value: secret_key
             - name: MINIO_STORAGE_CLASS_STANDARD
               value: EC:4
