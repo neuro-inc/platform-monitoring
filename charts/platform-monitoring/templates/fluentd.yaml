@@ -123,9 +123,9 @@ spec:
         - gcs
         - {{ .Values.logs.persistence.gcp.project | quote }}
         env:
-        - name: MINIO_ACCESS_KEY
+        - name: MINIO_ROOT_USER
           value: minio_access_key
-        - name: MINIO_SECRET_KEY
+        - name: MINIO_ROOT_PASSWORD
           value: minio_secret_key
         - name: GOOGLE_APPLICATION_CREDENTIALS
           value: /accounts/key.json
@@ -154,12 +154,12 @@ spec:
         - gateway
         - azure
         env:
-        - name: MINIO_ACCESS_KEY
+        - name: MINIO_ROOT_USER
           valueFrom:
             secretKeyRef:
               name: {{ include "platformMonitoring.logs.storage.key" . }}
               key: account_name
-        - name: MINIO_SECRET_KEY
+        - name: MINIO_ROOT_PASSWORD
           valueFrom:
             secretKeyRef:
               name: {{ include "platformMonitoring.logs.storage.key" . }}

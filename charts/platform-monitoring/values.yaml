@@ -106,7 +106,7 @@ fluentd:
 minio:
   image:
     repository: minio/minio
-    tag: RELEASE.2021-08-25T00-41-18Z
+    tag: RELEASE.2022-03-08T22-28-51Z
   port: 9000
   resources:
     requests:
