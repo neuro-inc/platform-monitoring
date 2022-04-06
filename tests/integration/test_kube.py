@@ -62,6 +62,9 @@ async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
         # Explicitly return plain text to trigger ContentTypeError
         return web.Response(content_type="text/plain")
 
+    async def _gpu_metrics(request: web.Request) -> web.Response:
+        return web.Response(content_type="text/plain")
+
     def _create_app() -> web.Application:
         app = web.Application()
         app.add_routes(
@@ -70,6 +73,7 @@ async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
                 web.get(
                     "/api/v1/nodes/whatever:10255/proxy/stats/summary", _stats_summary
                 ),
+                web.get("/api/v1/nodes/whatever:9400/proxy/metrics", _gpu_metrics),
             ]
         )
         return app
@@ -334,7 +338,35 @@ class TestKubeClient:
         async with KubeClient(
             base_url=str(f"http://{srv.host}:{srv.port}"), namespace="mock"
         ) as client:
-            stats = await client.get_pod_container_stats("whatever", "whenever")
+            stats = await client.get_pod_container_stats(
+                "whatever", "whatever", "whenever"
+            )
+            assert stats is None
+
+    async def test_get_pod_container_gpu_stats(
+        self, mock_kubernetes_server: ApiAddress
+    ) -> None:
+        srv = mock_kubernetes_server
+        async with KubeClient(
+            base_url=str(f"http://{srv.host}:{srv.port}"),
+            namespace="mock",
+            nvidia_dcgm_node_port=9400,
+        ) as client:
+            stats = await client.get_pod_container_gpu_stats(
+                "whatever", "whatever", "whenever"
+            )
+            assert stats is not None
+
+    async def test_get_pod_container_gpu_stats_no_nvidia_dcgm_port(
+        self, mock_kubernetes_server: ApiAddress
+    ) -> None:
+        srv = mock_kubernetes_server
+        async with KubeClient(
+            base_url=str(f"http://{srv.host}:{srv.port}"), namespace="mock"
+        ) as client:
+            stats = await client.get_pod_container_gpu_stats(
+                "whatever", "whatever", "whenever"
+            )
             assert stats is None
 
     async def test_get_pod_container_stats(
@@ -342,6 +374,7 @@ class TestKubeClient:
         kube_config: KubeConfig,
         kube_client: MyKubeClient,
         job_pod: MyPodDescriptor,
+        kube_node_name: str,
     ) -> None:
         command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
         job_pod.set_command(command)
@@ -351,7 +384,7 @@ class TestKubeClient:
         pod_metrics = []
         while True:
             stats = await kube_client.get_pod_container_stats(
-                job_pod.name, job_pod.name
+                kube_node_name, job_pod.name, job_pod.name
             )
             if stats:
                 pod_metrics.append(stats)
@@ -363,24 +396,6 @@ class TestKubeClient:
         assert pod_metrics[0] == PodContainerStats(cpu=mock.ANY, memory=mock.ANY)
         assert pod_metrics[0].cpu >= 0.0
         assert pod_metrics[0].memory > 0.0
-
-    async def test_get_pod_container_stats_no_pod(
-        self, kube_config: KubeConfig, kube_client: MyKubeClient
-    ) -> None:
-        pod_name = str(uuid.uuid4())
-        with pytest.raises(JobNotFoundException):
-            await kube_client.get_pod_container_stats(pod_name, pod_name)
-
-    async def test_get_pod_container_stats_not_scheduled_yet(
-        self,
-        kube_config: KubeConfig,
-        kube_client: MyKubeClient,
-        job_pod: MyPodDescriptor,
-    ) -> None:
-        await kube_client.create_pod(job_pod.payload)
-
-        stats = await kube_client.get_pod_container_stats(job_pod.name, job_pod.name)
-        assert stats is None
 
     async def test_check_pod_exists_true(
         self, kube_client: MyKubeClient, job_pod: MyPodDescriptor
