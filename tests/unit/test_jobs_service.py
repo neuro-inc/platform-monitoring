@@ -1,3 +1,4 @@
+import datetime
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from decimal import Decimal
@@ -7,11 +8,12 @@ from unittest import mock
 import pytest
 from neuro_config_client import (
     Cluster,
+    ClusterStatus,
     ConfigClient,
     OrchestratorConfig,
     ResourcePoolType,
+    ResourcePreset,
 )
-from neuro_config_client.models import ResourcePreset
 from neuro_sdk import Jobs as JobsClient
 
 from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
@@ -78,6 +80,8 @@ def create_pod(
 def cluster() -> Cluster:
     return Cluster(
         name="default",
+        status=ClusterStatus.DEPLOYED,
+        created_at=datetime.datetime(2022, 4, 6),
         orchestrator=OrchestratorConfig(
             job_hostname_template="",
             job_internal_hostname_template="",

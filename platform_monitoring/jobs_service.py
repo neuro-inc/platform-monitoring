@@ -6,8 +6,7 @@ from functools import reduce
 from typing import Optional
 
 import aiohttp
-from neuro_config_client import ConfigClient
-from neuro_config_client.models import ResourcePoolType
+from neuro_config_client import ConfigClient, ResourcePoolType
 from neuro_sdk import JobDescription as Job, Jobs as JobsClient
 
 from .config import KubeConfig
