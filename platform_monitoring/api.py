@@ -670,6 +670,7 @@ async def create_kube_client(
         read_timeout_s=config.client_read_timeout_s,
         conn_pool_size=config.client_conn_pool_size,
         kubelet_node_port=config.kubelet_node_port,
+        nvidia_dcgm_node_port=config.nvidia_dcgm_node_port,
         trace_configs=trace_configs,
     )
     try:
