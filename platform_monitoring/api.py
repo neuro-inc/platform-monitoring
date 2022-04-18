@@ -596,6 +596,13 @@ async def handle_exceptions(
             status=HTTPNotFound.status_code,
             headers={"X-Error": json.dumps(payload)} if ws_request else None,
         )
+    except ContainerRuntimeClientError as e:
+        payload = {"error": str(e)}
+        return json_response(
+            payload,
+            status=HTTPNotFound.status_code,
+            headers={"X-Error": json.dumps(payload)} if ws_request else None,
+        )
     except JobNotRunningException as e:
         payload = {"error": str(e)}
         return json_response(
