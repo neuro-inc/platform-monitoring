@@ -28,13 +28,10 @@ service:
     traefik.ingress.kubernetes.io/service.sticky.cookie: "true"
     traefik.ingress.kubernetes.io/service.sticky.cookie.name: NEURO_MONITORINGAPI_SESSION
 
+
 cors:
   origins:
-  - http://localhost:8000
-  - https://master--neuro-web.netlify.app
-  - https://master--megafon-web.netlify.app
-  - https://master--mts-web.netlify.app
-  - https://master--minzdrav-web.netlify.app
+  - *
 
 fluentd:
   persistence:
