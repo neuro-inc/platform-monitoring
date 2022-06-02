@@ -26,10 +26,10 @@ test_unit:
 	pytest -vv --cov=platform_monitoring --cov-report xml:.coverage-unit.xml tests/unit
 
 test_integration:
-	pytest -vv --maxfail=1 --cov=platform_monitoring --cov-report xml:.coverage-integration.xml tests/integration/test_kube.py::TestLogReader::test_elasticsearch_empty_log_reader tests/integration/test_kube.py::TestLogReader::test_s3_empty_log_reader -m "not minikube"
+	pytest -vv --maxfail=1 --cov=platform_monitoring --cov-report xml:.coverage-integration.xml tests/integration -m "not minikube"
 
 test_integration_minikube:
-	true #pytest -vv --log-cli-level=debug tests/integration -m minikube
+	pytest -vv --log-cli-level=debug tests/integration -m minikube
 
 docker_build:
 	rm -rf build dist
