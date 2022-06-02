@@ -4,7 +4,7 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Union
 from unittest import mock
 from uuid import uuid4
 
@@ -1069,54 +1069,73 @@ class TestLogReader:
             kube_config, kube_client, s3_log_service, job_pod
         )
 
-    async def _test_get_job_log_reader_empty(
+    async def _test_empty_log_reader(
         self,
-        kube_config: KubeConfig,
         kube_client: MyKubeClient,
-        factory: LogsService,
         job_pod: MyPodDescriptor,
+        factory: LogsService,
     ) -> None:
-        command = "true"
+        command = 'bash -c "sleep 5"'
         job_pod.set_command(command)
-        await kube_client.create_pod(job_pod.payload)
+        names = []
+        tasks = []
 
-        pod_name = job_pod.name
+        def run_log_reader(name: str, delay: float = 0) -> None:
+            async def coro() -> Union[bytes, Exception]:
+                await asyncio.sleep(delay)
+                try:
+                    async with timeout(60.0):
+                        log_reader = factory.get_pod_log_reader(
+                            job_pod.name, separator=b"===", archive_delay_s=600.0
+                        )
+                        return await self._consume_log_reader(log_reader)
+                except Exception as e:
+                    return e
 
-        await kube_client.wait_pod_is_terminated(pod_name)
+            names.append(name)
+            task = asyncio.ensure_future(coro())
+            tasks.append(task)
 
-        async with timeout(30.0):
-            log_reader = factory.get_pod_log_reader(pod_name, archive_delay_s=600.0)
-            payload = await self._consume_log_reader(log_reader)
-        assert payload == b""
+        try:
+            await kube_client.create_pod(job_pod.payload)
+            run_log_reader("created")
+            await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=60.0)
+            for i in range(4):
+                run_log_reader(f"started [{i}]", delay=i * 2)
+            await kube_client.wait_pod_is_terminated(job_pod.name)
+        finally:
+            await kube_client.delete_pod(job_pod.name)
+        run_log_reader("deleting")
+        await kube_client.wait_pod_is_deleted(job_pod.name)
+        run_log_reader("deleted")
 
-        await kube_client.delete_pod(job_pod.name)
+        payloads = await asyncio.gather(*tasks)
 
-        async with timeout(30.0):
-            log_reader = factory.get_pod_log_reader(pod_name, archive_delay_s=600.0)
-            payload = await self._consume_log_reader(log_reader)
-        assert payload == b""
+        # Output for debugging
+        for i, (name, payload) in enumerate(zip(names, payloads)):
+            print(f"{i}. {name}: {payload!r}")
 
-    async def test_get_job_elasticsearch_log_reader_empty(
+        # All logs are completely either live or archive, no separator.
+        for name, payload in zip(names, payloads):
+            assert payload == b"", name
+
+    async def test_elasticsearch_empty_log_reader(
         self,
-        kube_config: KubeConfig,
         kube_client: MyKubeClient,
         elasticsearch_log_service: LogsService,
         job_pod: MyPodDescriptor,
     ) -> None:
-        await self._test_get_job_log_reader_empty(
-            kube_config, kube_client, elasticsearch_log_service, job_pod
+        await self._test_empty_log_reader(
+            kube_client, job_pod, elasticsearch_log_service
         )
 
-    async def test_get_job_s3_log_reader_empty(
+    async def test_s3_empty_log_reader(
         self,
-        kube_config: KubeConfig,
         kube_client: MyKubeClient,
-        s3_log_service: S3LogsService,
+        s3_log_service: LogsService,
         job_pod: MyPodDescriptor,
     ) -> None:
-        await self._test_get_job_log_reader_empty(
-            kube_config, kube_client, s3_log_service, job_pod
-        )
+        await self._test_empty_log_reader(kube_client, job_pod, s3_log_service)
 
     async def _test_merged_log_reader(
         self,
