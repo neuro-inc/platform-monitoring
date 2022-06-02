@@ -522,7 +522,7 @@ class TestLogReader:
                     if delay:
                         await asyncio.sleep(delay)
         except asyncio.CancelledError:
-            pass
+            buffer += b"CANCELLED"
         return bytes(buffer)
 
     def _remove_timestamps(self, data: bytes) -> bytes:
@@ -1075,7 +1075,7 @@ class TestLogReader:
         job_pod: MyPodDescriptor,
         factory: LogsService,
     ) -> None:
-        command = 'bash -c "sleep 5"'
+        command = "sleep 5"
         job_pod.set_command(command)
         names = []
         tasks = []
