@@ -13,7 +13,7 @@ function minikube::start {
         --install-addons=true \
         --addons=registry \
         --wait=all \
-        --wait-timeout=5m
+        --wait-timeout=5m --driver=virtualbox
     kubectl config use-context minikube
     kubectl get nodes -o name | xargs -I {} kubectl label {} --overwrite \
         platform.neuromation.io/job=true \

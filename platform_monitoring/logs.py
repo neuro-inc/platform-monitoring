@@ -474,14 +474,10 @@ class LogsService(abc.ABC):
                         first = await self.get_first_log_entry_time(
                             pod_name, timeout_s=archive_delay_s
                         )
-                        if first is not None:
-                            if first > until:
-                                until = first
-                                continue
-                            # Start reading from container.
-                            break
-
-                    if request_time - prev_finish < archive_delay:
+                        if first is not None and first > until:
+                            until = first
+                            continue
+                    elif request_time - prev_finish < archive_delay:
                         until = None
                         await asyncio.sleep(interval_s)
                         continue
@@ -727,14 +723,11 @@ async def get_first_log_entry_time(
                     chunk = await stream.readany()
                     if not chunk:
                         break
-                    pos = chunk.find(b" ")
+                    pos = chunk.find(b" "[0])
                     if pos >= 0:
                         time_str += chunk[:pos]
                         break
-                    else:
-                        time_str += chunk
-                else:
-                    return None
+                    time_str += chunk
     except (asyncio.TimeoutError, JobNotFoundException):
         return None
     try:
