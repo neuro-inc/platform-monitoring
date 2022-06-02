@@ -1069,6 +1069,55 @@ class TestLogReader:
             kube_config, kube_client, s3_log_service, job_pod
         )
 
+    async def _test_get_job_log_reader_empty(
+        self,
+        kube_config: KubeConfig,
+        kube_client: MyKubeClient,
+        factory: LogsService,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        command = "true"
+        job_pod.set_command(command)
+        await kube_client.create_pod(job_pod.payload)
+
+        pod_name = job_pod.name
+
+        await kube_client.wait_pod_is_terminated(pod_name)
+
+        async with timeout(30.0):
+            log_reader = factory.get_pod_log_reader(pod_name, archive_delay_s=600.0)
+            payload = await self._consume_log_reader(log_reader)
+        assert payload == b""
+
+        await kube_client.delete_pod(job_pod.name)
+
+        async with timeout(30.0):
+            log_reader = factory.get_pod_log_reader(pod_name, archive_delay_s=600.0)
+            payload = await self._consume_log_reader(log_reader)
+        assert payload == b""
+
+    async def test_get_job_elasticsearch_log_reader_empty(
+        self,
+        kube_config: KubeConfig,
+        kube_client: MyKubeClient,
+        elasticsearch_log_service: LogsService,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        await self._test_get_job_log_reader_empty(
+            kube_config, kube_client, elasticsearch_log_service, job_pod
+        )
+
+    async def test_get_job_s3_log_reader_empty(
+        self,
+        kube_config: KubeConfig,
+        kube_client: MyKubeClient,
+        s3_log_service: S3LogsService,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        await self._test_get_job_log_reader_empty(
+            kube_config, kube_client, s3_log_service, job_pod
+        )
+
     async def _test_merged_log_reader(
         self,
         kube_client: MyKubeClient,
