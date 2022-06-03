@@ -466,6 +466,7 @@ class LogsService(abc.ABC):
                         prev_finish = status.finished_at or prev_finish
                         is_pod_terminated = status.is_pod_terminated
                     except JobNotFoundException:
+                        yield (f"~~~ Job not found at {_utcnow()}\n").encode()
                         start = None
                     if start is not None:
                         if start > until:
