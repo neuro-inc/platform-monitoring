@@ -1149,12 +1149,16 @@ class TestLogReader:
         tasks = []
 
         def run_log_reader(name: str, delay: float = 0) -> None:
-            async def coro() -> bytes:
+            async def coro() -> Union[bytes, Exception]:
                 await asyncio.sleep(delay)
-                log_reader = factory.get_pod_log_reader(
-                    job_pod.name, separator=b"===", archive_delay_s=10.0
-                )
-                return await self._consume_log_reader(log_reader)
+                try:
+                    async with timeout(60.0):
+                        log_reader = factory.get_pod_log_reader(
+                            job_pod.name, separator=b"===", archive_delay_s=600.0
+                        )
+                        return await self._consume_log_reader(log_reader)
+                except Exception as e:
+                    return e
 
             names.append(name)
             task = asyncio.ensure_future(coro())
@@ -1217,12 +1221,16 @@ class TestLogReader:
         tasks = []
 
         def run_log_reader(name: str, delay: float = 0) -> None:
-            async def coro() -> bytes:
+            async def coro() -> Union[bytes, Exception]:
                 await asyncio.sleep(delay)
-                log_reader = factory.get_pod_log_reader(
-                    job_pod.name, separator=b"===", archive_delay_s=20.0
-                )
-                return await self._consume_log_reader(log_reader)
+                try:
+                    async with timeout(60.0):
+                        log_reader = factory.get_pod_log_reader(
+                            job_pod.name, separator=b"===", archive_delay_s=600.0
+                        )
+                        return await self._consume_log_reader(log_reader)
+                except Exception as e:
+                    return e
 
             names.append(name)
             task = asyncio.ensure_future(coro())
