@@ -1163,7 +1163,7 @@ class TestLogReader:
                         )
                         return await self._consume_log_reader(log_reader)
                 except Exception as e:
-                    logger.exception("Error in reading logs for %r", name)
+                    logger.exception("Error in logs reading for %r", name)
                     return e
 
             names.append(name)
@@ -1237,7 +1237,7 @@ class TestLogReader:
                         )
                         return await self._consume_log_reader(log_reader)
                 except Exception as e:
-                    logger.exception("Error in reading logs for %r", name)
+                    logger.exception("Error in logs reading for %r", name)
                     return e
 
             names.append(name)
