@@ -26,7 +26,7 @@ test_unit:
 	pytest -vv --cov=platform_monitoring --cov-report xml:.coverage-unit.xml tests/unit
 
 test_integration:
-	pytest -vv --maxfail=1 --cov=platform_monitoring --cov-report xml:.coverage-integration.xml \
+	pytest -vv --maxfail=6 --cov=platform_monitoring --cov-report xml:.coverage-integration.xml \
 	    tests/integration/test_kube.py::TestLogReader::test_elasticsearch_empty_log_reader \
 	    tests/integration/test_kube.py::TestLogReader::test_s3_empty_log_reader \
 	    tests/integration/test_kube.py::TestLogReader::test_elasticsearch_merged_log_reader \
