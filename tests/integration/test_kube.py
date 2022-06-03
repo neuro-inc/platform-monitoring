@@ -1224,7 +1224,7 @@ class TestLogReader:
             async def coro() -> Union[bytes, Exception]:
                 await asyncio.sleep(delay)
                 try:
-                    async with timeout(60.0):
+                    async with timeout(90.0):
                         log_reader = factory.get_pod_log_reader(
                             job_pod.name, separator=b"===", archive_delay_s=600.0
                         )
