@@ -414,6 +414,7 @@ class LogsService(abc.ABC):
 
         has_archive = False
         is_pod_terminated = False
+        is_pod_deleted = False
         prev_finish = _utcnow()
         until = start
         while True:
@@ -468,9 +469,9 @@ class LogsService(abc.ABC):
                         prev_finish = status.finished_at or prev_finish
                         is_pod_terminated = status.is_pod_terminated
                     except JobNotFoundException:
-                        if is_pod_terminated and not has_new_archive:
+                        if is_pod_deleted and not has_new_archive:
                             return
-                        is_pod_terminated = True
+                        is_pod_deleted = is_pod_terminated = True
                         until = start = None
                         continue
                     if start is not None:
