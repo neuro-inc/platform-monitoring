@@ -469,6 +469,7 @@ class LogsService(abc.ABC):
                         prev_finish = status.finished_at or prev_finish
                         is_pod_terminated = status.is_pod_terminated
                     except JobNotFoundException:
+                        yield f"~~~ Job not found at {_utcnow()}\n".encode()
                         if is_pod_deleted and not has_new_archive:
                             return
                         is_pod_deleted = is_pod_terminated = True

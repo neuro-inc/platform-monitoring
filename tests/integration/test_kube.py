@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import re
 import uuid
 from collections.abc import AsyncIterator
@@ -36,6 +37,8 @@ from platform_monitoring.utils import parse_date
 
 from .conftest_kube import MyKubeClient, MyPodDescriptor
 from tests.integration.conftest import ApiAddress, create_local_app_server
+
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture
@@ -522,6 +525,7 @@ class TestLogReader:
                     if delay:
                         await asyncio.sleep(delay)
         except asyncio.CancelledError:
+            logger.exception("Cancelled logs reading")
             buffer += b"CANCELLED"
         return bytes(buffer)
 
@@ -1090,6 +1094,7 @@ class TestLogReader:
                         )
                         return await self._consume_log_reader(log_reader)
                 except Exception as e:
+                    logger.exception("Error in reading logs for %r", name)
                     return e
 
             names.append(name)
@@ -1158,6 +1163,7 @@ class TestLogReader:
                         )
                         return await self._consume_log_reader(log_reader)
                 except Exception as e:
+                    logger.exception("Error in reading logs for %r", name)
                     return e
 
             names.append(name)
@@ -1230,6 +1236,7 @@ class TestLogReader:
                         )
                         return await self._consume_log_reader(log_reader)
                 except Exception as e:
+                    logger.exception("Error in reading logs for %r", name)
                     return e
 
             names.append(name)
