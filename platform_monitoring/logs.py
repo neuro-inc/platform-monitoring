@@ -419,6 +419,7 @@ class LogsService(abc.ABC):
         while True:
             request_time = _utcnow()
             until = until or request_time
+            has_new_archive = False
             log_reader = self.get_pod_archive_log_reader(
                 pod_name, since=since, timestamps=timestamps, debug=debug
             )
@@ -453,6 +454,7 @@ class LogsService(abc.ABC):
                                     break
                         else:
                             until = _utcnow()
+                    has_new_archive = True
                     has_archive = True
                     yield chunk
                 else:
@@ -466,8 +468,11 @@ class LogsService(abc.ABC):
                         prev_finish = status.finished_at or prev_finish
                         is_pod_terminated = status.is_pod_terminated
                     except JobNotFoundException:
-                        yield (f"~~~ Job not found at {_utcnow()}\n").encode()
-                        start = None
+                        if is_pod_terminated and not has_new_archive:
+                            return
+                        is_pod_terminated = True
+                        until = start = None
+                        continue
                     if start is not None:
                         if start > until:
                             until = start
