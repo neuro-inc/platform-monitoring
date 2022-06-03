@@ -13,7 +13,7 @@ from typing import Any, Optional
 import aiohttp
 from aiobotocore.client import AioBaseClient
 from aiobotocore.response import StreamingBody
-from aioelasticsearch import Elasticsearch
+from aioelasticsearch import Elasticsearch, RequestError
 from aioelasticsearch.helpers import Scan
 from async_timeout import timeout
 from neuro_logging import trace
@@ -216,7 +216,7 @@ class ElasticsearchLogReader(LogReader):
 
     async def __aenter__(self) -> AsyncIterator[bytes]:
         query = self._combine_search_query()
-        self._scan = Scan(
+        scan = Scan(
             self._es_client,
             index=self._index,
             doc_type=self._doc_type,
@@ -230,20 +230,25 @@ class ElasticsearchLogReader(LogReader):
             preserve_order=True,
             size=100,
         )
-        await self._scan.__aenter__()
+        try:
+            await scan.__aenter__()
+            self._scan = scan
+        except RequestError:
+            pass
         self._iterator = self._iterate()
         return self._iterator
 
     async def __aexit__(self, *args: Any) -> None:
         assert self._iterator
         await self._iterator.aclose()  # type: ignore
-        assert self._scan
         scan = self._scan
         self._scan = None
-        await scan.__aexit__(*args)
+        if scan is not None:
+            await scan.__aexit__(*args)
 
     async def _iterate(self) -> AsyncIterator[bytes]:
-        assert self._scan
+        if self._scan is None:
+            return
         async for doc in self._scan:
             try:
                 source = doc["_source"]
