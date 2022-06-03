@@ -339,7 +339,9 @@ class S3LogReader(LogReader):
     async def _iterate(self) -> AsyncIterator[bytes]:
         since = self._since
         keys = await self._load_log_keys(since)
+        logger.info("keys = %r", keys)
         for key in keys:
+            logger.info("key = %r", key)
             response = await self._s3_client.get_object(
                 Bucket=self._bucket_name, Key=key
             )
@@ -351,6 +353,7 @@ class S3LogReader(LogReader):
                     line_iterator = response_body.iter_lines()
                 async with aclosing(line_iterator):
                     async for line in line_iterator:
+                        logger.info("line = %r", line)
                         try:
                             event = json.loads(line)
                             time_str = event["time"]
@@ -693,7 +696,7 @@ class S3LogsService(BaseLogsService):
             container_name=pod_name,
             since=since,
             timestamps=timestamps,
-            debug=debug,
+            debug=debug or True,
         )
 
     async def drop_logs(self, pod_name: str) -> None:
