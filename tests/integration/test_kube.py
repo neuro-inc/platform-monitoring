@@ -1045,6 +1045,7 @@ class TestLogReader:
         payload = await self._consume_log_reader(log_reader)
         assert payload == b"hello\n"
 
+        await asyncio.sleep(10)
         await kube_client.delete_pod(job_pod.name)
 
         log_reader = factory.get_pod_log_reader(pod_name, archive_delay_s=10.0)

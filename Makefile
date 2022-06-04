@@ -23,13 +23,24 @@ else
 endif
 
 test_unit:
-	pytest -vv --cov=platform_monitoring --cov-report xml:.coverage-unit.xml tests/unit
+	pytest -vv \
+	    --cov=platform_monitoring --cov-report xml:.coverage-unit.xml \
+	    tests/unit
 
 test_integration:
-	pytest -vv --maxfail=3 --cov=platform_monitoring --cov-report xml:.coverage-integration.xml tests/integration -m "not minikube"
+	pytest -vv \
+	    --maxfail=3 \
+	    --cov=platform_monitoring --cov-report xml:.coverage-integration.xml \
+	    --durations=10 \
+	    tests/integration \
+	    -m "not minikube"
 
 test_integration_minikube:
-	pytest -vv --log-cli-level=debug tests/integration -m minikube
+	pytest -vv \
+	    --log-cli-level=debug \
+	    --durations=10 \
+	    tests/integration \
+	    -m minikube
 
 docker_build:
 	rm -rf build dist
