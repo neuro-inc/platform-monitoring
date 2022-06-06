@@ -12,9 +12,6 @@ platform:
         name: platformservices-secret
         key: compute_token
 
-podAnnotations:
-  iam.amazonaws.com/role: arn:aws:iam::771188043543:role/s3-366c09e4841fcc83df56b8f070c34716
-
 ingress:
   enabled: true
   ingressClassName: traefik
@@ -39,9 +36,6 @@ fluentd:
     accessMode: ReadWriteOnce
     size: 10Gi
     storageClassName: standard
-
-  podAnnotations:
-    iam.amazonaws.com/role: arn:aws:iam::771188043543:role/s3-366c09e4841fcc83df56b8f070c34716
 
 logs:
   persistence:
