@@ -419,13 +419,11 @@ class LogsService(abc.ABC):
 
         has_archive = False
         is_pod_terminated = False
-        is_pod_deleted = False
         prev_finish = _utcnow()
         until = start
         while True:
             request_time = _utcnow()
             until = until or request_time
-            has_new_archive = False
             log_reader = self.get_pod_archive_log_reader(
                 pod_name, since=since, timestamps=timestamps, debug=debug
             )
@@ -460,7 +458,6 @@ class LogsService(abc.ABC):
                                     break
                         else:
                             until = _utcnow()
-                    has_new_archive = True
                     has_archive = True
                     yield chunk
                 else:
@@ -474,11 +471,7 @@ class LogsService(abc.ABC):
                         prev_finish = status.finished_at or prev_finish
                         is_pod_terminated = status.is_pod_terminated
                     except JobNotFoundException:
-                        if is_pod_deleted and not has_new_archive:
-                            return
-                        is_pod_deleted = is_pod_terminated = True
-                        until = start = None
-                        continue
+                        start = None
                     if start is not None:
                         if start > until:
                             until = start
@@ -486,10 +479,14 @@ class LogsService(abc.ABC):
                         first = await self.get_first_log_entry_time(
                             pod_name, timeout_s=archive_delay_s
                         )
-                        if first is not None and first > until:
-                            until = first
-                            continue
-                    elif request_time - prev_finish < archive_delay:
+                        if first is not None:
+                            if first > until:
+                                until = first
+                                continue
+                            # Start reading from container.
+                            break
+
+                    if request_time - prev_finish < archive_delay:
                         until = None
                         await asyncio.sleep(interval_s)
                         continue
