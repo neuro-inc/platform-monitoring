@@ -29,10 +29,18 @@ test_unit:
 
 test_integration:
 	pytest -vv \
-	    --maxfail=3 \
+	    --maxfail=8 \
 	    --cov=platform_monitoring --cov-report xml:.coverage-integration.xml \
 	    --durations=10 \
-	    tests/integration \
+	    tests/integration/test_kube.py::TestLogReader \
+	    -k "test_get_job_elasticsearch_log_reader or \
+	        test_get_job_s3_log_reader or \
+	        test_elasticsearch_empty_log_reader or \
+	        test_s3_empty_log_reader or \
+	        test_elasticsearch_merged_log_reader or \
+	        test_s3_merged_log_reader or \
+	        test_elasticsearch_merged_log_reader_restarted or \
+	        test_s3_merged_log_reader_restarted" \
 	    -m "not minikube"
 
 test_integration_minikube:

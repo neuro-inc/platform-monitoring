@@ -485,6 +485,8 @@ class LogsService(abc.ABC):
                                 continue
                             # Start reading from container.
                             break
+                        if is_pod_terminated and first is None:
+                            return
 
                     if request_time - prev_finish < archive_delay:
                         until = None
