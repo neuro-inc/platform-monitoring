@@ -190,6 +190,9 @@ class MonitoringApiHandler:
         response.headers["X-Separator"] = separator
         await response.prepare(request)
 
+        async def stop_func() -> bool:
+            return self._jobs_helper.is_job_finished(await self._get_job(job.id))
+
         async with self._logs_service.get_pod_log_reader(
             pod_name,
             separator=separator.encode(),
@@ -197,6 +200,7 @@ class MonitoringApiHandler:
             timestamps=timestamps,
             debug=debug,
             archive_delay_s=archive_delay_s,
+            stop_func=stop_func,
         ) as it:
             async for chunk in it:
                 await response.write(chunk)

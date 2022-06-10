@@ -1084,6 +1084,13 @@ class TestLogReader:
         job_pod.set_command(command)
         names = []
         tasks = []
+        done = False
+
+        async def stop_func() -> bool:
+            if done:
+                return True
+            await asyncio.sleep(1)
+            return False
 
         def run_log_reader(name: str, delay: float = 0) -> None:
             async def coro() -> Union[bytes, Exception]:
@@ -1091,7 +1098,10 @@ class TestLogReader:
                 try:
                     async with timeout(60.0):
                         log_reader = factory.get_pod_log_reader(
-                            job_pod.name, separator=b"===", archive_delay_s=600.0
+                            job_pod.name,
+                            separator=b"===",
+                            archive_delay_s=600.0,
+                            stop_func=stop_func,
                         )
                         return await self._consume_log_reader(log_reader)
                 except Exception as e:
@@ -1110,6 +1120,7 @@ class TestLogReader:
                 run_log_reader(f"started [{i}]", delay=i * 2)
             await kube_client.wait_pod_is_terminated(job_pod.name)
         finally:
+            done = True
             await kube_client.delete_pod(job_pod.name)
         run_log_reader("deleting")
         await kube_client.wait_pod_is_deleted(job_pod.name)
@@ -1153,6 +1164,13 @@ class TestLogReader:
         job_pod.set_command(command)
         names = []
         tasks = []
+        done = False
+
+        async def stop_func() -> bool:
+            if done:
+                return True
+            await asyncio.sleep(1)
+            return False
 
         def run_log_reader(name: str, delay: float = 0) -> None:
             async def coro() -> Union[bytes, Exception]:
@@ -1160,7 +1178,10 @@ class TestLogReader:
                 try:
                     async with timeout(60.0):
                         log_reader = factory.get_pod_log_reader(
-                            job_pod.name, separator=b"===", archive_delay_s=600.0
+                            job_pod.name,
+                            separator=b"===",
+                            archive_delay_s=600.0,
+                            stop_func=stop_func,
                         )
                         return await self._consume_log_reader(log_reader)
                 except Exception as e:
@@ -1180,6 +1201,7 @@ class TestLogReader:
             await kube_client.wait_pod_is_terminated(job_pod.name)
             await asyncio.sleep(10)
         finally:
+            done = True
             await kube_client.delete_pod(job_pod.name)
         run_log_reader("deleting")
         await kube_client.wait_pod_is_deleted(job_pod.name)
@@ -1227,6 +1249,13 @@ class TestLogReader:
         job_pod.set_restart_policy("Always")
         names = []
         tasks = []
+        done = False
+
+        async def stop_func() -> bool:
+            if done:
+                return True
+            await asyncio.sleep(1)
+            return False
 
         def run_log_reader(name: str, delay: float = 0) -> None:
             async def coro() -> Union[bytes, Exception]:
@@ -1234,7 +1263,10 @@ class TestLogReader:
                 try:
                     async with timeout(90.0):
                         log_reader = factory.get_pod_log_reader(
-                            job_pod.name, separator=b"===", archive_delay_s=600.0
+                            job_pod.name,
+                            separator=b"===",
+                            archive_delay_s=600.0,
+                            stop_func=stop_func,
                         )
                         return await self._consume_log_reader(log_reader)
                 except Exception as e:
@@ -1259,6 +1291,7 @@ class TestLogReader:
                 run_log_reader(f"restarted 2 [{i}]", delay=i * 2)
             await kube_client.wait_pod_is_terminated(job_pod.name)
         finally:
+            done = True
             await kube_client.delete_pod(job_pod.name)
         run_log_reader("deleting")
         await kube_client.wait_pod_is_deleted(job_pod.name)
