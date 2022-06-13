@@ -1202,6 +1202,7 @@ class TestLogReader:
             for i in range(4):
                 run_log_reader(f"started [{i}]", delay=i * 2)
             await kube_client.wait_pod_is_terminated(job_pod.name)
+            await asyncio.sleep(10)
         finally:
             done = True
             await kube_client.delete_pod(job_pod.name)
@@ -1319,6 +1320,9 @@ class TestLogReader:
                 # There should be parts of live and archive logs,
                 # and a separator between them.
                 assert payload.count(b"===\n") == 1, name
+            # The last line in the archive can be duplicated in live logs.
+            payload = re.sub(rb"(?m)^(.*\n)(?====\n\1)", b"", payload)
+            # Remove separator between archive and live logs.
             payload = payload.replace(b"===\n", b"")
             assert payload == payload0, name
 
