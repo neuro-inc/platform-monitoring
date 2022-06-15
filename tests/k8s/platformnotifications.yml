@@ -86,6 +86,10 @@ spec:
           value: http://platformauthapi:8080
         - name: NP_NOTIFICATIONS_PLATFORM_AUTH_TOKEN
           value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6Im5vdGlmaWNhdGlvbiIsImh0dHBzOi8vcGxhdGZvcm0ubmV1cm9tYXRpb24uaW8vdXNlciI6Im5vdGlmaWNhdGlvbiJ9.XiHClMa0aNPK7L6mm8NJrux8UQ414tN3UdVoxR6ybv8
+        - name: NP_NOTIFICATIONS_PLATFORM_ADMIN_URL
+          value: http://platformadmin:8080
+        - name: NP_NOTIFICATIONS_PLATFORM_ADMIN_TOKEN
+          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6Im5vdGlmaWNhdGlvbiIsImh0dHBzOi8vcGxhdGZvcm0ubmV1cm9tYXRpb24uaW8vdXNlciI6Im5vdGlmaWNhdGlvbiJ9.XiHClMa0aNPK7L6mm8NJrux8UQ414tN3UdVoxR6ybv8
         - name: NP_DB_REDIS_URI
           value: redis://platformnotifications-redis:6379/0
         - name: NP_NOTIFICATIONS_TRANSPORT
