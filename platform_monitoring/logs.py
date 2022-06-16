@@ -4,7 +4,7 @@ import io
 import json
 import logging
 import zlib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime, timedelta, timezone
 from os.path import basename
@@ -399,8 +399,14 @@ class LogsService(abc.ABC):
         interval_s: float = 1.0,
         archive_delay_s: float = DEFAULT_ARCHIVE_DELAY,
         debug: bool = False,
+        stop_func: Optional[Callable[[], Awaitable[bool]]] = None,
     ) -> AsyncIterator[bytes]:
         archive_delay = timedelta(seconds=archive_delay_s)
+        if stop_func is None:
+
+            async def stop_func() -> bool:
+                await asyncio.sleep(interval_s)
+                return False
 
         def get_last_start(status: ContainerStatus) -> Optional[datetime]:
             if status.is_running:
@@ -485,11 +491,16 @@ class LogsService(abc.ABC):
                                 continue
                             # Start reading from container.
                             break
+                        if is_pod_terminated and first is None:
+                            return
+                    elif is_pod_terminated:
+                        return
 
                     if request_time - prev_finish < archive_delay:
-                        until = None
-                        await asyncio.sleep(interval_s)
-                        continue
+                        assert stop_func is not None
+                        if not await stop_func():
+                            until = None
+                            continue
             # Start reading from container.
             break
 

@@ -1039,7 +1039,7 @@ class TestLogReader:
 
         pod_name = job_pod.name
 
-        await kube_client.wait_pod_is_terminated(pod_name)
+        await kube_client.wait_pod_is_terminated(pod_name, timeout_s=120)
 
         log_reader = factory.get_pod_log_reader(pod_name, archive_delay_s=10.0)
         payload = await self._consume_log_reader(log_reader)
@@ -1083,14 +1083,26 @@ class TestLogReader:
         job_pod.set_command(command)
         names = []
         tasks = []
+        done = False
 
-        def run_log_reader(name: str, delay: float = 0) -> None:
+        async def stop_func() -> bool:
+            if done:
+                return True
+            await asyncio.sleep(1)
+            return False
+
+        def run_log_reader(
+            name: str, delay: float = 0, timeout_s: float = 60.0
+        ) -> None:
             async def coro() -> Union[bytes, Exception]:
                 await asyncio.sleep(delay)
                 try:
-                    async with timeout(60.0):
+                    async with timeout(timeout_s):
                         log_reader = factory.get_pod_log_reader(
-                            job_pod.name, separator=b"===", archive_delay_s=20.0
+                            job_pod.name,
+                            separator=b"===",
+                            archive_delay_s=600.0,
+                            stop_func=stop_func,
                         )
                         return await self._consume_log_reader(log_reader)
                 except Exception as e:
@@ -1103,12 +1115,13 @@ class TestLogReader:
 
         try:
             await kube_client.create_pod(job_pod.payload)
-            run_log_reader("created")
-            await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=60.0)
+            run_log_reader("created", timeout_s=120)
+            await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=120)
             for i in range(4):
                 run_log_reader(f"started [{i}]", delay=i * 2)
             await kube_client.wait_pod_is_terminated(job_pod.name)
         finally:
+            done = True
             await kube_client.delete_pod(job_pod.name)
         run_log_reader("deleting")
         await kube_client.wait_pod_is_deleted(job_pod.name)
@@ -1152,14 +1165,26 @@ class TestLogReader:
         job_pod.set_command(command)
         names = []
         tasks = []
+        done = False
 
-        def run_log_reader(name: str, delay: float = 0) -> None:
+        async def stop_func() -> bool:
+            if done:
+                return True
+            await asyncio.sleep(1)
+            return False
+
+        def run_log_reader(
+            name: str, delay: float = 0, timeout_s: float = 60.0
+        ) -> None:
             async def coro() -> Union[bytes, Exception]:
                 await asyncio.sleep(delay)
                 try:
-                    async with timeout(60.0):
+                    async with timeout(timeout_s):
                         log_reader = factory.get_pod_log_reader(
-                            job_pod.name, separator=b"===", archive_delay_s=10.0
+                            job_pod.name,
+                            separator=b"===",
+                            archive_delay_s=600.0,
+                            stop_func=stop_func,
                         )
                         return await self._consume_log_reader(log_reader)
                 except Exception as e:
@@ -1172,12 +1197,14 @@ class TestLogReader:
 
         try:
             await kube_client.create_pod(job_pod.payload)
-            run_log_reader("created")
-            await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=60.0)
+            run_log_reader("created", timeout_s=120)
+            await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=120)
             for i in range(4):
                 run_log_reader(f"started [{i}]", delay=i * 2)
             await kube_client.wait_pod_is_terminated(job_pod.name)
+            await asyncio.sleep(10)
         finally:
+            done = True
             await kube_client.delete_pod(job_pod.name)
         run_log_reader("deleting")
         await kube_client.wait_pod_is_deleted(job_pod.name)
@@ -1225,14 +1252,26 @@ class TestLogReader:
         job_pod.set_restart_policy("Always")
         names = []
         tasks = []
+        done = False
 
-        def run_log_reader(name: str, delay: float = 0) -> None:
+        async def stop_func() -> bool:
+            if done:
+                return True
+            await asyncio.sleep(1)
+            return False
+
+        def run_log_reader(
+            name: str, delay: float = 0, timeout_s: float = 60.0
+        ) -> None:
             async def coro() -> Union[bytes, Exception]:
                 await asyncio.sleep(delay)
                 try:
-                    async with timeout(90.0):
+                    async with timeout(timeout_s):
                         log_reader = factory.get_pod_log_reader(
-                            job_pod.name, separator=b"===", archive_delay_s=20.0
+                            job_pod.name,
+                            separator=b"===",
+                            archive_delay_s=600.0,
+                            stop_func=stop_func,
                         )
                         return await self._consume_log_reader(log_reader)
                 except Exception as e:
@@ -1245,10 +1284,10 @@ class TestLogReader:
 
         try:
             await kube_client.create_pod(job_pod.payload)
-            run_log_reader("created")
-            await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=60.0)
+            run_log_reader("created", timeout_s=180)
+            await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=120)
             for i in range(4):
-                run_log_reader(f"started [{i}]", delay=i * 2)
+                run_log_reader(f"started [{i}]", delay=i * 2, timeout_s=90)
             await kube_client.wait_container_is_restarted(job_pod.name, 1)
             for i in range(4):
                 run_log_reader(f"restarted 1 [{i}]", delay=i * 2)
@@ -1257,6 +1296,7 @@ class TestLogReader:
                 run_log_reader(f"restarted 2 [{i}]", delay=i * 2)
             await kube_client.wait_pod_is_terminated(job_pod.name)
         finally:
+            done = True
             await kube_client.delete_pod(job_pod.name)
         run_log_reader("deleting")
         await kube_client.wait_pod_is_deleted(job_pod.name)
@@ -1280,6 +1320,9 @@ class TestLogReader:
                 # There should be parts of live and archive logs,
                 # and a separator between them.
                 assert payload.count(b"===\n") == 1, name
+            # The last line in the archive can be duplicated in live logs.
+            payload = re.sub(rb"(?m)^(.*\n)(?====\n\1)", b"", payload)
+            # Remove separator between archive and live logs.
             payload = payload.replace(b"===\n", b"")
             assert payload == payload0, name
 
@@ -1330,7 +1373,7 @@ class TestLogReader:
 
         try:
             await kube_client.create_pod(job_pod.payload)
-            await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=60.0)
+            await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=120)
             await kube_client.wait_pod_is_terminated(job_pod.name)
             status = await kube_client.get_container_status(job_pod.name)
             finished1 = status.finished_at

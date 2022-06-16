@@ -29,7 +29,7 @@ test_unit:
 
 test_integration:
 	pytest -vv \
-	    --maxfail=3 \
+	    --maxfail=8 \
 	    --cov=platform_monitoring --cov-report xml:.coverage-integration.xml \
 	    --durations=10 \
 	    tests/integration \
