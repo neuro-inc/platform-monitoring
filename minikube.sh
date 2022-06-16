@@ -9,7 +9,6 @@ function minikube::start {
     echo "Starting minikube..."
     minikube config set WantUpdateNotification false
     minikube start \
-        --kubernetes-version=v1.14.10 \
         --install-addons=true \
         --addons=registry \
         --wait=all \

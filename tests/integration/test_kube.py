@@ -1295,6 +1295,7 @@ class TestLogReader:
             for i in range(4):
                 run_log_reader(f"restarted 2 [{i}]", delay=i * 2)
             await kube_client.wait_pod_is_terminated(job_pod.name)
+            await asyncio.sleep(10)
         finally:
             done = True
             await kube_client.delete_pod(job_pod.name)
