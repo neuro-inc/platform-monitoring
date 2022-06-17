@@ -229,6 +229,9 @@ class MonitoringApiHandler:
             while True:
                 await response.receive()
 
+        async def stop_func() -> bool:
+            return self._jobs_helper.is_job_finished(await self._get_job(job.id))
+
         async with self._logs_service.get_pod_log_reader(
             pod_name,
             separator=separator.encode(),
@@ -236,6 +239,7 @@ class MonitoringApiHandler:
             timestamps=timestamps,
             debug=debug,
             archive_delay_s=archive_delay_s,
+            stop_func=stop_func,
         ) as it:
             await response.prepare(request)
             ws_reader_task = asyncio.create_task(_ws_reader())
