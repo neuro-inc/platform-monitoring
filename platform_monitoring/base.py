@@ -43,7 +43,7 @@ class JobStats:
     memory: float
 
     gpu_utilization: Optional[int] = None
-    gpu_memory_used_mb: Optional[int] = None
+    gpu_memory_used: Optional[int] = None
 
     timestamp: float = field(default_factory=time.time)
 

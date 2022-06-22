@@ -346,13 +346,15 @@ class MonitoringApiHandler:
     def _convert_job_stats_to_ws_message(self, job_stats: JobStats) -> dict[str, Any]:
         message = {
             "cpu": job_stats.cpu,
-            "memory": job_stats.memory,
+            "memory": job_stats.memory // 2**20,
+            "memory_bytes": job_stats.memory,
             "timestamp": job_stats.timestamp,
         }
         if job_stats.gpu_utilization is not None:
             message["gpu_duty_cycle"] = job_stats.gpu_utilization
-        if job_stats.gpu_memory_used_mb is not None:
-            message["gpu_memory"] = job_stats.gpu_memory_used_mb
+        if job_stats.gpu_memory_used is not None:
+            message["gpu_memory"] = job_stats.gpu_memory_used // 2**20
+            message["gpu_memory_bytes"] = job_stats.gpu_memory_used
         return message
 
     async def stream_save(self, request: Request) -> StreamResponse:

@@ -53,13 +53,13 @@ class PodPhase(str, enum.Enum):
 @dataclass(frozen=True)
 class Resources:
     cpu_m: int = 0
-    memory_mb: int = 0
+    memory: int = 0
     gpu: int = 0
 
     def add(self, other: "Resources") -> "Resources":
         return self.__class__(
             cpu_m=self.cpu_m + other.cpu_m,
-            memory_mb=self.memory_mb + other.memory_mb,
+            memory=self.memory + other.memory,
             gpu=self.gpu + other.gpu,
         )
 
@@ -71,7 +71,7 @@ class Resources:
         """
         return self.__class__(
             cpu_m=max(0, self.cpu_m - used.cpu_m),
-            memory_mb=max(0, self.memory_mb - used.memory_mb),
+            memory=max(0, self.memory - used.memory),
             gpu=max(0, self.gpu - used.gpu),
         )
 
@@ -82,13 +82,13 @@ class Resources:
         Returns:
             int: count
         """
-        if self.cpu_m == 0 and self.memory_mb == 0 and self.gpu == 0:
+        if self.cpu_m == 0 and self.memory == 0 and self.gpu == 0:
             return 0
         result = DEFAULT_MAX_PODS_PER_NODE
         if resources.cpu_m:
             result = min(result, self.cpu_m // resources.cpu_m)
-        if resources.memory_mb:
-            result = min(result, self.memory_mb // resources.memory_mb)
+        if resources.memory:
+            result = min(result, self.memory // resources.memory)
         if resources.gpu:
             result = min(result, self.gpu // resources.gpu)
         return result
@@ -153,27 +153,40 @@ class Pod:
     @property
     def resource_requests(self) -> Resources:
         cpu_m = 0
-        memory_mb = 0
+        memory = 0
         gpu = 0
         for container in self._payload["spec"]["containers"]:
             requests = container.get("resources", {}).get("requests")
             if requests:
                 cpu_m += self._parse_cpu_m(requests.get("cpu", "0"))
-                memory_mb += self._parse_memory_mb(requests.get("memory", "0Mi"))
+                memory += self._parse_memory(requests.get("memory", "0Mi"))
                 gpu += int(requests.get("nvidia.com/gpu", 0))
-        return Resources(cpu_m=cpu_m, memory_mb=memory_mb, gpu=gpu)
+        return Resources(cpu_m=cpu_m, memory=memory, gpu=gpu)
 
     def _parse_cpu_m(self, value: str) -> int:
         if value.endswith("m"):
             return int(value[:-1])
         return int(float(value) * 1000)
 
-    def _parse_memory_mb(self, value: str) -> int:
-        if value.endswith("Gi"):
-            return int(value[:-2]) * 1024
-        if value.endswith("Mi"):
-            return int(value[:-2])
-        raise KubeClientException("Memory unit is not supported")
+    def _parse_memory(self, memory: str) -> int:
+        try:
+            memory_b = int(memory)
+        except ValueError:
+            if memory.endswith("Ki"):
+                memory_b = int(memory[:-2]) * 1024
+            elif memory.endswith("K"):
+                memory_b = int(memory[:-1]) * 1000
+            elif memory.endswith("Mi"):
+                memory_b = int(memory[:-2]) * 1024**2
+            elif memory.endswith("M"):
+                memory_b = int(memory[:-1]) * 1000**2
+            elif memory.endswith("Gi"):
+                memory_b = int(memory[:-2]) * 1024**3
+            elif memory.endswith("G"):
+                memory_b = int(memory[:-1]) * 1000**3
+            else:
+                raise KubeClientException("Memory unit is not supported")
+        return memory_b
 
     @property
     def stdin(self) -> bool:
@@ -662,14 +675,14 @@ class PodContainerStats:
     @classmethod
     def from_primitive(cls, payload: dict[str, Any]) -> "PodContainerStats":
         cpu = payload.get("cpu", {}).get("usageNanoCores", 0) / (10**9)
-        memory = payload.get("memory", {}).get("workingSetBytes", 0) / (2**20)  # MB
+        memory = payload.get("memory", {}).get("workingSetBytes", 0)
         return cls(cpu=cpu, memory=memory)
 
 
 @dataclass(frozen=True)
 class PodContainerGPUStats:
     utilization: int
-    memory_used_mb: int
+    memory_used: int
 
 
 GPU_COUNTER_RE = r"^(?P<name>[A-Z_]+)\s*\{(?P<labels>.+)\}\s+(?P<value>\d+)"
@@ -709,7 +722,7 @@ class GPUCounters:
     ) -> PodContainerGPUStats:
         gpu_count = 0
         utilization = 0
-        memory_used_mb = 0
+        memory_used = 0
         for c in self.counters:
             if (
                 c.labels["namespace"] != namespace_name
@@ -721,14 +734,12 @@ class GPUCounters:
                 gpu_count += 1
                 utilization += c.value
             if c.name == "DCGM_FI_DEV_FB_USED":
-                memory_used_mb += c.value
+                memory_used += c.value * 2**20
         try:
             utilization = int(utilization / gpu_count)
         except ZeroDivisionError:
             utilization = 0
-        return PodContainerGPUStats(
-            utilization=utilization, memory_used_mb=memory_used_mb
-        )
+        return PodContainerGPUStats(utilization=utilization, memory_used=memory_used)
 
 
 class StatsSummary:
@@ -830,5 +841,5 @@ class KubeTelemetry(Telemetry):
             cpu=pod_stats.cpu,
             memory=pod_stats.memory,
             gpu_utilization=pod_gpu_stats.utilization,
-            gpu_memory_used_mb=pod_gpu_stats.memory_used_mb,
+            gpu_memory_used=pod_gpu_stats.memory_used,
         )
