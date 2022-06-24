@@ -78,6 +78,11 @@ spec:
           value: http://platformconfig:8080
         - name: NP_ADMIN_POSTGRES_DSN
           value: postgresql://postgres:postgres@platformadmin-postgres:5432/postgres
+        - name: NP_ADMIN_NOTIFICATIONS_URL
+          value: http://platformnotifications:8080
+        - name: NP_ADMIN_NOTIFICATIONS_TOKEN
+          value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZGVudGl0eSI6ImNvbXB1dGUifQ.IJDlKCfbiuNGZH9Sh6p-CdUL5KxEK5JStqzfDk4-RAA
+
 ---
 apiVersion: v1
 kind: Service
