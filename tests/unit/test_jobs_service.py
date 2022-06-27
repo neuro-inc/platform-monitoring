@@ -53,13 +53,13 @@ def get_pods_factory(
 def create_pod(
     node_name: Optional[str],
     cpu_m: int,
-    memory_mb: int,
+    memory: int,
     gpu: int = 0,
 ) -> Pod:
     job_id = f"job-{uuid.uuid4()}"
     resources = {
         "cpu": f"{cpu_m}m",
-        "memory": f"{memory_mb}Mi",
+        "memory": f"{memory}",
     }
     if gpu:
         resources["nvidia.com/gpu"] = str(gpu)
@@ -93,13 +93,13 @@ def cluster() -> Cluster:
                     name="minikube-cpu",
                     max_size=2,
                     available_cpu=1,
-                    available_memory_mb=1024,
+                    available_memory=2**30,
                 ),
                 ResourcePoolType(
                     name="minikube-gpu",
                     max_size=2,
                     available_cpu=1,
-                    available_memory_mb=1024,
+                    available_memory=2**30,
                     gpu=1,
                     gpu_model="nvidia-tesla-k80",
                 ),
@@ -109,14 +109,14 @@ def cluster() -> Cluster:
                     name="cpu",
                     credits_per_hour=Decimal(10),
                     cpu=0.2,
-                    memory_mb=100,
+                    memory=100 * 2**20,
                     resource_affinity=["minikube-cpu"],
                 ),
                 ResourcePreset(
                     name="cpu-p",
                     credits_per_hour=Decimal(10),
                     cpu=0.2,
-                    memory_mb=100,
+                    memory=100 * 2**20,
                     scheduler_enabled=True,
                     preemptible_node=True,
                 ),
@@ -124,7 +124,7 @@ def cluster() -> Cluster:
                     name="gpu",
                     credits_per_hour=Decimal(10),
                     cpu=0.2,
-                    memory_mb=100,
+                    memory=100 * 2**20,
                     gpu=1,
                     gpu_model="nvidia-tesla-k80",
                     resource_affinity=["minikube-gpu"],
@@ -190,9 +190,9 @@ class TestJobsService:
         self, service: JobsService, kube_client: mock.Mock
     ) -> None:
         kube_client.get_pods.side_effect = get_pods_factory(
-            create_pod("minikube-cpu-1", cpu_m=50, memory_mb=128),
-            create_pod("minikube-gpu-1", cpu_m=100, memory_mb=256, gpu=1),
-            create_pod("minikube-cpu-2", cpu_m=50, memory_mb=128),
+            create_pod("minikube-cpu-1", cpu_m=50, memory=128 * 2**20),
+            create_pod("minikube-gpu-1", cpu_m=100, memory=256 * 2**20, gpu=1),
+            create_pod("minikube-cpu-2", cpu_m=50, memory=128 * 2**20),
         )
 
         result = await service.get_available_jobs_counts()
@@ -210,10 +210,10 @@ class TestJobsService:
         self, service: JobsService, kube_client: mock.Mock
     ) -> None:
         kube_client.get_pods.side_effect = get_pods_factory(
-            create_pod("minikube-cpu-1", cpu_m=1000, memory_mb=1024),
-            create_pod("minikube-cpu-2", cpu_m=1000, memory_mb=1024),
-            create_pod("minikube-gpu-1", cpu_m=1000, memory_mb=1024, gpu=1),
-            create_pod("minikube-gpu-2", cpu_m=1000, memory_mb=1024, gpu=1),
+            create_pod("minikube-cpu-1", cpu_m=1000, memory=2**30),
+            create_pod("minikube-cpu-2", cpu_m=1000, memory=2**30),
+            create_pod("minikube-gpu-1", cpu_m=1000, memory=2**30, gpu=1),
+            create_pod("minikube-gpu-2", cpu_m=1000, memory=2**30, gpu=1),
         )
 
         result = await service.get_available_jobs_counts()
@@ -224,7 +224,7 @@ class TestJobsService:
         self, service: JobsService, kube_client: mock.Mock
     ) -> None:
         kube_client.get_pods.side_effect = get_pods_factory(
-            create_pod(None, cpu_m=1000, memory_mb=1024)
+            create_pod(None, cpu_m=1000, memory=2**30)
         )
 
         result = await service.get_available_jobs_counts()
@@ -235,7 +235,7 @@ class TestJobsService:
         self, service: JobsService, kube_client: mock.Mock
     ) -> None:
         kube_client.get_pods.side_effect = get_pods_factory(
-            create_pod("unknown", cpu_m=1000, memory_mb=1024)
+            create_pod("unknown", cpu_m=1000, memory=2**30)
         )
 
         with pytest.raises(NodeNotFoundException, match="Node 'unknown' was not found"):

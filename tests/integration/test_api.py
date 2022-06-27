@@ -552,6 +552,7 @@ class TestTopApi:
             assert message == {
                 "cpu": mock.ANY,
                 "memory": mock.ANY,
+                "memory_bytes": mock.ANY,
                 "timestamp": mock.ANY,
             }
 
@@ -714,6 +715,7 @@ class TestTopApi:
             assert message == {
                 "cpu": mock.ANY,
                 "memory": mock.ANY,
+                "memory_bytes": mock.ANY,
                 "timestamp": mock.ANY,
             }
 

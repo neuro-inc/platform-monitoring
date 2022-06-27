@@ -210,7 +210,7 @@ class JobsService:
             available_jobs_count = 0
             preset_resources = Resources(
                 cpu_m=int(preset.cpu * 1000),
-                memory_mb=preset.memory_mb,
+                memory=preset.memory,
                 gpu=preset.gpu or 0,
             )
             preset_pool_types = [pool_types[r] for r in preset.resource_affinity]
@@ -277,6 +277,6 @@ class JobsService:
     def _get_node_resource_limit(self, node_pool: ResourcePoolType) -> Resources:
         return Resources(
             cpu_m=int(node_pool.available_cpu * 1000),
-            memory_mb=node_pool.available_memory_mb,
+            memory=node_pool.available_memory,
             gpu=node_pool.gpu or 0,
         )
