@@ -181,8 +181,8 @@ spec:
                           "max_size": 1,
                           "cpu": 1.0,
                           "available_cpu": 1.0,
-                          "memory": 1000000,
-                          "available_memory": 1000000
+                          "memory": 1073741824,
+                          "available_memory": 1073741824
                       }
                   ],
                   "resource_presets": [
@@ -190,7 +190,7 @@ spec:
                           "name": "cpu-small",
                           "credits_per_hour": "0.0",
                           "cpu": 0.1,
-                          "memory": 102400
+                          "memory": 104857600
                       }
                   ]
               },
