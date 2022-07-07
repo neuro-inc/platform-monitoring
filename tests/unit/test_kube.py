@@ -108,13 +108,13 @@ class TestPod:
                 }
             }
         )
-        assert pod.resource_requests == Resources(memory_mb=1000)
+        assert pod.resource_requests == Resources(memory=1000 * 2**20)
 
     def test_resource_requests_memory_gibibytes(self) -> None:
         pod = Pod(
             {"spec": {"containers": [{"resources": {"requests": {"memory": "1Gi"}}}]}}
         )
-        assert pod.resource_requests == Resources(memory_mb=1024)
+        assert pod.resource_requests == Resources(memory=1024 * 2**20)
 
     def test_resource_requests_gpu(self) -> None:
         pod = Pod(
@@ -145,7 +145,9 @@ class TestPod:
                 }
             }
         )
-        assert pod.resource_requests == Resources(cpu_m=1500, memory_mb=1536, gpu=1)
+        assert pod.resource_requests == Resources(
+            cpu_m=1500, memory=1536 * 2**20, gpu=1
+        )
 
 
 class TestPodContainerStats:
@@ -169,10 +171,10 @@ class TestPodContainerStats:
     def test_from_primitive(self) -> None:
         payload = {
             "cpu": {"usageNanoCores": 1000},
-            "memory": {"workingSetBytes": 1024 * 1024},
+            "memory": {"workingSetBytes": 2**20},
         }
         stats = PodContainerStats.from_primitive(payload)
-        assert stats == PodContainerStats(cpu=0.000001, memory=1.0)
+        assert stats == PodContainerStats(cpu=0.000001, memory=2**20)
 
 
 class TestStatsSummary:
@@ -392,7 +394,7 @@ DCGM_FI_DEV_FB_USED{gpu="2",container="job-1",namespace="platform-jobs",pod="job
             namespace_name="platform-jobs", pod_name="job-0", container_name="job-0"
         )
         assert stats.utilization == 0
-        assert stats.memory_used_mb == 3
+        assert stats.memory_used == 3 * 2**20
 
     def test_get_pod_container_stats_unknown_job(self) -> None:
         counters = GPUCounters(
@@ -424,7 +426,7 @@ DCGM_FI_DEV_FB_USED{gpu="2",container="job-1",namespace="platform-jobs",pod="job
             namespace_name="platform-jobs", pod_name="job-1", container_name="job-1"
         )
         assert stats.utilization == 0
-        assert stats.memory_used_mb == 0
+        assert stats.memory_used == 0
 
 
 class TestFilterOutRPCError:
@@ -545,20 +547,24 @@ class TestNode:
 
 class TestResources:
     def test_add(self) -> None:
-        resources1 = Resources(cpu_m=1, memory_mb=2, gpu=3)
-        resources2 = Resources(cpu_m=4, memory_mb=5, gpu=6)
-        assert resources1.add(resources2) == Resources(cpu_m=5, memory_mb=7, gpu=9)
+        resources1 = Resources(cpu_m=1, memory=2 * 2**20, gpu=3)
+        resources2 = Resources(cpu_m=4, memory=5 * 2**20, gpu=6)
+        assert resources1.add(resources2) == Resources(
+            cpu_m=5, memory=7 * 2**20, gpu=9
+        )
 
     def test_available(self) -> None:
-        total = Resources(cpu_m=1000, memory_mb=1024, gpu=2)
-        used = Resources(cpu_m=100, memory_mb=256, gpu=1)
-        assert total.available(used) == Resources(cpu_m=900, memory_mb=768, gpu=1)
+        total = Resources(cpu_m=1000, memory=1024 * 2**20, gpu=2)
+        used = Resources(cpu_m=100, memory=256 * 2**20, gpu=1)
+        assert total.available(used) == Resources(
+            cpu_m=900, memory=768 * 2**20, gpu=1
+        )
 
     def test_count(self) -> None:
-        total = Resources(cpu_m=1000, memory_mb=1024, gpu=2)
+        total = Resources(cpu_m=1000, memory=1024 * 2**20, gpu=2)
 
-        assert total.count(Resources(cpu_m=100, memory_mb=128, gpu=1)) == 2
-        assert total.count(Resources(cpu_m=100, memory_mb=128)) == 8
+        assert total.count(Resources(cpu_m=100, memory=128 * 2**20, gpu=1)) == 2
+        assert total.count(Resources(cpu_m=100, memory=128 * 2**20)) == 8
         assert total.count(Resources(cpu_m=100)) == 10
         assert total.count(Resources(cpu_m=1100)) == 0
         assert total.count(Resources()) == 110

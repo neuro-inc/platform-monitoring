@@ -4,7 +4,7 @@ import io
 import json
 import logging
 import zlib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime, timedelta, timezone
 from os.path import basename
@@ -13,7 +13,7 @@ from typing import Any, Optional
 import aiohttp
 from aiobotocore.client import AioBaseClient
 from aiobotocore.response import StreamingBody
-from aioelasticsearch import Elasticsearch
+from aioelasticsearch import Elasticsearch, RequestError
 from aioelasticsearch.helpers import Scan
 from async_timeout import timeout
 from neuro_logging import trace
@@ -216,7 +216,7 @@ class ElasticsearchLogReader(LogReader):
 
     async def __aenter__(self) -> AsyncIterator[bytes]:
         query = self._combine_search_query()
-        self._scan = Scan(
+        scan = Scan(
             self._es_client,
             index=self._index,
             doc_type=self._doc_type,
@@ -230,20 +230,25 @@ class ElasticsearchLogReader(LogReader):
             preserve_order=True,
             size=100,
         )
-        await self._scan.__aenter__()
+        try:
+            await scan.__aenter__()
+            self._scan = scan
+        except RequestError:
+            pass
         self._iterator = self._iterate()
         return self._iterator
 
     async def __aexit__(self, *args: Any) -> None:
         assert self._iterator
         await self._iterator.aclose()  # type: ignore
-        assert self._scan
         scan = self._scan
         self._scan = None
-        await scan.__aexit__(*args)
+        if scan is not None:
+            await scan.__aexit__(*args)
 
     async def _iterate(self) -> AsyncIterator[bytes]:
-        assert self._scan
+        if self._scan is None:
+            return
         async for doc in self._scan:
             try:
                 source = doc["_source"]
@@ -394,8 +399,14 @@ class LogsService(abc.ABC):
         interval_s: float = 1.0,
         archive_delay_s: float = DEFAULT_ARCHIVE_DELAY,
         debug: bool = False,
+        stop_func: Optional[Callable[[], Awaitable[bool]]] = None,
     ) -> AsyncIterator[bytes]:
         archive_delay = timedelta(seconds=archive_delay_s)
+        if stop_func is None:
+
+            async def stop_func() -> bool:
+                await asyncio.sleep(interval_s)
+                return False
 
         def get_last_start(status: ContainerStatus) -> Optional[datetime]:
             if status.is_running:
@@ -480,11 +491,16 @@ class LogsService(abc.ABC):
                                 continue
                             # Start reading from container.
                             break
+                        if is_pod_terminated and first is None:
+                            return
+                    elif is_pod_terminated:
+                        return
 
                     if request_time - prev_finish < archive_delay:
-                        until = None
-                        await asyncio.sleep(interval_s)
-                        continue
+                        assert stop_func is not None
+                        if not await stop_func():
+                            until = None
+                            continue
             # Start reading from container.
             break
 
@@ -727,14 +743,11 @@ async def get_first_log_entry_time(
                     chunk = await stream.readany()
                     if not chunk:
                         break
-                    pos = chunk.find(b" ")
+                    pos = chunk.find(b" "[0])
                     if pos >= 0:
                         time_str += chunk[:pos]
                         break
-                    else:
-                        time_str += chunk
-                else:
-                    return None
+                    time_str += chunk
     except (asyncio.TimeoutError, JobNotFoundException):
         return None
     try:

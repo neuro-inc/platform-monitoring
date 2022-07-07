@@ -190,6 +190,9 @@ class MonitoringApiHandler:
         response.headers["X-Separator"] = separator
         await response.prepare(request)
 
+        async def stop_func() -> bool:
+            return self._jobs_helper.is_job_finished(await self._get_job(job.id))
+
         async with self._logs_service.get_pod_log_reader(
             pod_name,
             separator=separator.encode(),
@@ -197,6 +200,7 @@ class MonitoringApiHandler:
             timestamps=timestamps,
             debug=debug,
             archive_delay_s=archive_delay_s,
+            stop_func=stop_func,
         ) as it:
             async for chunk in it:
                 await response.write(chunk)
@@ -225,6 +229,9 @@ class MonitoringApiHandler:
             while True:
                 await response.receive()
 
+        async def stop_func() -> bool:
+            return self._jobs_helper.is_job_finished(await self._get_job(job.id))
+
         async with self._logs_service.get_pod_log_reader(
             pod_name,
             separator=separator.encode(),
@@ -232,6 +239,7 @@ class MonitoringApiHandler:
             timestamps=timestamps,
             debug=debug,
             archive_delay_s=archive_delay_s,
+            stop_func=stop_func,
         ) as it:
             await response.prepare(request)
             ws_reader_task = asyncio.create_task(_ws_reader())
@@ -338,13 +346,15 @@ class MonitoringApiHandler:
     def _convert_job_stats_to_ws_message(self, job_stats: JobStats) -> dict[str, Any]:
         message = {
             "cpu": job_stats.cpu,
-            "memory": job_stats.memory,
+            "memory": job_stats.memory // 2**20,
+            "memory_bytes": job_stats.memory,
             "timestamp": job_stats.timestamp,
         }
         if job_stats.gpu_utilization is not None:
             message["gpu_duty_cycle"] = job_stats.gpu_utilization
-        if job_stats.gpu_memory_used_mb is not None:
-            message["gpu_memory"] = job_stats.gpu_memory_used_mb
+        if job_stats.gpu_memory_used is not None:
+            message["gpu_memory"] = job_stats.gpu_memory_used // 2**20
+            message["gpu_memory_bytes"] = job_stats.gpu_memory_used
         return message
 
     async def stream_save(self, request: Request) -> StreamResponse:
