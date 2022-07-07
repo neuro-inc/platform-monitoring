@@ -157,7 +157,7 @@ class TestJobsService:
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=32,
+            memory=32 * 1024**2,
             cpu=0.1,
             gpu=None,
             shm=False,
@@ -191,7 +191,7 @@ class TestJobsService:
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=32,
+            memory=32 * 1024**2,
             cpu=0.1,
             gpu=None,
             shm=False,
@@ -229,7 +229,7 @@ class TestJobsService:
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=16**10,
+            memory=16**10 * 1024**2,
             cpu=0.1,
             gpu=None,
             shm=False,
@@ -255,7 +255,7 @@ class TestJobsService:
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=32,
+            memory=32 * 1024**2,
             cpu=0.1,
             gpu=None,
             shm=False,
@@ -296,7 +296,7 @@ class TestJobsService:
         image_tag: str,
     ) -> None:
         resources = Resources(
-            memory_mb=32,
+            memory=32 * 1024**2,
             cpu=0.1,
             gpu=None,
             shm=False,
@@ -326,7 +326,7 @@ class TestJobsService:
         jobs_service: JobsService,
     ) -> None:
         resources = Resources(
-            memory_mb=16, cpu=0.1, gpu=None, shm=False, gpu_model=None
+            memory=16 * 1024**2, cpu=0.1, gpu=None, shm=False, gpu_model=None
         )
         job = await job_factory(
             "alpine:latest",
