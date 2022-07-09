@@ -284,8 +284,8 @@ class TestJobsService:
         assert data[2]["status"] == msg
 
         assert "status" not in data[3]
-        msg = f"Get https://{registry_host}/v2/: dial tcp: lookup unknown"
-        assert msg in data[3]["error"]
+        assert f"https://{registry_host}/v2/" in data[3]["error"]
+        assert ": dial tcp: lookup unknown" in data[3]["error"]
 
     async def test_save_commit_fails_with_exception(
         self,
