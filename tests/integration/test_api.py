@@ -20,6 +20,7 @@ from aiohttp.web_exceptions import (
     HTTPBadRequest,
     HTTPForbidden,
     HTTPNoContent,
+    HTTPNotFound,
     HTTPUnauthorized,
 )
 from async_timeout import timeout
@@ -585,9 +586,11 @@ class TestTopApi:
         regular_user2: _User,
     ) -> None:
         url = monitoring_api.generate_top_url(infinite_job)
-        with pytest.raises(WSServerHandshakeError, match="Invalid response status"):
+        with pytest.raises(WSServerHandshakeError) as err:
             async with client.ws_connect(url, headers=regular_user2.headers):
                 pass
+        assert err.value.message == "Invalid response status"
+        assert err.value.status == HTTPForbidden.status_code
 
     async def test_top_no_auth_token_provided_unauthorized(
         self,
@@ -596,9 +599,11 @@ class TestTopApi:
         infinite_job: str,
     ) -> None:
         url = monitoring_api.generate_top_url(job_id=infinite_job)
-        with pytest.raises(WSServerHandshakeError, match="Invalid response status"):
+        with pytest.raises(WSServerHandshakeError) as err:
             async with client.ws_connect(url):
                 pass
+        assert err.value.message == "Invalid response status"
+        assert err.value.status == HTTPUnauthorized.status_code
 
     async def test_top_non_running_job(
         self,
@@ -652,9 +657,11 @@ class TestTopApi:
             assert "no such job" in payload
 
         url = monitoring_api.generate_top_url(job_id=job_id)
-        with pytest.raises(WSServerHandshakeError, match="Invalid response status"):
+        with pytest.raises(WSServerHandshakeError) as err:
             async with client.ws_connect(url, headers=headers):
                 pass
+        assert err.value.message == "Invalid response status"
+        assert err.value.status == HTTPBadRequest.status_code
 
     async def test_top_silently_wait_when_job_pending(
         self,
@@ -1076,6 +1083,8 @@ class TestAttachApi:
                 pass
         except WSServerHandshakeError as e:
             assert e.headers and e.headers.get("X-Error")
+            assert e.message == "Invalid response status"
+            assert e.status == HTTPUnauthorized.status_code
 
     async def test_attach_nontty_stdout(
         self,
@@ -1283,7 +1292,7 @@ class TestAttachApi:
         with pytest.raises(WSServerHandshakeError) as err:
             async with client.ws_connect(url, headers=headers):
                 pass
-        assert err.value.status == 404
+        assert err.value.status == HTTPNotFound.status_code
 
         await jobs_client.long_polling_by_job_id(job_id, status="failed")
 
@@ -1437,7 +1446,7 @@ class TestKillApi:
 
         url = monitoring_api.generate_kill_url(infinite_job)
         async with client.post(url, headers=headers) as response:
-            assert response.status == 204, await response.text()
+            assert response.status == HTTPNoContent.status_code, await response.text()
 
         result = await jobs_client.long_polling_by_job_id(infinite_job, status="failed")
         assert result["history"]["exit_code"] == 128 + signal.SIGKILL, result
@@ -1456,7 +1465,7 @@ class TestKillApi:
 
         url = monitoring_api.generate_kill_url(named_infinite_job)
         async with client.post(url, headers=regular_user2.headers) as response:
-            assert response.status == 204, await response.text()
+            assert response.status == HTTPNoContent.status_code, await response.text()
 
         result = await jobs_client.long_polling_by_job_id(
             named_infinite_job, status="failed"
@@ -1477,7 +1486,7 @@ class TestPortForward:
         # String port is invalid
         url = monitoring_api.generate_port_forward_url(infinite_job, "abc")
         async with client.get(url, headers=headers) as response:
-            assert response.status == 400, await response.text()
+            assert response.status == HTTPBadRequest.status_code, await response.text()
 
     async def test_port_forward_cannot_connect(
         self,
@@ -1491,7 +1500,7 @@ class TestPortForward:
         # Port 60001 is not handled
         url = monitoring_api.generate_port_forward_url(infinite_job, 60001)
         async with client.get(url, headers=headers) as response:
-            assert response.status == 400, await response.text()
+            assert response.status == HTTPBadRequest.status_code, await response.text()
 
     @pytest.mark.minikube
     async def test_port_forward_ok(
