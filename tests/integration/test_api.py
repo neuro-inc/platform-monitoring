@@ -27,7 +27,6 @@ from yarl import URL
 
 from platform_monitoring.api import create_app
 from platform_monitoring.config import Config, ContainerRuntimeConfig, PlatformApiConfig
-from platform_monitoring.kube_client import JobNotFoundException
 
 from .conftest import ApiAddress, create_local_app_server, random_str
 from .conftest_auth import _User
@@ -238,6 +237,18 @@ class JobsClient:
             assert response.status == HTTPOk.status_code, response_text
             return (await response.json())["materialized"]
 
+    async def run_job(self, job_submit: dict[str, Any]) -> str:
+        headers = self.headers
+        url = self._platform_api.jobs_base_url
+        async with self._client.post(url, headers=headers, json=job_submit) as response:
+            assert response.status == HTTPAccepted.status_code, await response.text()
+            result = await response.json()
+            assert result["status"] in ["pending"]
+            job_id = result["id"]
+            if "name" in job_submit:
+                assert result["name"] == job_submit["name"]
+        return job_id
+
     async def long_polling_by_job_id(
         self, job_id: str, status: str, interval_s: float = 0.5, max_time: float = 180
     ) -> dict[str, Any]:
@@ -320,8 +331,6 @@ async def job_submit(
 
 @pytest.fixture
 async def job_factory(
-    platform_api: PlatformApiEndpoints,
-    client: aiohttp.ClientSession,
     jobs_client: JobsClient,
     job_request_factory: Callable[[], dict[str, Any]],
 ) -> AsyncIterator[Callable[[str], Awaitable[str]]]:
@@ -332,16 +341,9 @@ async def job_factory(
         request_payload["container"]["command"] = command
         if name:
             request_payload["name"] = name
-        async with client.post(
-            platform_api.jobs_base_url,
-            headers=jobs_client.headers,
-            json=request_payload,
-        ) as response:
-            assert response.status == HTTPAccepted.status_code, await response.text()
-            result = await response.json()
-            job_id = result["id"]
-            jobs.append(job_id)
-            await jobs_client.long_polling_by_job_id(job_id, status="running")
+        job_id = await jobs_client.run_job(request_payload)
+        jobs.append(job_id)
+        await jobs_client.long_polling_by_job_id(job_id, status="running")
 
         return job_id
 
@@ -577,21 +579,12 @@ class TestTopApi:
     async def test_top_no_permissions_unauthorized(
         self,
         monitoring_api: MonitoringApiEndpoints,
-        platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
-        job_submit: dict[str, Any],
+        infinite_job: str,
         regular_user1: _User,
         regular_user2: _User,
     ) -> None:
-        url = platform_api.jobs_base_url
-        async with client.post(
-            url, headers=regular_user1.headers, json=job_submit
-        ) as resp:
-            assert resp.status == HTTPAccepted.status_code
-            payload = await resp.json()
-            job_id = payload["id"]
-
-        url = monitoring_api.generate_top_url(job_id)
+        url = monitoring_api.generate_top_url(infinite_job)
         with pytest.raises(WSServerHandshakeError, match="Invalid response status"):
             async with client.ws_connect(url, headers=regular_user2.headers):
                 pass
@@ -614,14 +607,15 @@ class TestTopApi:
         jobs_client: JobsClient,
         infinite_job: str,
     ) -> None:
-        job = infinite_job
-        await jobs_client.delete_job(job)
-        await jobs_client.long_polling_by_job_id(job_id=job, status="cancelled")
+        await jobs_client.delete_job(infinite_job)
+        await jobs_client.long_polling_by_job_id(
+            job_id=infinite_job, status="cancelled"
+        )
 
         num_request = 2
         records = []
 
-        url = monitoring_api.generate_top_url(job_id=job)
+        url = monitoring_api.generate_top_url(job_id=infinite_job)
         async with client.ws_connect(url, headers=jobs_client.headers) as ws:
             # TODO move this ws communication to JobClient
             while True:
@@ -665,25 +659,18 @@ class TestTopApi:
     async def test_top_silently_wait_when_job_pending(
         self,
         monitoring_api: MonitoringApiEndpoints,
-        platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
         job_submit: dict[str, Any],
     ) -> None:
         command = 'bash -c "for i in {1..10}; do echo $i; sleep 1; done"'
         job_submit["container"]["command"] = command
-        headers = jobs_client.headers
-
-        url = platform_api.jobs_base_url
-        async with client.post(url, headers=headers, json=job_submit) as resp:
-            assert resp.status == HTTPAccepted.status_code
-            payload = await resp.json()
-            job_id = payload["id"]
-            assert payload["status"] == "pending"
+        job_id = await jobs_client.run_job(job_submit)
 
         num_request = 2
         records = []
 
+        headers = jobs_client.headers
         job_top_url = monitoring_api.generate_top_url(job_id)
         async with client.ws_connect(job_top_url, headers=headers) as ws:
             job = await jobs_client.get_job_by_id(job_id=job_id)
@@ -724,25 +711,16 @@ class TestTopApi:
     async def test_top_close_when_job_succeeded(
         self,
         monitoring_api: MonitoringApiEndpoints,
-        platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
         job_submit: dict[str, Any],
     ) -> None:
-
         command = 'bash -c "for i in {1..2}; do echo $i; sleep 1; done"'
         job_submit["container"]["command"] = command
-        headers = jobs_client.headers
-
-        url = platform_api.jobs_base_url
-        async with client.post(url, headers=headers, json=job_submit) as response:
-            assert response.status == HTTPAccepted.status_code
-            result = await response.json()
-            assert result["status"] in ["pending"]
-            job_id = result["id"]
-
+        job_id = await jobs_client.run_job(job_submit)
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="succeeded")
 
+        headers = jobs_client.headers
         job_top_url = monitoring_api.generate_top_url(job_id)
         async with client.ws_connect(job_top_url, headers=headers) as ws:
             msg = await ws.receive()
@@ -758,33 +736,18 @@ class TestLogApi:
     async def test_log_no_permissions_forbidden(
         self,
         monitoring_api: MonitoringApiEndpoints,
-        platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
-        job_submit: dict[str, Any],
         regular_user1: _User,
         regular_user2: _User,
+        infinite_job: str,
         cluster_name: str,
     ) -> None:
-        url = platform_api.jobs_base_url
-        async with client.post(
-            url, headers=regular_user1.headers, json=job_submit
-        ) as resp:
-            assert resp.status == HTTPAccepted.status_code
-            payload = await resp.json()
-            job_id = payload["id"]
-
-        url = monitoring_api.generate_log_url(job_id)
+        url = monitoring_api.generate_log_url(infinite_job)
         async with client.get(url, headers=regular_user2.headers) as resp:
             assert resp.status == HTTPForbidden.status_code
             result = await resp.json()
-            assert result == {
-                "missing": [
-                    {
-                        "uri": f"job://{cluster_name}/{regular_user1.name}/{job_id}",
-                        "action": "read",
-                    }
-                ]
-            }
+            job_uri = f"job://{cluster_name}/{regular_user1.name}/{infinite_job}"
+            assert result == {"missing": [{"uri": job_uri, "action": "read"}]}
 
     async def test_log_no_auth_token_provided_unauthorized(
         self,
@@ -800,24 +763,16 @@ class TestLogApi:
     async def test_job_log(
         self,
         monitoring_api: MonitoringApiEndpoints,
-        platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
         job_submit: dict[str, Any],
     ) -> None:
         command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
-        request_payload = job_submit
-        request_payload["container"]["command"] = command
-        headers = jobs_client.headers
-
-        url = platform_api.jobs_base_url
-        async with client.post(url, headers=headers, json=request_payload) as response:
-            assert response.status == HTTPAccepted.status_code, await response.text()
-            result = await response.json()
-            job_id = result["id"]
-
+        job_submit["container"]["command"] = command
+        job_id = await jobs_client.run_job(job_submit)
         await jobs_client.long_polling_by_job_id(job_id, "succeeded")
 
+        headers = jobs_client.headers
         url = monitoring_api.generate_log_url(job_id)
         async with client.get(url, headers=headers) as response:
             assert response.status == HTTPOk.status_code
@@ -832,24 +787,16 @@ class TestLogApi:
     async def test_job_log_ws(
         self,
         monitoring_api: MonitoringApiEndpoints,
-        platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
         job_submit: dict[str, Any],
     ) -> None:
         command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
-        request_payload = job_submit
-        request_payload["container"]["command"] = command
-        headers = jobs_client.headers
-
-        url = platform_api.jobs_base_url
-        async with client.post(url, headers=headers, json=request_payload) as response:
-            assert response.status == HTTPAccepted.status_code, await response.text()
-            result = await response.json()
-            job_id = result["id"]
-
+        job_submit["container"]["command"] = command
+        job_id = await jobs_client.run_job(job_submit)
         await jobs_client.long_polling_by_job_id(job_id, "succeeded")
 
+        headers = jobs_client.headers
         url = monitoring_api.generate_log_ws_url(job_id)
 
         async with client.ws_connect(url, headers=headers) as ws:
@@ -864,64 +811,37 @@ class TestLogApi:
     async def test_log_shared_by_name(
         self,
         monitoring_api: MonitoringApiEndpoints,
-        platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
-        job_submit: dict[str, Any],
+        named_infinite_job: str,
         job_name: str,
         regular_user1: _User,
         regular_user2: _User,
         share_job: Callable[[_User, _User, str], Awaitable[None]],
     ) -> None:
-        job_submit["name"] = job_name
-
-        url = platform_api.jobs_base_url
-        async with client.post(
-            url, headers=regular_user1.headers, json=job_submit
-        ) as resp:
-            assert resp.status == HTTPAccepted.status_code, await resp.text()
-            payload = await resp.json()
-            job_id = payload["id"]
-            assert payload["name"] == job_name
-
         await share_job(regular_user1, regular_user2, job_name)
 
-        url = monitoring_api.generate_log_url(job_id)
+        url = monitoring_api.generate_log_url(named_infinite_job)
         async with client.get(url, headers=regular_user2.headers) as resp:
             assert resp.status == HTTPOk.status_code
 
     async def test_job_log_cleanup(
         self,
         monitoring_api_s3_storage: MonitoringApiEndpoints,
-        platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
         job_submit: dict[str, Any],
         kube_client: MyKubeClient,
     ) -> None:
         command = 'bash -c "for i in {1..5}; do echo $i; done; sleep 100"'
-        request_payload = job_submit
-        request_payload["container"]["command"] = command
-        headers = jobs_client.headers
-
-        url = platform_api.jobs_base_url
-        async with client.post(url, headers=headers, json=request_payload) as response:
-            assert response.status == HTTPAccepted.status_code, await response.text()
-            result = await response.json()
-            job_id = result["id"]
+        job_submit["container"]["command"] = command
+        job_id = await jobs_client.run_job(job_submit)
 
         # Jobs is canceled so its pod removed immediately
         await jobs_client.long_polling_by_job_id(job_id, "running")
         await jobs_client.delete_job(job_id)
+        await kube_client.wait_pod_is_deleted(job_id)
 
-        async def _wait_no_pod() -> None:
-            while True:
-                try:
-                    await kube_client.get_pod(job_id)
-                except JobNotFoundException:
-                    return
-
-        await asyncio.wait_for(_wait_no_pod(), timeout=60)
-
+        headers = jobs_client.headers
         url = monitoring_api_s3_storage.generate_log_url(job_id)
         async with client.get(url, headers=headers) as response:
             actual_payload = await response.read()
@@ -938,24 +858,12 @@ class TestLogApi:
     async def test_job_logs_removed_on_drop(
         self,
         monitoring_api_s3_storage: MonitoringApiEndpoints,
-        platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
         job_submit: dict[str, Any],
         kube_client: MyKubeClient,
     ) -> None:
-        command = 'bash -c "exit 0"'
-        request_payload = job_submit
-        request_payload["container"]["command"] = command
-        headers = jobs_client.headers
-
-        url = platform_api.jobs_base_url
-        async with client.post(url, headers=headers, json=request_payload) as response:
-            assert response.status == HTTPAccepted.status_code, await response.text()
-            result = await response.json()
-            job_id = result["id"]
-
-        # Jobs is canceled so its pod removed immediately
+        job_id = await jobs_client.run_job(job_submit)
         await jobs_client.long_polling_by_job_id(job_id, "succeeded")
 
         # Drop request
@@ -975,39 +883,23 @@ class TestSaveApi:
     async def test_save_no_permissions_forbidden(
         self,
         monitoring_api: MonitoringApiEndpoints,
-        platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
-        job_submit: dict[str, Any],
+        infinite_job: str,
         regular_user1: _User,
         regular_user2: _User,
         cluster_name: str,
     ) -> None:
-        url = platform_api.jobs_base_url
-        async with client.post(
-            url, headers=regular_user1.headers, json=job_submit
-        ) as resp:
-            assert resp.status == HTTPAccepted.status_code
-            payload = await resp.json()
-            job_id = payload["id"]
-
-        url = monitoring_api.generate_save_url(job_id)
+        url = monitoring_api.generate_save_url(infinite_job)
         async with client.post(url, headers=regular_user2.headers) as resp:
             assert resp.status == HTTPForbidden.status_code
             result = await resp.json()
-            assert result == {
-                "missing": [
-                    {
-                        "uri": f"job://{cluster_name}/{regular_user1.name}/{job_id}",
-                        "action": "write",
-                    }
-                ]
-            }
+            job_uri = f"job://{cluster_name}/{regular_user1.name}/{infinite_job}"
+            assert result == {"missing": [{"uri": job_uri, "action": "write"}]}
 
     async def test_save_no_auth_token_provided_unauthorized(
         self,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
-        jobs_client: JobsClient,
         infinite_job: str,
     ) -> None:
         url = monitoring_api.generate_save_url(job_id=infinite_job)
@@ -1016,7 +908,6 @@ class TestSaveApi:
 
     async def test_save_non_existing_job(
         self,
-        platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
@@ -1046,7 +937,6 @@ class TestSaveApi:
 
     async def test_save_not_running_job(
         self,
-        platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
@@ -1175,7 +1065,6 @@ class TestSaveApi:
 class TestAttachApi:
     async def test_attach_forbidden(
         self,
-        platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
     ) -> None:
@@ -1190,7 +1079,6 @@ class TestAttachApi:
 
     async def test_attach_nontty_stdout(
         self,
-        platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
@@ -1198,18 +1086,10 @@ class TestAttachApi:
     ) -> None:
         command = 'bash -c "for i in {0..9}; do echo $i; sleep 1; done"'
         job_submit["container"]["command"] = command
-        headers = jobs_client.headers
-
-        async with client.post(
-            platform_api.jobs_base_url, headers=headers, json=job_submit
-        ) as response:
-            assert response.status == 202
-            result = await response.json()
-            assert result["status"] in ["pending"]
-            job_id = result["id"]
-
+        job_id = await jobs_client.run_job(job_submit)
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
 
+        headers = jobs_client.headers
         url = monitoring_api.generate_attach_url(
             job_id=job_id, stdout=True, stderr=True
         )
@@ -1231,7 +1111,6 @@ class TestAttachApi:
 
     async def test_attach_nontty_stdout_shared_by_name(
         self,
-        platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
@@ -1243,15 +1122,7 @@ class TestAttachApi:
         command = 'bash -c "for i in {0..9}; do echo $i; sleep 1; done"'
         job_submit["container"]["command"] = command
         job_submit["name"] = job_name
-
-        async with client.post(
-            platform_api.jobs_base_url, headers=jobs_client.headers, json=job_submit
-        ) as response:
-            assert response.status == 202, await response.text()
-            result = await response.json()
-            assert result["status"] in ["pending"]
-            job_id = result["id"]
-            assert result["name"] == job_name
+        job_id = await jobs_client.run_job(job_submit)
 
         await share_job(jobs_client.user, regular_user2, job_name, action="write")
 
@@ -1278,7 +1149,6 @@ class TestAttachApi:
 
     async def test_attach_nontty_stderr(
         self,
-        platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
@@ -1286,18 +1156,10 @@ class TestAttachApi:
     ) -> None:
         command = 'bash -c "for i in {0..9}; do echo $i >&2; sleep 1; done"'
         job_submit["container"]["command"] = command
-        headers = jobs_client.headers
-
-        async with client.post(
-            platform_api.jobs_base_url, headers=headers, json=job_submit
-        ) as response:
-            assert response.status == 202
-            result = await response.json()
-            assert result["status"] in ["pending"]
-            job_id = result["id"]
-
+        job_id = await jobs_client.run_job(job_submit)
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
 
+        headers = jobs_client.headers
         url = monitoring_api.generate_attach_url(
             job_id=job_id, stdout=True, stderr=True
         )
@@ -1319,7 +1181,6 @@ class TestAttachApi:
 
     async def test_attach_tty(
         self,
-        platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
@@ -1328,18 +1189,10 @@ class TestAttachApi:
         command = "sh"
         job_submit["container"]["command"] = command
         job_submit["container"]["tty"] = True
-        headers = jobs_client.headers
-
-        async with client.post(
-            platform_api.jobs_base_url, headers=headers, json=job_submit
-        ) as response:
-            assert response.status == 202
-            result = await response.json()
-            assert result["status"] in ["pending"]
-            job_id = result["id"]
-
+        job_id = await jobs_client.run_job(job_submit)
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
 
+        headers = jobs_client.headers
         url = monitoring_api.generate_attach_url(
             job_id=job_id, tty=True, stdin=True, stdout=True, stderr=False
         )
@@ -1356,7 +1209,6 @@ class TestAttachApi:
 
     async def test_attach_tty_exit_code(
         self,
-        platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
@@ -1365,18 +1217,10 @@ class TestAttachApi:
         command = "sh"
         job_submit["container"]["command"] = command
         job_submit["container"]["tty"] = True
-        headers = jobs_client.headers
-
-        async with client.post(
-            platform_api.jobs_base_url, headers=headers, json=job_submit
-        ) as response:
-            assert response.status == 202
-            result = await response.json()
-            assert result["status"] in ["pending"]
-            job_id = result["id"]
-
+        job_id = await jobs_client.run_job(job_submit)
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
 
+        headers = jobs_client.headers
         url = monitoring_api.generate_attach_url(
             job_id=job_id, tty=True, stdin=True, stdout=True, stderr=False
         )
@@ -1410,7 +1254,6 @@ class TestAttachApi:
 
     async def test_reattach_just_after_exit(
         self,
-        platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
@@ -1419,17 +1262,10 @@ class TestAttachApi:
         command = "sh"
         job_submit["container"]["command"] = command
         job_submit["container"]["tty"] = True
-        headers = jobs_client.headers
-
-        url = platform_api.jobs_base_url
-        async with client.post(url, headers=headers, json=job_submit) as response:
-            assert response.status == 202
-            result = await response.json()
-            assert result["status"] in ["pending"]
-            job_id = result["id"]
-
+        job_id = await jobs_client.run_job(job_submit)
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
 
+        headers = jobs_client.headers
         url = monitoring_api.generate_attach_url(
             job_id=job_id, tty=True, stdin=True, stdout=True, stderr=False
         )
@@ -1477,8 +1313,6 @@ class TestExecApi:
             data = await ws.receive_bytes()
             assert data == b"\x01abc\n"
 
-        await jobs_client.delete_job(infinite_job)
-
     async def test_exec_notty_stdout_shared_by_name(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -1504,8 +1338,6 @@ class TestExecApi:
             data = await ws.receive_bytes()
             assert data == b"\x01abc\n"
 
-        await jobs_client.delete_job(named_infinite_job)
-
     async def test_exec_notty_stderr(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -1527,8 +1359,6 @@ class TestExecApi:
             await ws.receive_bytes(timeout=5)
             data = await ws.receive_bytes()
             assert data == b"\x02abc\n"
-
-        await jobs_client.delete_job(infinite_job)
 
     async def test_exec_tty(
         self,
@@ -1553,8 +1383,6 @@ class TestExecApi:
             assert (await expect_prompt(ws)).strip() == b"#"
             await ws.send_bytes(b"\x00echo 'abc'\n")
             assert await expect_prompt(ws) == b"echo 'abc'\r\nabc\r\n# "
-
-        await jobs_client.delete_job(infinite_job)
 
     async def test_exec_tty_exit_code(
         self,
@@ -1594,8 +1422,6 @@ class TestExecApi:
                     payload = json.loads(msg.data[1:])
                     assert payload["exit_code"] == 42
                     break
-
-        await jobs_client.delete_job(infinite_job)
 
 
 class TestKillApi:
@@ -1641,7 +1467,6 @@ class TestKillApi:
 class TestPortForward:
     async def test_port_forward_bad_port(
         self,
-        platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
@@ -1656,7 +1481,6 @@ class TestPortForward:
 
     async def test_port_forward_cannot_connect(
         self,
-        platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
@@ -1672,14 +1496,11 @@ class TestPortForward:
     @pytest.mark.minikube
     async def test_port_forward_ok(
         self,
-        platform_api: PlatformApiEndpoints,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         job_submit: dict[str, Any],
         jobs_client: JobsClient,
     ) -> None:
-        headers = jobs_client.headers
-
         py = textwrap.dedent(
             """\
             import socket
@@ -1698,16 +1519,10 @@ class TestPortForward:
         command = f"python -c '{py}'"
         job_submit["container"]["command"] = command
         job_submit["container"]["image"] = "python:latest"
-
-        url = platform_api.jobs_base_url
-        async with client.post(url, headers=headers, json=job_submit) as response:
-            assert response.status == HTTPAccepted.status_code
-            result = await response.json()
-            assert result["status"] in ["pending"]
-            job_id = result["id"]
-
+        job_id = await jobs_client.run_job(job_submit)
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
 
+        headers = jobs_client.headers
         url = monitoring_api.generate_port_forward_url(job_id, 60002)
 
         async with client.ws_connect(url, headers=headers) as ws:
@@ -1717,3 +1532,5 @@ class TestPortForward:
                 ret = await ws.receive_bytes()
                 assert ret == b"rep-" + data
             await ws.close()
+
+        await jobs_client.delete_job(job_id)
