@@ -100,7 +100,7 @@ class ContainerRuntimeClient:
                 raise ContainerNotFoundError(container_id)
             if 400 <= ex.status < 500:
                 raise ContainerRuntimeClientError(
-                    f"Attach container {container_id!r} client error: {ex}"
+                    f"Exec container {container_id!r} client error: {ex}"
                 )
             raise ContainerRuntimeError(f"Exec container {container_id!r} error: {ex}")
 
@@ -113,7 +113,7 @@ class ContainerRuntimeClient:
             if 400 <= resp.status < 500:
                 error = await _get_error(resp)
                 raise ContainerRuntimeClientError(
-                    f"Attach container {container_id!r} client error: {error}"
+                    f"Kill container {container_id!r} client error: {error}"
                 )
             if resp.status >= 500:
                 error = await _get_error(resp)
@@ -138,7 +138,7 @@ class ContainerRuntimeClient:
             if 400 <= resp.status < 500:
                 error = await _get_error(resp)
                 raise ContainerRuntimeClientError(
-                    f"Attach container {container_id!r} client error: {error}"
+                    f"Commit container {container_id!r} client error: {error}"
                 )
             if resp.status >= 500:
                 error = await _get_error(resp)
