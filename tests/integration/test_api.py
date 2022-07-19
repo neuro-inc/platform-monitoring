@@ -36,21 +36,17 @@ from tests.integration.conftest_kube import MyKubeClient
 
 async def expect_prompt(ws: aiohttp.ClientWebSocketResponse) -> bytes:
     _ansi_re = re.compile(rb"\033\[[;?0-9]*[a-zA-Z]")
-    _exit_re = re.compile(rb"exit \d+\Z")
+    _exit_re = re.compile(rb"exit \d+")
     try:
         ret: bytes = b""
         async with timeout(3):
-            while not ret.strip().endswith(b"#") and not _exit_re.match(ret.strip()):
-                msg = await ws.receive()
-                if msg.type in (
-                    aiohttp.WSMsgType.CLOSE,
-                    aiohttp.WSMsgType.CLOSING,
-                    aiohttp.WSMsgType.CLOSED,
-                ):
-                    break
-                print(msg.data)
+            async for msg in ws:
+                assert msg.type == aiohttp.WSMsgType.BINARY
                 assert msg.data[0] == 1
                 ret += _ansi_re.sub(b"", msg.data[1:])
+                ret_strip = ret.strip()
+                if ret_strip.endswith(b"#") or _exit_re.fullmatch(ret_strip):
+                    break
             return ret
     except asyncio.TimeoutError:
         raise AssertionError(f"[Timeout] {ret!r}")
@@ -535,19 +531,10 @@ class TestTopApi:
         url = monitoring_api.generate_top_url(job_id=infinite_job)
         async with client.ws_connect(url, headers=jobs_client.headers) as ws:
             # TODO move this ws communication to JobClient
-            while True:
-                msg = await ws.receive()
-                if msg.type == aiohttp.WSMsgType.CLOSE:
-                    break
-                else:
-                    records.append(json.loads(msg.data))
-
+            async for msg in ws:
+                assert msg.type == aiohttp.WSMsgType.TEXT
+                records.append(json.loads(msg.data))
                 if len(records) == num_request:
-                    # TODO (truskovskiyk 09/12/18) do not use protected prop
-                    # https://github.com/aio-libs/aiohttp/issues/3443
-                    proto = ws._writer.protocol
-                    assert proto.transport is not None
-                    proto.transport.close()
                     break
 
         assert len(records) == num_request
@@ -572,10 +559,8 @@ class TestTopApi:
         await share_job(jobs_client.user, regular_user2, job_name)
 
         url = monitoring_api.generate_top_url(named_infinite_job)
-        async with client.ws_connect(url, headers=regular_user2.headers) as ws:
-            proto = ws._writer.protocol
-            assert proto.transport is not None
-            proto.transport.close()
+        async with client.ws_connect(url, headers=regular_user2.headers):
+            pass
 
     async def test_top_no_permissions_unauthorized(
         self,
@@ -617,28 +602,10 @@ class TestTopApi:
             job_id=infinite_job, status="cancelled"
         )
 
-        num_request = 2
-        records = []
-
         url = monitoring_api.generate_top_url(job_id=infinite_job)
         async with client.ws_connect(url, headers=jobs_client.headers) as ws:
-            # TODO move this ws communication to JobClient
-            while True:
-                msg = await ws.receive()
-                if msg.type == aiohttp.WSMsgType.CLOSE:
-                    break
-                else:
-                    records.append(json.loads(msg.data))
-
-                if len(records) == num_request:
-                    # TODO (truskovskiyk 09/12/18) do not use protected prop
-                    # https://github.com/aio-libs/aiohttp/issues/3443
-                    proto = ws._writer.protocol
-                    assert proto.transport is not None
-                    proto.transport.close()
-                    break
-
-        assert not records
+            msg = await ws.receive()
+            assert msg.type == aiohttp.WSMsgType.CLOSE
 
     async def test_top_non_existing_job(
         self,
@@ -675,7 +642,7 @@ class TestTopApi:
         job_id = await jobs_client.run_job(job_submit)
 
         num_request = 2
-        records = []
+        records: list[Any] = []
 
         headers = jobs_client.headers
         job_top_url = monitoring_api.generate_top_url(job_id)
@@ -683,25 +650,13 @@ class TestTopApi:
             job = await jobs_client.get_job_by_id(job_id=job_id)
             assert job["status"] == "pending"
 
-            # silently waiting for a job becomes running
-            msg = await ws.receive()
-            job = await jobs_client.get_job_by_id(job_id=job_id)
-            assert job["status"] == "running"
-            assert msg.type == aiohttp.WSMsgType.TEXT
-
-            while True:
-                msg = await ws.receive()
-                if msg.type == aiohttp.WSMsgType.CLOSE:
-                    break
-                else:
-                    records.append(json.loads(msg.data))
-
+            async for msg in ws:
+                assert msg.type == aiohttp.WSMsgType.TEXT
+                if not records:  # First message.
+                    job = await jobs_client.get_job_by_id(job_id=job_id)
+                    assert job["status"] == "running"
+                records.append(json.loads(msg.data))
                 if len(records) == num_request:
-                    # TODO (truskovskiyk 09/12/18) do not use protected prop
-                    # https://github.com/aio-libs/aiohttp/issues/3443
-                    proto = ws._writer.protocol
-                    assert proto.transport is not None
-                    proto.transport.close()
                     break
 
         assert len(records) == num_request
@@ -731,9 +686,8 @@ class TestTopApi:
         job_top_url = monitoring_api.generate_top_url(job_id)
         async with client.ws_connect(job_top_url, headers=headers) as ws:
             msg = await ws.receive()
-            job = await jobs_client.get_job_by_id(job_id=job_id)
-
             assert msg.type == aiohttp.WSMsgType.CLOSE
+            job = await jobs_client.get_job_by_id(job_id=job_id)
             assert job["status"] == "succeeded"
 
         await jobs_client.delete_job(job_id=job_id)
@@ -763,7 +717,7 @@ class TestLogApi:
         jobs_client: JobsClient,
         infinite_job: str,
     ) -> None:
-        url = monitoring_api.generate_top_url(job_id=infinite_job)
+        url = monitoring_api.generate_log_url(job_id=infinite_job)
         async with client.get(url) as resp:
             assert resp.status == HTTPUnauthorized.status_code
 
@@ -809,6 +763,7 @@ class TestLogApi:
         async with client.ws_connect(url, headers=headers) as ws:
             ws_data = []
             async for msg in ws:
+                assert msg.type == aiohttp.WSMsgType.BINARY
                 ws_data.append(msg.data)
 
         actual_payload = b"".join(ws_data)
@@ -1108,6 +1063,7 @@ class TestAttachApi:
 
             content = []
             async for msg in ws:
+                assert msg.type == aiohttp.WSMsgType.BINARY
                 content.append(msg.data)
 
         expected = (
@@ -1146,6 +1102,7 @@ class TestAttachApi:
 
             content = []
             async for msg in ws:
+                assert msg.type == aiohttp.WSMsgType.BINARY
                 content.append(msg.data)
 
         expected = (
@@ -1178,6 +1135,7 @@ class TestAttachApi:
 
             content = []
             async for msg in ws:
+                assert msg.type == aiohttp.WSMsgType.BINARY
                 content.append(msg.data)
 
         expected = (
@@ -1252,6 +1210,7 @@ class TestAttachApi:
                 ):
                     break
 
+                assert msg.type == aiohttp.WSMsgType.BINARY
                 if msg.data[0] == 3:
                     payload = json.loads(msg.data[1:])
                     # Zero code is returned even if we exited with non zero code.
@@ -1427,6 +1386,7 @@ class TestExecApi:
                 ):
                     break
 
+                assert msg.type == aiohttp.WSMsgType.BINARY
                 if msg.data[0] == 3:
                     payload = json.loads(msg.data[1:])
                     assert payload["exit_code"] == 42
