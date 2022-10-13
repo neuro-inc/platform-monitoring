@@ -67,7 +67,7 @@ jobs:
         make install_k8s
         make start_k8s
     - name: Login to ghcr.io
-      uses: docker/login-action@v2.0.0
+      uses: docker/login-action@v2.1.0
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
