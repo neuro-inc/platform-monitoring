@@ -59,7 +59,7 @@ spec:
             - name: MINIO_ROOT_PASSWORD
               value: secret_key
             - name: MINIO_STORAGE_CLASS_STANDARD
-              value: EC:4
+              value: EC:0
           volumeMounts:
             - mountPath: /data
               name: data
