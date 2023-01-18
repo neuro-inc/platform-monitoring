@@ -4,10 +4,14 @@
 # https://github.com/kubernetes/minikube#linux-continuous-integration-without-vm-support
 
 function k8s::install_minikube {
-    local minikube_version="v1.11.0"
+    local minikube_version="v1.25.2"
+    sudo apt-get update
+    sudo apt-get install -y conntrack
     curl -Lo minikube https://storage.googleapis.com/minikube/releases/${minikube_version}/minikube-linux-amd64
     chmod +x minikube
     sudo mv minikube /usr/local/bin/
+    sudo -E minikube config set WantReportErrorPrompt false
+    sudo -E minikube config set WantNoneDriverWarning false
 }
 
 function k8s::start {
@@ -20,12 +24,8 @@ function k8s::start {
     export MINIKUBE_HOME=$HOME
     export CHANGE_MINIKUBE_NONE_USER=true
 
-    sudo -E minikube config set WantReportErrorPrompt false
-    sudo -E minikube config set WantNoneDriverWarning false
-
     sudo -E minikube start \
         --vm-driver=none \
-        --kubernetes-version=v1.14.10 \
         --install-addons=true \
         --addons=registry \
         --wait=all \
