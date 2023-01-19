@@ -25,7 +25,6 @@ service:
     traefik.ingress.kubernetes.io/service.sticky.cookie: "true"
     traefik.ingress.kubernetes.io/service.sticky.cookie.name: NEURO_MONITORINGAPI_SESSION
 
-
 cors:
   origins:
   - '*'
@@ -39,10 +38,14 @@ fluentd:
 
 logs:
   persistence:
-    type: aws
-    aws:
-      region: us-east-1
-      bucket: neuro-job-logs-dev
+    type: gcp
+
+    keySecret: gcp-key
+
+    gcp:
+      project: development-374312
+      location: us-central1
+      bucket: neuro-dev-logs
 
 sentry:
   dsn: https://432bc48cd2444be7afec5efeb1fc03a6@o489136.ingest.sentry.io/5530426

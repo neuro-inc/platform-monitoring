@@ -131,12 +131,12 @@ spec:
         - name: NP_MONITORING_S3_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.key" . }}
+              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
               key: access_key_id
         - name: NP_MONITORING_S3_SECRET_ACCESS_KEY
           valueFrom:
             secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.key" . }}
+              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
               key: secret_access_key
         {{- if .Values.logs.persistence.aws.region }}
         - name: NP_MONITORING_S3_REGION
@@ -180,7 +180,7 @@ spec:
         - name: MINIO_ROOT_PASSWORD
           value: minio_secret_key
         - name: GOOGLE_APPLICATION_CREDENTIALS
-          value: /accounts/key.json
+          value: /accounts/key_json
         volumeMounts:
         - name: gcs-credentials
           mountPath: /accounts
@@ -190,7 +190,7 @@ spec:
       volumes:
       - name: gcs-credentials
         secret:
-          secretName: {{ include "platformMonitoring.logs.storage.key" . }}
+          secretName: {{ include "platformMonitoring.logs.storage.keySecret" . }}
       {{- end }}
 
       {{- if eq .Values.logs.persistence.type "azure" }}
@@ -201,12 +201,12 @@ spec:
         - name: NP_MONITORING_S3_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.key" . }}
+              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
               key: account_name
         - name: NP_MONITORING_S3_SECRET_ACCESS_KEY
           valueFrom:
             secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.key" . }}
+              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
               key: account_key
         - name: NP_MONITORING_S3_ENDPOINT_URL
           value: "http://127.0.0.1:{{ .Values.minio.port }}"
@@ -224,12 +224,12 @@ spec:
         - name: MINIO_ROOT_USER
           valueFrom:
             secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.key" . }}
+              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
               key: account_name
         - name: MINIO_ROOT_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.key" . }}
+              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
               key: account_key
 {{ include "platformMonitoring.minio.resources" . | indent 8 }}
 {{ include "platformMonitoring.minio.probes" . | indent 8 }}
@@ -245,12 +245,12 @@ spec:
         - name: NP_MONITORING_S3_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.key" . }}
+              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
               key: access_key
         - name: NP_MONITORING_S3_SECRET_ACCESS_KEY
           valueFrom:
             secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.key" . }}
+              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
               key: secret_key
         - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
           value: {{ .Values.logs.persistence.minio.bucket | quote }}

@@ -90,6 +90,10 @@ resources:
 kube.var.log.containers.{pod_name}_{namespace_name}_{container_name}
 {{- end -}}
 
-{{- define "platformMonitoring.logs.storage.key" -}}
+{{- define "platformMonitoring.logs.storage.keySecret" -}}
+{{- if .Values.logs.persistence.keySecret -}}
+{{ .Values.logs.persistence.keySecret }}
+{{- else -}}
 {{ include "platformMonitoring.fullname" . }}-logs-storage-key
+{{- end -}}
 {{- end -}}

@@ -131,6 +131,8 @@ logs:
   persistence:
     type: es
 
+    keySecret: ""
+
     es:
       host: elasticsearch
       port: 9200
