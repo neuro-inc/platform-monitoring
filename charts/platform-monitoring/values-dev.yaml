@@ -12,6 +12,9 @@ platform:
         name: platformservices-secret
         key: compute_token
 
+containerRuntime:
+  name: containerd
+
 ingress:
   enabled: true
   ingressClassName: traefik
