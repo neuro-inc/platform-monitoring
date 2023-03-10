@@ -199,6 +199,10 @@ spec:
       {{- if .Values.imagePullSecrets }}
       imagePullSecrets: {{ toYaml .Values.imagePullSecrets | nindent 6 }}
       {{- end }}
+      {{ - if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+
 
   {{- if .Values.fluentd.persistence.enabled }}
   volumeClaimTemplates:
