@@ -51,11 +51,14 @@ async def _wait_for_platform_api_config(
     platform_api_config: PlatformApiConfig, sleep_s: float = 0.1
 ) -> None:
     while True:
-        try:
-            async with create_platform_api_client(
-                platform_api_config.url, platform_api_config.token
-            ):
-                return
-        except Exception:
-            pass
-        await asyncio.sleep(sleep_s)
+        import warnings
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=DeprecationWarning)
+            try:
+                async with create_platform_api_client(
+                        platform_api_config.url, platform_api_config.token
+                ):
+                    return
+            except Exception:
+                pass
+            await asyncio.sleep(sleep_s)
