@@ -731,7 +731,6 @@ class TestLogReader:
         finally:
             await kube_client.delete_pod(job_pod.name)
 
-    @pytest.skip
     async def test_elasticsearch_log_reader(
         self,
         kube_config: KubeConfig,
@@ -765,7 +764,6 @@ class TestLogReader:
                 timestamps=timestamps,
             )
 
-    @pytest.skip
     async def test_elasticsearch_log_reader_restarted(
         self,
         kube_config: KubeConfig,
@@ -994,7 +992,6 @@ class TestLogReader:
         except asyncio.TimeoutError:
             pytest.fail(f"Pod logs did not match. Last payload: {payload!r}")
 
-    @pytest.skip
     async def test_elasticsearch_log_reader_empty(
         self, es_client: Elasticsearch, kube_container_runtime: str
     ) -> None:
@@ -1054,7 +1051,6 @@ class TestLogReader:
         payload = await self._consume_log_reader(log_reader)
         assert payload == b"hello\n"
 
-    @pytest.skip
     async def test_get_job_elasticsearch_log_reader(
         self,
         kube_config: KubeConfig,
@@ -1141,7 +1137,6 @@ class TestLogReader:
         for name, payload in zip(names, payloads):
             assert payload == b"", name
 
-    @pytest.skip
     async def test_elasticsearch_empty_log_reader(
         self,
         kube_client: MyKubeClient,
@@ -1226,7 +1221,6 @@ class TestLogReader:
         for name, payload in zip(names, payloads):
             assert payload == expected_payload, name
 
-    @pytest.skip
     async def test_elasticsearch_merged_log_reader(
         self,
         kube_client: MyKubeClient,
@@ -1333,7 +1327,6 @@ class TestLogReader:
             payload = payload.replace(b"===\n", b"")
             assert payload == payload0, name
 
-    @pytest.skip
     async def test_elasticsearch_merged_log_reader_restarted(
         self,
         kube_client: MyKubeClient,
@@ -1432,7 +1425,6 @@ class TestLogReader:
             b"begin\nend\n",
         ]
 
-    @pytest.skip
     async def test_elasticsearch_merged_log_reader_restarted_since(
         self,
         kube_client: MyKubeClient,
