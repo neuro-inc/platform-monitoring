@@ -205,7 +205,9 @@ spec:
                   "url": "http://platformapi/api/v1/buckets",
                   "disable_creation": false
               },
-              "ingress": {"acme_environment": "staging"}
+              "ingress": {"acme_environment": "staging"},
+              "energy": {"co2_grams_eq_per_kwh": 0, "schedules": []},
+              "timezone": "UTC"
           }
           EOM
         env:
