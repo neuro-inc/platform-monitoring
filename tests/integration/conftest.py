@@ -116,7 +116,7 @@ async def platform_api_config(
         base_url = get_service_url("platformapi", namespace="default")
     assert base_url.startswith("http")
     url = URL(base_url) / "api/v1"
-    await wait_for_service("platformapi", url / "ping", timeout_s=240)
+    await wait_for_service("platformapi", url / "ping", timeout_s=120)
     yield PlatformApiConfig(
         url=url,
         token=token_factory("compute"),  # token is hard-coded in the yaml configuration
@@ -232,7 +232,7 @@ def config_factory(
     auth_config: PlatformAuthConfig,
     platform_api_config: PlatformApiConfig,
     platform_config: PlatformConfig,
-    es_config: ElasticsearchConfig,
+    s3_config: S3Config,
     kube_config: KubeConfig,
     registry_config: RegistryConfig,
     container_runtime_config: ContainerRuntimeConfig,
@@ -245,9 +245,9 @@ def config_factory(
             platform_auth=auth_config,
             platform_api=platform_api_config,
             platform_config=platform_config,
-            elasticsearch=es_config,
+            s3=s3_config,
             logs=LogsConfig(
-                storage_type=LogsStorageType.ELASTICSEARCH, cleanup_interval_sec=0.5
+                storage_type=LogsStorageType.S3, cleanup_interval_sec=0.5
             ),
             kube=kube_config,
             registry=registry_config,
