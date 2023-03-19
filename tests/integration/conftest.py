@@ -232,7 +232,7 @@ def config_factory(
     auth_config: PlatformAuthConfig,
     platform_api_config: PlatformApiConfig,
     platform_config: PlatformConfig,
-    es_config: ElasticsearchConfig,
+    s3_config: S3Config,
     kube_config: KubeConfig,
     registry_config: RegistryConfig,
     container_runtime_config: ContainerRuntimeConfig,
@@ -245,9 +245,9 @@ def config_factory(
             platform_auth=auth_config,
             platform_api=platform_api_config,
             platform_config=platform_config,
-            elasticsearch=es_config,
+            s3=s3_config,
             logs=LogsConfig(
-                storage_type=LogsStorageType.ELASTICSEARCH, cleanup_interval_sec=0.5
+                storage_type=LogsStorageType.S3, cleanup_interval_sec=0.5
             ),
             kube=kube_config,
             registry=registry_config,
