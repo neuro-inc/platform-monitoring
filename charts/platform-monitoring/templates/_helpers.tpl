@@ -97,3 +97,7 @@ kube.var.log.containers.{pod_name}_{namespace_name}_{container_name}
 {{ include "platformMonitoring.fullname" . }}-logs-storage-key
 {{- end -}}
 {{- end -}}
+
+{{- define "platformMonitoring.kubeAuthMountRoot" -}}
+{{- printf "/var/run/secrets/kubernetes.io/serviceaccount" -}}
+{{- end -}}

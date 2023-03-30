@@ -77,9 +77,9 @@ spec:
         - name: NP_MONITORING_K8S_AUTH_TYPE
           value: token
         - name: NP_MONITORING_K8S_CA_PATH
-          value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          value:  {{ include "platformMonitoring.kubeAuthMountRoot" . }}/ca.crt
         - name: NP_MONITORING_K8S_TOKEN_PATH
-          value: /var/run/secrets/kubernetes.io/serviceaccount/token
+          value:  {{ include "platformMonitoring.kubeAuthMountRoot" . }}/token
         - name: NP_MONITORING_PLATFORM_API_URL
           value: {{ .Values.platform.apiUrl | quote }}
         - name: NP_MONITORING_PLATFORM_AUTH_URL
@@ -167,6 +167,10 @@ spec:
           value: {{ .Values.logs.persistence.gcp.bucket | quote }}
         - name: NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT
           value: {{ include "platformMonitoring.logs.storage.s3.keyPrefixFormat" . | quote }}
+        volumeMounts:
+        - mountPath: {{ include "platformMonitoring.kubeAuthMountRoot" . }}
+          name: kube-api-token
+          readOnly: true
 
       - name: minio
         image: {{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}
@@ -273,3 +277,15 @@ spec:
       {{- if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName }}
       {{- end }}
+      volumes:
+      - name: kube-api-data
+        projected:
+          sources:
+          - serviceAccountToken:
+              expirationSeconds: 3600
+              path: token
+          - configMap:
+              name: kube-root-ca.crt
+              items:
+              - key: ca.crt
+                path: ca.crt
