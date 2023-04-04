@@ -169,7 +169,7 @@ spec:
           value: {{ include "platformMonitoring.logs.storage.s3.keyPrefixFormat" . | quote }}
         volumeMounts:
         - mountPath: {{ include "platformMonitoring.kubeAuthMountRoot" . }}
-          name: kube-api-token
+          name: kube-api-data
           readOnly: true
 
       - name: minio
