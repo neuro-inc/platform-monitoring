@@ -365,6 +365,10 @@ class KubeClient:
     async def init(self) -> None:
         self._client = await self.create_http_client()
 
+    async def init_if_needed(self) -> None:
+        if not self._client or self._client.closed:
+            await self.init()
+
     async def create_http_client(
         self, *, force_close: bool = False
     ) -> aiohttp.ClientSession:
@@ -457,6 +461,7 @@ class KubeClient:
         return url
 
     async def _request(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        await self.init_if_needed()
         assert self._client, "client is not initialized"
         doing_retry = kwargs.pop("doing_retry", False)
 
@@ -561,12 +566,17 @@ class KubeClient:
             return None
 
     async def get_pod_container_gpu_stats(
-        self, node_name: str, pod_name: str, container_name: str
+        self,
+        node_name: str,
+        pod_name: str,
+        container_name: str,
+        doing_retry: bool = False,
     ) -> Optional["PodContainerGPUStats"]:
         url = self._generate_node_gpu_metrics_url(node_name)
         if not url:
             return None
         try:
+            await self.init_if_needed()
             assert self._client
             async with self._client.get(url, raise_for_status=True) as resp:
                 text = await resp.text()
@@ -575,9 +585,12 @@ class KubeClient:
                 self._namespace, pod_name, container_name
             )
         except aiohttp.ClientResponseError as e:
-            if e.status == 401:
-                # OK to skip one telemetry update (1 sec interval)
+            if e.status == 401 and not doing_retry:
                 await self._recreate_http_client()
+                return await self.get_pod_container_gpu_stats(
+                    node_name, pod_name, container_name, doing_retry=True,
+                )
+            raise
         except aiohttp.ClientError as e:
             logger.exception(e)
         return None
@@ -612,6 +625,7 @@ class KubeClient:
         client_timeout = aiohttp.ClientTimeout(
             connect=conn_timeout_s, sock_read=read_timeout_s
         )
+        await self.init_if_needed()
         async with self._client.get(  # type: ignore
             url, timeout=client_timeout
         ) as response:

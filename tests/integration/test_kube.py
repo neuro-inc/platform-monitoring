@@ -1,7 +1,12 @@
+from __future__ import annotations
+
+from collections.abc import Callable
+from collections.abc import Coroutine
 import asyncio
 import logging
 import re
 import uuid
+from pathlib import Path
 from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime, timedelta, timezone
@@ -12,7 +17,7 @@ from uuid import uuid4
 import pytest
 from aiobotocore.client import AioBaseClient
 from aioelasticsearch import Elasticsearch
-from aiohttp import web
+from aiohttp import web, ClientError
 from async_timeout import timeout
 from yarl import URL
 
@@ -21,6 +26,7 @@ from platform_monitoring.kube_client import (
     JobNotFoundException,
     KubeClient,
     KubeClientException,
+    KubeClientAuthType,
     PodContainerStats,
     PodPhase,
 )
@@ -68,6 +74,18 @@ async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
     async def _gpu_metrics(request: web.Request) -> web.Response:
         return web.Response(content_type="text/plain")
 
+    def _unauthorized_gpu_metrics(
+    ) -> Callable[[web.Request], Coroutine[Any, Any, web.Response]]:
+
+        async def _inner(request: web.Request) -> web.Response:
+            auth_header = request.headers.get("Authorization", "")
+            print(request.headers)
+            if auth_header.split(" ")[1] == "authorized":
+                return web.Response(content_type="text/plain")
+            else:
+                return web.Response(status=401)
+        return _inner
+
     def _create_app() -> web.Application:
         app = web.Application()
         app.add_routes(
@@ -77,6 +95,10 @@ async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
                     "/api/v1/nodes/whatever:10255/proxy/stats/summary", _stats_summary
                 ),
                 web.get("/api/v1/nodes/whatever:9400/proxy/metrics", _gpu_metrics),
+                web.get(
+                    "/api/v1/nodes/unauthorized:9400/proxy/metrics",
+                    _unauthorized_gpu_metrics(),
+                ),
             ]
         )
         return app
@@ -509,6 +531,39 @@ class TestKubeClient:
             )
         finally:
             await kube_client.delete_pod(job_pod.name)
+
+    @pytest.mark.parametrize(
+        "token, is_valid",
+        [
+            ["authorized", True],
+            ["badtoken", False],
+        ]
+    )
+    async def test_get_pod_container_gpu_stats_handles_unauthorized(
+        self,
+        mock_kubernetes_server: ApiAddress,
+        tmp_path: Path,
+        token: str,
+        is_valid: bool,
+    ) -> None:
+        srv = mock_kubernetes_server
+        token_path = tmp_path / "token"
+        token_path.write_text(token)
+        async with KubeClient(
+            base_url=f"http://{srv.host}:{srv.port}",
+            namespace="mock",
+            nvidia_dcgm_node_port=9400,
+            auth_type=KubeClientAuthType.TOKEN,
+            token="bad",
+            token_path=token_path,
+        ) as client:
+            stats_coro = client.get_pod_container_gpu_stats("unauthorized", "p", "c")
+            if is_valid:
+                stats = await stats_coro
+                assert stats
+            else:
+                with pytest.raises(ClientError):
+                    await stats_coro
 
 
 class TestLogReader:
