@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from collections.abc import Coroutine
 import asyncio
 import logging
 import re
 import uuid
 from pathlib import Path
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime, timedelta, timezone
 from typing import Any, Union
@@ -79,7 +77,6 @@ async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
 
         async def _inner(request: web.Request) -> web.Response:
             auth_header = request.headers.get("Authorization", "")
-            print(request.headers)
             if auth_header.split(" ")[1] == "authorized":
                 return web.Response(content_type="text/plain")
             else:
@@ -555,7 +552,7 @@ class TestKubeClient:
             nvidia_dcgm_node_port=9400,
             auth_type=KubeClientAuthType.TOKEN,
             token="bad",
-            token_path=token_path,
+            token_path=str(token_path),
         ) as client:
             stats_coro = client.get_pod_container_gpu_stats("unauthorized", "p", "c")
             if is_valid:
