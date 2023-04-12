@@ -21,7 +21,7 @@ def cluster_token(token_factory: Callable[[str], str]) -> str:
     return token_factory("cluster")
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 async def platform_config_url(
     platform_api_config: PlatformApiConfig, in_minikube: bool
 ) -> URL:
@@ -31,14 +31,14 @@ async def platform_config_url(
     return URL(get_service_url("platformconfig", namespace="default"))
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def platform_config(
     platform_config_url: URL, token_factory: Callable[[str], str]
 ) -> PlatformConfig:
     return PlatformConfig(url=platform_config_url, token=token_factory("cluster"))
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 @pytest.mark.usefixtures("cluster_name")
 async def platform_config_client(
     platform_config_url: URL, cluster_token: str

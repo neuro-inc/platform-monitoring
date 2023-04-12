@@ -76,7 +76,7 @@ def minikube_ip() -> str:
     return subprocess.check_output(("minikube", "ip"), text=True).strip()
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 async def client() -> AsyncIterator[aiohttp.ClientSession]:
     async with aiohttp.ClientSession() as session:
         yield session
@@ -104,7 +104,7 @@ async def wait_for_service(
             await asyncio.sleep(interval_s)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 # TODO (A Yushkovskiy, 05-May-2019) This fixture should have scope="session" in order
 #  to be faster, but it causes mysterious errors `RuntimeError: Event loop is closed`
 async def platform_api_config(
@@ -123,7 +123,7 @@ async def platform_api_config(
     )
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 async def container_runtime_config(
     in_minikube: bool, kube_container_runtime: str
 ) -> ContainerRuntimeConfig:
@@ -139,7 +139,7 @@ async def container_runtime_config(
     return ContainerRuntimeConfig(name=kube_container_runtime, port=url.port)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 async def container_runtime_client_registry(
     container_runtime_config: ContainerRuntimeConfig,
 ) -> AsyncIterator[ContainerRuntimeClientRegistry]:
@@ -149,7 +149,7 @@ async def container_runtime_client_registry(
         yield registry
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 # TODO (A Yushkovskiy, 05-May-2019) This fixture should have scope="session" in order
 #  to be faster, but it causes mysterious errors `RuntimeError: Event loop is closed`
 async def es_config(
@@ -170,7 +170,7 @@ async def es_config(
     yield ElasticsearchConfig(hosts=[es_host])
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 async def es_client(es_config: ElasticsearchConfig) -> AsyncIterator[Elasticsearch]:
     """Elasticsearch client that goes directly to elasticsearch-logging service
     without any authentication.
@@ -179,7 +179,7 @@ async def es_client(es_config: ElasticsearchConfig) -> AsyncIterator[Elasticsear
         yield es_client
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def s3_config(s3_logs_bucket: str, s3_logs_key_prefix_format: str) -> S3Config:
     s3_url = get_service_url(service_name="minio")
     return S3Config(
@@ -192,7 +192,7 @@ def s3_config(s3_logs_bucket: str, s3_logs_key_prefix_format: str) -> S3Config:
     )
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 async def s3_client(s3_config: S3Config) -> AsyncIterator[AioBaseClient]:
     session = aiobotocore.session.get_session()
     async with session.create_client(
@@ -205,17 +205,17 @@ async def s3_client(s3_config: S3Config) -> AsyncIterator[AioBaseClient]:
         yield client
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def s3_logs_bucket() -> str:
     return "logs"
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def s3_logs_key_prefix_format() -> str:
     return "kube.var.log.containers.{pod_name}_{namespace_name}_{container_name}"
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 async def registry_config(request: FixtureRequest, in_minikube: bool) -> RegistryConfig:
     if in_minikube:
         external_url = URL("http://registry.kube-system")
@@ -227,7 +227,7 @@ async def registry_config(request: FixtureRequest, in_minikube: bool) -> Registr
     return RegistryConfig(URL("http://localhost:5000"))
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def config_factory(
     auth_config: PlatformAuthConfig,
     platform_api_config: PlatformApiConfig,
@@ -260,7 +260,7 @@ def config_factory(
     return _f
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def config(config_factory: Callable[..., Config]) -> Config:
     return config_factory()
 
