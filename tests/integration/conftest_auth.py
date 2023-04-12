@@ -45,7 +45,7 @@ def auth_config(
     )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def auth_client(
     auth_config: PlatformAuthConfig,
 ) -> AsyncGenerator[AuthClient, None]:
@@ -63,7 +63,7 @@ class _User(AuthClientUser):
         return {AUTHORIZATION: f"Bearer {self.token}"}
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def share_job(
     auth_client: AuthClient, cluster_name: str
 ) -> AsyncIterator[Callable[[_User, _User, str], Awaitable[None]]]:

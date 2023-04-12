@@ -172,14 +172,14 @@ class PlatformApiEndpoints:
         return self.jobs_base_url / job_id
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def monitoring_api(config: Config) -> AsyncIterator[MonitoringApiEndpoints]:
     app = await create_app(config)
     async with create_local_app_server(app, port=8080) as address:
         yield MonitoringApiEndpoints(address=address)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def monitoring_api_s3_storage(
     config_s3_storage: Config,
 ) -> AsyncIterator[MonitoringApiEndpoints]:
@@ -188,7 +188,7 @@ async def monitoring_api_s3_storage(
         yield MonitoringApiEndpoints(address=address)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def platform_api(
     platform_api_config: PlatformApiConfig,
 ) -> AsyncIterator[PlatformApiEndpoints]:
@@ -287,7 +287,7 @@ class JobsClient:
                 assert response.status == HTTPNoContent.status_code
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def jobs_client_factory(
     platform_api: PlatformApiEndpoints, client: aiohttp.ClientSession
 ) -> Iterator[Callable[[_User], JobsClient]]:
@@ -297,7 +297,7 @@ def jobs_client_factory(
     yield impl
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def jobs_client(
     regular_user1: _User,
     jobs_client_factory: Callable[[_User], JobsClient],
@@ -305,7 +305,7 @@ async def jobs_client(
     return jobs_client_factory(regular_user1)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def job_request_factory() -> Callable[[], dict[str, Any]]:
     def _factory() -> dict[str, Any]:
         return {
@@ -326,7 +326,7 @@ async def job_submit(
     return job_request_factory()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def job_factory(
     jobs_client: JobsClient,
     job_request_factory: Callable[[], dict[str, Any]],
