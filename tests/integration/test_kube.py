@@ -15,7 +15,7 @@ from uuid import uuid4
 import pytest
 from aiobotocore.client import AioBaseClient
 from aioelasticsearch import Elasticsearch
-from aiohttp import web, ClientError
+from aiohttp import web
 from async_timeout import timeout
 from yarl import URL
 
@@ -554,13 +554,11 @@ class TestKubeClient:
             token="bad",
             token_path=str(token_path),
         ) as client:
-            stats_coro = client.get_pod_container_gpu_stats("unauthorized", "p", "c")
+            stats = await client.get_pod_container_gpu_stats("unauthorized", "p", "c")
             if is_valid:
-                stats = await stats_coro
                 assert stats
             else:
-                with pytest.raises(ClientError):
-                    await stats_coro
+                assert not stats
 
 
 class TestLogReader:
