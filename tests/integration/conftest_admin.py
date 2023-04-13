@@ -47,6 +47,12 @@ def regular_user_factory(
                 json={"user_name": name, "role": "user"},
             ) as resp:
                 resp.raise_for_status()
+            async with client.post(
+                admin_url / "apis/admin/v1/clusters" / cluster_name / "projects",
+                headers={"Authorization": f"Bearer {token_factory(name)}"},
+                json={"name": name},
+            ) as resp:
+                resp.raise_for_status()
 
         return _User(name=name, token=token_factory(name))
 

@@ -30,6 +30,10 @@ class KubeClientException(Exception):
     pass
 
 
+class KubeClientUnauthorized(KubeClientException):
+    pass
+
+
 class JobException(Exception):
     pass
 
@@ -361,6 +365,10 @@ class KubeClient:
     async def init(self) -> None:
         self._client = await self.create_http_client()
 
+    async def init_if_needed(self) -> None:
+        if not self._client or self._client.closed:
+            await self.init()
+
     async def create_http_client(
         self, *, force_close: bool = False
     ) -> aiohttp.ClientSession:
@@ -386,6 +394,12 @@ class KubeClient:
             headers=headers,
             trace_configs=self._trace_configs,
         )
+
+    async def _recreate_http_client(self) -> None:
+        logger.warning("Reloading http K8s client.")
+        await self.close()
+        self._token = None
+        await self.init()
 
     @property
     def namespace(self) -> str:
@@ -447,12 +461,23 @@ class KubeClient:
         return url
 
     async def _request(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        await self.init_if_needed()
         assert self._client, "client is not initialized"
+        doing_retry = kwargs.pop("doing_retry", False)
+
         async with self._client.request(*args, **kwargs) as response:
-            await self._check_response_status(response)
-            payload = await response.json()
-            logger.debug("k8s response payload: %s", payload)
-            return payload
+            try:
+                await self._check_response_status(response)
+                payload = await response.json()
+                logger.debug("k8s response payload: %s", payload)
+            except KubeClientUnauthorized:
+                if doing_retry:
+                    raise
+                await self._recreate_http_client()
+                kwargs["doing_retry"] = True
+                payload = await self._request(*args, **kwargs)
+
+        return payload
 
     async def get_raw_pod(self, pod_name: str) -> dict[str, Any]:
         url = self._generate_pod_url(pod_name)
@@ -541,12 +566,17 @@ class KubeClient:
             return None
 
     async def get_pod_container_gpu_stats(
-        self, node_name: str, pod_name: str, container_name: str
+        self,
+        node_name: str,
+        pod_name: str,
+        container_name: str,
+        doing_retry: bool = False,
     ) -> Optional["PodContainerGPUStats"]:
         url = self._generate_node_gpu_metrics_url(node_name)
         if not url:
             return None
         try:
+            await self.init_if_needed()
             assert self._client
             async with self._client.get(url, raise_for_status=True) as resp:
                 text = await resp.text()
@@ -554,8 +584,15 @@ class KubeClient:
             return gpu_counters.get_pod_container_stats(
                 self._namespace, pod_name, container_name
             )
-        except aiohttp.ClientError:
-            return None
+        except aiohttp.ClientResponseError as e:
+            if e.status == 401 and not doing_retry:
+                await self._recreate_http_client()
+                return await self.get_pod_container_gpu_stats(
+                    node_name, pod_name, container_name, doing_retry=True,
+                )
+        except aiohttp.ClientError as e:
+            logger.exception(e)
+        return None
 
     async def check_pod_exists(self, pod_name: str) -> bool:
         try:
@@ -587,6 +624,7 @@ class KubeClient:
         client_timeout = aiohttp.ClientTimeout(
             connect=conn_timeout_s, sock_read=read_timeout_s
         )
+        await self.init_if_needed()
         async with self._client.get(  # type: ignore
             url, timeout=client_timeout
         ) as response:
@@ -596,36 +634,27 @@ class KubeClient:
     async def get_pods(
         self, label_selector: str = "", field_selector: str = ""
     ) -> Sequence[Pod]:
-        assert self._client
         params = {}
         if label_selector:
             params["labelSelector"] = label_selector
         if field_selector:
             params["fieldSelector"] = field_selector
-        async with self._client.get(self._pods_url, params=params) as response:
-            await self._check_response_status(response)
-            payload = await response.json()
-            self._assert_resource_kind("PodList", payload)
-            return [Pod(p) for p in payload["items"]]
+        payload = await self._request(method="get", url=self._pods_url, params=params)
+        self._assert_resource_kind("PodList", payload)
+        return [Pod(p) for p in payload["items"]]
 
     async def get_node(self, name: str) -> Node:
-        assert self._client
-        async with self._client.get(self._generate_node_url(name)) as response:
-            await self._check_response_status(response)
-            payload = await response.json()
-            self._assert_resource_kind("Node", payload)
-            return Node(payload)
+        payload = await self._request(method="get", url=self._generate_node_url(name))
+        self._assert_resource_kind("Node", payload)
+        return Node(payload)
 
     async def get_nodes(self, label_selector: str = "") -> Sequence[Node]:
-        assert self._client
         params = None
         if label_selector:
             params = {"labelSelector": label_selector}
-        async with self._client.get(self._nodes_url, params=params) as response:
-            await self._check_response_status(response)
-            payload = await response.json()
-            self._assert_resource_kind("NodeList", payload)
-            return [Node(item) for item in payload["items"]]
+        payload = await self._request(method="get", url=self._nodes_url, params=params)
+        self._assert_resource_kind("NodeList", payload)
+        return [Node(item) for item in payload["items"]]
 
     async def _check_response_status(
         self, response: aiohttp.ClientResponse, job_id: str = ""
@@ -636,7 +665,7 @@ class KubeClient:
                 pod = json.loads(payload)
             except ValueError:
                 pod = {"code": response.status, "message": payload}
-            self._raise_status_job_exception(pod, job_id=job_id)
+            self._raise_for_status(pod, job_id=job_id)
             raise KubeClientException(payload)
 
     def _assert_resource_kind(
@@ -644,27 +673,29 @@ class KubeClient:
     ) -> None:
         kind = payload["kind"]
         if kind == "Status":
-            self._raise_status_job_exception(payload, job_id=job_id)
+            self._raise_for_status(payload, job_id=job_id)
             raise JobError("unexpected error")
         elif kind != expected_kind:
             raise ValueError(f"unknown kind: {kind}")
 
-    def _raise_status_job_exception(
-        self, pod: dict[str, Any], job_id: Optional[str]
+    def _raise_for_status(
+        self, payload: dict[str, Any], job_id: Optional[str]
     ) -> None:
-        if pod["code"] == 409:
-            raise JobError(f"job '{job_id}' already exist")
-        elif pod["code"] == 404:
-            raise JobNotFoundException(f"job '{job_id}' was not found")
-        elif pod["code"] == 422:
-            raise JobError(f"can not create job with id '{job_id}'")
-        if pod["code"] == 400:
-            if "ContainerCreating" in pod["message"]:
+        if payload["code"] == 400:
+            if "ContainerCreating" in payload["message"]:
+                raise JobNotFoundException(f"job '{job_id}' was not created yet")
+            if "is not available" in payload["message"]:
                 raise JobNotFoundException(f"job '{job_id}' has not created yet")
-            if "is not available" in pod["message"]:
-                raise JobNotFoundException(f"job '{job_id}' has not created yet")
-            if "is terminated" in pod["message"]:
+            if "is terminated" in payload["message"]:
                 raise JobNotFoundException(f"job '{job_id}' is terminated")
+        elif payload["code"] == 401:
+            raise KubeClientUnauthorized(payload)
+        elif payload["code"] == 404:
+            raise JobNotFoundException(f"job '{job_id}' was not found")
+        elif payload["code"] == 409:
+            raise JobError(f"job '{job_id}' already exist")
+        elif payload["code"] == 422:
+            raise JobError(f"can not create job with id '{job_id}'")
 
 
 @dataclass(frozen=True)
