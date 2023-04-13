@@ -590,7 +590,6 @@ class KubeClient:
                 return await self.get_pod_container_gpu_stats(
                     node_name, pod_name, container_name, doing_retry=True,
                 )
-            raise
         except aiohttp.ClientError as e:
             logger.exception(e)
         return None
