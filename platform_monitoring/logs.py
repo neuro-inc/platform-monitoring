@@ -361,7 +361,7 @@ class S3LogReader(LogReader):
                             if self._debug and key:
                                 yield f"~~~ From file {basename(key)}\n".encode()
                                 key = ""
-                            log = event["log"]
+                            log = event.get("log", "")
                             yield self.encode_log(time_str, log)
                         except Exception:
                             logger.exception("Invalid log entry: %r", line)
