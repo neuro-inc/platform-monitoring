@@ -5,7 +5,7 @@ import logging
 import re
 import ssl
 from collections.abc import AsyncIterator, Sequence
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -315,6 +315,7 @@ class KubeClient:
         auth_cert_key_path: Optional[str] = None,
         token: Optional[str] = None,
         token_path: Optional[str] = None,
+        token_update_interval_s: int = 300,
         conn_timeout_s: int = 300,
         read_timeout_s: int = 100,
         conn_pool_size: int = 100,
@@ -333,6 +334,7 @@ class KubeClient:
         self._auth_cert_key_path = auth_cert_key_path
         self._token = token
         self._token_path = token_path
+        self._token_update_interval_s = token_update_interval_s
 
         self._conn_timeout_s = conn_timeout_s
         self._read_timeout_s = read_timeout_s
@@ -344,6 +346,7 @@ class KubeClient:
         self._trace_configs = trace_configs
 
         self._client: Optional[aiohttp.ClientSession] = None
+        self._token_updater_task: Optional[asyncio.Task[None]] = None
 
     @property
     def _is_ssl(self) -> bool:
@@ -363,43 +366,35 @@ class KubeClient:
         return ssl_context
 
     async def init(self) -> None:
-        self._client = await self.create_http_client()
-
-    async def init_if_needed(self) -> None:
-        if not self._client or self._client.closed:
-            await self.init()
-
-    async def create_http_client(
-        self, *, force_close: bool = False
-    ) -> aiohttp.ClientSession:
         connector = aiohttp.TCPConnector(
-            limit=self._conn_pool_size,
-            ssl=self._create_ssl_context(),
-            force_close=force_close,
+            limit=self._conn_pool_size, ssl=self._create_ssl_context()
         )
-        if self._auth_type == KubeClientAuthType.TOKEN:
-            token = self._token
-            if not token:
-                assert self._token_path is not None
-                token = Path(self._token_path).read_text()
-            headers = {"Authorization": "Bearer " + token}
-        else:
-            headers = {}
+        if self._token_path:
+            self._token = Path(self._token_path).read_text()
+            self._token_updater_task = asyncio.create_task(self._start_token_updater())
         timeout = aiohttp.ClientTimeout(
             connect=self._conn_timeout_s, total=self._read_timeout_s
         )
-        return aiohttp.ClientSession(
+        self._client = aiohttp.ClientSession(
             connector=connector,
             timeout=timeout,
-            headers=headers,
             trace_configs=self._trace_configs,
         )
 
-    async def _recreate_http_client(self) -> None:
-        logger.warning("Reloading http K8s client.")
-        await self.close()
-        self._token = None
-        await self.init()
+    async def _start_token_updater(self) -> None:
+        if not self._token_path:
+            return
+        while True:
+            try:
+                token = Path(self._token_path).read_text()
+                if token != self._token:
+                    self._token = token
+                    logger.info("Kube token was refreshed")
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.exception("Failed to update kube token: %s", exc)
+            await asyncio.sleep(self._token_update_interval_s)
 
     @property
     def namespace(self) -> str:
@@ -409,6 +404,11 @@ class KubeClient:
         if self._client:
             await self._client.close()
             self._client = None
+        if self._token_updater_task:
+            self._token_updater_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._token_updater_task
+            self._token_updater_task = None
 
     async def __aenter__(self) -> "KubeClient":
         await self.init()
@@ -460,24 +460,22 @@ class KubeClient:
         url = f"{url}/log?container={pod_name}&follow=true"
         return url
 
+    def _create_headers(
+        self, headers: Optional[dict[str, Any]] = None
+    ) -> dict[str, Any]:
+        headers = dict(headers) if headers else {}
+        if self._auth_type == KubeClientAuthType.TOKEN and self._token:
+            headers["Authorization"] = "Bearer " + self._token
+        return headers
+
     async def _request(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        await self.init_if_needed()
+        headers = self._create_headers(kwargs.pop("headers", None))
         assert self._client, "client is not initialized"
-        doing_retry = kwargs.pop("doing_retry", False)
-
-        async with self._client.request(*args, **kwargs) as response:
-            try:
-                await self._check_response_status(response)
-                payload = await response.json()
-                logger.debug("k8s response payload: %s", payload)
-            except KubeClientUnauthorized:
-                if doing_retry:
-                    raise
-                await self._recreate_http_client()
-                kwargs["doing_retry"] = True
-                payload = await self._request(*args, **kwargs)
-
-        return payload
+        async with self._client.request(*args, headers=headers, **kwargs) as response:
+            await self._check_response_status(response)
+            payload = await response.json()
+            logger.debug("k8s response payload: %s", payload)
+            return payload
 
     async def get_raw_pod(self, pod_name: str) -> dict[str, Any]:
         url = self._generate_pod_url(pod_name)
@@ -534,18 +532,6 @@ class KubeClient:
                     return status
                 await asyncio.sleep(interval_s)
 
-    def _get_node_proxy_url(self, host: str, port: int) -> URL:
-        return URL(self._generate_node_proxy_url(host, port))
-
-    @asynccontextmanager
-    async def get_node_proxy_client(
-        self, host: str, port: int
-    ) -> AsyncIterator[ProxyClient]:
-        assert self._client
-        yield ProxyClient(
-            url=self._get_node_proxy_url(host, port), session=self._client
-        )
-
     async def get_pod_container_stats(
         self, node_name: str, pod_name: str, container_name: str
     ) -> Optional["PodContainerStats"]:
@@ -570,26 +556,20 @@ class KubeClient:
         node_name: str,
         pod_name: str,
         container_name: str,
-        doing_retry: bool = False,
     ) -> Optional["PodContainerGPUStats"]:
         url = self._generate_node_gpu_metrics_url(node_name)
         if not url:
             return None
         try:
-            await self.init_if_needed()
             assert self._client
-            async with self._client.get(url, raise_for_status=True) as resp:
+            async with self._client.get(
+                url, headers=self._create_headers(), raise_for_status=True
+            ) as resp:
                 text = await resp.text()
                 gpu_counters = GPUCounters.parse(text)
             return gpu_counters.get_pod_container_stats(
                 self._namespace, pod_name, container_name
             )
-        except aiohttp.ClientResponseError as e:
-            if e.status == 401 and not doing_retry:
-                await self._recreate_http_client()
-                return await self.get_pod_container_gpu_stats(
-                    node_name, pod_name, container_name, doing_retry=True,
-                )
         except aiohttp.ClientError as e:
             logger.exception(e)
         return None
@@ -624,9 +604,9 @@ class KubeClient:
         client_timeout = aiohttp.ClientTimeout(
             connect=conn_timeout_s, sock_read=read_timeout_s
         )
-        await self.init_if_needed()
-        async with self._client.get(  # type: ignore
-            url, timeout=client_timeout
+        assert self._client
+        async with self._client.get(
+            url, headers=self._create_headers(), timeout=client_timeout
         ) as response:
             await self._check_response_status(response, job_id=pod_name)
             yield response.content
@@ -678,9 +658,7 @@ class KubeClient:
         elif kind != expected_kind:
             raise ValueError(f"unknown kind: {kind}")
 
-    def _raise_for_status(
-        self, payload: dict[str, Any], job_id: Optional[str]
-    ) -> None:
+    def _raise_for_status(self, payload: dict[str, Any], job_id: Optional[str]) -> None:
         if payload["code"] == 400:
             if "ContainerCreating" in payload["message"]:
                 raise JobNotFoundException(f"job '{job_id}' was not created yet")
