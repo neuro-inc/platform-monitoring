@@ -605,7 +605,7 @@ class KubeClient:
             connect=conn_timeout_s, sock_read=read_timeout_s
         )
         assert self._client
-        async with self._client.get(  # type: ignore
+        async with self._client.get(
             url, headers=self._create_headers(), timeout=client_timeout
         ) as response:
             await self._check_response_status(response, job_id=pod_name)
