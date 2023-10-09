@@ -52,11 +52,12 @@ async def _wait_for_platform_api_config(
 ) -> None:
     while True:
         import warnings
+
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=DeprecationWarning)
             try:
                 async with create_platform_api_client(
-                        platform_api_config.url, platform_api_config.token
+                    platform_api_config.url, platform_api_config.token
                 ):
                     return
             except Exception:
