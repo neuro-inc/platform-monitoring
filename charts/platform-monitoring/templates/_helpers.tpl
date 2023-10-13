@@ -28,17 +28,22 @@
 {{- end -}}
 {{- end -}}
 
-{{- define "platformMonitoring.fluentd.fullname" -}}
-{{- if .Values.fluentd.fullnameOverride -}}
-{{- .Values.fluentd.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- define "platformMonitoring.s3proxy.fullname" -}}
+{{- if .Values.s3proxy.fullnameOverride -}}
+{{- .Values.s3proxy.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
-{{- $name := default "fluent-bit" .Values.fluentd.nameOverride -}}
+{{- $name := default "s3proxy" .Values.s3proxy.nameOverride -}}
 {{- if contains $name .Release.Name -}}
 {{- .Release.Name | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
 {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 {{- end -}}
+{{- end -}}
+
+{{- define "platformMonitoring.s3proxy.endpoint" -}}
+{{- $serviceName := include "platformMonitoring.s3proxy.fullname" . -}}
+{{- printf "http://%s:%s" $serviceName .Values.s3proxy.port -}}
 {{- end -}}
 
 {{- define "platformMonitoring.chart" -}}

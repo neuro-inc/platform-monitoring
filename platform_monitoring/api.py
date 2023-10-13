@@ -394,7 +394,7 @@ class MonitoringApiHandler:
             raise ValueError("Required at least one of stdin, stdout or stderr")
 
         if tty and stdout and stderr:
-            raise ValueError("Stdin and stdout cannot be multiplexed in tty mode")
+            raise ValueError("Stdout and stderr cannot be multiplexed in tty mode")
 
         job = await self._resolve_job(request, "write")
 
@@ -425,7 +425,7 @@ class MonitoringApiHandler:
             raise ValueError("Required at least one of stdin, stdout or stderr")
 
         if tty and stdout and stderr:
-            raise ValueError("Stdin and stdout cannot be multiplexed in tty mode")
+            raise ValueError("Stdout and stderr cannot be multiplexed in tty mode")
 
         job = await self._resolve_job(request, "write")
 

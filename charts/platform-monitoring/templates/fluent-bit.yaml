@@ -24,6 +24,7 @@ spec:
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
+      maxSurge: 0
       maxUnavailable: 100%
   template:
     metadata:
@@ -33,10 +34,48 @@ spec:
         service: fluent-bit
       annotations:
         checksum/config: {{ $config | sha256sum }}
+{{- if .Values.fluentbit.podAnnotations }}
+{{ toYaml .Values.fluentbit.podAnnotations | indent 8 }}
+{{- end }}
     spec:
       containers:
-      - image: {{ .Values.fluentbit.image.repository }}:{{ .Values.fluentbit.image.tag }}
-        name: fluent-bit
+      - name: fluent-bit
+        {{- with .Values.fluentbit.image }}
+        image: {{ .repository }}:{{ .tag }}
+        {{- end }}
+        env:
+        {{- if eq .Values.logs.persistence.type "aws" }}
+        {{- if .Values.logs.persistence.aws.accessKeyId }}
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
+              key: access_key_id
+        {{- end }}
+        {{- if .Values.logs.persistence.aws.secretAccessKey }}
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
+              key: secret_access_key
+        {{- end }}
+        {{- else if eq .Values.logs.persistence.type "minio" }}
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
+              key: access_key
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
+              key: secret_key
+        {{- else if or (eq .Values.logs.persistence.type "gcp") (eq .Values.logs.persistence.type "azure") }}
+        - name: AWS_ACCESS_KEY_ID
+          value: {{ .Values.s3proxy.identity }}
+        - name: AWS_SECRET_ACCESS_KEY
+          value: {{ .Values.s3proxy.credential }}
+        {{- end }}
         volumeMounts:
         - mountPath: /var/log
           name: varlog
@@ -47,15 +86,14 @@ spec:
         {{- end }}
         - name: tail-db
           mountPath: /tail-db
-{{- range $path, $_ := .Files.Glob $configPattern }}
+        {{- range $path, $_ := .Files.Glob $configPattern }}
         - name: config
           mountPath: /fluent-bit/etc/{{ base $path }}
           subPath: {{ base $path }}
-{{- end }}
-{{- if .Values.fluentbit.resources }}
-        resources:
-{{ toYaml .Values.fluentbit.resources | indent 10 }}
-{{- end }}
+        {{- end }}
+        {{- if .Values.fluentbit.resources }}
+        resources: {{ toYaml .Values.fluentbit.resources | nindent 10 }}
+        {{- end }}
       volumes:
       - name: tail-db
         hostPath:
@@ -81,10 +119,9 @@ spec:
             - matchExpressions:
               - key: {{ .Values.nodeLabels.job | quote }}
                 operator: Exists
-{{- if .Values.fluentbit.tolerations }}
-      tolerations:
-{{ toYaml .Values.fluentbit.tolerations | indent 8 }}
-{{- end }}
+      {{- if .Values.fluentbit.tolerations }}
+      tolerations: {{ toYaml .Values.fluentbit.tolerations | nindent 8 }}
+      {{- end }}
       {{- if .Values.imagePullSecrets }}
       imagePullSecrets: {{ toYaml .Values.imagePullSecrets | nindent 6 }}
       {{- end }}
