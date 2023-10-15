@@ -106,7 +106,7 @@ spec:
       restartPolicy: Never
       initContainers:
       - name: wait-for-platform-config
-        image: curlimages/curl
+        image: curlimages/curl:8.4.0
         command: [sh]
         args:
         - -c
@@ -115,12 +115,14 @@ spec:
 
           while [ $code != 0 ]
           do
+            sleep 1
             curl -f "$NP_PLATFORM_CONFIG_URL/healthchecks/liveness"
             code=$?
           done
 
           while [ $code != 0 ]
           do
+            sleep 1
             curl -f "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/ping"
             code=$?
           done
@@ -131,7 +133,7 @@ spec:
           value: http://platformadmin:8080
       containers:
       - name: create-cluster
-        image: curlimages/curl
+        image: curlimages/curl:8.4.0
         command: [sh]
         args:
         - -ec

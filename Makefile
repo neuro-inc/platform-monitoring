@@ -50,6 +50,12 @@ docker_build:
 
 docker_pull_test_images:
 	@eval $$(minikube docker-env); \
+	    docker pull postgres:12.11; \
+	    docker pull redis:4; \
+	    docker pull curlimages/curl:8.4.0; \
+	    docker pull fluent/fluent-bit:2.1.10; \
+	    docker pull minio/minio:RELEASE.2023-10-14T05-17-22Z; \
+	    docker pull lachlanevenson/k8s-kubectl:v1.10.3; \
 	    docker pull $(PLATFORMAPI_IMAGE); \
 	    docker pull $(PLATFORMADMIN_IMAGE); \
 	    docker pull $(PLATFORMAUTHAPI_IMAGE); \
