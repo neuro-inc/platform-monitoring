@@ -118,7 +118,7 @@ class MyPodDescriptor:
                 "containers": [
                     {
                         "name": job_id,
-                        "image": "ghcr.io/neuro-inc/ubuntu:20.10",
+                        "image": "ubuntu:20.10",
                         "env": [],
                         "volumeMounts": [],
                         "terminationMessagePolicy": "FallbackToLogsOnError",

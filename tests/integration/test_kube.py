@@ -847,6 +847,7 @@ class TestLogReader:
             container_name=job_pod.name,
             expected_payload=expected_payload,
         )
+        await asyncio.sleep(10)
         await kube_client.delete_pod(job_pod.name)
         for timestamps in [False, True]:
             await self._check_es_logs(
@@ -1140,6 +1141,7 @@ class TestLogReader:
         payload = await self._consume_log_reader(log_reader)
         assert payload == b"hello\n"
 
+        await asyncio.sleep(10)
         await kube_client.delete_pod(job_pod.name)
 
         log_reader = factory.get_pod_log_reader(pod_name, archive_delay_s=10.0)
@@ -1494,6 +1496,7 @@ class TestLogReader:
             run_log_reader(since=finished2 - timedelta(seconds=2))
             run_log_reader(since=finished2 + timedelta(seconds=2))
             await kube_client.wait_pod_is_terminated(job_pod.name)
+            await asyncio.sleep(10)
         finally:
             await kube_client.delete_pod(job_pod.name)
         await kube_client.wait_pod_is_deleted(job_pod.name)
