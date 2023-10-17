@@ -81,6 +81,7 @@ minioGateway:
   fullnameOverride: minio-gateway
   image:
     repository: ghcr.io/neuro-inc/minio
+    # minio gateway was removed from minio, we need to stick to old minio version
     tag: RELEASE.2022-03-08T22-28-51Z
   port: 9000
   replicas: 2
