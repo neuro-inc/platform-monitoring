@@ -2,33 +2,33 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "platformMonitoring.s3proxy.fullname" . }}
+  name: {{ include "platformMonitoring.minioGateway.fullname" . }}
   labels: {{ include "platformMonitoring.labels.standard" . | nindent 4 }}
-    service: s3proxy
+    service: minio-gateway
 spec:
   type: ClusterIP
   ports:
   - name: http
-    port: {{ .Values.s3proxy.port }}
+    port: {{ .Values.minioGateway.port }}
     targetPort: http
   selector:
     app: {{ include "platformMonitoring.name" . }}
     release: {{ .Release.Name | quote }}
-    service: s3proxy
+    service: minio-gateway
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "platformMonitoring.s3proxy.fullname" . }}
+  name: {{ include "platformMonitoring.minioGateway.fullname" . }}
   labels: {{ include "platformMonitoring.labels.standard" . | nindent 4 }}
-    service: s3proxy
+    service: minio-gateway
 spec:
-  replicas: {{ .Values.s3proxy.replicas }}
+  replicas: {{ .Values.minioGateway.replicas }}
   selector:
     matchLabels:
       app: {{ include "platformMonitoring.name" . }}
       release: {{ .Release.Name | quote }}
-      service: s3proxy
+      service: minio-gateway
   strategy:
     rollingUpdate:
       maxSurge: 1
@@ -39,21 +39,28 @@ spec:
       labels:
         app: {{ include "platformMonitoring.name" . }}
         release: {{ .Release.Name | quote }}
-        service: s3proxy
+        service: minio-gateway
       annotations:
         checksum/logs-secret: {{ include (print $.Template.BasePath "/logs-storage-key-secret.yaml") . | sha256sum }}
-{{- if .Values.s3proxy.podAnnotations }}
-{{ toYaml .Values.s3proxy.podAnnotations | indent 8 }}
+{{- if .Values.minioGateway.podAnnotations }}
+{{ toYaml .Values.minioGateway.podAnnotations | indent 8 }}
 {{- end }}
     spec:
       containers:
-      - name: s3proxy
-        {{- with .Values.s3proxy.image }}
+      - name: gateway
+        {{- with .Values.minioGateway.image }}
         image: {{ .repository }}:{{ .tag }}
+        {{- end }}
+        ports:
+          - name: http
+            containerPort: {{ .Values.minioGateway.port }}
+            protocol: TCP
+        {{- if .Values.minioGateway.resources }}
+        resources: {{ toYaml .Values.minioGateway.resources | nindent 10 }}
         {{- end }}
         readinessProbe:
           httpGet:
-            path: /
+            path: /minio/health/ready
             port: http
           initialDelaySeconds: 10
           periodSeconds: 3
@@ -62,45 +69,41 @@ spec:
           timeoutSeconds: 5
         livenessProbe:
           httpGet:
-            path: /
+            path: /minio/health/live
             port: http
           initialDelaySeconds: 10
           periodSeconds: 3
           successThreshold: 1
           failureThreshold: 3
           timeoutSeconds: 5
-        ports:
-          - name: http
-            containerPort: {{ .Values.s3proxy.port }}
-            protocol: TCP
-        {{- if .Values.s3proxy.resources }}
-        resources: {{ toYaml .Values.s3proxy.resources | nindent 10 }}
-        {{- end }}
         env:
-        - name: S3PROXY_ENDPOINT
-          value: {{ printf "http://0.0.0.0:%s" .Values.s3proxy.port }}
-        - name: S3PROXY_IDENTITY
-          value: {{ .Values.s3proxy.identity }}
-        - name: S3PROXY_CREDENTIAL
-          value: {{ .Values.s3proxy.credential }}
         {{- if eq .Values.logs.persistence.type "gcp" }}
-        - name: JCLOUDS_PROVIDER
-          value: google-cloud-storage
-        - name: JCLOUDS_IDENTITY
-          value: json-key
-        - name: JCLOUDS_CREDENTIAL
-          value: /etc/config/s3proxy/key_json
+        args:
+        - gateway
+        - gcs
+        - {{ .Values.logs.persistence.gcp.project | quote }}
+        env:
+        - name: MINIO_ROOT_USER
+          value: minio_access_key
+        - name: MINIO_ROOT_PASSWORD
+          value: minio_secret_key
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: /etc/config/minio/gcs/key_json
         volumeMounts:
         - name: gcs-credentials
-          mountPath: /etc/config/s3proxy
+          mountPath: /etc/config/minio/gcs
+          readOnly: true
         {{- else if eq .Values.logs.persistence.type "azure" }}
-        - name: JCLOUDS_PROVIDER
-          value: azureblob
-        - name: JCLOUDS_ENDPOINT
-          value: {{ printf "https://%s.blob.core.windows.net" .Values.logs.persistence.azure.storageAccountName }}
-        - name: JCLOUDS_IDENTITY
-          value: {{ .Values.logs.persistence.azure.storageAccountName }}
-        - name: JCLOUDS_CREDENTIAL
+        args:
+        - gateway
+        - azure
+        env:
+        - name: MINIO_ROOT_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
+              key: account_name
+        - name: MINIO_ROOT_PASSWORD
           valueFrom:
             secretKeyRef:
               name: {{ include "platformMonitoring.logs.storage.keySecret" . }}

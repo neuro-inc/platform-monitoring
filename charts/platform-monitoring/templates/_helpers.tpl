@@ -28,11 +28,11 @@
 {{- end -}}
 {{- end -}}
 
-{{- define "platformMonitoring.s3proxy.fullname" -}}
-{{- if .Values.s3proxy.fullnameOverride -}}
-{{- .Values.s3proxy.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- define "platformMonitoring.minioGateway.fullname" -}}
+{{- if .Values.minioGateway.fullnameOverride -}}
+{{- .Values.minioGateway.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
-{{- $name := default "s3proxy" .Values.s3proxy.nameOverride -}}
+{{- $name := default "minio-gateway" .Values.minioGateway.nameOverride -}}
 {{- if contains $name .Release.Name -}}
 {{- .Release.Name | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
@@ -41,9 +41,9 @@
 {{- end -}}
 {{- end -}}
 
-{{- define "platformMonitoring.s3proxy.endpoint" -}}
-{{- $serviceName := include "platformMonitoring.s3proxy.fullname" . -}}
-{{- printf "http://%s:%s" $serviceName .Values.s3proxy.port -}}
+{{- define "platformMonitoring.minioGateway.endpoint" -}}
+{{- $serviceName := include "platformMonitoring.minioGateway.fullname" . -}}
+{{- printf "http://%s:%s" $serviceName (toString .Values.minioGateway.port) -}}
 {{- end -}}
 
 {{- define "platformMonitoring.chart" -}}
@@ -55,40 +55,6 @@ app: {{ include "platformMonitoring.name" . }}
 chart: {{ include "platformMonitoring.chart" . }}
 heritage: {{ .Release.Service | quote }}
 release: {{ .Release.Name | quote }}
-{{- end -}}
-
-{{- define "platformMonitoring.minio.probes" -}}
-livenessProbe:
-  httpGet:
-    path: /minio/health/live
-    port: {{ .Values.minio.port }}
-{{- /* if dict is empty 'with' block is not executed, creating default dummy dict */ -}}
-{{- with (.Values.minio.livenessProbe | default (dict "dummy" "dummy")) }}
-  initialDelaySeconds: {{ .initialDelaySeconds | default 5 }}
-  periodSeconds: {{ .periodSeconds | default 10 }}
-  timeoutSeconds: {{ .timeoutSeconds | default 1 }}
-  successThreshold: {{ .successThreshold | default 1 }}
-  failureThreshold: {{ .failureThreshold | default 3 }}
-{{- end }}
-readinessProbe:
-  httpGet:
-    path: /minio/health/ready
-    port: {{ .Values.minio.port }}
-{{- /* if dict is empty 'with' block is not executed, creating default dummy dict */ -}}
-{{- with (.Values.minio.readinessProbe | default (dict "dummy" "dummy")) }}
-  initialDelaySeconds: {{ .initialDelaySeconds | default 5 }}
-  periodSeconds: {{ .periodSeconds | default 10 }}
-  timeoutSeconds: {{ .timeoutSeconds | default 1 }}
-  successThreshold: {{ .successThreshold | default 1 }}
-  failureThreshold: {{ .failureThreshold | default 3 }}
-{{- end }}
-{{- end -}}
-
-{{- define "platformMonitoring.minio.resources" -}}
-{{- if .Values.minio.resources }}
-resources:
-{{ toYaml .Values.minio.resources | indent 2 }}
-{{- end }}
 {{- end -}}
 
 {{- define "platformMonitoring.logs.storage.s3.keyPrefixFormat" -}}

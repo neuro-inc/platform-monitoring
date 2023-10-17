@@ -76,6 +76,23 @@ fluentbit:
     directory: /var/lib/platform-monitoring/fluent-bit
   logLevel: info
 
+minioGateway:
+  nameOverride: minio-gateway
+  fullnameOverride: minio-gateway
+  image:
+    repository: ghcr.io/neuro-inc/minio
+    tag: RELEASE.2022-03-08T22-28-51Z
+  port: 9000
+  replicas: 2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 100m
+      memory: 256Mi
+  podAnnotations: {}
+
 logs:
   cleanup_interval_sec: 900
   persistence:
@@ -115,24 +132,5 @@ logs:
     #   secretKey: secret_key
     #   region: region
     #   bucket: logs
-
-s3proxy:
-  nameOverride: s3proxy
-  fullnameOverride: s3proxy
-  image:
-    repository: ghcr.io/neuro-inc/s3proxy
-    tag: latest
-  replicas: 2
-  port: 80
-  resources:
-    requests:
-      cpu: 50m
-      memory: 128Mi
-    limits:
-      cpu: 100m
-      memory: 256Mi
-  podAnnotations: {}
-  identity: local-identity
-  credential: local-credential
 
 priorityClassName: ""

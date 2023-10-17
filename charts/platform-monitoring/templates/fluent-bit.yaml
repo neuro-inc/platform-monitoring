@@ -70,11 +70,22 @@ spec:
             secretKeyRef:
               name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
               key: secret_key
-        {{- else if or (eq .Values.logs.persistence.type "gcp") (eq .Values.logs.persistence.type "azure") }}
+        {{- else if eq .Values.logs.persistence.type "gcp" }}
         - name: AWS_ACCESS_KEY_ID
-          value: {{ .Values.s3proxy.identity }}
+          value: minio_access_key
         - name: AWS_SECRET_ACCESS_KEY
-          value: {{ .Values.s3proxy.credential }}
+          value: minio_secret_key
+        {{- else if eq .Values.logs.persistence.type "azure" }}
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
+              key: account_name
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
+              key: account_key
         {{- end }}
         volumeMounts:
         - mountPath: /var/log

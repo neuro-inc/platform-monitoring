@@ -705,10 +705,7 @@ async def create_s3_logs_bucket(client: AioBaseClient, config: S3Config) -> None
         await client.create_bucket(Bucket=config.job_logs_bucket_name)
         logger.info("Bucket %r created", config.job_logs_bucket_name)
     except BotoClientError as err:
-        if err.response["Error"]["Code"] in (
-            "BucketAlreadyOwnedByYou",
-            "BucketAlreadyExists",
-        ):
+        if err.response["ResponseMetadata"]["HTTPStatusCode"] == 409:
             logger.info("Bucket %r already exists", config.job_logs_bucket_name)
         else:
             raise

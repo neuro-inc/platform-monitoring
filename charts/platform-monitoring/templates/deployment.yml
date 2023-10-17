@@ -156,11 +156,11 @@ spec:
         - name: NP_MONITORING_S3_REGION
           value: {{ .Values.logs.persistence.gcp.location | quote }}
         - name: NP_MONITORING_S3_ACCESS_KEY_ID
-          value: {{ .Values.s3proxy.identity }}
+          value: minio_access_key
         - name: NP_MONITORING_S3_SECRET_ACCESS_KEY
-          value: {{ .Values.s3proxy.credential }}
+          value: minio_secret_key
         - name: NP_MONITORING_S3_ENDPOINT_URL
-          value: {{ include "platformMonitoring.s3proxy.endpoint" . }}
+          value: {{ include "platformMonitoring.minioGateway.endpoint" . }}
         - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
           value: {{ .Values.logs.persistence.gcp.bucket | quote }}
         - name: NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT
@@ -169,13 +169,19 @@ spec:
         - name: NP_MONITORING_LOGS_STORAGE_TYPE
           value: s3
         - name: NP_MONITORING_S3_REGION
-          value: s3proxy
+          value: minio
         - name: NP_MONITORING_S3_ACCESS_KEY_ID
-          value: {{ .Values.s3proxy.identity }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
+              key: account_name
         - name: NP_MONITORING_S3_SECRET_ACCESS_KEY
-          value: {{ .Values.s3proxy.credential }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
+              key: account_key
         - name: NP_MONITORING_S3_ENDPOINT_URL
-          value: {{ include "platformMonitoring.s3proxy.endpoint" . }}
+          value: {{ include "platformMonitoring.minioGateway.endpoint" . }}
         - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
           value: {{ .Values.logs.persistence.azure.bucket | quote }}
         - name: NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT
