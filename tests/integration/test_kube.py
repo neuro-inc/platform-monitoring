@@ -1343,7 +1343,7 @@ class TestLogReader:
         factory: LogsService,
     ) -> None:
         command = (
-            'bash -c "sleep 5; date +[%T]; for i in {1..5}; do sleep 1; echo $i; done"'
+            'bash -c "date +[%T]; for i in {1..5}; do sleep 1; echo $i; done; sleep 2"'
         )
         job_pod.set_command(command)
         job_pod.set_restart_policy("Always")
