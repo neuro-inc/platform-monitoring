@@ -175,7 +175,7 @@ class PodContainerLogReader(LogReader):
     async def __aexit__(self, *args: Any) -> None:
         assert self._iterator
         if hasattr(self._iterator, "aclose"):
-            await self._iterator.aclose()  # type: ignore
+            await self._iterator.aclose()
         assert self._stream_cm
         stream_cm = self._stream_cm
         self._stream_cm = None
