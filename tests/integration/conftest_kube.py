@@ -118,12 +118,12 @@ class MyPodDescriptor:
                 "containers": [
                     {
                         "name": job_id,
-                        "image": "ubuntu",
+                        "image": "ubuntu:20.10",
                         "env": [],
                         "volumeMounts": [],
                         "terminationMessagePolicy": "FallbackToLogsOnError",
                         "args": ["true"],
-                        "resources": {"limits": {"cpu": "10m", "memory": "32Mi"}},
+                        "resources": {"limits": {"cpu": "100m", "memory": "128Mi"}},
                     }
                 ],
                 "volumes": [

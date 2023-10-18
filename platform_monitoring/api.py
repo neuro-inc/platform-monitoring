@@ -30,6 +30,7 @@ from aiohttp.web import (
 )
 from aiohttp.web_urldispatcher import AbstractRoute
 from aiohttp_security import check_authorized
+from botocore.exceptions import ClientError as BotoClientError
 from neuro_auth_client import AuthClient, Permission, check_permissions
 from neuro_auth_client.security import AuthScheme, setup_security
 from neuro_config_client import ConfigClient
@@ -394,7 +395,7 @@ class MonitoringApiHandler:
             raise ValueError("Required at least one of stdin, stdout or stderr")
 
         if tty and stdout and stderr:
-            raise ValueError("Stdin and stdout cannot be multiplexed in tty mode")
+            raise ValueError("Stdout and stderr cannot be multiplexed in tty mode")
 
         job = await self._resolve_job(request, "write")
 
@@ -425,7 +426,7 @@ class MonitoringApiHandler:
             raise ValueError("Required at least one of stdin, stdout or stderr")
 
         if tty and stdout and stderr:
-            raise ValueError("Stdin and stdout cannot be multiplexed in tty mode")
+            raise ValueError("Stdout and stderr cannot be multiplexed in tty mode")
 
         job = await self._resolve_job(request, "write")
 
@@ -699,6 +700,17 @@ def create_s3_client(config: S3Config) -> AioBaseClient:
     return session.create_client("s3", **kwargs)
 
 
+async def create_s3_logs_bucket(client: AioBaseClient, config: S3Config) -> None:
+    try:
+        await client.create_bucket(Bucket=config.job_logs_bucket_name)
+        logger.info("Bucket %r created", config.job_logs_bucket_name)
+    except BotoClientError as err:
+        if err.response["ResponseMetadata"]["HTTPStatusCode"] == 409:
+            logger.info("Bucket %r already exists", config.job_logs_bucket_name)
+        else:
+            raise
+
+
 def create_logs_service(
     config: Config,
     kube_client: KubeClient,
@@ -807,6 +819,7 @@ async def create_app(config: Config) -> aiohttp.web.Application:
                 s3_client = await exit_stack.enter_async_context(
                     create_s3_client(config.s3)
                 )
+                await create_s3_logs_bucket(s3_client, config.s3)
 
             logger.info("Initializing Kubernetes client")
             kube_client = await exit_stack.enter_async_context(

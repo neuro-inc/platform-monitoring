@@ -847,6 +847,7 @@ class TestLogReader:
             container_name=job_pod.name,
             expected_payload=expected_payload,
         )
+        await asyncio.sleep(10)
         await kube_client.delete_pod(job_pod.name)
         for timestamps in [False, True]:
             await self._check_es_logs(
@@ -1140,6 +1141,7 @@ class TestLogReader:
         payload = await self._consume_log_reader(log_reader)
         assert payload == b"hello\n"
 
+        await asyncio.sleep(10)
         await kube_client.delete_pod(job_pod.name)
 
         log_reader = factory.get_pod_log_reader(pod_name, archive_delay_s=10.0)
@@ -1341,7 +1343,7 @@ class TestLogReader:
         factory: LogsService,
     ) -> None:
         command = (
-            'bash -c "sleep 5; date +[%T]; for i in {1..5}; do sleep 1; echo $i; done"'
+            'bash -c "date +[%T]; for i in {1..5}; do sleep 1; echo $i; done; sleep 2"'
         )
         job_pod.set_command(command)
         job_pod.set_restart_policy("Always")
@@ -1450,7 +1452,7 @@ class TestLogReader:
         job_pod: MyPodDescriptor,
         factory: LogsService,
     ) -> None:
-        command = "bash -c 'echo begin; sleep 5; echo end; false'"
+        command = "bash -c 'echo begin; sleep 5; echo end; sleep 2; false'"
         job_pod.set_command(command)
         job_pod.set_restart_policy("OnFailure")
         starts = []
@@ -1489,17 +1491,18 @@ class TestLogReader:
             assert finished2
 
             await kube_client.wait_container_is_restarted(job_pod.name, 2)
-            run_log_reader(since=finished1 - timedelta(seconds=2))
+            run_log_reader(since=finished1 - timedelta(seconds=4))
             run_log_reader(since=started2)
-            run_log_reader(since=finished2 - timedelta(seconds=2))
+            run_log_reader(since=finished2 - timedelta(seconds=4))
             run_log_reader(since=finished2 + timedelta(seconds=2))
             await kube_client.wait_pod_is_terminated(job_pod.name)
+            await asyncio.sleep(10)
         finally:
             await kube_client.delete_pod(job_pod.name)
         await kube_client.wait_pod_is_deleted(job_pod.name)
-        run_log_reader(since=finished1 - timedelta(seconds=2))
+        run_log_reader(since=finished1 - timedelta(seconds=4))
         run_log_reader(since=started2)
-        run_log_reader(since=finished2 - timedelta(seconds=2))
+        run_log_reader(since=finished2 - timedelta(seconds=4))
         run_log_reader(since=finished2 + timedelta(seconds=2))
 
         payloads = await asyncio.gather(*tasks)

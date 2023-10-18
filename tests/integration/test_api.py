@@ -310,9 +310,9 @@ def job_request_factory() -> Callable[[], dict[str, Any]]:
     def _factory() -> dict[str, Any]:
         return {
             "container": {
-                "image": "ubuntu",
+                "image": "ubuntu:20.10",
                 "command": "true",
-                "resources": {"cpu": 0.1, "memory": 32 * 2**20},
+                "resources": {"cpu": 0.1, "memory": 128 * 2**20},
             }
         }
 
