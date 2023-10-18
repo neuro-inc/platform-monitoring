@@ -317,7 +317,8 @@ class TestJobsService:
 
     async def test_get_available_jobs_count(self, jobs_service: JobsService) -> None:
         result = await jobs_service.get_available_jobs_counts()
-        assert result and "cpu-small" in result
+        assert result
+        assert "cpu-small" in result
 
     async def test_mark_logs_dropped(
         self,

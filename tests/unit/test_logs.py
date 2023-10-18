@@ -1,6 +1,6 @@
 import json
 from collections.abc import AsyncIterator, Callable, Sequence
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest import mock
 
@@ -37,12 +37,11 @@ class TestS3LogReader:
         s3_client: mock.Mock,
     ) -> Callable[[dict[str, list[str]]], None]:
         def _setup(content: dict[str, list[str]]) -> None:
-            async def get_object(
-                Key: str, *args: Any, **kwargs: Any
-            ) -> dict[str, Any]:
+            async def get_object(Key: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
                 async def _iter() -> AsyncIterator[str]:
                     for line in content[Key]:
                         yield line
+
                 body = mock.AsyncMock()
                 body.iter_lines = mock.MagicMock()
                 body.iter_lines.return_value = mock.AsyncMock()
@@ -50,6 +49,7 @@ class TestS3LogReader:
                 return {"ContentType": "", "Body": body}
 
             s3_client.get_object = get_object
+
         return _setup
 
     @pytest.fixture
@@ -100,6 +100,7 @@ class TestS3LogReader:
 
         def later_iso(sec: int = 0) -> str:
             return (now + timedelta(seconds=sec)).isoformat()
+
         stored_lines = []
         for i, line in enumerate(log_lines):
             stored_line = {"time": later_iso(i)}

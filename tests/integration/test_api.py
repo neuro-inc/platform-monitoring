@@ -1037,7 +1037,8 @@ class TestAttachApi:
             async with client.ws_connect(url):
                 pass
         except WSServerHandshakeError as e:
-            assert e.headers and e.headers.get("X-Error")
+            assert e.headers
+            assert e.headers.get("X-Error")
             assert e.message == "Invalid response status"
             assert e.status == HTTPUnauthorized.status_code
 
@@ -1401,7 +1402,6 @@ class TestKillApi:
         jobs_client: JobsClient,
         infinite_job: str,
     ) -> None:
-
         headers = jobs_client.headers
 
         url = monitoring_api.generate_kill_url(infinite_job)

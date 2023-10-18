@@ -20,7 +20,6 @@ from platform_monitoring.kube_client import (
 
 
 class MyKubeClient(KubeClient):
-
     # TODO (A Yushkovskiy, 30-May-2019) delete pods automatically
 
     async def create_pod(self, job_pod_descriptor: dict[str, Any]) -> str:

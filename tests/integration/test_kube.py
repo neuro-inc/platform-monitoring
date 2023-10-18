@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator, Callable, Coroutine, Iterator
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 from unittest import mock
 from uuid import uuid4
 
@@ -1191,7 +1191,7 @@ class TestLogReader:
         def run_log_reader(
             name: str, delay: float = 0, timeout_s: float = 60.0
         ) -> None:
-            async def coro() -> Union[bytes, Exception]:
+            async def coro() -> bytes | Exception:
                 await asyncio.sleep(delay)
                 try:
                     async with timeout(timeout_s):
@@ -1273,7 +1273,7 @@ class TestLogReader:
         def run_log_reader(
             name: str, delay: float = 0, timeout_s: float = 60.0
         ) -> None:
-            async def coro() -> Union[bytes, Exception]:
+            async def coro() -> bytes | Exception:
                 await asyncio.sleep(delay)
                 try:
                     async with timeout(timeout_s):
@@ -1360,7 +1360,7 @@ class TestLogReader:
         def run_log_reader(
             name: str, delay: float = 0, timeout_s: float = 60.0
         ) -> None:
-            async def coro() -> Union[bytes, Exception]:
+            async def coro() -> bytes | Exception:
                 await asyncio.sleep(delay)
                 try:
                     async with timeout(timeout_s):
