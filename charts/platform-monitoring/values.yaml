@@ -73,7 +73,7 @@ fluentbit:
       operator: Exists
   podAnnotations: {}
   taildb:
-    directory: /var/lib/platform-monitoring/fluent-bit
+    directory: /var/lib/platform-monitoring-fluent-bit
   logLevel: info
 
 minioGateway:

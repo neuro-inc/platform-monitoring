@@ -161,7 +161,7 @@ data:
         total_file_size  1M
         upload_timeout   1s
         use_put_object   On
-        s3_key_format    /$TAG/%Y%m%d%H%M_$INDEX.gz
+        s3_key_format    /$TAG/%Y%m%d%H%M__$INDEX.gz
         static_file_path On
         json_date_key    time
 ---
