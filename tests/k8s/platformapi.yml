@@ -50,7 +50,7 @@ spec:
     spec:
       initContainers:
       - name: wait-for-cluster
-        image: curlimages/curl
+        image: curlimages/curl:8.4.0
         command: [sh]
         args:
         - -c
@@ -59,6 +59,7 @@ spec:
 
           while [ $code != 0 ]
           do
+            sleep 1
             curl -f -H "Authorization: Bearer $NP_TOKEN" "$NP_PLATFORM_CONFIG_URL/api/v1/clusters/default"
             code=$?
           done
@@ -141,6 +142,26 @@ spec:
       labels:
         service: platformapi-poller
     spec:
+      initContainers:
+      - name: wait-for-config
+        image: curlimages/curl:8.4.0
+        command: [sh]
+        args:
+        - -c
+        - |
+          code=-1
+
+          while [ $code != 0 ]
+          do
+            sleep 1
+            curl -f -H "Authorization: Bearer $NP_TOKEN" "$NP_PLATFORM_API_URL/api/v1/config"
+            code=$?
+          done
+        env:
+        - name: NP_PLATFORM_API_URL
+          value: http://platformapi:8080
+        - name: NP_TOKEN
+          value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZGVudGl0eSI6ImNvbXB1dGUifQ.IJDlKCfbiuNGZH9Sh6p-CdUL5KxEK5JStqzfDk4-RAA
       containers:
       - name: platformapi
         image: platformapi:latest

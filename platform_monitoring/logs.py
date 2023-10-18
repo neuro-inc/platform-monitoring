@@ -175,7 +175,7 @@ class PodContainerLogReader(LogReader):
     async def __aexit__(self, *args: Any) -> None:
         assert self._iterator
         if hasattr(self._iterator, "aclose"):
-            await self._iterator.aclose()  # type: ignore
+            await self._iterator.aclose()
         assert self._stream_cm
         stream_cm = self._stream_cm
         self._stream_cm = None
@@ -326,7 +326,7 @@ class S3LogReader(LogReader):
                 # get time slice from s3 key
                 time_slice_str = basename(s3_key).split(".")[0].split("_")
                 start_time_str = time_slice_str[0]
-                index = int(time_slice_str[1])
+                index = int(time_slice_str[-1])
                 if start_time_str >= since_time_str:
                     keys.append((start_time_str, index, s3_key))
         keys.sort()  # order keys by time slice

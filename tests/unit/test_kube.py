@@ -116,6 +116,18 @@ class TestPod:
         )
         assert pod.resource_requests == Resources(memory=1024 * 2**20)
 
+    def test_resource_requests_memory_terabytes(self) -> None:
+        pod = Pod(
+            {"spec": {"containers": [{"resources": {"requests": {"memory": "4T"}}}]}}
+        )
+        assert pod.resource_requests == Resources(memory=4 * 10**12)
+
+    def test_resource_requests_memory_tebibytes(self) -> None:
+        pod = Pod(
+            {"spec": {"containers": [{"resources": {"requests": {"memory": "4Ti"}}}]}}
+        )
+        assert pod.resource_requests == Resources(memory=4 * 2**40)
+
     def test_resource_requests_gpu(self) -> None:
         pod = Pod(
             {

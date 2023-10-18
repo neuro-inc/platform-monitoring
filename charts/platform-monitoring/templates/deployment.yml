@@ -150,9 +150,7 @@ spec:
           value: {{ .Values.logs.persistence.aws.bucket | quote }}
         - name: NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT
           value: {{ include "platformMonitoring.logs.storage.s3.keyPrefixFormat" . | quote }}
-        {{- end }}
-
-      {{- if eq .Values.logs.persistence.type "gcp" }}
+        {{- else if eq .Values.logs.persistence.type "gcp" }}
         - name: NP_MONITORING_LOGS_STORAGE_TYPE
           value: s3
         - name: NP_MONITORING_S3_REGION
@@ -162,14 +160,12 @@ spec:
         - name: NP_MONITORING_S3_SECRET_ACCESS_KEY
           value: minio_secret_key
         - name: NP_MONITORING_S3_ENDPOINT_URL
-          value: "http://127.0.0.1:{{ .Values.minio.port }}"
+          value: {{ include "platformMonitoring.minioGateway.endpoint" . }}
         - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
           value: {{ .Values.logs.persistence.gcp.bucket | quote }}
         - name: NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT
           value: {{ include "platformMonitoring.logs.storage.s3.keyPrefixFormat" . | quote }}
-      {{- end }}
-
-      {{- if eq .Values.logs.persistence.type "azure" }}
+        {{- else if eq .Values.logs.persistence.type "azure" }}
         - name: NP_MONITORING_LOGS_STORAGE_TYPE
           value: s3
         - name: NP_MONITORING_S3_REGION
@@ -185,14 +181,12 @@ spec:
               name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
               key: account_key
         - name: NP_MONITORING_S3_ENDPOINT_URL
-          value: "http://127.0.0.1:{{ .Values.minio.port }}"
+          value: {{ include "platformMonitoring.minioGateway.endpoint" . }}
         - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
           value: {{ .Values.logs.persistence.azure.bucket | quote }}
         - name: NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT
           value: {{ include "platformMonitoring.logs.storage.s3.keyPrefixFormat" . | quote }}
-      {{- end }}
-
-        {{- if eq .Values.logs.persistence.type "minio" }}
+        {{- else if eq .Values.logs.persistence.type "minio" }}
         - name: NP_MONITORING_LOGS_STORAGE_TYPE
           value: s3
         - name: NP_MONITORING_S3_ENDPOINT_URL
@@ -213,9 +207,7 @@ spec:
           value: {{ .Values.logs.persistence.minio.bucket | quote }}
         - name: NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT
           value: {{ include "platformMonitoring.logs.storage.s3.keyPrefixFormat" . | quote }}
-        {{- end }}
-
-        {{- if eq .Values.logs.persistence.type "es" }}
+        {{- else if eq .Values.logs.persistence.type "es" }}
         - name: NP_MONITORING_LOGS_STORAGE_TYPE
           value: elasticsearch
         - name: NP_MONITORING_ES_HOSTS
@@ -227,50 +219,6 @@ spec:
         - mountPath: {{ include "platformMonitoring.kubeAuthMountRoot" . }}
           name: kube-api-data
           readOnly: true
-
-      {{- if eq .Values.logs.persistence.type "gcp" }}
-      - name: minio
-        image: {{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}
-        args:
-        - gateway
-        - gcs
-        - {{ .Values.logs.persistence.gcp.project }}
-        env:
-        - name: MINIO_ROOT_USER
-          value: minio_access_key
-        - name: MINIO_ROOT_PASSWORD
-          value: minio_secret_key
-        - name: GOOGLE_APPLICATION_CREDENTIALS
-          value: /accounts/key_json
-        volumeMounts:
-        - name: gcs-credentials
-          mountPath: /accounts
-          readOnly: true
-{{ include "platformMonitoring.minio.resources" . | indent 8 }}
-{{ include "platformMonitoring.minio.probes" . | indent 8 }}
-      {{- end }}
-
-      {{- if eq .Values.logs.persistence.type "azure" }}
-      - name: minio
-        image: {{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}
-        args:
-        - gateway
-        - azure
-        env:
-        - name: MINIO_ROOT_USER
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
-              key: account_name
-        - name: MINIO_ROOT_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
-              key: account_key
-{{ include "platformMonitoring.minio.resources" . | indent 8 }}
-{{ include "platformMonitoring.minio.probes" . | indent 8 }}
-      {{- end }}
-
       {{- if .Values.imagePullSecrets }}
       imagePullSecrets: {{ toYaml .Values.imagePullSecrets | nindent 6 }}
       {{- end }}
@@ -289,8 +237,3 @@ spec:
               items:
               - key: ca.crt
                 path: ca.crt
-      {{- if eq .Values.logs.persistence.type "gcp" }}
-      - name: gcs-credentials
-        secret:
-          secretName: {{ include "platformMonitoring.logs.storage.keySecret" . }}
-      {{- end }}

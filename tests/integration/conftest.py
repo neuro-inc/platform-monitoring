@@ -246,9 +246,7 @@ def config_factory(
             platform_api=platform_api_config,
             platform_config=platform_config,
             s3=s3_config,
-            logs=LogsConfig(
-                storage_type=LogsStorageType.S3, cleanup_interval_sec=0.5
-            ),
+            logs=LogsConfig(storage_type=LogsStorageType.S3, cleanup_interval_sec=0.5),
             kube=kube_config,
             registry=registry_config,
             container_runtime=container_runtime_config,
