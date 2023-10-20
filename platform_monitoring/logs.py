@@ -407,15 +407,15 @@ class S3LogReader(LogReader):
                 else:
                     line_iterator = response_body.iter_lines()
                 if self.last_time:
-                    record_default_time = max(self.last_time, self._get_key_time(key))
+                    record_fallback_time = max(self.last_time, self._get_key_time(key))
                 else:
-                    record_default_time = self._get_key_time(key)
+                    record_fallback_time = self._get_key_time(key)
 
                 async with aclosing(line_iterator):
                     async for line in line_iterator:
                         try:
-                            record = S3LogRecord.parse(line, record_default_time)
-                            record_default_time = record.time
+                            record = S3LogRecord.parse(line, record_fallback_time)
+                            record_fallback_time = record.time
                             if since is not None and record.time < since:
                                 continue
                             self.last_time = record.time
