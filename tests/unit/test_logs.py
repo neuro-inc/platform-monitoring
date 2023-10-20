@@ -5,8 +5,9 @@ from typing import Any
 from unittest import mock
 
 import pytest
+from iso8601 import UTC
 
-from platform_monitoring.logs import S3LogReader
+from platform_monitoring.logs import S3LogReader, S3LogRecord
 
 
 class TestS3LogReader:
@@ -38,9 +39,9 @@ class TestS3LogReader:
     ) -> Callable[[dict[str, list[str]]], None]:
         def _setup(content: dict[str, list[str]]) -> None:
             async def get_object(Key: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
-                async def _iter() -> AsyncIterator[str]:
+                async def _iter() -> AsyncIterator[bytes]:
                     for line in content[Key]:
-                        yield line
+                        yield line.encode()
 
                 body = mock.AsyncMock()
                 body.iter_lines = mock.MagicMock()
@@ -114,3 +115,72 @@ class TestS3LogReader:
             async for chunk in it:
                 res.append(chunk.decode()[:-1])  # -1 implies removal of \n
         assert log_lines == res
+
+
+class TestS3LogRecord:
+    def test_parse(self) -> None:
+        record = S3LogRecord.parse(
+            b'{"time": "2023-10-01T12:34:56.123456789", "log": "hello"}', datetime.now()
+        )
+
+        assert record == S3LogRecord(
+            time=datetime(2023, 10, 1, 12, 34, 56, 123456, UTC),
+            time_str="2023-10-01T12:34:56.123456789",
+            message="hello",
+        )
+
+    def test_parse__no_log(self) -> None:
+        record = S3LogRecord.parse(
+            b'{"time": "2023-10-01T12:34:56.123456789"}', datetime.now()
+        )
+
+        assert record == S3LogRecord(
+            time=datetime(2023, 10, 1, 12, 34, 56, 123456, UTC),
+            time_str="2023-10-01T12:34:56.123456789",
+            message="",
+        )
+
+    def test_parse__invalid_unicode(self) -> None:
+        record = S3LogRecord.parse(
+            b'{"time": "2023-10-01T12:34:56.123456789", "log": "hello\xff"}',
+            datetime.now(),
+        )
+
+        assert record == S3LogRecord(
+            time=datetime(2023, 10, 1, 12, 34, 56, 123456, UTC),
+            time_str="2023-10-01T12:34:56.123456789",
+            message="hello�",
+        )
+
+    def test_parse__no_time_key(self) -> None:
+        record = S3LogRecord.parse(
+            b'{"log": "2023-10-01T12:34:56.123456789 stdout P hello"}',
+            datetime.now(),
+        )
+
+        assert record == S3LogRecord(
+            time=datetime(2023, 10, 1, 12, 34, 56, 123456, UTC),
+            time_str="2023-10-01T12:34:56.123456789",
+            message="hello",
+        )
+
+    def test_parse__no_time_key__invalid_time(self) -> None:
+        fallback_time = datetime(2023, 10, 1, 12, 34, 56, 123456, UTC)
+        record = S3LogRecord.parse(b'{"log": "invalid stdout P hello"}', fallback_time)
+
+        assert record == S3LogRecord(
+            time=fallback_time,
+            time_str="2023-10-01T12:34:56.123456",
+            message="hello",
+        )
+
+    def test_parse__no_time_key__no_message(self) -> None:
+        record = S3LogRecord.parse(
+            b'{"log": "2023-10-01T12:34:56.123456789 stdout P "}', datetime.now()
+        )
+
+        assert record == S3LogRecord(
+            time=datetime(2023, 10, 1, 12, 34, 56, 123456, UTC),
+            time_str="2023-10-01T12:34:56.123456789",
+            message="",
+        )
