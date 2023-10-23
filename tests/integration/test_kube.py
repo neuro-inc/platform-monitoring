@@ -8,7 +8,7 @@ import tempfile
 import uuid
 from collections.abc import AsyncIterator, Callable, Coroutine, Iterator
 from contextlib import AbstractAsyncContextManager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -1386,9 +1386,11 @@ class TestLogReader:
             for i in range(4):
                 run_log_reader(f"started [{i}]", delay=i * 2, timeout_s=90)
             await kube_client.wait_container_is_restarted(job_pod.name, 1)
+            await kube_client.wait_pod_is_running(job_pod.name)
             for i in range(4):
                 run_log_reader(f"restarted 1 [{i}]", delay=i * 2)
             await kube_client.wait_container_is_restarted(job_pod.name, 2)
+            await kube_client.wait_pod_is_running(job_pod.name)
             for i in range(4):
                 run_log_reader(f"restarted 2 [{i}]", delay=i * 2)
             await kube_client.wait_pod_is_terminated(job_pod.name)
@@ -1478,11 +1480,12 @@ class TestLogReader:
             assert finished1
 
             await kube_client.wait_container_is_restarted(job_pod.name, 1)
+            await kube_client.wait_pod_is_running(job_pod.name)
             status = await kube_client.get_container_status(job_pod.name)
             started2 = status.started_at
             assert started2
             run_log_reader(since=started2)
-            run_log_reader(since=datetime.now(tz=timezone.utc))
+            run_log_reader(since=started2 + timedelta(seconds=2))
 
             await kube_client.wait_pod_is_terminated(job_pod.name)
             status = await kube_client.get_container_status(job_pod.name)
@@ -1491,6 +1494,7 @@ class TestLogReader:
             assert finished2
 
             await kube_client.wait_container_is_restarted(job_pod.name, 2)
+            await kube_client.wait_pod_is_running(job_pod.name)
             run_log_reader(since=finished1 - timedelta(seconds=4))
             run_log_reader(since=started2)
             run_log_reader(since=finished2 - timedelta(seconds=4))

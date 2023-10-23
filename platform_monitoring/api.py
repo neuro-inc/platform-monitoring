@@ -484,7 +484,7 @@ class MonitoringApiHandler:
 
 
 async def _listen(ws: WebSocketResponse) -> None:
-    # Maintain the WebSocket connetion.
+    # Maintain the WebSocket connection.
     # Process ping-pong game and perform closing handshake.
     async for msg in ws:
         logger.info(f"Received unexpected WebSocket message: {msg!r}")
@@ -493,12 +493,13 @@ async def _listen(ws: WebSocketResponse) -> None:
 async def _forward_bytes_iterating(
     ws: WebSocketResponse, it: AsyncIterator[bytes]
 ) -> None:
-    async for chunk in it:
-        if ws.closed:
-            break
-        await ws.send_bytes(chunk)
-        if ws.closed:
-            break
+    with suppress(ConnectionResetError):
+        async for chunk in it:
+            if ws.closed:
+                break
+            await ws.send_bytes(chunk)
+            if ws.closed:
+                break
 
 
 async def _forward_reading(ws: WebSocketResponse, reader: asyncio.StreamReader) -> None:
