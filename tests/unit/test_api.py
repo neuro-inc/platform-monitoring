@@ -32,7 +32,7 @@ def config_factory() -> Callable[[LogsStorageType], Config]:
             platform_api=None,  # type: ignore
             platform_auth=None,  # type: ignore
             platform_config=None,  # type: ignore
-            kube=KubeConfig(""),  # type: ignore
+            kube=KubeConfig(""),
             container_runtime=ContainerRuntimeConfig(name="docker"),
             registry=None,  # type: ignore
             cors=None,  # type: ignore

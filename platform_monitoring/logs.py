@@ -357,8 +357,7 @@ class S3LogsMetadataStorage:
     ) -> None:
         self._s3_client = s3_client
         self._bucket_name = bucket_name
-        self._max_cache_size = max_cache_size
-        self._cache = LRUCache(max_cache_size)
+        self._cache: LRUCache[str, S3LogsMetadata] = LRUCache(max_cache_size)
 
     @property
     def bucket_name(self) -> str:
