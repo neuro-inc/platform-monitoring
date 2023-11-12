@@ -556,7 +556,7 @@ class S3LogRecord:
             time=time,
             message=cls._parse_message(data),
             container_id=container_id,
-            stream=data.get("stream", "stdout"),
+            stream=data.get("stream", cls.stream),
         )
 
     @classmethod
@@ -738,7 +738,7 @@ class S3LogRecordsWriter:
 
     def encode_record(self, record: S3LogRecord) -> bytes:
         body = {"time": record.time_str, "log": record.message}
-        if record.stream == S3LogRecord:
+        if record.stream != S3LogRecord.stream:
             body["stream"] = record.stream
         body_str = json.dumps(body) + "\n"
         return body_str.encode()

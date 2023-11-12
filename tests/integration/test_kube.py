@@ -2194,6 +2194,7 @@ class TestS3LogRecordWriter:
                 time_str="2023-01-01T12:34:58.123456",
                 message="2",
                 container_id="c1",
+                stream="stderr",
             ),
         ]
 
@@ -2218,7 +2219,7 @@ class TestS3LogRecordWriter:
             S3LogFile(
                 key=mock.ANY,
                 records_count=3,
-                size=153,
+                size=173,
                 first_record_time=records[0].time,
                 last_record_time=records[2].time,
             )
@@ -2246,7 +2247,7 @@ class TestS3LogRecordWriter:
             S3LogFile(
                 key=mock.ANY,
                 records_count=1,
-                size=51,
+                size=71,
                 first_record_time=records[2].time,
                 last_record_time=records[2].time,
             ),
@@ -2281,7 +2282,7 @@ class TestS3LogRecordWriter:
             S3LogFile(
                 key=mock.ANY,
                 records_count=1,
-                size=51,
+                size=71,
                 first_record_time=records[2].time,
                 last_record_time=records[2].time,
             ),
@@ -2310,7 +2311,7 @@ class TestS3LogRecordWriter:
             S3LogFile(
                 key=mock.ANY,
                 records_count=3,
-                size=153,
+                size=173,
                 first_record_time=records[0].time,
                 last_record_time=records[2].time,
             ),
