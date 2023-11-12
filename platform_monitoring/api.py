@@ -30,7 +30,6 @@ from aiohttp.web import (
 )
 from aiohttp.web_urldispatcher import AbstractRoute
 from aiohttp_security import check_authorized
-from botocore.exceptions import ClientError as BotoClientError
 from neuro_auth_client import AuthClient, Permission, check_permissions
 from neuro_auth_client.security import AuthScheme, setup_security
 from neuro_config_client import ConfigClient
@@ -72,7 +71,10 @@ from .logs import (
     DEFAULT_ARCHIVE_DELAY,
     ElasticsearchLogsService,
     LogsService,
+    S3LogsMetadataService,
+    S3LogsMetadataStorage,
     S3LogsService,
+    s3_client_error,
 )
 from .user import untrusted_user
 from .utils import JobsHelper, KubeHelper, parse_date
@@ -705,11 +707,8 @@ async def create_s3_logs_bucket(client: AioBaseClient, config: S3Config) -> None
     try:
         await client.create_bucket(Bucket=config.job_logs_bucket_name)
         logger.info("Bucket %r created", config.job_logs_bucket_name)
-    except BotoClientError as err:
-        if err.response["ResponseMetadata"]["HTTPStatusCode"] == 409:
-            logger.info("Bucket %r already exists", config.job_logs_bucket_name)
-        else:
-            raise
+    except s3_client_error(409):
+        logger.info("Bucket %r already exists", config.job_logs_bucket_name)
 
 
 def create_logs_service(
@@ -720,22 +719,18 @@ def create_logs_service(
 ) -> LogsService:
     if config.logs.storage_type == LogsStorageType.ELASTICSEARCH:
         assert es_client
-        return ElasticsearchLogsService(
-            kube_client,
-            es_client,
-            container_runtime=config.container_runtime.name,
-        )
+        return ElasticsearchLogsService(kube_client, es_client)
 
     if config.logs.storage_type == LogsStorageType.S3:
         assert config.s3
         assert s3_client
-        return S3LogsService(
-            kube_client,
-            s3_client,
-            container_runtime=config.container_runtime.name,
-            bucket_name=config.s3.job_logs_bucket_name,
-            key_prefix_format=config.s3.job_logs_key_prefix_format,
+        metadata_storage = S3LogsMetadataStorage(
+            s3_client, bucket_name=config.s3.job_logs_bucket_name
         )
+        metadata_service = S3LogsMetadataService(
+            s3_client, metadata_storage, kube_namespace_name=config.kube.namespace
+        )
+        return S3LogsService(kube_client, s3_client, metadata_service)
 
     raise ValueError(
         f"{config.logs.storage_type} storage is not supported"
