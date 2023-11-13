@@ -2561,7 +2561,7 @@ class TestS3LogsService:
         ]
 
         await write_lines_to_s3(pod_keys[0], records[0])
-        await s3_log_service.compact_all(cleanup_interval=0, pod_names=[pod_name])
+        await s3_log_service.compact_all(pod_names=[pod_name])
 
         queue = await s3_logs_metadata_service.get_pods_cleanup_queue(
             cleanup_interval=0

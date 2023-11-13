@@ -1171,14 +1171,11 @@ class S3LogsService(BaseLogsService):
             if pod_names is None or pod_name in pod_names:
                 await self.compact_one(pod_name)
 
-        skip_cleanup = set(compact_queue)
         cleanup_queue = await self._metadata_service.get_pods_cleanup_queue(
             cleanup_interval=cleanup_interval
         )
         for pod_name in cleanup_queue:
-            if (
-                pod_names is None or pod_name in pod_names
-            ) and pod_name not in skip_cleanup:
+            if pod_names is None or pod_name in pod_names:
                 await self.cleanup_one(pod_name)
 
     @trace
