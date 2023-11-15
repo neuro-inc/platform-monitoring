@@ -41,7 +41,6 @@ class S3Config:
     access_key_id: str = field(repr=False)
     secret_access_key: str = field(repr=False)
     job_logs_bucket_name: str
-    job_logs_key_prefix_format: str
     endpoint_url: Optional[URL] = None
 
 
@@ -54,6 +53,13 @@ class LogsStorageType(str, enum.Enum):
 class LogsConfig:
     storage_type: LogsStorageType
     cleanup_interval_sec: float = 15 * 60  # 15m
+
+
+@dataclass(frozen=True)
+class LogsCompactConfig:
+    run_interval: float = 300
+    compact_interval: float = 3600
+    cleanup_interval: float = 3600
 
 
 class KubeClientAuthType(str, enum.Enum):
@@ -102,7 +108,6 @@ class RegistryConfig:
 
 @dataclass(frozen=True)
 class ContainerRuntimeConfig:
-    name: str
     port: int = 9000
 
 
@@ -129,6 +134,7 @@ class Config:
     platform_auth: PlatformAuthConfig
     platform_config: PlatformConfig
     logs: LogsConfig
+    logs_compact: LogsCompactConfig
     kube: KubeConfig
     container_runtime: ContainerRuntimeConfig
     registry: RegistryConfig

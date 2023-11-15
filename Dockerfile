@@ -22,4 +22,4 @@ COPY --from=installer /root/.local/ /root/.local/
 ENV NP_MONITORING_API_PORT=8080
 EXPOSE $NP_MONITORING_API_PORT
 
-CMD platform-monitoring
+CMD [ "platform-monitoring-api" ]

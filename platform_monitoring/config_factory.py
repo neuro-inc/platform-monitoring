@@ -13,6 +13,7 @@ from .config import (
     ElasticsearchConfig,
     KubeClientAuthType,
     KubeConfig,
+    LogsCompactConfig,
     LogsConfig,
     LogsStorageType,
     PlatformApiConfig,
@@ -49,6 +50,7 @@ class EnvironConfigFactory:
             elasticsearch=self._create_elasticsearch(),
             s3=self._create_s3(),
             logs=self._create_logs(),
+            logs_compact=self._create_logs_compact(),
             kube=self._create_kube(),
             registry=self._create_registry(),
             container_runtime=self._create_container_runtime(),
@@ -93,9 +95,6 @@ class EnvironConfigFactory:
             secret_access_key=self._environ["NP_MONITORING_S3_SECRET_ACCESS_KEY"],
             endpoint_url=URL(endpoint_url) if endpoint_url else None,
             job_logs_bucket_name=self._environ["NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME"],
-            job_logs_key_prefix_format=self._environ[
-                "NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT"
-            ],
         )
 
     def _create_logs(self) -> LogsConfig:
@@ -111,6 +110,28 @@ class EnvironConfigFactory:
                     "NP_MONITORING_LOGS_CLEANUP_INTERVAL_SEC",
                     LogsConfig.cleanup_interval_sec,
                 ),
+            ),
+        )
+
+    def _create_logs_compact(self) -> LogsCompactConfig:
+        return LogsCompactConfig(
+            run_interval=float(
+                self._environ.get(
+                    "NP_MONITORING_LOGS_COMPACT_RUN_INTERVAL",
+                    LogsCompactConfig.run_interval,
+                )
+            ),
+            compact_interval=float(
+                self._environ.get(
+                    "NP_MONITORING_LOGS_COMPACT_COMPACT_INTERVAL",
+                    LogsCompactConfig.compact_interval,
+                )
+            ),
+            cleanup_interval=float(
+                self._environ.get(
+                    "NP_MONITORING_LOGS_COMPACT_CLEANUP_INTERVAL",
+                    LogsCompactConfig.cleanup_interval,
+                )
             ),
         )
 
@@ -170,7 +191,6 @@ class EnvironConfigFactory:
 
     def _create_container_runtime(self) -> ContainerRuntimeConfig:
         return ContainerRuntimeConfig(
-            name=self._environ["NP_MONITORING_CONTAINER_RUNTIME_NAME"],
             port=int(
                 self._environ.get(
                     "NP_MONITORING_CONTAINER_RUNTIME_PORT", ContainerRuntimeConfig.port

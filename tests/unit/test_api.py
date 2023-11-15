@@ -10,6 +10,7 @@ from platform_monitoring.config import (
     Config,
     ContainerRuntimeConfig,
     KubeConfig,
+    LogsCompactConfig,
     LogsConfig,
     LogsStorageType,
     S3Config,
@@ -33,16 +34,16 @@ def config_factory() -> Callable[[LogsStorageType], Config]:
             platform_auth=None,  # type: ignore
             platform_config=None,  # type: ignore
             kube=KubeConfig(""),
-            container_runtime=ContainerRuntimeConfig(name="docker"),
+            container_runtime=ContainerRuntimeConfig(),
             registry=None,  # type: ignore
             cors=None,  # type: ignore
             logs=LogsConfig(storage_type=storage_type),
+            logs_compact=LogsCompactConfig(),
             s3=S3Config(
                 region="us-east-1",
                 access_key_id="access_key",
                 secret_access_key="secret_key",
                 job_logs_bucket_name="logs",
-                job_logs_key_prefix_format="format",
             ),
         )
 

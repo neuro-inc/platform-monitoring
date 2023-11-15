@@ -722,19 +722,25 @@ def create_logs_service(
         return ElasticsearchLogsService(kube_client, es_client)
 
     if config.logs.storage_type == LogsStorageType.S3:
-        assert config.s3
         assert s3_client
-        metadata_storage = S3LogsMetadataStorage(
-            s3_client, bucket_name=config.s3.job_logs_bucket_name
-        )
-        metadata_service = S3LogsMetadataService(
-            s3_client, metadata_storage, kube_namespace_name=config.kube.namespace
-        )
-        return S3LogsService(kube_client, s3_client, metadata_service)
+        return create_s3_logs_service(config, kube_client, s3_client)
 
     raise ValueError(
         f"{config.logs.storage_type} storage is not supported"
     )  # pragma: nocover
+
+
+def create_s3_logs_service(
+    config: Config, kube_client: KubeClient, s3_client: AioBaseClient
+) -> S3LogsService:
+    assert config.s3
+    metadata_storage = S3LogsMetadataStorage(
+        s3_client, bucket_name=config.s3.job_logs_bucket_name
+    )
+    metadata_service = S3LogsMetadataService(
+        s3_client, metadata_storage, kube_namespace_name=config.kube.namespace
+    )
+    return S3LogsService(kube_client, s3_client, metadata_service)
 
 
 def _setup_cors(app: aiohttp.web.Application, config: CORSConfig) -> None:
