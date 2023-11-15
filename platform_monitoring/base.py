@@ -9,23 +9,18 @@ from typing import Any, Optional
 class LogReader(ABC):
     last_time: Optional[datetime] = None
 
-    def __init__(self, container_runtime: str, timestamps: bool = False) -> None:
+    def __init__(self, timestamps: bool = False) -> None:
         super().__init__()
 
-        self._container_runtime = container_runtime
         self._timestamps = timestamps
 
     def encode_log(self, time: str, log: str) -> bytes:
         result = log
 
+        if result and result[-1] != "\n":
+            result = f"{result}\n"
         if self._timestamps:
-            if self._container_runtime == "docker":
-                result = f"{time} {log}"
-            else:
-                result = f"{time} {log}\n"
-        else:
-            if self._container_runtime != "docker":
-                result = f"{log}\n"
+            result = f"{time} {result}"
 
         return result.encode()
 

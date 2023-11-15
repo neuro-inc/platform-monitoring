@@ -36,6 +36,7 @@ from platform_monitoring.config import (
     ServerConfig,
 )
 from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
+from platform_monitoring.logs import s3_client_error
 
 logger = logging.getLogger(__name__)
 
@@ -180,14 +181,14 @@ async def es_client(es_config: ElasticsearchConfig) -> AsyncIterator[Elasticsear
 
 
 @pytest.fixture
-def s3_config(s3_logs_bucket: str, s3_logs_key_prefix_format: str) -> S3Config:
+def s3_config(s3_logs_key_prefix_format: str) -> S3Config:
     s3_url = get_service_url(service_name="minio")
     return S3Config(
         region="minio",
         access_key_id="access_key",
         secret_access_key="secret_key",
         endpoint_url=URL(s3_url),
-        job_logs_bucket_name=s3_logs_bucket,
+        job_logs_bucket_name="logs",
         job_logs_key_prefix_format=s3_logs_key_prefix_format,
     )
 
@@ -206,8 +207,15 @@ async def s3_client(s3_config: S3Config) -> AsyncIterator[AioBaseClient]:
 
 
 @pytest.fixture
-def s3_logs_bucket() -> str:
-    return "logs"
+async def s3_logs_bucket(
+    s3_config: S3Config, s3_client: AioBaseClient
+) -> AsyncIterator[str]:
+    try:
+        await s3_client.create_bucket(Bucket=s3_config.job_logs_bucket_name)
+        logger.info("Bucket %r created", s3_config.job_logs_bucket_name)
+    except s3_client_error(409):
+        pass
+    yield s3_config.job_logs_bucket_name
 
 
 @pytest.fixture
@@ -308,8 +316,8 @@ def get_service_url(service_name: str, namespace: str = "default") -> str:
             stdout=subprocess.PIPE,
         )
         output = process.stdout
-        if output:
-            url = output.decode().strip()
+        url = output.decode().strip()
+        if url:
             # Sometimes `minikube service ... --url` returns a prefixed
             # string such as: "* https://127.0.0.1:8081/"
             start_idx = url.find("http")

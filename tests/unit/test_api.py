@@ -9,6 +9,7 @@ from platform_monitoring.api import create_logs_service
 from platform_monitoring.config import (
     Config,
     ContainerRuntimeConfig,
+    KubeConfig,
     LogsConfig,
     LogsStorageType,
     S3Config,
@@ -31,7 +32,7 @@ def config_factory() -> Callable[[LogsStorageType], Config]:
             platform_api=None,  # type: ignore
             platform_auth=None,  # type: ignore
             platform_config=None,  # type: ignore
-            kube=None,  # type: ignore
+            kube=KubeConfig(""),
             container_runtime=ContainerRuntimeConfig(name="docker"),
             registry=None,  # type: ignore
             cors=None,  # type: ignore

@@ -2,23 +2,28 @@ from __future__ import annotations
 
 import abc
 import asyncio
+import functools
 import io
 import json
 import logging
+import sys
+import time
 import zlib
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Sequence
 from contextlib import AbstractAsyncContextManager, suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from os.path import basename
-from typing import Any
+from typing import IO, Any
 
 import aiohttp
+import botocore.exceptions
 from aiobotocore.client import AioBaseClient
 from aiobotocore.response import StreamingBody
 from aioelasticsearch import Elasticsearch, RequestError
 from aioelasticsearch.helpers import Scan
 from async_timeout import timeout
+from cachetools import LRUCache
 from iso8601 import UTC, ParseError
 from neuro_logging import trace
 
@@ -30,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 DEFAULT_ARCHIVE_DELAY = 3.0 * 60
+ZLIB_WBITS = 16 + zlib.MAX_WBITS
 
 error_prefixes = (
     b"rpc error: code =",
@@ -190,7 +196,6 @@ class ElasticsearchLogReader(LogReader):
     def __init__(
         self,
         es_client: Elasticsearch,
-        container_runtime: str,
         namespace_name: str,
         pod_name: str,
         container_name: str,
@@ -198,7 +203,7 @@ class ElasticsearchLogReader(LogReader):
         since: datetime | None = None,
         timestamps: bool = False,
     ) -> None:
-        super().__init__(container_runtime=container_runtime, timestamps=timestamps)
+        super().__init__(timestamps=timestamps)
 
         self._es_client = es_client
         self._index = "logstash-*"
@@ -269,19 +274,289 @@ class ElasticsearchLogReader(LogReader):
 
 
 @dataclass(frozen=True)
+class S3LogFile:
+    key: str
+    records_count: int
+    size: int
+    first_record_time: datetime
+    last_record_time: datetime
+
+    def to_primitive(self) -> dict[str, Any]:
+        return {
+            "key": self.key,
+            "records_count": self.records_count,
+            "size": self.size,
+            "first_record_time": self.first_record_time.isoformat(),
+            "last_record_time": self.last_record_time.isoformat(),
+        }
+
+    @classmethod
+    def from_primitive(cls, data: dict[str, Any]) -> S3LogFile:
+        return cls(
+            key=data["key"],
+            records_count=data["records_count"],
+            size=data["size"],
+            first_record_time=datetime.fromisoformat(data["first_record_time"]),
+            last_record_time=datetime.fromisoformat(data["last_record_time"]),
+        )
+
+
+@dataclass(frozen=True)
+class S3LogsMetadata:
+    log_files: Sequence[S3LogFile] = field(default=(), repr=False)
+    last_compaction_time: datetime | None = None
+    last_merged_key: str | None = None
+
+    def get_log_keys(self, *, since: datetime | None = None) -> list[str]:
+        if since is None:
+            return [f.key for f in self.log_files]
+        return [f.key for f in self.log_files if since <= f.last_record_time]
+
+    def add_log_files(
+        self,
+        files: Iterable[S3LogFile],
+        *,
+        last_merged_key: str,
+        compaction_time: datetime,
+    ) -> S3LogsMetadata:
+        return replace(
+            self,
+            log_files=[*self.log_files, *files],
+            last_merged_key=last_merged_key,
+            last_compaction_time=compaction_time,
+        )
+
+    def delete_last_log_file(self) -> S3LogsMetadata:
+        return replace(self, log_files=self.log_files[:-1])
+
+    def to_primitive(self) -> dict[str, Any]:
+        return {
+            "log_files": [f.to_primitive() for f in self.log_files],
+            "last_compaction_time": self.last_compaction_time.isoformat()
+            if self.last_compaction_time
+            else None,
+            "last_merged_key": self.last_merged_key,
+        }
+
+    @classmethod
+    def from_primitive(cls, data: dict[str, Any]) -> S3LogsMetadata:
+        return cls(
+            log_files=[S3LogFile.from_primitive(f) for f in data["log_files"]],
+            last_compaction_time=datetime.fromisoformat(data["last_compaction_time"])
+            if data.get("last_compaction_time")
+            else None,
+            last_merged_key=data["last_merged_key"],
+        )
+
+
+class S3LogsMetadataStorage:
+    METADATA_KEY_PREFIX = "metadata"
+
+    def __init__(
+        self, s3_client: AioBaseClient, bucket_name: str, max_cache_size: int = 1000
+    ) -> None:
+        self._s3_client = s3_client
+        self._bucket_name = bucket_name
+        self._cache: LRUCache[str, S3LogsMetadata] = LRUCache(max_cache_size)
+
+    @property
+    def bucket_name(self) -> str:
+        return self._bucket_name
+
+    @classmethod
+    def get_metadata_key(cls, pod_name: str) -> str:
+        return f"{cls.METADATA_KEY_PREFIX}/{pod_name}.json"
+
+    async def get(self, pod_name: str) -> S3LogsMetadata:
+        metadata = self._cache.get(pod_name)
+        if metadata is None:
+            try:
+                metadata = await self._get_from_s3(pod_name)
+            except s3_client_error("NoSuchKey"):
+                metadata = S3LogsMetadata()
+            self._cache[pod_name] = metadata
+        return metadata
+
+    @trace
+    async def _get_from_s3(self, pod_name: str) -> S3LogsMetadata:
+        get_object = functools.partial(
+            self._s3_client.get_object,
+            Bucket=self._bucket_name,
+            Key=self.get_metadata_key(pod_name),
+        )
+        resp = await retry_if_failed(get_object)
+        resp_body = resp["Body"]
+        async with resp_body:
+            raw_data = await resp_body.read()
+            data = json.loads(raw_data)
+            return S3LogsMetadata.from_primitive(data)
+
+    async def put(self, pod_name: str, metadata: S3LogsMetadata) -> None:
+        await self._put_to_s3(pod_name, metadata)
+        self._cache[pod_name] = metadata
+
+    @trace
+    async def _put_to_s3(self, pod_name: str, metadata: S3LogsMetadata) -> None:
+        put_object = functools.partial(
+            self._s3_client.put_object,
+            Bucket=self._bucket_name,
+            Key=self.get_metadata_key(pod_name),
+            Body=json.dumps(metadata.to_primitive()).encode(),
+        )
+        await retry_if_failed(put_object)
+
+
+class S3LogsMetadataService:
+    RAW_LOG_KEY_PREFIX = "kube.var.log.containers."
+    RAW_LOG_KEY_PREFIX_FORMAT = (
+        "kube.var.log.containers.{pod_name}_{namespace_name}_{container_name}"
+    )
+    CLEANUP_KEY_PREFIX = "cleanup"
+
+    def __init__(
+        self,
+        s3_client: AioBaseClient,
+        metadata_storage: S3LogsMetadataStorage,
+        kube_namespace_name: str,
+    ) -> None:
+        self._s3_client = s3_client
+        self._metadata_storage = metadata_storage
+        self._kube_namespace_name = kube_namespace_name
+
+    @property
+    def bucket_name(self) -> str:
+        return self._metadata_storage.bucket_name
+
+    def _get_prefix(self, pod_name: str) -> str:
+        return self.RAW_LOG_KEY_PREFIX_FORMAT.format(
+            namespace_name=self._kube_namespace_name,
+            pod_name=pod_name,
+            container_name=pod_name,
+        )
+
+    @trace
+    async def get_metadata(self, pod_name: str) -> S3LogsMetadata:
+        return await self._metadata_storage.get(pod_name)
+
+    @trace
+    async def update_metadata(self, pod_name: str, metadata: S3LogsMetadata) -> None:
+        await self._metadata_storage.put(pod_name, metadata)
+
+    @trace
+    async def get_log_keys(
+        self, pod_name: str, *, since: datetime | None = None
+    ) -> list[str]:
+        metadata = await self._metadata_storage.get(pod_name)
+        keys = metadata.get_log_keys(since=since)
+        raw_keys = await self.get_raw_log_keys(pod_name, since=since)
+        if metadata.last_merged_key and keys:
+            try:
+                last_merged_key_index = raw_keys.index(metadata.last_merged_key)
+                raw_keys = raw_keys[last_merged_key_index + 1 :]
+            except ValueError:
+                pass
+        keys.extend(raw_keys)
+        return keys
+
+    @trace
+    async def get_raw_log_keys(
+        self, pod_name: str, *, since: datetime | None = None
+    ) -> list[str]:
+        since_time_str = f"{since:%Y%m%d%H%M}" if since else ""
+        paginator = self._s3_client.get_paginator("list_objects_v2")
+        keys = []
+        async for page in paginator.paginate(
+            Bucket=self.bucket_name, Prefix=self._get_prefix(pod_name)
+        ):
+            for obj in page.get("Contents", ()):
+                key = obj["Key"]
+                # get time slice from s3 key
+                time_slice_str = basename(key).split(".")[0].split("_")
+                start_time_str = time_slice_str[0]
+                index = int(time_slice_str[-1])
+                if start_time_str >= since_time_str:
+                    keys.append((start_time_str, index, key))
+        keys.sort()  # order keys by time slice
+        return [key[-1] for key in keys]
+
+    @trace
+    async def get_pods_compact_queue(self, compact_interval: float = 3600) -> list[str]:
+        time_threshold = _utcnow() - timedelta(seconds=compact_interval)
+        paginator = self._s3_client.get_paginator("list_objects_v2")
+        pod_names = []
+        async for page in paginator.paginate(
+            Bucket=self.bucket_name, Prefix=self.RAW_LOG_KEY_PREFIX, Delimiter="_"
+        ):
+            for prefix in page.get("CommonPrefixes", ()):
+                prefix = prefix["Prefix"]
+                pod_name = prefix[len(self.RAW_LOG_KEY_PREFIX) : -1]
+                metadata = await self._metadata_storage.get(pod_name)
+                if (
+                    metadata.last_compaction_time is None
+                    or metadata.last_compaction_time <= time_threshold
+                ):
+                    pod_names.append(pod_name)
+        return pod_names
+
+    @trace
+    async def get_pods_cleanup_queue(self, cleanup_interval: float = 3600) -> list[str]:
+        time_threshold = _utcnow() - timedelta(seconds=cleanup_interval)
+        paginator = self._s3_client.get_paginator("list_objects_v2")
+        pod_names = []
+        async for page in paginator.paginate(
+            Bucket=self.bucket_name, Prefix=f"{self.CLEANUP_KEY_PREFIX}/"
+        ):
+            for obj in page.get("Contents", ()):
+                key = obj["Key"]
+                pod_name = key[len(self.CLEANUP_KEY_PREFIX) + 1 :]
+                metadata = await self._metadata_storage.get(pod_name)
+                if (
+                    metadata.last_compaction_time is None
+                    or metadata.last_compaction_time <= time_threshold
+                ):
+                    pod_names.append(pod_name)
+        return pod_names
+
+    @trace
+    async def add_pod_to_cleanup_queue(self, pod_name: str) -> None:
+        put_object = functools.partial(
+            self._s3_client.put_object,
+            Bucket=self.bucket_name,
+            Key=f"{self.CLEANUP_KEY_PREFIX}/{pod_name}",
+            Body=b"",
+        )
+        await retry_if_failed(put_object)
+
+    @trace
+    async def remove_pod_from_cleanup_queue(self, pod_name: str) -> None:
+        delete_object = functools.partial(
+            self._s3_client.delete_object,
+            Bucket=self.bucket_name,
+            Key=f"{self.CLEANUP_KEY_PREFIX}/{pod_name}",
+        )
+        await retry_if_failed(delete_object)
+
+
+@dataclass(frozen=True)
 class S3LogRecord:
     time: datetime
     time_str: str
     message: str
+    container_id: str
+    stream: str = "stdout"
 
     @classmethod
-    def parse(cls, line: bytes, fallback_time: datetime) -> S3LogRecord:
+    def parse(
+        cls, line: bytes, fallback_time: datetime, *, container_id: str
+    ) -> S3LogRecord:
         data = json.loads(line.decode(errors="replace"))
         time_str, time = cls._parse_time(data, fallback_time)
         return cls(
             time_str=time_str,
             time=time,
             message=cls._parse_message(data),
+            container_id=container_id,
+            stream=data.get("stream", cls.stream),
         )
 
     @classmethod
@@ -318,125 +593,43 @@ class S3LogRecord:
         # If there is no time key then record is considered not parsed by Fluent Bit.
         # We need to extract raw message from container runtime log message.
         log_arr = log.split(" ", 3)
-        return log_arr[-1] if len(log_arr) == 4 else ""
+        return log_arr[-1] if len(log_arr) == 4 else log
 
 
-class S3LogReader(LogReader):
-    def __init__(
-        self,
-        s3_client: AioBaseClient,
-        container_runtime: str,
-        bucket_name: str,
-        prefix_format: str,
-        namespace_name: str,
-        pod_name: str,
-        container_name: str,
-        *,
-        since: datetime | None = None,
-        timestamps: bool = False,
-        debug: bool = False,
-    ) -> None:
-        super().__init__(container_runtime=container_runtime, timestamps=timestamps)
-
+class S3FileReader:
+    def __init__(self, s3_client: AioBaseClient, bucket_name: str, key: str) -> None:
         self._s3_client = s3_client
         self._bucket_name = bucket_name
-        self._prefix_format = prefix_format
-        self._namespace_name = namespace_name
-        self._pod_name = pod_name
-        self._container_name = container_name
-        self._since = since
-        self._debug = debug
-        self._iterator: AsyncIterator[bytes] | None = None
+        self._key = key
+        self._loop = asyncio.get_event_loop()
 
-    @staticmethod
-    def get_prefix(
-        prefix_format: str, namespace_name: str, pod_name: str, container_name: str
-    ) -> str:
-        return prefix_format.format(
-            namespace_name=namespace_name,
-            pod_name=pod_name,
-            container_name=container_name,
+    @classmethod
+    def _is_compressed(cls, response: Any) -> bool:
+        return response["ContentType"] == "application/x-gzip"
+
+    async def iter_lines(self) -> AsyncIterator[bytes]:
+        get_object = functools.partial(
+            self._s3_client.get_object, Bucket=self._bucket_name, Key=self._key
         )
+        response = await retry_if_failed(get_object)
+        response_body = response["Body"]
 
-    def _get_prefix(self) -> str:
-        return self.get_prefix(
-            prefix_format=self._prefix_format,
-            namespace_name=self._namespace_name,
-            pod_name=self._pod_name,
-            container_name=self._container_name,
-        )
+        async with response_body:
+            if self._is_compressed(response):
+                line_iterator = self._iter_decompressed_lines(response_body)
+            else:
+                line_iterator = response_body.iter_lines()
 
-    async def __aenter__(self) -> AsyncIterator[bytes]:
-        self._iterator = self._iterate()
-        return self._iterator
-
-    @trace
-    async def _load_log_keys(self, since: datetime | None) -> list[str]:
-        since_time_str = f"{since:%Y%m%d%H%M}" if since else ""
-        paginator = self._s3_client.get_paginator("list_objects_v2")
-        keys = []
-        async for page in paginator.paginate(
-            Bucket=self._bucket_name, Prefix=self._get_prefix()
-        ):
-            for obj in page.get("Contents", ()):
-                s3_key = obj["Key"]
-                # get time slice from s3 key
-                time_slice_str = basename(s3_key).split(".")[0].split("_")
-                start_time_str = time_slice_str[0]
-                index = int(time_slice_str[-1])
-                if start_time_str >= since_time_str:
-                    keys.append((start_time_str, index, s3_key))
-        keys.sort()  # order keys by time slice
-        return [key[-1] for key in keys]
-
-    async def __aexit__(self, *args: Any) -> None:
-        assert self._iterator
-        await self._iterator.aclose()  # type: ignore
-
-    async def _iterate(self) -> AsyncIterator[bytes]:
-        since = self._since
-        keys = await self._load_log_keys(since)
-        for key in keys:
-            response = await self._s3_client.get_object(
-                Bucket=self._bucket_name, Key=key
-            )
-            response_body = response["Body"]
-            async with response_body:
-                if response["ContentType"] == "application/x-gzip":
-                    line_iterator = self._iter_decompressed_lines(response_body)
-                else:
-                    line_iterator = response_body.iter_lines()
-                if self.last_time:
-                    record_fallback_time = max(self.last_time, self._get_key_time(key))
-                else:
-                    record_fallback_time = self._get_key_time(key)
-
-                async with aclosing(line_iterator):
-                    async for line in line_iterator:
-                        try:
-                            record = S3LogRecord.parse(line, record_fallback_time)
-                            record_fallback_time = record.time
-                            if since is not None and record.time < since:
-                                continue
-                            self.last_time = record.time
-                            if self._debug and key:
-                                yield f"~~~ From file {basename(key)}\n".encode()
-                                key = ""
-                            yield self.encode_log(record.time_str, record.message)
-                        except Exception:
-                            logger.exception("Invalid log entry: %r", line)
-                            raise
-
-    def _get_key_time(cls, key: str) -> datetime:
-        time_str = basename(key).split("_")[0]
-        return datetime.strptime(time_str, "%Y%m%d%H%M").replace(tzinfo=UTC)
+            async with aclosing(line_iterator):
+                async for line in line_iterator:
+                    yield line
 
     @classmethod
     async def _iter_decompressed_lines(
         cls, body: StreamingBody
     ) -> AsyncIterator[bytes]:
         loop = asyncio.get_event_loop()
-        decompress_obj = zlib.decompressobj(wbits=16 + zlib.MAX_WBITS)
+        decompress_obj = zlib.decompressobj(wbits=ZLIB_WBITS)
         pending = b""
         async for chunk in body.iter_chunks():
             chunk_d = await loop.run_in_executor(
@@ -448,6 +641,202 @@ class S3LogReader(LogReader):
             pending = lines[-1]
         if pending:
             yield pending.splitlines()[0]
+
+
+class S3LogRecordsWriter:
+    LOGS_KEY_PREFIX = "logs"
+
+    def __init__(
+        self,
+        s3_client: AioBaseClient,
+        bucket_name: str,
+        pod_name: str,
+        size_limit: int = 10 * 1024**2,
+        buffer: IO[bytes] | None = None,
+    ) -> None:
+        self._s3_client = s3_client
+        self._bucket_name = bucket_name
+        self._size_limit = size_limit
+
+        self._buffer = io.BytesIO() if buffer is None else buffer
+        self._buffer.seek(0)
+        self._buffer.truncate(0)
+        self._compress_obj = zlib.compressobj(wbits=ZLIB_WBITS)
+
+        self._key_prefix = self.get_key_prefix(pod_name)
+        self._time = _utcnow().strftime("%Y%m%d%H%M")
+        self._container_id: str
+        self._size = 0
+        self._records_count = 0
+        self._first_record_time: datetime
+        self._last_record_time: datetime
+        self._output_files: list[S3LogFile] = []
+
+    @classmethod
+    def get_key_prefix(cls, pod_name: str) -> str:
+        return f"{cls.LOGS_KEY_PREFIX}/{pod_name}"
+
+    async def __aenter__(self) -> S3LogRecordsWriter:
+        return self
+
+    async def __aexit__(self, exc_type: type[BaseException] | None, *args: Any) -> None:
+        if exc_type is None:
+            await self._flush()
+
+    async def _flush(self) -> None:
+        if self._size == 0:
+            return
+
+        self._buffer.write(self._compress_obj.flush())
+        self._buffer.seek(0)
+
+        key = (
+            f"{self._key_prefix}/{self._container_id}/"
+            f"{self._time}_{time.monotonic_ns()}.gz"
+        )
+        file = S3LogFile(
+            key=key,
+            records_count=self._records_count,
+            size=self._size,
+            first_record_time=self._first_record_time,
+            last_record_time=self._last_record_time,
+        )
+        logger.info("Flushing records to %s", file)
+        put_object = functools.partial(
+            self._s3_client.put_object,
+            Bucket=self._bucket_name,
+            Key=key,
+            Body=self._buffer,
+            ContentType="application/x-gzip",
+        )
+        await retry_if_failed(put_object)
+        self._output_files.append(file)
+        self._compress_obj = zlib.compressobj(wbits=ZLIB_WBITS)
+        self._buffer.seek(0)
+        self._buffer.truncate(0)
+        self._records_count = 0
+        self._size = 0
+
+    async def write(self, record: S3LogRecord) -> None:
+        if self._size and self._container_id != record.container_id:
+            await self._flush()
+
+        self._container_id = record.container_id
+        record_encoded = self.encode_record(record)
+
+        if self._size + len(record_encoded) > self._size_limit:
+            await self._flush()
+
+        if self._records_count == 0:
+            self._first_record_time = record.time
+
+        data = self._compress_obj.compress(record_encoded)
+        self._buffer.write(data)
+        self._size += len(record_encoded)
+        self._records_count += 1
+        self._last_record_time = record.time
+
+    def encode_record(self, record: S3LogRecord) -> bytes:
+        body = {"time": record.time_str, "log": record.message}
+        if record.stream != S3LogRecord.stream:
+            body["stream"] = record.stream
+        body_str = json.dumps(body) + "\n"
+        return body_str.encode()
+
+    def get_output_files(self) -> list[S3LogFile]:
+        return self._output_files.copy()
+
+
+class S3LogRecordsReader:
+    def __init__(self, s3_client: AioBaseClient, bucket_name: str) -> None:
+        self._s3_client = s3_client
+        self._bucket_name = bucket_name
+
+    async def iter_records(
+        self, keys: str | Iterable[str]
+    ) -> AsyncIterator[S3LogRecord]:
+        if isinstance(keys, str):
+            keys = [keys]
+
+        fallback_time = None
+
+        for key in keys:
+            reader = S3FileReader(self._s3_client, self._bucket_name, key)
+            container_id = self._get_key_container_id(key)
+
+            if fallback_time is None:
+                fallback_time = self._get_key_time(key)
+            else:
+                fallback_time = max(fallback_time, self._get_key_time(key))
+
+            async for line in reader.iter_lines():
+                try:
+                    record = S3LogRecord.parse(
+                        line, fallback_time, container_id=container_id
+                    )
+                    fallback_time = record.time
+                    yield record
+                except Exception:
+                    logger.exception("Invalid log entry: %r", line)
+                    raise
+
+    @classmethod
+    def _get_key_time(cls, key: str) -> datetime:
+        time_str = basename(key).split("_")[0]
+        return datetime.strptime(time_str, "%Y%m%d%H%M").replace(tzinfo=UTC)
+
+    @classmethod
+    def _get_key_container_id(cls, key: str) -> str:
+        container_id = key.split("/")[-2].split("-")[-1]
+        if container_id.endswith(".log"):
+            return container_id[:-4]
+        return container_id
+
+
+class S3LogReader(LogReader):
+    def __init__(
+        self,
+        s3_client: AioBaseClient,
+        metadata_service: S3LogsMetadataService,
+        pod_name: str,
+        *,
+        since: datetime | None = None,
+        timestamps: bool = False,
+        debug: bool = False,
+    ) -> None:
+        super().__init__(timestamps=timestamps)
+
+        self._record_reader = S3LogRecordsReader(
+            s3_client, metadata_service.bucket_name
+        )
+        self._metadata_service = metadata_service
+        self._pod_name = pod_name
+        self._since = since
+        self._debug = debug
+        self._iterator: AsyncIterator[bytes] | None = None
+
+    async def __aenter__(self) -> AsyncIterator[bytes]:
+        self._iterator = self._iterate()
+        return self._iterator
+
+    async def __aexit__(self, *args: Any) -> None:
+        assert self._iterator
+        await self._iterator.aclose()  # type: ignore
+
+    async def _iterate(self) -> AsyncIterator[bytes]:
+        keys = await self._metadata_service.get_log_keys(
+            self._pod_name, since=self._since
+        )
+
+        for key in keys:
+            async for record in self._record_reader.iter_records(key):
+                if self._since is not None and record.time < self._since:
+                    continue
+                self.last_time = record.time
+                if self._debug and key:
+                    yield f"~~~ From file {basename(key)}\n".encode()
+                    key = ""
+                yield self.encode_log(record.time_str, record.message)
 
 
 class LogsService(abc.ABC):
@@ -703,12 +1092,9 @@ class ElasticsearchLogsService(BaseLogsService):
     #  kube-client and elasticsearch-client (in platform-api it's KubeOrchestrator)
     #  and move there method `get_pod_log_reader`
 
-    def __init__(
-        self, kube_client: KubeClient, es_client: Elasticsearch, container_runtime: str
-    ) -> None:
+    def __init__(self, kube_client: KubeClient, es_client: Elasticsearch) -> None:
         super().__init__(kube_client)
         self._es_client = es_client
-        self._container_runtime = container_runtime
 
     def get_pod_archive_log_reader(
         self,
@@ -720,7 +1106,6 @@ class ElasticsearchLogsService(BaseLogsService):
     ) -> LogReader:
         return ElasticsearchLogReader(
             es_client=self._es_client,
-            container_runtime=self._container_runtime,
             namespace_name=self._kube_client.namespace,
             pod_name=pod_name,
             container_name=pod_name,
@@ -737,15 +1122,18 @@ class S3LogsService(BaseLogsService):
         self,
         kube_client: KubeClient,
         s3_client: AioBaseClient,
-        container_runtime: str,
-        bucket_name: str,
-        key_prefix_format: str,
+        metadata_service: S3LogsMetadataService,
+        log_file_size_limit: int = 10 * 1024**2,
     ) -> None:
         super().__init__(kube_client)
         self._s3_client = s3_client
-        self._container_runtime = container_runtime
-        self._bucket_name = bucket_name
-        self._key_prefix_format = key_prefix_format
+        self._metadata_service = metadata_service
+        self._log_file_size_limit = log_file_size_limit
+        self._write_buffer = io.BytesIO()
+
+    @property
+    def _bucket_name(self) -> str:
+        return self._metadata_service.bucket_name
 
     def get_pod_archive_log_reader(
         self,
@@ -757,33 +1145,158 @@ class S3LogsService(BaseLogsService):
     ) -> LogReader:
         return S3LogReader(
             s3_client=self._s3_client,
-            container_runtime=self._container_runtime,
-            bucket_name=self._bucket_name,
-            prefix_format=self._key_prefix_format,
-            namespace_name=self._kube_client.namespace,
+            metadata_service=self._metadata_service,
             pod_name=pod_name,
-            container_name=pod_name,
             since=since,
             timestamps=timestamps,
             debug=debug,
         )
 
+    @trace
     async def drop_logs(self, pod_name: str) -> None:
-        paginator = self._s3_client.get_paginator("list_objects_v2")
+        keys = await self._metadata_service.get_log_keys(pod_name)
+        await self._delete_keys(keys)
 
+    @trace
+    async def compact_all(
+        self,
+        compact_interval: float = 3600,
+        cleanup_interval: float = 3600,
+        pod_names: Sequence[str] | None = None,  # for testing
+    ) -> None:
+        compact_queue = await self._metadata_service.get_pods_compact_queue(
+            compact_interval=compact_interval
+        )
+        for pod_name in compact_queue:
+            if pod_names is None or pod_name in pod_names:
+                await self.compact_one(pod_name)
+
+        cleanup_queue = await self._metadata_service.get_pods_cleanup_queue(
+            cleanup_interval=cleanup_interval
+        )
+        for pod_name in cleanup_queue:
+            if pod_names is None or pod_name in pod_names:
+                await self.cleanup_one(pod_name)
+
+    @trace
+    async def compact_one(self, pod_name: str) -> None:
+        await self._metadata_service.add_pod_to_cleanup_queue(pod_name)
+        metadata = await self._metadata_service.get_metadata(pod_name)
+        logger.info("Compacting pod %s, %s", pod_name, metadata)
+        raw_keys = await self._metadata_service.get_raw_log_keys(pod_name)
+        raw_keys = await self._delete_merged_keys(metadata, raw_keys)
+        await self._delete_orphaned_keys(pod_name, metadata)
+        metadata = await self._merge_raw_keys(pod_name, metadata, raw_keys)
+        await self._metadata_service.update_metadata(pod_name, metadata)
+
+    @trace
+    async def cleanup_one(self, pod_name: str) -> None:
+        metadata = await self._metadata_service.get_metadata(pod_name)
+        logger.info("Cleaning pod %s, %s", pod_name, metadata)
+        raw_keys = await self._metadata_service.get_raw_log_keys(pod_name)
+        raw_keys = await self._delete_merged_keys(metadata, raw_keys)
+        await self._delete_orphaned_keys(pod_name, metadata)
+        await self._metadata_service.remove_pod_from_cleanup_queue(pod_name)
+
+    @trace
+    async def _merge_raw_keys(
+        self, pod_name: str, metadata: S3LogsMetadata, raw_keys: Sequence[str]
+    ) -> S3LogsMetadata:
+        if not raw_keys:
+            return metadata
+
+        logger.info("Merging %d files", len(raw_keys))
+
+        now = _utcnow()
+        log_writing_resumed = False
+
+        async with self._create_log_record_writer(pod_name) as writer:
+            reader = S3LogRecordsReader(self._s3_client, self._bucket_name)
+
+            async for record in reader.iter_records(raw_keys):
+                if log_writing_resumed:
+                    await writer.write(record)
+                else:
+                    metadata = await self._resume_log_writing(writer, metadata, record)
+                    log_writing_resumed = True
+
+        metadata = metadata.add_log_files(
+            writer.get_output_files(), last_merged_key=raw_keys[-1], compaction_time=now
+        )
+
+        return metadata
+
+    def _create_log_record_writer(self, pod_name: str) -> S3LogRecordsWriter:
+        return S3LogRecordsWriter(
+            self._s3_client,
+            self._bucket_name,
+            pod_name,
+            size_limit=self._log_file_size_limit,
+            buffer=self._write_buffer,
+        )
+
+    @trace
+    async def _resume_log_writing(
+        self, writer: S3LogRecordsWriter, metadata: S3LogsMetadata, record: S3LogRecord
+    ) -> S3LogsMetadata:
+        if metadata.log_files:
+            last_file = metadata.log_files[-1]
+            record_encoded = writer.encode_record(record)
+
+            if last_file.size + len(record_encoded) <= self._log_file_size_limit:
+                logger.info("Resuming log writing from the last file %s", last_file)
+                metadata = metadata.delete_last_log_file()
+                reader = S3LogRecordsReader(self._s3_client, self._bucket_name)
+
+                async for r in reader.iter_records(last_file.key):
+                    await writer.write(r)
+        await writer.write(record)
+
+        return metadata
+
+    @trace
+    async def _delete_merged_keys(
+        self, metadata: S3LogsMetadata, keys: list[str]
+    ) -> list[str]:
+        if not metadata.last_merged_key:
+            return keys
+        try:
+            last_merged_key_index = keys.index(metadata.last_merged_key)
+        except ValueError:
+            return keys
+        merged_keys = keys[: last_merged_key_index + 1]
+        logger.info("Deleting %d merged keys", len(merged_keys))
+        await self._delete_keys(merged_keys)
+        return keys[last_merged_key_index + 1 :]
+
+    @trace
+    async def _delete_orphaned_keys(
+        self, pod_name: str, metadata: S3LogsMetadata
+    ) -> None:
+        log_keys = {f.key for f in metadata.log_files}
+        orphaned_keys = []
+        paginator = self._s3_client.get_paginator("list_objects_v2")
         async for page in paginator.paginate(
             Bucket=self._bucket_name,
-            Prefix=S3LogReader.get_prefix(
-                self._key_prefix_format,
-                namespace_name=self._kube_client.namespace,
-                pod_name=pod_name,
-                container_name=pod_name,
-            ),
+            Prefix=f"{S3LogRecordsWriter.get_key_prefix(pod_name)}/",
         ):
             for obj in page.get("Contents", ()):
-                await self._s3_client.delete_object(
-                    Bucket=self._bucket_name, Key=obj["Key"]
-                )
+                if obj["Key"] not in log_keys:
+                    orphaned_keys.append(obj["Key"])
+        logger.info("Deleting %d orphaned keys", len(orphaned_keys))
+        await self._delete_keys(orphaned_keys)
+
+    @trace
+    async def _delete_keys(self, keys: Iterable[str]) -> None:
+        for key in keys:
+            await self._delete_key(key)
+
+    @trace
+    async def _delete_key(self, key: str) -> None:
+        delete_object = functools.partial(
+            self._s3_client.delete_object, Bucket=self._bucket_name, Key=key
+        )
+        await retry_if_failed(delete_object)
 
 
 async def get_first_log_entry_time(
@@ -822,3 +1335,45 @@ async def get_first_log_entry_time(
 
 def _utcnow() -> datetime:
     return datetime.now(tz=timezone.utc)
+
+
+class UnknownS3Error(Exception):
+    pass
+
+
+def s3_client_error(code: str | int) -> type[Exception]:
+    e = sys.exc_info()[1]
+    if isinstance(e, botocore.exceptions.ClientError) and (
+        e.response["Error"]["Code"] == code
+        or e.response["ResponseMetadata"]["HTTPStatusCode"] == code
+    ):
+        return botocore.exceptions.ClientError
+    return UnknownS3Error
+
+
+async def retry_if_failed(
+    partial: Any,
+    attempts: int = 6,
+    sleep_seconds: float = 10,
+    exceptions: tuple[type[BaseException], ...] | None = None,
+) -> Any:
+    if exceptions is None:
+        exceptions = (botocore.exceptions.EndpointConnectionError,)
+    last_err = None
+    for attempt in range(attempts):
+        try:
+            return await partial()
+        except exceptions as err:
+            last_err = err
+            logger.error(
+                "Unable to connect to the endpoint. Check your network connection. "
+                "Sleeping and retrying %d more times "
+                "before giving up." % (attempts - attempt - 1)
+            )
+            await asyncio.sleep(sleep_seconds)
+    else:
+        logger.error(
+            "Unable to connect to the endpoint after %d attempts. Giving up.", attempts
+        )
+        assert last_err
+        raise last_err
