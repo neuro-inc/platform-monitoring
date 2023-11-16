@@ -723,7 +723,9 @@ def create_logs_service(
 
     if config.logs.storage_type == LogsStorageType.S3:
         assert s3_client
-        return create_s3_logs_service(config, kube_client, s3_client)
+        return create_s3_logs_service(
+            config, kube_client, s3_client, cache_log_metadata=False
+        )
 
     raise ValueError(
         f"{config.logs.storage_type} storage is not supported"
@@ -731,11 +733,16 @@ def create_logs_service(
 
 
 def create_s3_logs_service(
-    config: Config, kube_client: KubeClient, s3_client: AioBaseClient
+    config: Config,
+    kube_client: KubeClient,
+    s3_client: AioBaseClient,
+    cache_log_metadata: bool = False,
 ) -> S3LogsService:
     assert config.s3
     metadata_storage = S3LogsMetadataStorage(
-        s3_client, bucket_name=config.s3.job_logs_bucket_name
+        s3_client,
+        bucket_name=config.s3.job_logs_bucket_name,
+        cache_metadata=cache_log_metadata,
     )
     metadata_service = S3LogsMetadataService(
         s3_client, metadata_storage, kube_namespace_name=config.kube.namespace

@@ -15,19 +15,19 @@ class ServerConfig:
 @dataclass(frozen=True)
 class PlatformApiConfig:
     url: URL
-    token: str
+    token: str = field(repr=False)
 
 
 @dataclass(frozen=True)
 class PlatformAuthConfig:
     url: Optional[URL]
-    token: str
+    token: str = field(repr=False)
 
 
 @dataclass(frozen=True)
 class PlatformConfig:
     url: URL
-    token: str
+    token: str = field(repr=False)
 
 
 @dataclass(frozen=True)
@@ -76,13 +76,13 @@ class CORSConfig:
 @dataclass(frozen=True)
 class KubeConfig:
     endpoint_url: str
-    cert_authority_data_pem: Optional[str] = None
+    cert_authority_data_pem: Optional[str] = field(default=None, repr=False)
     cert_authority_path: Optional[str] = None
     auth_type: KubeClientAuthType = KubeClientAuthType.CERTIFICATE
-    auth_cert_path: Optional[str] = None
+    auth_cert_path: Optional[str] = field(default=None, repr=False)
     auth_cert_key_path: Optional[str] = None
     token_path: Optional[str] = None
-    token: Optional[str] = None
+    token: Optional[str] = field(default=None, repr=False)
     namespace: str = "default"
     client_conn_timeout_s: int = 300
     client_read_timeout_s: int = 300

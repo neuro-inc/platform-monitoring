@@ -37,6 +37,8 @@ spec:
         env:
         {{- include "platformMonitoring.env.common" . | nindent 8 }}
         {{- include "platformMonitoring.env.s3" . | indent 8 }}
+        - name: NP_LOG_LEVEL
+          value: INFO
         volumeMounts:
         {{- include "platformMonitoring.volumeMounts.common" . | nindent 8 }}
       {{- if .Values.imagePullSecrets }}

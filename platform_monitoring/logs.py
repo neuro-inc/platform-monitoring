@@ -353,10 +353,16 @@ class S3LogsMetadataStorage:
     METADATA_KEY_PREFIX = "metadata"
 
     def __init__(
-        self, s3_client: AioBaseClient, bucket_name: str, max_cache_size: int = 1000
+        self,
+        s3_client: AioBaseClient,
+        bucket_name: str,
+        *,
+        cache_metadata: bool = False,
+        max_cache_size: int = 1000,
     ) -> None:
         self._s3_client = s3_client
         self._bucket_name = bucket_name
+        self._cache_metadata = cache_metadata
         self._cache: LRUCache[str, S3LogsMetadata] = LRUCache(max_cache_size)
 
     @property
@@ -368,6 +374,8 @@ class S3LogsMetadataStorage:
         return f"{cls.METADATA_KEY_PREFIX}/{pod_name}.json"
 
     async def get(self, pod_name: str) -> S3LogsMetadata:
+        if not self._cache_metadata:
+            return await self._get_from_s3(pod_name)
         metadata = self._cache.get(pod_name)
         if metadata is None:
             try:
@@ -393,7 +401,8 @@ class S3LogsMetadataStorage:
 
     async def put(self, pod_name: str, metadata: S3LogsMetadata) -> None:
         await self._put_to_s3(pod_name, metadata)
-        self._cache[pod_name] = metadata
+        if self._cache_metadata:
+            self._cache[pod_name] = metadata
 
     @trace
     async def _put_to_s3(self, pod_name: str, metadata: S3LogsMetadata) -> None:
@@ -1283,8 +1292,9 @@ class S3LogsService(BaseLogsService):
             for obj in page.get("Contents", ()):
                 if obj["Key"] not in log_keys:
                     orphaned_keys.append(obj["Key"])
-        logger.info("Deleting %d orphaned keys", len(orphaned_keys))
-        await self._delete_keys(orphaned_keys)
+        if orphaned_keys:
+            logger.info("Deleting %d orphaned keys", len(orphaned_keys))
+            await self._delete_keys(orphaned_keys)
 
     @trace
     async def _delete_keys(self, keys: Iterable[str]) -> None:
