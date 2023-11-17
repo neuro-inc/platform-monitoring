@@ -136,7 +136,7 @@ async def container_runtime_config(in_minikube: bool) -> ContainerRuntimeConfig:
         "platform-container-runtime", url / "api/v1/ping", timeout_s=120
     )
     assert url.port
-    return ContainerRuntimeConfig()
+    return ContainerRuntimeConfig(port=url.port)
 
 
 @pytest.fixture
