@@ -374,15 +374,16 @@ class S3LogsMetadataStorage:
         return f"{cls.METADATA_KEY_PREFIX}/{pod_name}.json"
 
     async def get(self, pod_name: str) -> S3LogsMetadata:
-        if not self._cache_metadata:
-            return await self._get_from_s3(pod_name)
-        metadata = self._cache.get(pod_name)
+        metadata = None
+        if self._cache_metadata:
+            metadata = self._cache.get(pod_name)
         if metadata is None:
             try:
                 metadata = await self._get_from_s3(pod_name)
             except s3_client_error("NoSuchKey"):
                 metadata = S3LogsMetadata()
-            self._cache[pod_name] = metadata
+            if self._cache_metadata:
+                self._cache[pod_name] = metadata
         return metadata
 
     @trace
