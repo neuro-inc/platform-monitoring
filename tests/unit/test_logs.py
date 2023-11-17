@@ -271,4 +271,4 @@ class TestS3LogsMetadata:
 
         metadata = metadata.delete_last_log_file()
 
-        assert metadata == S3LogsMetadata(log_files=[])
+        assert metadata == S3LogsMetadata()

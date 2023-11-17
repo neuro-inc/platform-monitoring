@@ -303,7 +303,7 @@ class S3LogFile:
 
 @dataclass(frozen=True)
 class S3LogsMetadata:
-    log_files: Sequence[S3LogFile] = field(default=(), repr=False)
+    log_files: Sequence[S3LogFile] = field(default_factory=list, repr=False)
     last_compaction_time: datetime | None = None
     last_merged_key: str | None = None
 
