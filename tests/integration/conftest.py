@@ -127,15 +127,15 @@ async def platform_api_config(
 
 @pytest.fixture
 async def container_runtime_config(in_minikube: bool) -> ContainerRuntimeConfig:
-    # if in_minikube:
-    #     url = URL("http://platform-container-runtime:9000")
-    # else:
-    #     url = URL(get_service_url("platform-container-runtime", namespace="default"))
-    # assert url
-    # await wait_for_service(
-    #     "platform-container-runtime", url / "api/v1/ping", timeout_s=120
-    # )
-    # assert url.port
+    if in_minikube:
+        url = URL("http://platform-container-runtime:9000")
+    else:
+        url = URL(get_service_url("platform-container-runtime", namespace="default"))
+    assert url
+    await wait_for_service(
+        "platform-container-runtime", url / "api/v1/ping", timeout_s=120
+    )
+    assert url.port
     return ContainerRuntimeConfig()
 
 
