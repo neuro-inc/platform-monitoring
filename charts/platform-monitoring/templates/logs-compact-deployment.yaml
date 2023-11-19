@@ -1,0 +1,52 @@
+{{- if ne .Values.logs.persistence.type "es" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "platformMonitoring.fullname" . }}-logs-compact
+  labels:
+    {{- include "platformMonitoring.labels.standard" . | nindent 4 }}
+    service: platform-monitoring-logs-compact
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "platformMonitoring.logs.compact.selectorLabels" . | nindent 6 }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        {{- include "platformMonitoring.logs.compact.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      containers:
+      - name: compact
+        {{- with .Values.image }}
+        image: {{ .repository }}:{{ .tag }}
+        {{- end }}
+        command: [platform-monitoring-logs-compact]
+        {{- with .Values.logs.compact.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        env:
+        {{- include "platformMonitoring.env.common" . | nindent 8 }}
+        {{- include "platformMonitoring.env.s3" . | indent 8 }}
+        volumeMounts:
+          {{- include "platformMonitoring.volumeMounts.common" . | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      volumes:
+        {{- include "platformMonitoring.volumes.common" . | nindent 6 }}
+{{- end }}

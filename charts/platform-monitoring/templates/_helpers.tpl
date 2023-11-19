@@ -237,3 +237,9 @@ release: {{ .Release.Name | quote }}
   name: kube-api-data
   readOnly: true
 {{- end -}}
+
+{{- define "platformMonitoring.logs.compact.selectorLabels" -}}
+app: {{ include "platformMonitoring.name" . }}
+release: {{ .Release.Name | quote }}
+service: platform-monitoring-logs-compact
+{{- end -}}

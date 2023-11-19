@@ -98,6 +98,8 @@ logs:
   cleanup_interval_sec: 900
 
   compact:
+    podAnnotations: {}
+
     resources:
       requests:
         cpu: "0.1"
