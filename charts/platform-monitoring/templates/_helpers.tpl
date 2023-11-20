@@ -141,7 +141,8 @@ release: {{ .Release.Name | quote }}
 {{- end -}}
 
 {{- define "platformMonitoring.env.s3" -}}
-{{- if eq .Values.logs.persistence.type "aws" }}
+{{- $logsPersistence := .Values.logs.persistence -}}
+{{- if eq $logsPersistence.type "aws" }}
 - name: NP_MONITORING_LOGS_STORAGE_TYPE
   value: s3
 - name: NP_MONITORING_S3_ACCESS_KEY_ID
@@ -154,21 +155,21 @@ release: {{ .Release.Name | quote }}
     secretKeyRef:
       name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
       key: secret_access_key
-{{- if .Values.logs.persistence.aws.region }}
+{{- if $logsPersistence.aws.region }}
 - name: NP_MONITORING_S3_REGION
-  value: {{ .Values.logs.persistence.aws.region | quote }}
+  value: {{ $logsPersistence.aws.region | quote }}
 {{- end }}
-{{- if .Values.logs.persistence.aws.endpoint }}
+{{- if $logsPersistence.aws.endpoint }}
 - name: NP_MONITORING_S3_ENDPOINT_URL
-  value: {{ .Values.logs.persistence.aws.endpoint | quote }}
+  value: {{ $logsPersistence.aws.endpoint | quote }}
 {{- end }}
 - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
-  value: {{ .Values.logs.persistence.aws.bucket | quote }}
-{{- else if eq .Values.logs.persistence.type "gcp" }}
+  value: {{ $logsPersistence.aws.bucket | quote }}
+{{- else if eq $logsPersistence.type "gcp" }}
 - name: NP_MONITORING_LOGS_STORAGE_TYPE
   value: s3
 - name: NP_MONITORING_S3_REGION
-  value: {{ .Values.logs.persistence.gcp.location | quote }}
+  value: {{ $logsPersistence.gcp.location | quote }}
 - name: NP_MONITORING_S3_ACCESS_KEY_ID
   value: minio_access_key
 - name: NP_MONITORING_S3_SECRET_ACCESS_KEY
@@ -176,8 +177,8 @@ release: {{ .Release.Name | quote }}
 - name: NP_MONITORING_S3_ENDPOINT_URL
   value: {{ include "platformMonitoring.minioGateway.endpoint" . }}
 - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
-  value: {{ .Values.logs.persistence.gcp.bucket | quote }}
-{{- else if eq .Values.logs.persistence.type "azure" }}
+  value: {{ $logsPersistence.gcp.bucket | quote }}
+{{- else if eq $logsPersistence.type "azure" }}
 - name: NP_MONITORING_LOGS_STORAGE_TYPE
   value: s3
 - name: NP_MONITORING_S3_REGION
@@ -195,14 +196,14 @@ release: {{ .Release.Name | quote }}
 - name: NP_MONITORING_S3_ENDPOINT_URL
   value: {{ include "platformMonitoring.minioGateway.endpoint" . }}
 - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
-  value: {{ .Values.logs.persistence.azure.bucket | quote }}
-{{- else if eq .Values.logs.persistence.type "minio" }}
+  value: {{ $logsPersistence.azure.bucket | quote }}
+{{- else if eq $logsPersistence.type "minio" }}
 - name: NP_MONITORING_LOGS_STORAGE_TYPE
   value: s3
 - name: NP_MONITORING_S3_ENDPOINT_URL
-  value: {{ .Values.logs.persistence.minio.url | quote }}
+  value: {{ $logsPersistence.minio.url | quote }}
 - name: NP_MONITORING_S3_REGION
-  value: {{ .Values.logs.persistence.minio.region | quote }}
+  value: {{ $logsPersistence.minio.region | quote }}
 - name: NP_MONITORING_S3_ACCESS_KEY_ID
   valueFrom:
     secretKeyRef:
@@ -214,7 +215,7 @@ release: {{ .Release.Name | quote }}
       name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
       key: secret_key
 - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
-  value: {{ .Values.logs.persistence.minio.bucket | quote }}
+  value: {{ $logsPersistence.minio.bucket | quote }}
 {{- end }}
 {{- end -}}
 
