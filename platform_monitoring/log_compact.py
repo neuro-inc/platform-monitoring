@@ -58,16 +58,16 @@ class App:
             try:
                 logger.info("Starting compact iteration")
                 await self.service.compact_all(
-                    compact_interval=self.config.logs_compact.compact_interval,
-                    cleanup_interval=self.config.logs_compact.cleanup_interval,
+                    compact_interval=self.config.logs.compact.compact_interval,
+                    cleanup_interval=self.config.logs.compact.cleanup_interval,
                 )
             except Exception:
                 logger.exception("Unhandled error")
             logger.info(
                 "Finished compact iteration, sleeping for %.1f seconds",
-                self.config.logs_compact.run_interval,
+                self.config.logs.compact.run_interval,
             )
-            await asyncio.sleep(self.config.logs_compact.run_interval)
+            await asyncio.sleep(self.config.logs.compact.run_interval)
 
 
 @asynccontextmanager
