@@ -31,7 +31,10 @@ class MyS3LogService(S3LogsService):
 
 @pytest.fixture
 def config(config: Config) -> Config:
-    return replace(config, logs_compact=LogsCompactConfig(run_interval=0.1))
+    return replace(
+        config,
+        logs=replace(config.logs, compact=LogsCompactConfig(run_interval=0.1)),
+    )
 
 
 async def test_run(config: Config) -> None:

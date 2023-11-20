@@ -10,7 +10,6 @@ from platform_monitoring.config import (
     Config,
     ContainerRuntimeConfig,
     KubeConfig,
-    LogsCompactConfig,
     LogsConfig,
     LogsStorageType,
     S3Config,
@@ -38,7 +37,6 @@ def config_factory() -> Callable[[LogsStorageType], Config]:
             registry=None,  # type: ignore
             cors=None,  # type: ignore
             logs=LogsConfig(storage_type=storage_type),
-            logs_compact=LogsCompactConfig(),
             s3=S3Config(
                 region="us-east-1",
                 access_key_id="access_key",

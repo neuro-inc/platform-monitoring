@@ -50,7 +50,6 @@ class EnvironConfigFactory:
             elasticsearch=self._create_elasticsearch(),
             s3=self._create_s3(),
             logs=self._create_logs(),
-            logs_compact=self._create_logs_compact(),
             kube=self._create_kube(),
             registry=self._create_registry(),
             container_runtime=self._create_container_runtime(),
@@ -111,6 +110,7 @@ class EnvironConfigFactory:
                     LogsConfig.cleanup_interval_sec,
                 ),
             ),
+            compact=self._create_logs_compact(),
         )
 
     def _create_logs_compact(self) -> LogsCompactConfig:

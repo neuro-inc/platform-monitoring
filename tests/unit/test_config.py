@@ -93,7 +93,6 @@ def test_create(environ: dict[str, Any], token_path: str) -> None:
         ),
         elasticsearch=ElasticsearchConfig(hosts=["http://es1", "http://es2"]),
         logs=LogsConfig(storage_type=LogsStorageType.ELASTICSEARCH),
-        logs_compact=LogsCompactConfig(),
         kube=KubeConfig(
             endpoint_url="https://localhost:8443",
             cert_authority_data_pem=CA_DATA_PEM,
@@ -165,7 +164,7 @@ def test_create_with_logs_compact(environ: dict[str, Any]) -> None:
 
     config = EnvironConfigFactory(environ).create()
 
-    assert config.logs_compact == LogsCompactConfig(
+    assert config.logs.compact == LogsCompactConfig(
         run_interval=1.0, compact_interval=2.0, cleanup_interval=3.0
     )
 

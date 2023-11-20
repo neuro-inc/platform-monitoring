@@ -50,16 +50,17 @@ class LogsStorageType(str, enum.Enum):
 
 
 @dataclass(frozen=True)
-class LogsConfig:
-    storage_type: LogsStorageType
-    cleanup_interval_sec: float = 15 * 60  # 15m
-
-
-@dataclass(frozen=True)
 class LogsCompactConfig:
     run_interval: float = 300
     compact_interval: float = 3600
     cleanup_interval: float = 3600
+
+
+@dataclass(frozen=True)
+class LogsConfig:
+    storage_type: LogsStorageType
+    cleanup_interval_sec: float = 15 * 60  # 15m
+    compact: LogsCompactConfig = LogsCompactConfig()
 
 
 class KubeClientAuthType(str, enum.Enum):
@@ -134,7 +135,6 @@ class Config:
     platform_auth: PlatformAuthConfig
     platform_config: PlatformConfig
     logs: LogsConfig
-    logs_compact: LogsCompactConfig
     kube: KubeConfig
     container_runtime: ContainerRuntimeConfig
     registry: RegistryConfig
