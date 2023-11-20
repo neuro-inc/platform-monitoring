@@ -2,7 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "platformMonitoring.fullname" . }}
-  labels: {{ include "platformMonitoring.labels.standard" . | nindent 4 }}
+  labels:
+    {{- include "platformMonitoring.labels.standard" . | nindent 4 }}
     service: platform-monitoring
 spec:
   replicas: {{ .Values.replicas }}
@@ -27,9 +28,9 @@ spec:
         {{- if .Values.secrets }}
         checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
         {{- end }}
-{{- if .Values.podAnnotations }}
-{{ toYaml .Values.podAnnotations | indent 8 }}
-{{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       containers:
       - name: platform-monitoring
@@ -50,190 +51,30 @@ spec:
           - containerPort: 8080
             name: tcp-web
             protocol: TCP
-        {{- if .Values.resources }}
-        resources: {{ toYaml .Values.resources | nindent 10 }}
+        {{- with .Values.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
         {{- end }}
         env:
-        - name: NP_MONITORING_CLUSTER_NAME
-          value: {{ .Values.platform.clusterName }}
-        - name: NP_MONITORING_CONTAINER_RUNTIME_NAME
-          value: {{ .Values.containerRuntime.name }}
-        - name: NP_MONITORING_CONTAINER_RUNTIME_PORT
-          value: {{ .Values.containerRuntime.port | quote }}
-        - name: NP_MONITORING_PLATFORM_API_TOKEN
-{{- if .Values.platform.token }}
-{{ toYaml .Values.platform.token | indent 10 }}
-{{- end }}
-        - name: NP_MONITORING_PLATFORM_AUTH_TOKEN
-{{- if .Values.platform.token }}
-{{ toYaml .Values.platform.token | indent 10 }}
-{{- end }}
-        - name: NP_MONITORING_PLATFORM_CONFIG_TOKEN
-{{- if .Values.platform.token }}
-{{ toYaml .Values.platform.token | indent 10 }}
-{{- end }}
-        - name: NP_MONITORING_K8S_API_URL
-          value: https://kubernetes.default:443
-        - name: NP_MONITORING_K8S_AUTH_TYPE
-          value: token
-        - name: NP_MONITORING_K8S_CA_PATH
-          value:  {{ include "platformMonitoring.kubeAuthMountRoot" . }}/ca.crt
-        - name: NP_MONITORING_K8S_TOKEN_PATH
-          value:  {{ include "platformMonitoring.kubeAuthMountRoot" . }}/token
-        - name: NP_MONITORING_PLATFORM_API_URL
-          value: {{ .Values.platform.apiUrl | quote }}
-        - name: NP_MONITORING_PLATFORM_AUTH_URL
-          value: {{ .Values.platform.authUrl | quote }}
-        - name: NP_MONITORING_PLATFORM_CONFIG_URL
-          value: {{ .Values.platform.configUrl | quote }}
-        - name: NP_MONITORING_K8S_NS
-          value: {{ .Values.jobsNamespace }}
-        - name: NP_MONITORING_REGISTRY_URL
-          value: {{ .Values.platform.registryUrl | quote }}
-        - name: NP_MONITORING_K8S_KUBELET_PORT
-          value: {{ .Values.kubeletPort | quote }}
-        {{- if .Values.nvidiaDCGMPort }}
-        - name: NP_MONITORING_K8S_NVIDIA_DCGM_PORT
-          value: {{ .Values.nvidiaDCGMPort | quote }}
-        {{- end }}
-        {{- if .Values.cors.origins }}
-        - name: NP_CORS_ORIGINS
-          value: {{ join "," .Values.cors.origins | quote }}
-        {{- end }}
-        {{- if .Values.zipkin }}
-        - name: NP_ZIPKIN_URL
-          value: {{ .Values.zipkin.url }}
-        - name: NP_ZIPKIN_SAMPLE_RATE
-          value: {{ .Values.zipkin.sampleRate | default 0 | quote }}
-        {{- end }}
-        {{- if .Values.sentry }}
-        - name: NP_SENTRY_DSN
-          value: {{ .Values.sentry.dsn }}
-        - name: NP_SENTRY_CLUSTER_NAME
-          value: {{ .Values.sentry.clusterName }}
-        - name: NP_SENTRY_SAMPLE_RATE
-          value: {{ .Values.sentry.sampleRate | default 0 | quote }}
-        {{- end }}
-        {{- if .Values.nodeLabels.job }}
-        - name: NP_MONITORING_NODE_LABEL_JOB
-          value: {{ .Values.nodeLabels.job }}
-        {{- end }}
-        {{- if .Values.nodeLabels.nodePool }}
-        - name: NP_MONITORING_NODE_LABEL_NODE_POOL
-          value: {{ .Values.nodeLabels.nodePool }}
-        {{- end }}
-        - name: NP_MONITORING_LOGS_CLEANUP_INTERVAL_SEC
-          value: {{ .Values.logs.cleanup_interval_sec | quote }}
-
-        {{- if eq .Values.logs.persistence.type "aws" }}
-        - name: NP_MONITORING_LOGS_STORAGE_TYPE
-          value: s3
-        - name: NP_MONITORING_S3_ACCESS_KEY_ID
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
-              key: access_key_id
-        - name: NP_MONITORING_S3_SECRET_ACCESS_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
-              key: secret_access_key
-        {{- if .Values.logs.persistence.aws.region }}
-        - name: NP_MONITORING_S3_REGION
-          value: {{ .Values.logs.persistence.aws.region | quote }}
-        {{- end }}
-        {{- if .Values.logs.persistence.aws.endpoint }}
-        - name: NP_MONITORING_S3_ENDPOINT_URL
-          value: {{ .Values.logs.persistence.aws.endpoint | quote }}
-        {{- end }}
-        - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
-          value: {{ .Values.logs.persistence.aws.bucket | quote }}
-        - name: NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT
-          value: {{ include "platformMonitoring.logs.storage.s3.keyPrefixFormat" . | quote }}
-        {{- else if eq .Values.logs.persistence.type "gcp" }}
-        - name: NP_MONITORING_LOGS_STORAGE_TYPE
-          value: s3
-        - name: NP_MONITORING_S3_REGION
-          value: {{ .Values.logs.persistence.gcp.location | quote }}
-        - name: NP_MONITORING_S3_ACCESS_KEY_ID
-          value: minio_access_key
-        - name: NP_MONITORING_S3_SECRET_ACCESS_KEY
-          value: minio_secret_key
-        - name: NP_MONITORING_S3_ENDPOINT_URL
-          value: {{ include "platformMonitoring.minioGateway.endpoint" . }}
-        - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
-          value: {{ .Values.logs.persistence.gcp.bucket | quote }}
-        - name: NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT
-          value: {{ include "platformMonitoring.logs.storage.s3.keyPrefixFormat" . | quote }}
-        {{- else if eq .Values.logs.persistence.type "azure" }}
-        - name: NP_MONITORING_LOGS_STORAGE_TYPE
-          value: s3
-        - name: NP_MONITORING_S3_REGION
-          value: minio
-        - name: NP_MONITORING_S3_ACCESS_KEY_ID
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
-              key: account_name
-        - name: NP_MONITORING_S3_SECRET_ACCESS_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
-              key: account_key
-        - name: NP_MONITORING_S3_ENDPOINT_URL
-          value: {{ include "platformMonitoring.minioGateway.endpoint" . }}
-        - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
-          value: {{ .Values.logs.persistence.azure.bucket | quote }}
-        - name: NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT
-          value: {{ include "platformMonitoring.logs.storage.s3.keyPrefixFormat" . | quote }}
-        {{- else if eq .Values.logs.persistence.type "minio" }}
-        - name: NP_MONITORING_LOGS_STORAGE_TYPE
-          value: s3
-        - name: NP_MONITORING_S3_ENDPOINT_URL
-          value: {{ .Values.logs.persistence.minio.url | quote }}
-        - name: NP_MONITORING_S3_REGION
-          value: {{ .Values.logs.persistence.minio.region | quote }}
-        - name: NP_MONITORING_S3_ACCESS_KEY_ID
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
-              key: access_key
-        - name: NP_MONITORING_S3_SECRET_ACCESS_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
-              key: secret_key
-        - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
-          value: {{ .Values.logs.persistence.minio.bucket | quote }}
-        - name: NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT
-          value: {{ include "platformMonitoring.logs.storage.s3.keyPrefixFormat" . | quote }}
-        {{- else if eq .Values.logs.persistence.type "es" }}
-        - name: NP_MONITORING_LOGS_STORAGE_TYPE
-          value: elasticsearch
-        - name: NP_MONITORING_ES_HOSTS
-        {{- with .Values.logs.persistence.es }}
-          value: "http://{{ .host }}:{{ .port }}"
-        {{- end }}
-        {{- end }}
+          {{- include "platformMonitoring.env.common" . | nindent 10 }}
+          {{- if eq .Values.logs.persistence.type "es" }}
+          - name: NP_MONITORING_LOGS_STORAGE_TYPE
+            value: elasticsearch
+          - name: NP_MONITORING_ES_HOSTS
+          {{- with .Values.logs.persistence.es }}
+            value: "http://{{ .host }}:{{ .port }}"
+          {{- end }}
+          {{- else }}
+          {{- include "platformMonitoring.env.s3" . | indent 10 }}
+          {{- end }}
         volumeMounts:
-        - mountPath: {{ include "platformMonitoring.kubeAuthMountRoot" . }}
-          name: kube-api-data
-          readOnly: true
-      {{- if .Values.imagePullSecrets }}
-      imagePullSecrets: {{ toYaml .Values.imagePullSecrets | nindent 6 }}
+          {{- include "platformMonitoring.volumeMounts.common" . | nindent 10 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if .Values.priorityClassName }}
-      priorityClassName: {{ .Values.priorityClassName }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
       {{- end }}
       volumes:
-      - name: kube-api-data
-        projected:
-          sources:
-          - serviceAccountToken:
-              expirationSeconds: 3600
-              path: token
-          - configMap:
-              name: kube-root-ca.crt
-              items:
-              - key: ca.crt
-                path: ca.crt
+        {{- include "platformMonitoring.volumes.common" . | nindent 8 }}

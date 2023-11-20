@@ -125,9 +125,7 @@ async def platform_api_config(
 
 
 @pytest.fixture
-async def container_runtime_config(
-    in_minikube: bool, kube_container_runtime: str
-) -> ContainerRuntimeConfig:
+async def container_runtime_config(in_minikube: bool) -> ContainerRuntimeConfig:
     if in_minikube:
         url = URL("http://platform-container-runtime:9000")
     else:
@@ -137,7 +135,7 @@ async def container_runtime_config(
         "platform-container-runtime", url / "api/v1/ping", timeout_s=120
     )
     assert url.port
-    return ContainerRuntimeConfig(name=kube_container_runtime, port=url.port)
+    return ContainerRuntimeConfig(port=url.port)
 
 
 @pytest.fixture
@@ -181,7 +179,7 @@ async def es_client(es_config: ElasticsearchConfig) -> AsyncIterator[Elasticsear
 
 
 @pytest.fixture
-def s3_config(s3_logs_key_prefix_format: str) -> S3Config:
+def s3_config() -> S3Config:
     s3_url = get_service_url(service_name="minio")
     return S3Config(
         region="minio",
@@ -189,7 +187,6 @@ def s3_config(s3_logs_key_prefix_format: str) -> S3Config:
         secret_access_key="secret_key",
         endpoint_url=URL(s3_url),
         job_logs_bucket_name="logs",
-        job_logs_key_prefix_format=s3_logs_key_prefix_format,
     )
 
 
@@ -216,11 +213,6 @@ async def s3_logs_bucket(
     except s3_client_error(409):
         pass
     yield s3_config.job_logs_bucket_name
-
-
-@pytest.fixture
-def s3_logs_key_prefix_format() -> str:
-    return "kube.var.log.containers.{pod_name}_{namespace_name}_{container_name}"
 
 
 @pytest.fixture

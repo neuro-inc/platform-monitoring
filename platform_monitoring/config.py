@@ -15,19 +15,19 @@ class ServerConfig:
 @dataclass(frozen=True)
 class PlatformApiConfig:
     url: URL
-    token: str
+    token: str = field(repr=False)
 
 
 @dataclass(frozen=True)
 class PlatformAuthConfig:
     url: Optional[URL]
-    token: str
+    token: str = field(repr=False)
 
 
 @dataclass(frozen=True)
 class PlatformConfig:
     url: URL
-    token: str
+    token: str = field(repr=False)
 
 
 @dataclass(frozen=True)
@@ -41,7 +41,6 @@ class S3Config:
     access_key_id: str = field(repr=False)
     secret_access_key: str = field(repr=False)
     job_logs_bucket_name: str
-    job_logs_key_prefix_format: str
     endpoint_url: Optional[URL] = None
 
 
@@ -51,9 +50,17 @@ class LogsStorageType(str, enum.Enum):
 
 
 @dataclass(frozen=True)
+class LogsCompactConfig:
+    run_interval: float = 300
+    compact_interval: float = 3600
+    cleanup_interval: float = 3600
+
+
+@dataclass(frozen=True)
 class LogsConfig:
     storage_type: LogsStorageType
     cleanup_interval_sec: float = 15 * 60  # 15m
+    compact: LogsCompactConfig = LogsCompactConfig()
 
 
 class KubeClientAuthType(str, enum.Enum):
@@ -70,13 +77,13 @@ class CORSConfig:
 @dataclass(frozen=True)
 class KubeConfig:
     endpoint_url: str
-    cert_authority_data_pem: Optional[str] = None
+    cert_authority_data_pem: Optional[str] = field(default=None, repr=False)
     cert_authority_path: Optional[str] = None
     auth_type: KubeClientAuthType = KubeClientAuthType.CERTIFICATE
-    auth_cert_path: Optional[str] = None
+    auth_cert_path: Optional[str] = field(default=None, repr=False)
     auth_cert_key_path: Optional[str] = None
     token_path: Optional[str] = None
-    token: Optional[str] = None
+    token: Optional[str] = field(default=None, repr=False)
     namespace: str = "default"
     client_conn_timeout_s: int = 300
     client_read_timeout_s: int = 300
@@ -102,7 +109,6 @@ class RegistryConfig:
 
 @dataclass(frozen=True)
 class ContainerRuntimeConfig:
-    name: str
     port: int = 9000
 
 

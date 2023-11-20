@@ -31,7 +31,7 @@ from platform_monitoring.config import Config, ContainerRuntimeConfig, PlatformA
 
 from .conftest import ApiAddress, create_local_app_server, random_str
 from .conftest_auth import _User
-from tests.integration.conftest_kube import MyKubeClient
+from .conftest_kube import MyKubeClient
 
 
 async def expect_prompt(ws: aiohttp.ClientWebSocketResponse) -> bytes:
@@ -935,7 +935,7 @@ class TestSaveApi:
         jobs_client: JobsClient,
         infinite_job: str,
     ) -> None:
-        invalid_runtime_config = ContainerRuntimeConfig(name="docker", port=1)
+        invalid_runtime_config = ContainerRuntimeConfig(port=1)
         config = config_factory(container_runtime=invalid_runtime_config)
 
         app = await create_app(config)

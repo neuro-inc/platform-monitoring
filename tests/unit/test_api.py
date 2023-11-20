@@ -33,7 +33,7 @@ def config_factory() -> Callable[[LogsStorageType], Config]:
             platform_auth=None,  # type: ignore
             platform_config=None,  # type: ignore
             kube=KubeConfig(""),
-            container_runtime=ContainerRuntimeConfig(name="docker"),
+            container_runtime=ContainerRuntimeConfig(),
             registry=None,  # type: ignore
             cors=None,  # type: ignore
             logs=LogsConfig(storage_type=storage_type),
@@ -42,7 +42,6 @@ def config_factory() -> Callable[[LogsStorageType], Config]:
                 access_key_id="access_key",
                 secret_access_key="secret_key",
                 job_logs_bucket_name="logs",
-                job_logs_key_prefix_format="format",
             ),
         )
 

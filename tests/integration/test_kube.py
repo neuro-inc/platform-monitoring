@@ -1673,34 +1673,47 @@ class TestS3FileReader:
 
 
 class TestS3LogsMetadataStorage:
-    async def test_get(self, s3_client: AioBaseClient, s3_logs_bucket: str) -> None:
+    @pytest.mark.parametrize("cache_metadata", (True, False))
+    async def test_get(
+        self, s3_client: AioBaseClient, s3_logs_bucket: str, cache_metadata: bool
+    ) -> None:
         pod_name = f"test-{uuid.uuid4()}"
         metadata = S3LogsMetadata(
             last_compaction_time=datetime(2023, 1, 2), last_merged_key="key"
         )
-        storage = S3LogsMetadataStorage(s3_client, s3_logs_bucket)
+        storage = S3LogsMetadataStorage(
+            s3_client, s3_logs_bucket, cache_metadata=cache_metadata
+        )
 
         await storage.put(pod_name, metadata)
         result = await storage.get(pod_name)
 
         assert result == metadata
 
+    @pytest.mark.parametrize("cache_metadata", (True, False))
     async def test_get__no_key(
-        self, s3_client: AioBaseClient, s3_logs_bucket: str
+        self, s3_client: AioBaseClient, s3_logs_bucket: str, cache_metadata: bool
     ) -> None:
         pod_name = f"test-{uuid.uuid4()}"
-        storage = S3LogsMetadataStorage(s3_client, s3_logs_bucket)
+        storage = S3LogsMetadataStorage(
+            s3_client, s3_logs_bucket, cache_metadata=cache_metadata
+        )
 
         result = await storage.get(pod_name)
 
         assert result == S3LogsMetadata()
 
-    async def test_put(self, s3_client: AioBaseClient, s3_logs_bucket: str) -> None:
+    @pytest.mark.parametrize("cache_metadata", (True, False))
+    async def test_put(
+        self, s3_client: AioBaseClient, s3_logs_bucket: str, cache_metadata: bool
+    ) -> None:
         pod_name = f"test-{uuid.uuid4()}"
         metadata = S3LogsMetadata(
             last_compaction_time=datetime(2023, 1, 2), last_merged_key="key"
         )
-        storage = S3LogsMetadataStorage(s3_client, s3_logs_bucket)
+        storage = S3LogsMetadataStorage(
+            s3_client, s3_logs_bucket, cache_metadata=cache_metadata
+        )
 
         await storage.put(pod_name, metadata)
         result = await storage.get(pod_name)

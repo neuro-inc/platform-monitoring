@@ -11,6 +11,7 @@ from platform_monitoring.config import (
     ElasticsearchConfig,
     KubeClientAuthType,
     KubeConfig,
+    LogsCompactConfig,
     LogsConfig,
     LogsStorageType,
     PlatformApiConfig,
@@ -46,7 +47,6 @@ def token_path(tmp_path: Path) -> str:
 def environ(cert_authority_path: str, token_path: str) -> dict[str, Any]:
     return {
         "NP_MONITORING_CLUSTER_NAME": "default",
-        "NP_MONITORING_CONTAINER_RUNTIME_NAME": "docker",
         "NP_MONITORING_CONTAINER_RUNTIME_PORT": "1234",
         "NP_MONITORING_API_HOST": "0.0.0.0",
         "NP_MONITORING_API_PORT": 8080,
@@ -109,7 +109,7 @@ def test_create(environ: dict[str, Any], token_path: str) -> None:
             nvidia_dcgm_node_port=12322,
         ),
         registry=RegistryConfig(url=URL("http://testhost:5000")),
-        container_runtime=ContainerRuntimeConfig(name="docker", port=1234),
+        container_runtime=ContainerRuntimeConfig(port=1234),
         cors=CORSConfig(["https://domain1.com", "http://do.main"]),
         zipkin=ZipkinConfig(url=URL("https://zipkin:9411")),
         sentry=SentryConfig(dsn=URL("https://sentry"), cluster_name="test"),
@@ -139,7 +139,6 @@ def test_create_with_s3(environ: dict[str, Any]) -> None:
     environ["NP_MONITORING_S3_ACCESS_KEY_ID"] = "access_key"
     environ["NP_MONITORING_S3_SECRET_ACCESS_KEY"] = "secret_access_key"
     environ["NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME"] = "logs"
-    environ["NP_MONITORING_S3_JOB_LOGS_KEY_PREFIX_FORMAT"] = "format"
 
     config = EnvironConfigFactory(environ).create()
 
@@ -148,7 +147,6 @@ def test_create_with_s3(environ: dict[str, Any]) -> None:
         access_key_id="access_key",
         secret_access_key="secret_access_key",
         job_logs_bucket_name="logs",
-        job_logs_key_prefix_format="format",
     )
 
     environ["NP_MONITORING_S3_ENDPOINT_URL"] = "http://minio:9000"
@@ -157,6 +155,18 @@ def test_create_with_s3(environ: dict[str, Any]) -> None:
 
     assert config.s3
     assert config.s3.endpoint_url == URL("http://minio:9000")
+
+
+def test_create_with_logs_compact(environ: dict[str, Any]) -> None:
+    environ["NP_MONITORING_LOGS_COMPACT_RUN_INTERVAL"] = "1"
+    environ["NP_MONITORING_LOGS_COMPACT_COMPACT_INTERVAL"] = "2"
+    environ["NP_MONITORING_LOGS_COMPACT_CLEANUP_INTERVAL"] = "3"
+
+    config = EnvironConfigFactory(environ).create()
+
+    assert config.logs.compact == LogsCompactConfig(
+        run_interval=1.0, compact_interval=2.0, cleanup_interval=3.0
+    )
 
 
 def test_create_without_es_and_s3(environ: dict[str, Any]) -> None:
