@@ -660,7 +660,7 @@ class S3LogRecordsWriter:
         pod_name: str,
         size_limit: int = 10 * 1024**2,
         buffer: IO[bytes] | None = None,
-        write_buffer_attempts: int = 3,
+        write_buffer_attempts: int = 4,
         write_buffer_timeout: int = 10,
     ) -> None:
         self._s3_client = s3_client
@@ -721,9 +721,9 @@ class S3LogRecordsWriter:
         self._records_count = 0
         self._size = 0
 
-    async def _put_buffer_to_s3(self, key: str, attempts: int = 3) -> None:
+    async def _put_buffer_to_s3(self, key: str) -> None:
         last_err = None
-        for _ in range(attempts):
+        for _ in range(self._write_buffer_attempts):
             try:
                 await asyncio.wait_for(
                     self._s3_client.put_object(
@@ -732,7 +732,7 @@ class S3LogRecordsWriter:
                         Body=self._buffer,
                         ContentType="application/x-gzip",
                     ),
-                    10,
+                    self._write_buffer_timeout,
                 )
                 return
             except asyncio.TimeoutError as err:
