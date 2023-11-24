@@ -42,6 +42,7 @@ class S3Config:
     secret_access_key: str = field(repr=False)
     job_logs_bucket_name: str
     endpoint_url: Optional[URL] = None
+    read_timeout: float = 300
 
 
 class LogsStorageType(str, enum.Enum):
@@ -102,7 +103,7 @@ class RegistryConfig:
 
     @property
     def host(self) -> str:
-        port = self.url.explicit_port  # type: ignore
+        port = self.url.explicit_port
         suffix = f":{port}" if port else ""
         return f"{self.url.host}{suffix}"
 

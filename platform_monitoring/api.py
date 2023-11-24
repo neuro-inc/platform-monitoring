@@ -15,6 +15,7 @@ import aiohttp.hdrs
 import aiohttp.web
 import aiohttp_cors
 from aiobotocore.client import AioBaseClient
+from aiobotocore.config import AioConfig
 from aioelasticsearch import Elasticsearch
 from aiohttp.client_ws import ClientWebSocketResponse
 from aiohttp.web import (
@@ -690,7 +691,7 @@ async def create_elasticsearch_client(
 
 
 def create_s3_client(config: S3Config) -> AioBaseClient:
-    kwargs: dict[str, str] = {}
+    kwargs: dict[str, Any] = {}
     if config.access_key_id:
         kwargs["aws_access_key_id"] = config.access_key_id
     if config.secret_access_key:
@@ -699,6 +700,14 @@ def create_s3_client(config: S3Config) -> AioBaseClient:
         kwargs["endpoint_url"] = str(config.endpoint_url)
     if config.region:
         kwargs["region_name"] = config.region
+    kwargs["config"] = {
+        "retries": {"mode": "standard"},  # 3 retries by default
+        "read_timeout": config.read_timeout,
+    }
+    kwargs["config"] = AioConfig(
+        retries={"mode": "standard"},  # 3 retries by default
+        read_timeout=config.read_timeout,
+    )
     session = aiobotocore.session.get_session()
     return session.create_client("s3", **kwargs)
 

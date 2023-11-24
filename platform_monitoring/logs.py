@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import abc
 import asyncio
-import functools
 import io
-import json
 import logging
 import sys
 import time
@@ -18,6 +16,7 @@ from typing import IO, Any
 
 import aiohttp
 import botocore.exceptions
+import orjson
 from aiobotocore.client import AioBaseClient
 from aiobotocore.response import StreamingBody
 from aioelasticsearch import Elasticsearch, RequestError
@@ -388,16 +387,13 @@ class S3LogsMetadataStorage:
 
     @trace
     async def _get_from_s3(self, pod_name: str) -> S3LogsMetadata:
-        get_object = functools.partial(
-            self._s3_client.get_object,
+        response = await self._s3_client.get_object(
             Bucket=self._bucket_name,
             Key=self.get_metadata_key(pod_name),
         )
-        resp = await retry_if_failed(get_object)
-        resp_body = resp["Body"]
-        async with resp_body:
-            raw_data = await resp_body.read()
-            data = json.loads(raw_data)
+        async with response["Body"]:
+            raw_data = await response["Body"].read()
+            data = orjson.loads(raw_data)
             return S3LogsMetadata.from_primitive(data)
 
     async def put(self, pod_name: str, metadata: S3LogsMetadata) -> None:
@@ -407,13 +403,11 @@ class S3LogsMetadataStorage:
 
     @trace
     async def _put_to_s3(self, pod_name: str, metadata: S3LogsMetadata) -> None:
-        put_object = functools.partial(
-            self._s3_client.put_object,
+        await self._s3_client.put_object(
             Bucket=self._bucket_name,
             Key=self.get_metadata_key(pod_name),
-            Body=json.dumps(metadata.to_primitive()).encode(),
+            Body=orjson.dumps(metadata.to_primitive()),
         )
-        await retry_if_failed(put_object)
 
 
 class S3LogsMetadataService:
@@ -529,22 +523,17 @@ class S3LogsMetadataService:
 
     @trace
     async def add_pod_to_cleanup_queue(self, pod_name: str) -> None:
-        put_object = functools.partial(
-            self._s3_client.put_object,
+        await self._s3_client.put_object(
             Bucket=self.bucket_name,
             Key=f"{self.CLEANUP_KEY_PREFIX}/{pod_name}",
             Body=b"",
         )
-        await retry_if_failed(put_object)
 
     @trace
     async def remove_pod_from_cleanup_queue(self, pod_name: str) -> None:
-        delete_object = functools.partial(
-            self._s3_client.delete_object,
-            Bucket=self.bucket_name,
-            Key=f"{self.CLEANUP_KEY_PREFIX}/{pod_name}",
+        await self._s3_client.delete_object(
+            Bucket=self.bucket_name, Key=f"{self.CLEANUP_KEY_PREFIX}/{pod_name}"
         )
-        await retry_if_failed(delete_object)
 
 
 @dataclass(frozen=True)
@@ -559,7 +548,7 @@ class S3LogRecord:
     def parse(
         cls, line: bytes, fallback_time: datetime, *, container_id: str
     ) -> S3LogRecord:
-        data = json.loads(line.decode(errors="replace"))
+        data = orjson.loads(line.decode(errors="replace"))
         time_str, time = cls._parse_time(data, fallback_time)
         return cls(
             time_str=time_str,
@@ -618,17 +607,15 @@ class S3FileReader:
         return response["ContentType"] == "application/x-gzip"
 
     async def iter_lines(self) -> AsyncIterator[bytes]:
-        get_object = functools.partial(
-            self._s3_client.get_object, Bucket=self._bucket_name, Key=self._key
+        response = await self._s3_client.get_object(
+            Bucket=self._bucket_name, Key=self._key
         )
-        response = await retry_if_failed(get_object)
-        response_body = response["Body"]
 
-        async with response_body:
+        async with response["Body"]:
             if self._is_compressed(response):
-                line_iterator = self._iter_decompressed_lines(response_body)
+                line_iterator = self._iter_decompressed_lines(response["Body"])
             else:
-                line_iterator = response_body.iter_lines()
+                line_iterator = response["Body"].iter_lines()
 
             async with aclosing(line_iterator):
                 async for line in line_iterator:
@@ -645,12 +632,22 @@ class S3FileReader:
             chunk_d = await loop.run_in_executor(
                 None, lambda: decompress_obj.decompress(chunk)
             )
-            lines = (pending + chunk_d).splitlines(True)
-            for line in lines[:-1]:
-                yield line.splitlines()[0]
-            pending = lines[-1]
+            if chunk_d:
+                lines = chunk_d.splitlines()
+                lines[0] = pending + lines[0]
+                for i in range(len(lines) - 1):
+                    yield lines[i]
+                if chunk_d.endswith(b"\n"):
+                    pending = b""
+                    yield lines[-1]
+                else:
+                    pending = lines[-1]
+        chunk_d = await loop.run_in_executor(None, decompress_obj.flush)
+        if chunk_d:
+            pending += chunk_d
         if pending:
-            yield pending.splitlines()[0]
+            for line in pending.splitlines():
+                yield line
 
 
 class S3LogRecordsWriter:
@@ -663,10 +660,14 @@ class S3LogRecordsWriter:
         pod_name: str,
         size_limit: int = 10 * 1024**2,
         buffer: IO[bytes] | None = None,
+        write_buffer_attempts: int = 3,
+        write_buffer_timeout: int = 10,
     ) -> None:
         self._s3_client = s3_client
         self._bucket_name = bucket_name
         self._size_limit = size_limit
+        self._write_buffer_attempts = write_buffer_attempts
+        self._write_buffer_timeout = write_buffer_timeout
 
         self._buffer = io.BytesIO() if buffer is None else buffer
         self._buffer.seek(0)
@@ -712,20 +713,34 @@ class S3LogRecordsWriter:
             last_record_time=self._last_record_time,
         )
         logger.info("Flushing records to %s", file)
-        put_object = functools.partial(
-            self._s3_client.put_object,
-            Bucket=self._bucket_name,
-            Key=key,
-            Body=self._buffer,
-            ContentType="application/x-gzip",
-        )
-        await retry_if_failed(put_object)
+        await self._put_buffer_to_s3(key)
         self._output_files.append(file)
         self._compress_obj = zlib.compressobj(wbits=ZLIB_WBITS)
         self._buffer.seek(0)
         self._buffer.truncate(0)
         self._records_count = 0
         self._size = 0
+
+    async def _put_buffer_to_s3(self, key: str, attempts: int = 3) -> None:
+        last_err = None
+        for _ in range(attempts):
+            try:
+                await asyncio.wait_for(
+                    self._s3_client.put_object(
+                        Bucket=self._bucket_name,
+                        Key=key,
+                        Body=self._buffer,
+                        ContentType="application/x-gzip",
+                    ),
+                    10,
+                )
+                return
+            except asyncio.TimeoutError as err:
+                last_err = err
+                logger.warning("Timeout while flushing records")
+        else:
+            assert last_err
+            raise last_err
 
     async def write(self, record: S3LogRecord) -> None:
         if self._size and self._container_id != record.container_id:
@@ -750,8 +765,7 @@ class S3LogRecordsWriter:
         body = {"time": record.time_str, "log": record.message}
         if record.stream != S3LogRecord.stream:
             body["stream"] = record.stream
-        body_str = json.dumps(body) + "\n"
-        return body_str.encode()
+        return orjson.dumps(body) + b"\n"
 
     def get_output_files(self) -> list[S3LogFile]:
         return self._output_files.copy()
@@ -1304,10 +1318,7 @@ class S3LogsService(BaseLogsService):
 
     @trace
     async def _delete_key(self, key: str) -> None:
-        delete_object = functools.partial(
-            self._s3_client.delete_object, Bucket=self._bucket_name, Key=key
-        )
-        await retry_if_failed(delete_object)
+        await self._s3_client.delete_object(Bucket=self._bucket_name, Key=key)
 
 
 async def get_first_log_entry_time(
@@ -1360,31 +1371,3 @@ def s3_client_error(code: str | int) -> type[Exception]:
     ):
         return botocore.exceptions.ClientError
     return UnknownS3Error
-
-
-async def retry_if_failed(
-    partial: Any,
-    attempts: int = 6,
-    sleep_seconds: float = 10,
-    exceptions: tuple[type[BaseException], ...] | None = None,
-) -> Any:
-    if exceptions is None:
-        exceptions = (botocore.exceptions.EndpointConnectionError,)
-    last_err = None
-    for attempt in range(attempts):
-        try:
-            return await partial()
-        except exceptions as err:
-            last_err = err
-            logger.error(
-                "Unable to connect to the endpoint. Check your network connection. "
-                "Sleeping and retrying %d more times "
-                "before giving up." % (attempts - attempt - 1)
-            )
-            await asyncio.sleep(sleep_seconds)
-    else:
-        logger.error(
-            "Unable to connect to the endpoint after %d attempts. Giving up.", attempts
-        )
-        assert last_err
-        raise last_err

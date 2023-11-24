@@ -2232,7 +2232,7 @@ class TestS3LogRecordWriter:
             S3LogFile(
                 key=mock.ANY,
                 records_count=3,
-                size=173,
+                size=162,
                 first_record_time=records[0].time,
                 last_record_time=records[2].time,
             )
@@ -2253,14 +2253,14 @@ class TestS3LogRecordWriter:
             S3LogFile(
                 key=mock.ANY,
                 records_count=2,
-                size=102,
+                size=96,
                 first_record_time=records[0].time,
                 last_record_time=records[1].time,
             ),
             S3LogFile(
                 key=mock.ANY,
                 records_count=1,
-                size=71,
+                size=66,
                 first_record_time=records[2].time,
                 last_record_time=records[2].time,
             ),
@@ -2281,21 +2281,21 @@ class TestS3LogRecordWriter:
             S3LogFile(
                 key=mock.ANY,
                 records_count=1,
-                size=51,
+                size=48,
                 first_record_time=records[0].time,
                 last_record_time=records[0].time,
             ),
             S3LogFile(
                 key=mock.ANY,
                 records_count=1,
-                size=51,
+                size=48,
                 first_record_time=records[1].time,
                 last_record_time=records[1].time,
             ),
             S3LogFile(
                 key=mock.ANY,
                 records_count=1,
-                size=71,
+                size=66,
                 first_record_time=records[2].time,
                 last_record_time=records[2].time,
             ),
@@ -2324,7 +2324,7 @@ class TestS3LogRecordWriter:
             S3LogFile(
                 key=mock.ANY,
                 records_count=3,
-                size=173,
+                size=162,
                 first_record_time=records[0].time,
                 last_record_time=records[2].time,
             ),
@@ -2362,8 +2362,8 @@ class TestS3LogsService:
             f"{raw_log_key_prefix}-c1.log/202301011234_1.gz",
         ]
         records = [
-            '{"time": "2023-01-01T12:34:56.123456", "log": "1"}',
-            '{"time": "2023-01-01T12:34:57.123456", "log": "2"}',
+            '{"time":"2023-01-01T12:34:56.123456","log":"1"}',
+            '{"time":"2023-01-01T12:34:57.123456","log":"2"}',
         ]
 
         await write_lines_to_s3(pod_keys[0], records[0])
@@ -2400,8 +2400,8 @@ class TestS3LogsService:
             f"{raw_log_key_prefix}-c1.log/202301011234_1.gz",
         ]
         records = [
-            '{"time": "2023-01-01T12:34:56.123456", "log": "1"}',
-            '{"time": "2023-01-01T12:34:57.123456", "log": "2"}',
+            '{"time":"2023-01-01T12:34:56.123456","log":"1"}',
+            '{"time":"2023-01-01T12:34:57.123456","log":"2"}',
         ]
 
         await write_lines_to_s3(pod_keys[0], records[0])
