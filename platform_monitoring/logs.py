@@ -1206,7 +1206,7 @@ class S3LogsService(BaseLogsService):
     async def compact_one(self, pod_name: str) -> None:
         await self._metadata_service.add_pod_to_cleanup_queue(pod_name)
         metadata = await self._metadata_service.get_metadata(pod_name)
-        logger.info("Compacting pod %s, %s", pod_name, metadata)
+        logger.info("Compacting pod %s with %s", pod_name, metadata)
         raw_keys = await self._metadata_service.get_raw_log_keys(pod_name)
         raw_keys = await self._delete_merged_keys(metadata, raw_keys)
         await self._delete_orphaned_keys(pod_name, metadata)
@@ -1216,7 +1216,7 @@ class S3LogsService(BaseLogsService):
     @trace
     async def cleanup_one(self, pod_name: str) -> None:
         metadata = await self._metadata_service.get_metadata(pod_name)
-        logger.info("Cleaning pod %s, %s", pod_name, metadata)
+        logger.info("Cleaning pod %s with %s", pod_name, metadata)
         raw_keys = await self._metadata_service.get_raw_log_keys(pod_name)
         raw_keys = await self._delete_merged_keys(metadata, raw_keys)
         await self._delete_orphaned_keys(pod_name, metadata)
