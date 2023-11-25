@@ -9,7 +9,7 @@ COPY dist /tmp/dist
 RUN ls /tmp/dist
 RUN pip install --user --find-links /tmp/dist platform-monitoring
 
-FROM python:3.9.9-slim-bullseye AS service
+FROM python:3.9.18-slim-bookworm AS service
 
 LABEL org.opencontainers.image.source = "https://github.com/neuro-inc/platform-monitoring"
 
