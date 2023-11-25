@@ -42,7 +42,6 @@ class S3Config:
     secret_access_key: str = field(repr=False)
     job_logs_bucket_name: str
     endpoint_url: Optional[URL] = None
-    read_timeout: float = 300
 
 
 class LogsStorageType(str, enum.Enum):

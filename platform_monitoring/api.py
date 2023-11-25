@@ -700,13 +700,8 @@ def create_s3_client(config: S3Config) -> AioBaseClient:
         kwargs["endpoint_url"] = str(config.endpoint_url)
     if config.region:
         kwargs["region_name"] = config.region
-    kwargs["config"] = {
-        "retries": {"mode": "standard"},  # 3 retries by default
-        "read_timeout": config.read_timeout,
-    }
     kwargs["config"] = AioConfig(
         retries={"mode": "standard"},  # 3 retries by default
-        read_timeout=config.read_timeout,
     )
     session = aiobotocore.session.get_session()
     return session.create_client("s3", **kwargs)

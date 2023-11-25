@@ -596,10 +596,17 @@ class S3LogRecord:
 
 
 class S3FileReader:
-    def __init__(self, s3_client: AioBaseClient, bucket_name: str, key: str) -> None:
+    def __init__(
+        self,
+        s3_client: AioBaseClient,
+        bucket_name: str,
+        key: str,
+        chunk_size: int = 1024,
+    ) -> None:
         self._s3_client = s3_client
         self._bucket_name = bucket_name
         self._key = key
+        self._chunk_size = chunk_size
         self._loop = asyncio.get_event_loop()
 
     @classmethod
@@ -615,20 +622,19 @@ class S3FileReader:
             if self._is_compressed(response):
                 line_iterator = self._iter_decompressed_lines(response["Body"])
             else:
-                line_iterator = response["Body"].iter_lines()
+                line_iterator = response["Body"].iter_lines(chunk_size=self._chunk_size)
 
             async with aclosing(line_iterator):
                 async for line in line_iterator:
                     yield line
 
-    @classmethod
     async def _iter_decompressed_lines(
-        cls, body: StreamingBody
+        self, body: StreamingBody
     ) -> AsyncIterator[bytes]:
         loop = asyncio.get_event_loop()
         decompress_obj = zlib.decompressobj(wbits=ZLIB_WBITS)
         pending = b""
-        async for chunk in body.iter_chunks():
+        async for chunk in body.iter_chunks(chunk_size=self._chunk_size):
             chunk_d = await loop.run_in_executor(
                 None, lambda: decompress_obj.decompress(chunk)
             )
@@ -1251,6 +1257,10 @@ class S3LogsService(BaseLogsService):
         return metadata
 
     def _create_log_record_writer(self, pod_name: str) -> S3LogRecordsWriter:
+        # NOTE: write_buffer_timeout must be less than S3Config.read_timeout.
+        # Buffer flushing can happen while compactor is reading the raw log file.
+        # So it should be acceptable for flushing to fail several times
+        # while the file is being read.
         return S3LogRecordsWriter(
             self._s3_client,
             self._bucket_name,

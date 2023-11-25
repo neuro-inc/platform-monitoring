@@ -1654,18 +1654,34 @@ async def write_lines_to_s3(
 
 
 class TestS3FileReader:
-    @pytest.mark.parametrize("compress", [False, True])
-    async def test_iter_lines(
+    async def test_iter_lines__without_compression(
         self,
         s3_client: AioBaseClient,
         s3_logs_bucket: str,
         write_lines_to_s3: Callable[..., Awaitable[None]],
-        compress: bool,
     ) -> None:
         key = f"tests/{uuid.uuid4()}"
         reader = S3FileReader(s3_client, s3_logs_bucket, key)
 
-        await write_lines_to_s3(key, "1", "2", "3", compress=compress)
+        await write_lines_to_s3(key, "1", "2", "3")
+
+        result = [line async for line in reader.iter_lines()]
+
+        assert result == [b"1", b"2", b"3"]
+
+    async def test_iter_lines__with_compression(
+        self,
+        s3_client: AioBaseClient,
+        s3_logs_bucket: str,
+        write_lines_to_s3: Callable[..., Awaitable[None]],
+    ) -> None:
+        key = f"tests/{uuid.uuid4()}"
+        # chunk_size = 1 will for DecompressObj to periodically
+        # keep decompressed data in internal buffer and not return
+        # it to the caller.
+        reader = S3FileReader(s3_client, s3_logs_bucket, key, chunk_size=1)
+
+        await write_lines_to_s3(key, "1", "2", "3", compress=True)
 
         result = [line async for line in reader.iter_lines()]
 
