@@ -1257,10 +1257,10 @@ class S3LogsService(BaseLogsService):
         return metadata
 
     def _create_log_record_writer(self, pod_name: str) -> S3LogRecordsWriter:
-        # NOTE: write_buffer_timeout must be less than S3Config.read_timeout.
-        # Buffer flushing can happen while compactor is reading the raw log file.
-        # So it should be acceptable for flushing to fail several times
-        # while the file is being read.
+        # NOTE: write_buffer_timeout must be less than s3_client read_timeout,
+        # which is 60s by default. Buffer flushing can happen while compactor
+        # is reading the raw log file. So it should be acceptable for flushing
+        # to be retried several times while the file is being read.
         return S3LogRecordsWriter(
             self._s3_client,
             self._bucket_name,
