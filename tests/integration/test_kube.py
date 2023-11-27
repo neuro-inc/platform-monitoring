@@ -1654,18 +1654,34 @@ async def write_lines_to_s3(
 
 
 class TestS3FileReader:
-    @pytest.mark.parametrize("compress", [False, True])
-    async def test_iter_lines(
+    async def test_iter_lines__without_compression(
         self,
         s3_client: AioBaseClient,
         s3_logs_bucket: str,
         write_lines_to_s3: Callable[..., Awaitable[None]],
-        compress: bool,
     ) -> None:
         key = f"tests/{uuid.uuid4()}"
         reader = S3FileReader(s3_client, s3_logs_bucket, key)
 
-        await write_lines_to_s3(key, "1", "2", "3", compress=compress)
+        await write_lines_to_s3(key, "1", "2", "3")
+
+        result = [line async for line in reader.iter_lines()]
+
+        assert result == [b"1", b"2", b"3"]
+
+    async def test_iter_lines__with_compression(
+        self,
+        s3_client: AioBaseClient,
+        s3_logs_bucket: str,
+        write_lines_to_s3: Callable[..., Awaitable[None]],
+    ) -> None:
+        key = f"tests/{uuid.uuid4()}"
+        # chunk_size = 1 will for DecompressObj to periodically
+        # keep decompressed data in internal buffer and not return
+        # it to the caller.
+        reader = S3FileReader(s3_client, s3_logs_bucket, key, chunk_size=1)
+
+        await write_lines_to_s3(key, "1", "2", "3", compress=True)
 
         result = [line async for line in reader.iter_lines()]
 
@@ -2232,7 +2248,7 @@ class TestS3LogRecordWriter:
             S3LogFile(
                 key=mock.ANY,
                 records_count=3,
-                size=173,
+                size=162,
                 first_record_time=records[0].time,
                 last_record_time=records[2].time,
             )
@@ -2253,14 +2269,14 @@ class TestS3LogRecordWriter:
             S3LogFile(
                 key=mock.ANY,
                 records_count=2,
-                size=102,
+                size=96,
                 first_record_time=records[0].time,
                 last_record_time=records[1].time,
             ),
             S3LogFile(
                 key=mock.ANY,
                 records_count=1,
-                size=71,
+                size=66,
                 first_record_time=records[2].time,
                 last_record_time=records[2].time,
             ),
@@ -2281,21 +2297,21 @@ class TestS3LogRecordWriter:
             S3LogFile(
                 key=mock.ANY,
                 records_count=1,
-                size=51,
+                size=48,
                 first_record_time=records[0].time,
                 last_record_time=records[0].time,
             ),
             S3LogFile(
                 key=mock.ANY,
                 records_count=1,
-                size=51,
+                size=48,
                 first_record_time=records[1].time,
                 last_record_time=records[1].time,
             ),
             S3LogFile(
                 key=mock.ANY,
                 records_count=1,
-                size=71,
+                size=66,
                 first_record_time=records[2].time,
                 last_record_time=records[2].time,
             ),
@@ -2324,7 +2340,7 @@ class TestS3LogRecordWriter:
             S3LogFile(
                 key=mock.ANY,
                 records_count=3,
-                size=173,
+                size=162,
                 first_record_time=records[0].time,
                 last_record_time=records[2].time,
             ),
@@ -2362,8 +2378,8 @@ class TestS3LogsService:
             f"{raw_log_key_prefix}-c1.log/202301011234_1.gz",
         ]
         records = [
-            '{"time": "2023-01-01T12:34:56.123456", "log": "1"}',
-            '{"time": "2023-01-01T12:34:57.123456", "log": "2"}',
+            '{"time":"2023-01-01T12:34:56.123456","log":"1"}',
+            '{"time":"2023-01-01T12:34:57.123456","log":"2"}',
         ]
 
         await write_lines_to_s3(pod_keys[0], records[0])
@@ -2400,8 +2416,8 @@ class TestS3LogsService:
             f"{raw_log_key_prefix}-c1.log/202301011234_1.gz",
         ]
         records = [
-            '{"time": "2023-01-01T12:34:56.123456", "log": "1"}',
-            '{"time": "2023-01-01T12:34:57.123456", "log": "2"}',
+            '{"time":"2023-01-01T12:34:56.123456","log":"1"}',
+            '{"time":"2023-01-01T12:34:57.123456","log":"2"}',
         ]
 
         await write_lines_to_s3(pod_keys[0], records[0])

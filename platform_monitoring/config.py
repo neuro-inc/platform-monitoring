@@ -102,7 +102,7 @@ class RegistryConfig:
 
     @property
     def host(self) -> str:
-        port = self.url.explicit_port  # type: ignore
+        port = self.url.explicit_port
         suffix = f":{port}" if port else ""
         return f"{self.url.host}{suffix}"
 

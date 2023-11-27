@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import uuid1
 
-import aiobotocore.session
 import aiohttp
 import aiohttp.web
 import pytest
@@ -19,7 +18,7 @@ from aioelasticsearch import Elasticsearch
 from async_timeout import timeout
 from yarl import URL
 
-from platform_monitoring.api import create_elasticsearch_client
+from platform_monitoring.api import create_elasticsearch_client, create_s3_client
 from platform_monitoring.config import (
     Config,
     ContainerRuntimeConfig,
@@ -192,14 +191,7 @@ def s3_config() -> S3Config:
 
 @pytest.fixture
 async def s3_client(s3_config: S3Config) -> AsyncIterator[AioBaseClient]:
-    session = aiobotocore.session.get_session()
-    async with session.create_client(
-        "s3",
-        endpoint_url=str(s3_config.endpoint_url),
-        region_name=s3_config.region,
-        aws_access_key_id=s3_config.access_key_id,
-        aws_secret_access_key=s3_config.secret_access_key,
-    ) as client:
+    async with create_s3_client(s3_config) as client:
         yield client
 
 
