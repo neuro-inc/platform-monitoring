@@ -22,7 +22,6 @@ from platform_monitoring.api import create_elasticsearch_client, create_s3_clien
 from platform_monitoring.config import (
     Config,
     ContainerRuntimeConfig,
-    CORSConfig,
     ElasticsearchConfig,
     KubeConfig,
     LogsConfig,
@@ -242,7 +241,6 @@ def config_factory(
             kube=kube_config,
             registry=registry_config,
             container_runtime=container_runtime_config,
-            cors=CORSConfig(allowed_origins=["https://neu.ro"]),
         )
         kwargs = {**defaults, **kwargs}
         return Config(**kwargs)

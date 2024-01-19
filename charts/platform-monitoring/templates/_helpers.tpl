@@ -110,10 +110,6 @@ release: {{ .Release.Name | quote }}
 - name: NP_MONITORING_K8S_NVIDIA_DCGM_PORT
   value: {{ .Values.nvidiaDCGMPort | quote }}
 {{- end }}
-{{- if .Values.cors.origins }}
-- name: NP_CORS_ORIGINS
-  value: {{ join "," .Values.cors.origins | quote }}
-{{- end }}
 {{- if .Values.zipkin }}
 - name: NP_ZIPKIN_URL
   value: {{ .Values.zipkin.url }}

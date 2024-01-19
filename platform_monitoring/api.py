@@ -13,7 +13,6 @@ import aiobotocore.session
 import aiohttp
 import aiohttp.hdrs
 import aiohttp.web
-import aiohttp_cors
 from aiobotocore.client import AioBaseClient
 from aiobotocore.config import AioConfig
 from aioelasticsearch import Elasticsearch
@@ -51,14 +50,7 @@ from neuro_sdk import (
 from yarl import URL
 
 from .base import JobStats, Telemetry
-from .config import (
-    Config,
-    CORSConfig,
-    ElasticsearchConfig,
-    KubeConfig,
-    LogsStorageType,
-    S3Config,
-)
+from .config import Config, ElasticsearchConfig, KubeConfig, LogsStorageType, S3Config
 from .config_factory import EnvironConfigFactory
 from .container_runtime_client import (
     ContainerNotFoundError,
@@ -754,24 +746,6 @@ def create_s3_logs_service(
     return S3LogsService(kube_client, s3_client, metadata_service)
 
 
-def _setup_cors(app: aiohttp.web.Application, config: CORSConfig) -> None:
-    if not config.allowed_origins:
-        return
-
-    logger.info(f"Setting up CORS with allowed origins: {config.allowed_origins}")
-    default_options = aiohttp_cors.ResourceOptions(
-        allow_credentials=True,
-        expose_headers="*",
-        allow_headers="*",
-    )
-    cors = aiohttp_cors.setup(
-        app, defaults={origin: default_options for origin in config.allowed_origins}
-    )
-    for route in app.router.routes():
-        logger.debug(f"Setting up CORS for {route}")
-        cors.add(route)
-
-
 package_version = version(__package__)
 
 
@@ -894,8 +868,6 @@ async def create_app(config: Config) -> aiohttp.web.Application:
     api_v1_app.add_subapp("/jobs", monitoring_app)
 
     app.add_subapp("/api/v1", api_v1_app)
-
-    _setup_cors(app, config.cors)
 
     app.on_response_prepare.append(add_version_to_header)
 

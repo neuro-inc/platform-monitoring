@@ -35,7 +35,6 @@ def config_factory() -> Callable[[LogsStorageType], Config]:
             kube=KubeConfig(""),
             container_runtime=ContainerRuntimeConfig(),
             registry=None,  # type: ignore
-            cors=None,  # type: ignore
             logs=LogsConfig(storage_type=storage_type),
             s3=S3Config(
                 region="us-east-1",

@@ -70,11 +70,6 @@ class KubeClientAuthType(str, enum.Enum):
 
 
 @dataclass(frozen=True)
-class CORSConfig:
-    allowed_origins: Sequence[str] = ()
-
-
-@dataclass(frozen=True)
 class KubeConfig:
     endpoint_url: str
     cert_authority_data_pem: Optional[str] = field(default=None, repr=False)
@@ -138,7 +133,6 @@ class Config:
     kube: KubeConfig
     container_runtime: ContainerRuntimeConfig
     registry: RegistryConfig
-    cors: CORSConfig
     elasticsearch: Optional[ElasticsearchConfig] = None
     s3: Optional[S3Config] = None
     zipkin: Optional[ZipkinConfig] = None

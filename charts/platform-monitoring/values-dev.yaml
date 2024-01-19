@@ -28,10 +28,6 @@ service:
     traefik.ingress.kubernetes.io/service.sticky.cookie: "true"
     traefik.ingress.kubernetes.io/service.sticky.cookie.name: NEURO_MONITORINGAPI_SESSION
 
-cors:
-  origins:
-  - '*'
-
 logs:
   persistence:
     type: gcp
