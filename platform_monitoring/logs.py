@@ -24,7 +24,7 @@ from aioelasticsearch.helpers import Scan
 from async_timeout import timeout
 from cachetools import LRUCache
 from iso8601 import UTC, ParseError
-from neuro_logging import trace
+from neuro_logging import trace, trace_cm
 
 from .base import LogReader
 from .kube_client import ContainerStatus, JobNotFoundException, KubeClient
@@ -377,15 +377,15 @@ class S3LogsMetadataStorage:
         if self._cache_metadata:
             metadata = self._cache.get(pod_name)
         if metadata is None:
-            try:
-                metadata = await self._get_from_s3(pod_name)
-            except s3_client_error("NoSuchKey"):
-                metadata = S3LogsMetadata()
-            if self._cache_metadata:
-                self._cache[pod_name] = metadata
+            async with trace_cm("get_from_s3"):
+                try:
+                    metadata = await self._get_from_s3(pod_name)
+                except s3_client_error("NoSuchKey"):
+                    metadata = S3LogsMetadata()
+                if self._cache_metadata:
+                    self._cache[pod_name] = metadata
         return metadata
 
-    @trace
     async def _get_from_s3(self, pod_name: str) -> S3LogsMetadata:
         response = await self._s3_client.get_object(
             Bucket=self._bucket_name,
