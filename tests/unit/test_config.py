@@ -7,7 +7,6 @@ from yarl import URL
 from platform_monitoring.config import (
     Config,
     ContainerRuntimeConfig,
-    CORSConfig,
     ElasticsearchConfig,
     KubeClientAuthType,
     KubeConfig,
@@ -70,7 +69,6 @@ def environ(cert_authority_path: str, token_path: str) -> dict[str, Any]:
         "NP_MONITORING_REGISTRY_URL": "http://testhost:5000",
         "NP_MONITORING_K8S_KUBELET_PORT": "12321",
         "NP_MONITORING_K8S_NVIDIA_DCGM_PORT": "12322",
-        "NP_CORS_ORIGINS": "https://domain1.com,http://do.main",
         "NP_ZIPKIN_URL": "https://zipkin:9411",
         "NP_SENTRY_DSN": "https://sentry",
         "NP_SENTRY_CLUSTER_NAME": "test",
@@ -110,7 +108,6 @@ def test_create(environ: dict[str, Any], token_path: str) -> None:
         ),
         registry=RegistryConfig(url=URL("http://testhost:5000")),
         container_runtime=ContainerRuntimeConfig(port=1234),
-        cors=CORSConfig(["https://domain1.com", "http://do.main"]),
         zipkin=ZipkinConfig(url=URL("https://zipkin:9411")),
         sentry=SentryConfig(dsn=URL("https://sentry"), cluster_name="test"),
     )

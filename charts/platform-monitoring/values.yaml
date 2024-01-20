@@ -44,9 +44,6 @@ secrets: []
 
 podAnnotations: {}
 
-cors:
-  origins: []
-
 zipkin: {}
 
 sentry: {}

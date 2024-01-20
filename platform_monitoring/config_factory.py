@@ -1,6 +1,5 @@
 import logging
 import os
-from collections.abc import Sequence
 from pathlib import Path
 from typing import Optional
 
@@ -9,7 +8,6 @@ from yarl import URL
 from .config import (
     Config,
     ContainerRuntimeConfig,
-    CORSConfig,
     ElasticsearchConfig,
     KubeClientAuthType,
     KubeConfig,
@@ -53,7 +51,6 @@ class EnvironConfigFactory:
             kube=self._create_kube(),
             registry=self._create_registry(),
             container_runtime=self._create_container_runtime(),
-            cors=self.create_cors(),
             zipkin=self.create_zipkin(),
             sentry=self.create_sentry(),
         )
@@ -197,13 +194,6 @@ class EnvironConfigFactory:
                 )
             ),
         )
-
-    def create_cors(self) -> CORSConfig:
-        origins: Sequence[str] = CORSConfig.allowed_origins
-        origins_str = self._environ.get("NP_CORS_ORIGINS", "").strip()
-        if origins_str:
-            origins = origins_str.split(",")
-        return CORSConfig(allowed_origins=origins)
 
     def create_zipkin(self) -> Optional[ZipkinConfig]:
         if "NP_ZIPKIN_URL" not in self._environ:
