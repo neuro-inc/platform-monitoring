@@ -152,9 +152,9 @@ class PodContainerLogReader(LogReader):
         self._timestamps = timestamps
         self._debug = debug
 
-        self._stream_cm: (
-            AbstractAsyncContextManager[aiohttp.StreamReader]
-        ) | None = None
+        self._stream_cm: (AbstractAsyncContextManager[aiohttp.StreamReader]) | None = (
+            None
+        )
         self._iterator: AsyncIterator[bytes] | None = None
 
     async def __aenter__(self) -> AsyncIterator[bytes]:
@@ -331,9 +331,11 @@ class S3LogsMetadata:
     def to_primitive(self) -> dict[str, Any]:
         return {
             "log_files": [f.to_primitive() for f in self.log_files],
-            "last_compaction_time": self.last_compaction_time.isoformat()
-            if self.last_compaction_time
-            else None,
+            "last_compaction_time": (
+                self.last_compaction_time.isoformat()
+                if self.last_compaction_time
+                else None
+            ),
             "last_merged_key": self.last_merged_key,
         }
 
@@ -341,9 +343,11 @@ class S3LogsMetadata:
     def from_primitive(cls, data: dict[str, Any]) -> S3LogsMetadata:
         return cls(
             log_files=[S3LogFile.from_primitive(f) for f in data["log_files"]],
-            last_compaction_time=datetime.fromisoformat(data["last_compaction_time"])
-            if data.get("last_compaction_time")
-            else None,
+            last_compaction_time=(
+                datetime.fromisoformat(data["last_compaction_time"])
+                if data.get("last_compaction_time")
+                else None
+            ),
             last_merged_key=data["last_merged_key"],
         )
 
