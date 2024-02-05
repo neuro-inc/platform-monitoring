@@ -561,16 +561,12 @@ class TestResources:
     def test_add(self) -> None:
         resources1 = Resources(cpu_m=1, memory=2 * 2**20, gpu=3)
         resources2 = Resources(cpu_m=4, memory=5 * 2**20, gpu=6)
-        assert resources1.add(resources2) == Resources(
-            cpu_m=5, memory=7 * 2**20, gpu=9
-        )
+        assert resources1.add(resources2) == Resources(cpu_m=5, memory=7 * 2**20, gpu=9)
 
     def test_available(self) -> None:
         total = Resources(cpu_m=1000, memory=1024 * 2**20, gpu=2)
         used = Resources(cpu_m=100, memory=256 * 2**20, gpu=1)
-        assert total.available(used) == Resources(
-            cpu_m=900, memory=768 * 2**20, gpu=1
-        )
+        assert total.available(used) == Resources(cpu_m=900, memory=768 * 2**20, gpu=1)
 
     def test_count(self) -> None:
         total = Resources(cpu_m=1000, memory=1024 * 2**20, gpu=2)
