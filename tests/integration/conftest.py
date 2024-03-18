@@ -230,18 +230,20 @@ def config_factory(
     cluster_name: str,
 ) -> Callable[..., Config]:
     def _f(**kwargs: Any) -> Config:
-        defaults = dict(
-            cluster_name=cluster_name,
-            server=ServerConfig(host="0.0.0.0", port=8080),
-            platform_auth=auth_config,
-            platform_api=platform_api_config,
-            platform_config=platform_config,
-            s3=s3_config,
-            logs=LogsConfig(storage_type=LogsStorageType.S3, cleanup_interval_sec=0.5),
-            kube=kube_config,
-            registry=registry_config,
-            container_runtime=container_runtime_config,
-        )
+        defaults = {
+            "cluster_name": cluster_name,
+            "server": ServerConfig(host="0.0.0.0", port=8080),
+            "platform_auth": auth_config,
+            "platform_api": platform_api_config,
+            "platform_config": platform_config,
+            "s3": s3_config,
+            "logs": LogsConfig(
+                storage_type=LogsStorageType.S3, cleanup_interval_sec=0.5
+            ),
+            "kube": kube_config,
+            "registry": registry_config,
+            "container_runtime": container_runtime_config,
+        }
         kwargs = {**defaults, **kwargs}
         return Config(**kwargs)
 

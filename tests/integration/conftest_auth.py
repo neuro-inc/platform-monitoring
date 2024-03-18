@@ -8,7 +8,6 @@ from neuro_auth_client import AuthClient, Permission, User as AuthClientUser
 from yarl import URL
 
 from platform_monitoring.config import PlatformAuthConfig
-
 from tests.integration.conftest import get_service_url
 
 
