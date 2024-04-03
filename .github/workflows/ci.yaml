@@ -94,7 +94,7 @@ jobs:
       env:
         IMAGE_TAG: latest
     - name: Upload image artifact
-      uses: neuro-inc/upload-image-action@v21.9.2
+      uses: neuro-inc/upload-image-action@v24.4.0
       with:
         image: platformmonitoringapi
         token: ${{ secrets.GITHUB_TOKEN }}
