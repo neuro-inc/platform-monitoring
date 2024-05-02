@@ -19,7 +19,7 @@ lint:
 	. venv/bin/activate; \
 	python -m pre_commit run --all-files
 	. venv/bin/activate; \
-	python -m mypy platform_monitoring alembic tests
+	python -m mypy platform_monitoring tests
 
 
 .PHONY: test_unit
