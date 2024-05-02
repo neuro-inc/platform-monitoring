@@ -116,7 +116,7 @@ spec:
           while [ $code != 0 ]
           do
             sleep 1
-            curl -f "$NP_PLATFORM_CONFIG_URL/healthchecks/liveness"
+            curl -f "$NP_PLATFORM_CONFIG_URL/api/v1/ping"
             code=$?
           done
 

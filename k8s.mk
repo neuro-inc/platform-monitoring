@@ -1,3 +1,6 @@
+.PHONY: all test clean
+all test clean:
+
 K8S_CLUSTER_CMD := tests/k8s/cluster.sh
 
 install_k8s:
