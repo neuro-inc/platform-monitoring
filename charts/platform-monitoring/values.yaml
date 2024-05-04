@@ -44,9 +44,9 @@ secrets: []
 
 podAnnotations: {}
 
-zipkin: {}
-
-sentry: {}
+sentry:
+  appName: platform-monitoring
+  sampleRate: 0.002
 
 nodeLabels:
   job: platform.neuromation.io/job

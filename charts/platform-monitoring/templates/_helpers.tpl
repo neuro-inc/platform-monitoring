@@ -110,18 +110,14 @@ release: {{ .Release.Name | quote }}
 - name: NP_MONITORING_K8S_NVIDIA_DCGM_PORT
   value: {{ .Values.nvidiaDCGMPort | quote }}
 {{- end }}
-{{- if .Values.zipkin }}
-- name: NP_ZIPKIN_URL
-  value: {{ .Values.zipkin.url }}
-- name: NP_ZIPKIN_SAMPLE_RATE
-  value: {{ .Values.zipkin.sampleRate | default 0 | quote }}
-{{- end }}
 {{- if .Values.sentry }}
-- name: NP_SENTRY_DSN
+- name: SENTRY_DSN
   value: {{ .Values.sentry.dsn }}
-- name: NP_SENTRY_CLUSTER_NAME
+- name: SENTRY_CLUSTER_NAME
   value: {{ .Values.sentry.clusterName }}
-- name: NP_SENTRY_SAMPLE_RATE
+- name: SENTRY_APP_NAME
+  value: {{ .Values.sentry.appName }}
+- name: SENTRY_SAMPLE_RATE
   value: {{ .Values.sentry.sampleRate | default 0 | quote }}
 {{- end }}
 {{- if .Values.nodeLabels.job }}

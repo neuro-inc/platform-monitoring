@@ -28,20 +28,11 @@ from aiohttp.web import (
     middleware,
 )
 from aiohttp.web_urldispatcher import AbstractRoute
-from aiohttp_security import check_authorized
 from elasticsearch import AsyncElasticsearch
 from neuro_auth_client import AuthClient, Permission, check_permissions
 from neuro_auth_client.security import AuthScheme, setup_security
 from neuro_config_client import ConfigClient
-from neuro_logging import (
-    init_logging,
-    make_sentry_trace_config,
-    make_zipkin_trace_config,
-    notrace,
-    setup_sentry,
-    setup_zipkin,
-    setup_zipkin_tracer,
-)
+from neuro_logging import init_logging, setup_sentry
 from neuro_sdk import (
     Client as PlatformApiClient,
     Factory as PlatformClientFactory,
@@ -89,18 +80,11 @@ class ApiHandler:
         return app.add_routes(
             [
                 aiohttp.web.get("/ping", self.handle_ping),
-                aiohttp.web.get("/secured-ping", self.handle_secured_ping),
             ]
         )
 
-    @notrace
     async def handle_ping(self, request: Request) -> Response:
         return Response(text="Pong")
-
-    @notrace
-    async def handle_secured_ping(self, request: Request) -> Response:
-        await check_authorized(request)
-        return Response(text="Secured Pong")
 
 
 class MonitoringApiHandler:
@@ -764,18 +748,6 @@ async def add_version_to_header(request: Request, response: StreamResponse) -> N
     response.headers["X-Service-Version"] = f"platform-monitoring/{package_version}"
 
 
-def make_tracing_trace_configs(config: Config) -> list[aiohttp.TraceConfig]:
-    trace_configs = []
-
-    if config.zipkin:
-        trace_configs.append(make_zipkin_trace_config())
-
-    if config.sentry:
-        trace_configs.append(make_sentry_trace_config())
-
-    return trace_configs
-
-
 async def create_app(config: Config) -> aiohttp.web.Application:
     app = aiohttp.web.Application(middlewares=[handle_exceptions])
     app["config"] = config
@@ -785,19 +757,13 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             logger.info("Initializing Platform API client")
             platform_client = await exit_stack.enter_async_context(
                 create_platform_api_client(
-                    config.platform_api.url,
-                    config.platform_api.token,
-                    make_tracing_trace_configs(config),
+                    config.platform_api.url, config.platform_api.token
                 )
             )
 
             logger.info("Initializing Auth client")
             auth_client = await exit_stack.enter_async_context(
-                AuthClient(
-                    config.platform_auth.url or None,
-                    config.platform_auth.token,
-                    make_tracing_trace_configs(config),
-                )
+                AuthClient(config.platform_auth.url or None, config.platform_auth.token)
             )
 
             await setup_security(
@@ -827,11 +793,7 @@ async def create_app(config: Config) -> aiohttp.web.Application:
 
             logger.info("Initializing Platform Config client")
             config_client = await exit_stack.enter_async_context(
-                ConfigClient(
-                    config.platform_config.url,
-                    config.platform_config.token,
-                    trace_configs=make_tracing_trace_configs(config),
-                )
+                ConfigClient(config.platform_config.url, config.platform_config.token)
             )
             app["monitoring_app"]["config_client"] = config_client
 
@@ -842,8 +804,7 @@ async def create_app(config: Config) -> aiohttp.web.Application:
 
             container_runtime_client_registry = await exit_stack.enter_async_context(
                 ContainerRuntimeClientRegistry(
-                    container_runtime_port=config.container_runtime.port,
-                    trace_configs=make_tracing_trace_configs(config),
+                    container_runtime_port=config.container_runtime.port
                 )
             )
             jobs_service = JobsService(
@@ -871,7 +832,7 @@ async def create_app(config: Config) -> aiohttp.web.Application:
 
     api_v1_app = aiohttp.web.Application()
     api_v1_handler = ApiHandler()
-    probes_routes = api_v1_handler.register(api_v1_app)
+    api_v1_handler.register(api_v1_app)
     app["api_v1_app"] = api_v1_app
 
     monitoring_app = await create_monitoring_app(config)
@@ -882,38 +843,14 @@ async def create_app(config: Config) -> aiohttp.web.Application:
 
     app.on_response_prepare.append(add_version_to_header)
 
-    if config.zipkin:
-        setup_zipkin(app, skip_routes=probes_routes)
-
     return app
-
-
-def setup_tracing(config: Config) -> None:
-    if config.zipkin:
-        setup_zipkin_tracer(
-            config.zipkin.app_name,
-            config.server.host,
-            config.server.port,
-            config.zipkin.url,
-            config.zipkin.sample_rate,
-            ignored_exceptions=[ContainerRuntimeClientError],
-        )
-
-    if config.sentry:
-        setup_sentry(
-            config.sentry.dsn,
-            app_name=config.sentry.app_name,
-            cluster_name=config.sentry.cluster_name,
-            sample_rate=config.sentry.sample_rate,
-            exclude=[ContainerRuntimeClientError],
-        )
 
 
 def main() -> None:  # pragma: no coverage
     init_logging()
     config = EnvironConfigFactory().create()
     logging.info("Loaded config: %r", config)
-    setup_tracing(config)
+    setup_sentry()
     aiohttp.web.run_app(
         create_app(config), host=config.server.host, port=config.server.port
     )

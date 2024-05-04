@@ -66,10 +66,6 @@ class MonitoringApiEndpoints:
         return self.api_v1_endpoint / "ping"
 
     @property
-    def secured_ping_url(self) -> URL:
-        return self.api_v1_endpoint / "secured-ping"
-
-    @property
     def endpoint(self) -> URL:
         return self.api_v1_endpoint / "jobs"
 
@@ -387,37 +383,6 @@ class TestApi:
         async with client.get(monitoring_api.ping_url) as resp:
             assert resp.status == HTTPOk.status_code
             assert "platform-monitoring" in resp.headers["X-Service-Version"]
-
-    async def test_secured_ping(
-        self,
-        monitoring_api: MonitoringApiEndpoints,
-        client: aiohttp.ClientSession,
-        jobs_client: JobsClient,
-    ) -> None:
-        headers = jobs_client.headers
-        async with client.get(monitoring_api.secured_ping_url, headers=headers) as resp:
-            assert resp.status == HTTPOk.status_code
-            text = await resp.text()
-            assert text == "Secured Pong"
-
-    async def test_secured_ping_no_token_provided_unauthorized(
-        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
-    ) -> None:
-        url = monitoring_api.secured_ping_url
-        async with client.get(url) as resp:
-            assert resp.status == HTTPUnauthorized.status_code
-
-    async def test_secured_ping_non_existing_token_unauthorized(
-        self,
-        monitoring_api: MonitoringApiEndpoints,
-        client: aiohttp.ClientSession,
-        token_factory: Callable[[str], str],
-    ) -> None:
-        url = monitoring_api.secured_ping_url
-        token = token_factory("non-existing-user")
-        headers = {"Authorization": f"Bearer {token}"}
-        async with client.get(url, headers=headers) as resp:
-            assert resp.status == HTTPUnauthorized.status_code
 
     async def test_get_capacity(
         self,

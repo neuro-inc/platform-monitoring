@@ -18,9 +18,7 @@ from platform_monitoring.config import (
     PlatformConfig,
     RegistryConfig,
     S3Config,
-    SentryConfig,
     ServerConfig,
-    ZipkinConfig,
 )
 from platform_monitoring.config_factory import EnvironConfigFactory
 
@@ -70,9 +68,6 @@ def environ(cert_authority_path: str, token_path: str) -> dict[str, Any]:
         "NP_MONITORING_REGISTRY_URL": "http://testhost:5000",
         "NP_MONITORING_K8S_KUBELET_PORT": "12321",
         "NP_MONITORING_K8S_NVIDIA_DCGM_PORT": "12322",
-        "NP_ZIPKIN_URL": "https://zipkin:9411",
-        "NP_SENTRY_DSN": "https://sentry",
-        "NP_SENTRY_CLUSTER_NAME": "test",
     }
 
 
@@ -109,8 +104,6 @@ def test_create(environ: dict[str, Any], token_path: str) -> None:
         ),
         registry=RegistryConfig(url=URL("http://testhost:5000")),
         container_runtime=ContainerRuntimeConfig(port=1234),
-        zipkin=ZipkinConfig(url=URL("https://zipkin:9411")),
-        sentry=SentryConfig(dsn=URL("https://sentry"), cluster_name="test"),
     )
 
 
@@ -211,45 +204,3 @@ def test_create_with_logs_interval_custom(environ: dict[str, Any]) -> None:
 def test_registry_config_host(url: URL, expected_host: str) -> None:
     config = RegistryConfig(url)
     assert config.host == expected_host
-
-
-def test_create_zipkin_none() -> None:
-    result = EnvironConfigFactory({}).create_zipkin()
-
-    assert result is None
-
-
-def test_create_zipkin() -> None:
-    env = {
-        "NP_ZIPKIN_URL": "https://zipkin:9411",
-        "NP_ZIPKIN_APP_NAME": "api",
-        "NP_ZIPKIN_SAMPLE_RATE": "1",
-    }
-    result = EnvironConfigFactory(env).create_zipkin()
-
-    assert result == ZipkinConfig(
-        url=URL("https://zipkin:9411"), app_name="api", sample_rate=1
-    )
-
-
-def test_create_sentry_none() -> None:
-    result = EnvironConfigFactory({}).create_sentry()
-
-    assert result is None
-
-
-def test_create_sentry() -> None:
-    env = {
-        "NP_SENTRY_DSN": "https://sentry",
-        "NP_SENTRY_APP_NAME": "api",
-        "NP_SENTRY_CLUSTER_NAME": "test",
-        "NP_SENTRY_SAMPLE_RATE": "1",
-    }
-    result = EnvironConfigFactory(env).create_sentry()
-
-    assert result == SentryConfig(
-        dsn=URL("https://sentry"),
-        app_name="api",
-        cluster_name="test",
-        sample_rate=1,
-    )
