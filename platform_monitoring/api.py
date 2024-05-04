@@ -15,7 +15,6 @@ import aiohttp.hdrs
 import aiohttp.web
 from aiobotocore.client import AioBaseClient
 from aiobotocore.config import AioConfig
-from aioelasticsearch import Elasticsearch
 from aiohttp.client_ws import ClientWebSocketResponse
 from aiohttp.web import (
     HTTPBadRequest,
@@ -30,6 +29,7 @@ from aiohttp.web import (
 )
 from aiohttp.web_urldispatcher import AbstractRoute
 from aiohttp_security import check_authorized
+from elasticsearch import AsyncElasticsearch
 from neuro_auth_client import AuthClient, Permission, check_permissions
 from neuro_auth_client.security import AuthScheme, setup_security
 from neuro_config_client import ConfigClient
@@ -687,8 +687,8 @@ async def create_kube_client(
 @asynccontextmanager
 async def create_elasticsearch_client(
     config: ElasticsearchConfig,
-) -> AsyncIterator[Elasticsearch]:
-    async with Elasticsearch(hosts=config.hosts) as client:
+) -> AsyncIterator[AsyncElasticsearch]:
+    async with AsyncElasticsearch(hosts=config.hosts) as client:
         await client.ping()
         yield client
 
@@ -721,7 +721,7 @@ async def create_s3_logs_bucket(client: AioBaseClient, config: S3Config) -> None
 def create_logs_service(
     config: Config,
     kube_client: KubeClient,
-    es_client: Elasticsearch | None = None,
+    es_client: AsyncElasticsearch | None = None,
     s3_client: AioBaseClient | None = None,
 ) -> LogsService:
     if config.logs.storage_type == LogsStorageType.ELASTICSEARCH:
@@ -804,7 +804,7 @@ async def create_app(config: Config) -> aiohttp.web.Application:
                 app=app, auth_client=auth_client, auth_scheme=AuthScheme.BEARER
             )
 
-            es_client: Elasticsearch | None = None
+            es_client: AsyncElasticsearch | None = None
             if config.elasticsearch:
                 logger.info("Initializing Elasticsearch client")
                 es_client = await exit_stack.enter_async_context(

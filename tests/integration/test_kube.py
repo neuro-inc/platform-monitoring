@@ -29,9 +29,9 @@ import aiohttp.web
 import botocore.exceptions
 import pytest
 from aiobotocore.client import AioBaseClient
-from aioelasticsearch import Elasticsearch
 from aiohttp import web
 from async_timeout import timeout
+from elasticsearch import AsyncElasticsearch
 
 from platform_monitoring.config import KubeConfig
 from platform_monitoring.kube_client import (
@@ -131,7 +131,7 @@ async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
 
 @pytest.fixture()
 def elasticsearch_log_service(
-    kube_client: MyKubeClient, es_client: Elasticsearch
+    kube_client: MyKubeClient, es_client: AsyncElasticsearch
 ) -> ElasticsearchLogsService:
     return ElasticsearchLogsService(kube_client, es_client)
 
@@ -859,7 +859,7 @@ class TestLogReader:
         kube_config: KubeConfig,
         kube_client: MyKubeClient,
         job_pod: MyPodDescriptor,
-        es_client: Elasticsearch,
+        es_client: AsyncElasticsearch,
     ) -> None:
         command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
         expected_payload = ("\n".join(str(i) for i in range(1, 6)) + "\n").encode()
@@ -891,7 +891,7 @@ class TestLogReader:
         kube_config: KubeConfig,
         kube_client: MyKubeClient,
         job_pod: MyPodDescriptor,
-        es_client: Elasticsearch,
+        es_client: AsyncElasticsearch,
     ) -> None:
         command = 'bash -c "sleep 5; for i in {1..5}; do echo $i; sleep 1; done"'
         expected_payload = ("\n".join(str(i) for i in range(1, 6)) + "\n").encode()
@@ -1016,7 +1016,7 @@ class TestLogReader:
     async def _check_es_logs(
         self,
         *,
-        es_client: Elasticsearch,
+        es_client: AsyncElasticsearch,
         namespace_name: str,
         pod_name: str,
         container_name: str,
@@ -1076,7 +1076,7 @@ class TestLogReader:
             pytest.fail(f"Pod logs did not match. Last payload: {payload!r}")
 
     async def test_elasticsearch_log_reader_empty(
-        self, es_client: Elasticsearch
+        self, es_client: AsyncElasticsearch
     ) -> None:
         namespace_name = pod_name = container_name = str(uuid.uuid4())
         log_reader = ElasticsearchLogReader(

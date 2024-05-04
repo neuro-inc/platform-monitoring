@@ -14,8 +14,8 @@ import aiohttp.web
 import pytest
 from _pytest.fixtures import FixtureRequest
 from aiobotocore.client import AioBaseClient
-from aioelasticsearch import Elasticsearch
 from async_timeout import timeout
+from elasticsearch import AsyncElasticsearch
 from yarl import URL
 
 from platform_monitoring.api import create_elasticsearch_client, create_s3_client
@@ -163,7 +163,7 @@ async def es_config(
         es_host = "http://elasticsearch-logging:9200"
     else:
         es_host = get_service_url("elasticsearch-logging")
-    async with Elasticsearch(hosts=[es_host]) as client:
+    async with AsyncElasticsearch(hosts=[es_host]) as client:
         async with timeout(120):
             while True:
                 try:
@@ -175,7 +175,9 @@ async def es_config(
 
 
 @pytest.fixture()
-async def es_client(es_config: ElasticsearchConfig) -> AsyncIterator[Elasticsearch]:
+async def es_client(
+    es_config: ElasticsearchConfig,
+) -> AsyncIterator[AsyncElasticsearch]:
     """Elasticsearch client that goes directly to elasticsearch-logging service
     without any authentication.
     """

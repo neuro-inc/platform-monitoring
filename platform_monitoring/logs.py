@@ -20,17 +20,17 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import TracebackType
-from typing import IO, Any, Self
+from typing import IO, Any, Self, cast
 
 import aiohttp
 import botocore.exceptions
 import orjson
 from aiobotocore.client import AioBaseClient
 from aiobotocore.response import StreamingBody
-from aioelasticsearch import Elasticsearch, RequestError
-from aioelasticsearch.helpers import Scan
 from async_timeout import timeout
 from cachetools import LRUCache
+from elasticsearch import AsyncElasticsearch, RequestError
+from elasticsearch.helpers import async_scan
 from iso8601 import ParseError
 from neuro_logging import trace, trace_cm
 
@@ -208,7 +208,7 @@ class PodContainerLogReader(LogReader):
 class ElasticsearchLogReader(LogReader):
     def __init__(
         self,
-        es_client: Elasticsearch,
+        es_client: AsyncElasticsearch,
         namespace_name: str,
         pod_name: str,
         container_name: str,
@@ -225,7 +225,10 @@ class ElasticsearchLogReader(LogReader):
         self._pod_name = pod_name
         self._container_name = container_name
         self._since = since
-        self._scan: Scan | None = None
+        self._scan_cm: (
+            AbstractAsyncContextManager[AsyncGenerator[dict[str, Any], None]] | None
+        ) = None
+        self._scan: AsyncGenerator[dict[str, Any], None] | None = None
         self._iterator: AsyncIterator[bytes] | None = None
 
     def _combine_search_query(self) -> dict[str, Any]:
@@ -238,35 +241,44 @@ class ElasticsearchLogReader(LogReader):
 
     async def __aenter__(self) -> AsyncIterator[bytes]:
         query = self._combine_search_query()
-        scan = Scan(
-            self._es_client,
-            index=self._index,
-            doc_type=self._doc_type,
-            # scroll="1m" means that the requested search context will be
-            # preserved in the ES cluster for at most 1 minutes. in other
-            # words, our client code has up to 1 minute to process previous
-            # results and fetch next ones.
-            scroll="1m",
-            raise_on_error=False,
-            query=query,
-            preserve_order=True,
-            size=100,
+        scan = cast(
+            AsyncGenerator[Any, None],
+            async_scan(
+                self._es_client,
+                index=self._index,
+                doc_type=self._doc_type,
+                # scroll="1m" means that the requested search context will be
+                # preserved in the ES cluster for at most 1 minutes. in other
+                # words, our client code has up to 1 minute to process previous
+                # results and fetch next ones.
+                scroll="1m",
+                raise_on_error=False,
+                query=query,
+                preserve_order=True,
+                size=100,
+            ),
         )
         try:
-            await scan.__aenter__()
-            self._scan = scan
+            self._scan_cm = aclosing(scan)
+            self._scan = await self._scan_cm.__aenter__()
         except RequestError:
             pass
         self._iterator = self._iterate()
         return self._iterator
 
-    async def __aexit__(self, *args: object) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
         assert self._iterator
         await self._iterator.aclose()  # type: ignore
-        scan = self._scan
+        scan_cm = self._scan_cm
+        self._scan_cm = None
         self._scan = None
-        if scan is not None:
-            await scan.__aexit__(*args)
+        if scan_cm is not None:
+            await scan_cm.__aexit__(exc_type, exc_value, traceback)
 
     async def _iterate(self) -> AsyncIterator[bytes]:
         if self._scan is None:
@@ -1139,7 +1151,7 @@ class ElasticsearchLogsService(BaseLogsService):
     #  kube-client and elasticsearch-client (in platform-api it's KubeOrchestrator)
     #  and move there method `get_pod_log_reader`
 
-    def __init__(self, kube_client: KubeClient, es_client: Elasticsearch) -> None:
+    def __init__(self, kube_client: KubeClient, es_client: AsyncElasticsearch) -> None:
         super().__init__(kube_client)
         self._es_client = es_client
 
