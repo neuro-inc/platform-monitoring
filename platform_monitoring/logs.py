@@ -27,7 +27,6 @@ import botocore.exceptions
 import orjson
 from aiobotocore.client import AioBaseClient
 from aiobotocore.response import StreamingBody
-from async_timeout import timeout
 from cachetools import LRUCache
 from elasticsearch import AsyncElasticsearch, RequestError
 from elasticsearch.helpers import async_scan
@@ -1071,7 +1070,7 @@ class LogsService(abc.ABC):
         timeout_s: float = 10.0 * 60,
         interval_s: float = 1.0,
     ) -> ContainerStatus:
-        async with timeout(timeout_s):
+        async with asyncio.timeout(timeout_s):
             while True:
                 status = await self.get_container_status(name)
                 if not status.is_waiting:
@@ -1375,7 +1374,7 @@ async def get_first_log_entry_time(
             timestamps=True,
             read_timeout_s=timeout_s,
         ) as stream:
-            async with timeout(timeout_s):
+            async with asyncio.timeout(timeout_s):
                 while True:
                     chunk = await stream.readany()
                     if not chunk:

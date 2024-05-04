@@ -72,6 +72,13 @@ WS_ATTACH_PROTOCOL = "v2.channels.neu.ro"
 HEARTBEAT = 30
 
 
+CONFIG_KEY = aiohttp.web.AppKey("config", Config)
+KUBE_CLIENT_KEY = aiohttp.web.AppKey("kube_client", KubeClient)
+JOBS_SERVICE_KEY = aiohttp.web.AppKey("jobs_service", JobsService)
+LOGS_SERVICE_KEY = aiohttp.web.AppKey("logs_service", LogsService)
+CONFIG_CLIENT_KEY = aiohttp.web.AppKey("config_client", ConfigClient)
+MONITORING_APP_KEY = aiohttp.web.AppKey("monitoring_app", aiohttp.web.Application)
+
 logger = logging.getLogger(__name__)
 
 
@@ -124,15 +131,15 @@ class MonitoringApiHandler:
 
     @property
     def _jobs_service(self) -> JobsService:
-        return self._app["jobs_service"]
+        return self._app[JOBS_SERVICE_KEY]
 
     @property
     def _kube_client(self) -> KubeClient:
-        return self._app["kube_client"]
+        return self._app[KUBE_CLIENT_KEY]
 
     @property
     def _logs_service(self) -> LogsService:
-        return self._app["logs_service"]
+        return self._app[LOGS_SERVICE_KEY]
 
     async def get_capacity(self, request: Request) -> Response:
         # Check that user has access to the cluster
@@ -750,7 +757,7 @@ async def add_version_to_header(request: Request, response: StreamResponse) -> N
 
 async def create_app(config: Config) -> aiohttp.web.Application:
     app = aiohttp.web.Application(middlewares=[handle_exceptions])
-    app["config"] = config
+    app[CONFIG_KEY] = config
 
     async def _init_app(app: aiohttp.web.Application) -> AsyncIterator[None]:
         async with AsyncExitStack() as exit_stack:
@@ -789,18 +796,18 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             kube_client = await exit_stack.enter_async_context(
                 create_kube_client(config.kube)
             )
-            app["monitoring_app"]["kube_client"] = kube_client
+            app[MONITORING_APP_KEY][KUBE_CLIENT_KEY] = kube_client
 
             logger.info("Initializing Platform Config client")
             config_client = await exit_stack.enter_async_context(
                 ConfigClient(config.platform_config.url, config.platform_config.token)
             )
-            app["monitoring_app"]["config_client"] = config_client
+            app[MONITORING_APP_KEY][CONFIG_CLIENT_KEY] = config_client
 
             logs_service = create_logs_service(
                 config, kube_client, es_client, s3_client
             )
-            app["monitoring_app"]["logs_service"] = logs_service
+            app[MONITORING_APP_KEY][LOGS_SERVICE_KEY] = logs_service
 
             container_runtime_client_registry = await exit_stack.enter_async_context(
                 ContainerRuntimeClientRegistry(
@@ -816,7 +823,7 @@ async def create_app(config: Config) -> aiohttp.web.Application:
                 kube_job_label=config.kube.job_label,
                 kube_node_pool_label=config.kube.node_pool_label,
             )
-            app["monitoring_app"]["jobs_service"] = jobs_service
+            app[MONITORING_APP_KEY][JOBS_SERVICE_KEY] = jobs_service
 
             await exit_stack.enter_async_context(
                 LogCleanupPoller(
@@ -833,10 +840,9 @@ async def create_app(config: Config) -> aiohttp.web.Application:
     api_v1_app = aiohttp.web.Application()
     api_v1_handler = ApiHandler()
     api_v1_handler.register(api_v1_app)
-    app["api_v1_app"] = api_v1_app
 
     monitoring_app = await create_monitoring_app(config)
-    app["monitoring_app"] = monitoring_app
+    app[MONITORING_APP_KEY] = monitoring_app
     api_v1_app.add_subapp("/jobs", monitoring_app)
 
     app.add_subapp("/api/v1", api_v1_app)

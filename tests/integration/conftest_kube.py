@@ -8,7 +8,6 @@ from typing import Any
 
 import pytest
 from _pytest.fixtures import FixtureRequest
-from async_timeout import timeout
 
 from platform_monitoring.config import KubeConfig
 from platform_monitoring.kube_client import (
@@ -57,7 +56,7 @@ class MyKubeClient(KubeClient):
         allow_pod_not_exists: bool = False,
     ) -> None:
         try:
-            async with timeout(timeout_s):
+            async with asyncio.timeout(timeout_s):
                 while True:
                     try:
                         state = await self._get_raw_container_state(pod_name)
@@ -80,7 +79,7 @@ class MyKubeClient(KubeClient):
         interval_s: float = 1.0,
     ) -> None:
         try:
-            async with timeout(timeout_s):
+            async with asyncio.timeout(timeout_s):
                 while await self.check_pod_exists(pod_name):
                     await asyncio.sleep(interval_s)
         except TimeoutError:
@@ -99,7 +98,7 @@ class MyKubeClient(KubeClient):
         interval_s: float = 1.0,
     ) -> None:
         try:
-            async with timeout(timeout_s):
+            async with asyncio.timeout(timeout_s):
                 while True:
                     status = await self.get_container_status(name)
                     if status.restart_count >= count:

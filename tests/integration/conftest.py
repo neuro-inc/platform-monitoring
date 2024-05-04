@@ -2,7 +2,7 @@ import asyncio
 import logging
 import subprocess
 import time
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,7 +14,6 @@ import aiohttp.web
 import pytest
 from _pytest.fixtures import FixtureRequest
 from aiobotocore.client import AioBaseClient
-from async_timeout import timeout
 from elasticsearch import AsyncElasticsearch
 from yarl import URL
 
@@ -50,23 +49,6 @@ def in_minikube(in_docker: bool) -> bool:  # noqa: FBT001
     return in_docker
 
 
-@pytest.fixture(scope="session")
-def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
-    """This fixture fixes scope mismatch error with implicitly added "event_loop".
-    see https://github.com/pytest-dev/pytest-asyncio/issues/68
-    """
-    asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    loop.set_debug(True)
-
-    watcher = asyncio.SafeChildWatcher()
-    watcher.attach_loop(loop)
-    asyncio.get_event_loop_policy().set_child_watcher(watcher)
-
-    yield loop
-    loop.close()
-
-
 def random_str(length: int = 8) -> str:
     return str(uuid1())[:length]
 
@@ -88,11 +70,11 @@ async def wait_for_service(
     timeout_s: float = 30,
     interval_s: float = 1,
 ) -> None:
-    async with timeout(timeout_s):
+    async with asyncio.timeout(timeout_s):
         while True:
             try:
                 async with aiohttp.ClientSession() as client:
-                    async with timeout(1):
+                    async with asyncio.timeout(1):
                         async with client.get(service_ping_url) as resp:
                             assert resp.status == aiohttp.web.HTTPOk.status_code
                             return
@@ -164,7 +146,7 @@ async def es_config(
     else:
         es_host = get_service_url("elasticsearch-logging")
     async with AsyncElasticsearch(hosts=[es_host]) as client:
-        async with timeout(120):
+        async with asyncio.timeout(120):
             while True:
                 try:
                     await client.ping()

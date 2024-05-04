@@ -7,7 +7,6 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 import pytest
-from async_timeout import timeout
 from neuro_config_client import ConfigClient
 from neuro_sdk import (
     Client as PlatformApiClient,
@@ -107,7 +106,7 @@ class TestJobsService:
         interval_s: float = 1.0,
     ) -> None:
         try:
-            async with timeout(timeout_s):
+            async with asyncio.timeout(timeout_s):
                 while True:
                     job = await platform_api_client.jobs.status(job.id)
                     if condition(job):

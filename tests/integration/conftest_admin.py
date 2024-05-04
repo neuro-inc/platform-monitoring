@@ -1,4 +1,3 @@
-import asyncio
 from collections.abc import Awaitable, Callable
 
 import aiohttp
@@ -59,16 +58,14 @@ def regular_user_factory(
 
 
 @pytest.fixture(scope="session")
-def regular_user1(
-    event_loop: asyncio.AbstractEventLoop,
+async def regular_user1(
     regular_user_factory: Callable[..., Awaitable[_User]],
 ) -> _User:
-    return event_loop.run_until_complete(regular_user_factory())
+    return await regular_user_factory()
 
 
 @pytest.fixture(scope="session")
-def regular_user2(
-    event_loop: asyncio.AbstractEventLoop,
+async def regular_user2(
     regular_user_factory: Callable[..., Awaitable[_User]],
 ) -> _User:
-    return event_loop.run_until_complete(regular_user_factory())
+    return await regular_user_factory()

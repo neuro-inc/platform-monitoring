@@ -16,7 +16,6 @@ from urllib.parse import quote_plus, urlsplit
 
 import aiohttp
 from aiohttp import ContentTypeError
-from async_timeout import timeout
 from yarl import URL
 
 from .base import JobStats, Telemetry
@@ -361,9 +360,9 @@ class KubeClient:
     def _is_ssl(self) -> bool:
         return urlsplit(self._base_url).scheme == "https"
 
-    def _create_ssl_context(self) -> ssl.SSLContext | None:
+    def _create_ssl_context(self) -> bool | ssl.SSLContext:
         if not self._is_ssl:
-            return None
+            return True
         ssl_context = ssl.create_default_context(
             cafile=self._cert_authority_path, cadata=self._cert_authority_data_pem
         )
@@ -516,7 +515,7 @@ class KubeClient:
         Raise JobNotFoundException if there is no such pod.
         Raise asyncio.TimeoutError if it takes too long for the pod.
         """
-        async with timeout(timeout_s):
+        async with asyncio.timeout(timeout_s):
             while True:
                 status = await self.get_container_status(pod_name)
                 if status.is_running:
@@ -533,7 +532,7 @@ class KubeClient:
         Raise JobNotFoundException if there is no such pod.
         Raise asyncio.TimeoutError if it takes too long for the pod.
         """
-        async with timeout(timeout_s):
+        async with asyncio.timeout(timeout_s):
             while True:
                 status = await self.get_container_status(pod_name)
                 if not status.is_waiting:

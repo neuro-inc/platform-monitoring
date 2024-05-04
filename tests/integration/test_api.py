@@ -23,7 +23,6 @@ from aiohttp.web_exceptions import (
     HTTPNotFound,
     HTTPUnauthorized,
 )
-from async_timeout import timeout
 from yarl import URL
 
 from platform_monitoring.api import create_app
@@ -39,7 +38,7 @@ async def expect_prompt(ws: aiohttp.ClientWebSocketResponse) -> bytes:
     _exit_re = re.compile(rb"exit \d+")
     try:
         ret: bytes = b""
-        async with timeout(3):
+        async with asyncio.timeout(3):
             async for msg in ws:
                 assert msg.type == aiohttp.WSMsgType.BINARY
                 assert msg.data[0] == 1
