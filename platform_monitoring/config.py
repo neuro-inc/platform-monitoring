@@ -107,21 +107,6 @@ class ContainerRuntimeConfig:
 
 
 @dataclass(frozen=True)
-class ZipkinConfig:
-    url: URL
-    app_name: str = "platform-monitoring"
-    sample_rate: float = 0
-
-
-@dataclass(frozen=True)
-class SentryConfig:
-    dsn: URL
-    cluster_name: str
-    app_name: str = "platform-monitoring"
-    sample_rate: float = 0
-
-
-@dataclass(frozen=True)
 class Config:
     cluster_name: str
     server: ServerConfig
@@ -134,5 +119,3 @@ class Config:
     registry: RegistryConfig
     elasticsearch: ElasticsearchConfig | None = None
     s3: S3Config | None = None
-    zipkin: ZipkinConfig | None = None
-    sentry: SentryConfig | None = None
