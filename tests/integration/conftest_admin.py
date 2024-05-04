@@ -1,6 +1,5 @@
 import asyncio
 from collections.abc import Awaitable, Callable
-from typing import Optional
 
 import aiohttp
 import pytest
@@ -11,7 +10,7 @@ from tests.integration.conftest_auth import _User
 
 
 @pytest.fixture(scope="session")
-def admin_url(in_minikube: bool) -> URL:
+def admin_url(in_minikube: bool) -> URL:  # noqa: FBT001
     if in_minikube:
         platform_admin = "http://platformadmin:8080"
     else:
@@ -25,11 +24,11 @@ def regular_user_factory(
     admin_token: str,
     token_factory: Callable[[str], str],
     cluster_name: str,
-) -> Callable[[Optional[str], Optional[str]], Awaitable[_User]]:
+) -> Callable[[str | None, str | None], Awaitable[_User]]:
     default_cluster_name = cluster_name
 
     async def _factory(
-        name: Optional[str] = None, cluster_name: Optional[str] = None
+        name: str | None = None, cluster_name: str | None = None
     ) -> _User:
         name = name or f"user-{random_str(8)}"
         cluster_name = cluster_name or default_cluster_name

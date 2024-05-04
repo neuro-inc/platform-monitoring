@@ -23,7 +23,7 @@
     ```shell
     ./minikube.sh apply
     ```
-1. Create a new virtual environment with Python 3.9:
+1. Create a new virtual environment with Python 3.11:
     ```shell
     python -m venv venv
     source venv/bin/activate

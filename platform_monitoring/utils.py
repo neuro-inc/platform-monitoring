@@ -1,41 +1,23 @@
 import functools
-import sys
-from collections.abc import Callable
-from contextlib import AbstractAsyncContextManager
+from collections.abc import AsyncGenerator, Callable
+from contextlib import AbstractAsyncContextManager, aclosing
 from datetime import datetime
-from types import TracebackType
-from typing import Any, Optional, TypeVar
+from typing import Any, TypeVar
 
 import iso8601
 from neuro_sdk import JobDescription as Job, JobStatus
 
+
 T_co = TypeVar("T_co", covariant=True)
-
-if sys.version_info >= (3, 10):
-    from contextlib import aclosing
-else:
-
-    class aclosing(AbstractAsyncContextManager[T_co]):
-        def __init__(self, thing: T_co):
-            self.thing = thing
-
-        async def __aenter__(self) -> T_co:
-            return self.thing
-
-        async def __aexit__(
-            self,
-            exc_type: Optional[type[BaseException]],
-            exc: Optional[BaseException],
-            tb: Optional[TracebackType],
-        ) -> None:
-            await self.thing.aclose()  # type: ignore
 
 
 def asyncgeneratorcontextmanager(
-    func: Callable[..., T_co]
-) -> Callable[..., AbstractAsyncContextManager[T_co]]:
+    func: Callable[..., AsyncGenerator[T_co, Any]],
+) -> Callable[..., AbstractAsyncContextManager[AsyncGenerator[T_co, Any]]]:
     @functools.wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> AbstractAsyncContextManager[T_co]:
+    def wrapper(
+        *args: Any, **kwargs: Any
+    ) -> AbstractAsyncContextManager[AsyncGenerator[T_co, Any]]:
         return aclosing(func(*args, **kwargs))
 
     return wrapper

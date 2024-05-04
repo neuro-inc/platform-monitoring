@@ -3,7 +3,7 @@ from unittest import mock
 
 import pytest
 from aiobotocore.client import AioBaseClient
-from aioelasticsearch import Elasticsearch
+from elasticsearch import AsyncElasticsearch
 
 from platform_monitoring.api import create_logs_service
 from platform_monitoring.config import (
@@ -18,12 +18,12 @@ from platform_monitoring.kube_client import KubeClient
 from platform_monitoring.logs import ElasticsearchLogsService, S3LogsService
 
 
-@pytest.fixture
+@pytest.fixture()
 def kube_client() -> mock.Mock:
     return mock.Mock(spec=KubeClient)
 
 
-@pytest.fixture
+@pytest.fixture()
 def config_factory() -> Callable[[LogsStorageType], Config]:
     def _factory(storage_type: LogsStorageType) -> Config:
         return Config(
@@ -52,7 +52,7 @@ def test_create_es_logs_service(
 ) -> None:
     config = config_factory(LogsStorageType.ELASTICSEARCH)
     result = create_logs_service(
-        config, kube_client, es_client=mock.Mock(spec=Elasticsearch)
+        config, kube_client, es_client=mock.Mock(spec=AsyncElasticsearch)
     )
     assert isinstance(result, ElasticsearchLogsService)
 

@@ -26,10 +26,11 @@ class MyS3LogService(S3LogsService):
     ) -> None:
         self.call_count += 1
         if self.raise_error:
-            raise Exception("error")
+            msg = "error"
+            raise Exception(msg)
 
 
-@pytest.fixture
+@pytest.fixture()
 def config(config: Config) -> Config:
     return replace(
         config,

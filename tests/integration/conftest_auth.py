@@ -1,4 +1,4 @@
-from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass
 
 import pytest
@@ -8,17 +8,16 @@ from neuro_auth_client import AuthClient, Permission, User as AuthClientUser
 from yarl import URL
 
 from platform_monitoring.config import PlatformAuthConfig
-
 from tests.integration.conftest import get_service_url
 
 
 @pytest.fixture(scope="session")
-def token_factory() -> Iterator[Callable[[str], str]]:
+def token_factory() -> Callable[[str], str]:
     def _factory(name: str) -> str:
         payload = {"identity": name}
         return jwt.encode(payload, "secret", algorithm="HS256")
 
-    yield _factory
+    return _factory
 
 
 @pytest.fixture(scope="session")
@@ -33,19 +32,20 @@ def compute_token(token_factory: Callable[[str], str]) -> str:
 
 @pytest.fixture(scope="session")
 def auth_config(
-    token_factory: Callable[[str], str], in_minikube: bool
-) -> Iterator[PlatformAuthConfig]:
+    token_factory: Callable[[str], str],
+    in_minikube: bool,  # noqa: FBT001
+) -> PlatformAuthConfig:
     if in_minikube:
         platform_auth = "http://platformauthapi:8080"
     else:
         platform_auth = get_service_url("platformauthapi", namespace="default")
-    yield PlatformAuthConfig(
+    return PlatformAuthConfig(
         url=URL(platform_auth),
         token=token_factory("compute"),  # token is hard-coded in the yaml configuration
     )
 
 
-@pytest.fixture
+@pytest.fixture()
 async def auth_client(
     auth_config: PlatformAuthConfig,
 ) -> AsyncGenerator[AuthClient, None]:
@@ -63,10 +63,10 @@ class _User(AuthClientUser):
         return {AUTHORIZATION: f"Bearer {self.token}"}
 
 
-@pytest.fixture
+@pytest.fixture()
 async def share_job(
     auth_client: AuthClient, cluster_name: str
-) -> AsyncIterator[Callable[[_User, _User, str], Awaitable[None]]]:
+) -> Callable[[_User, _User, str, str], Awaitable[None]]:
     async def _impl(
         owner: _User, follower: _User, job_id: str, action: str = "read"
     ) -> None:
@@ -77,4 +77,4 @@ async def share_job(
             follower.name, [permission], token=owner.token
         )
 
-    yield _impl
+    return _impl

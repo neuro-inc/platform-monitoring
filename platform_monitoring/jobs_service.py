@@ -1,9 +1,8 @@
 import asyncio
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncGenerator, AsyncIterator, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from functools import reduce
-from typing import Optional
 
 import aiohttp
 from neuro_config_client import ConfigClient, ResourcePoolType
@@ -84,7 +83,9 @@ class JobsService:
             pass
 
     @asyncgeneratorcontextmanager
-    async def save(self, job: Job, user: User, image: str) -> AsyncIterator[bytes]:
+    async def save(
+        self, job: Job, user: User, image: str
+    ) -> AsyncGenerator[bytes, None]:
         pod_name = self._kube_helper.get_job_pod_name(job)
         pod = await self._get_running_jobs_pod(pod_name)
         cont_id = pod.get_container_id(pod_name)
@@ -104,7 +105,8 @@ class JobsService:
         except ContainerNotFoundError:
             raise
         except ContainerRuntimeError as ex:
-            raise JobException(f"Failed to save job '{job.id}': {ex}")
+            msg = f"Failed to save job '{job.id}': {ex}"
+            raise JobException(msg) from ex
 
     @asynccontextmanager
     async def attach(
@@ -186,7 +188,7 @@ class JobsService:
         return reader, writer
 
     async def _get_running_jobs_pod(self, job_id: str) -> Pod:
-        pod: Optional[Pod]
+        pod: Pod | None
         try:
             pod = await self._kube_client.get_pod(job_id)
             if not pod.is_phase_running:
@@ -196,7 +198,8 @@ class JobsService:
             pod = None
 
         if not pod:
-            raise JobNotRunningException(f"Job '{job_id}' is not running.")
+            msg = f"Job '{job_id}' is not running."
+            raise JobNotRunningException(msg)
 
         return pod
 
@@ -262,10 +265,8 @@ class JobsService:
             result.setdefault(node_pool_name, []).append(node_resources)
         return result
 
-    def _group_pods_by_node(
-        self, pods: Sequence[Pod]
-    ) -> dict[Optional[str], list[Pod]]:
-        result: dict[Optional[str], list[Pod]] = {}
+    def _group_pods_by_node(self, pods: Sequence[Pod]) -> dict[str | None, list[Pod]]:
+        result: dict[str | None, list[Pod]] = {}
         for pod in pods:
             group = result.get(pod.node_name)
             if not group:

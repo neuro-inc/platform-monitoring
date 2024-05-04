@@ -1,13 +1,13 @@
 import asyncio
 import contextlib
 import logging
-from typing import Any, Optional
 
 from neuro_logging import new_trace
 
 from platform_monitoring.jobs_service import JobsService
 from platform_monitoring.logs import LogsService
 from platform_monitoring.utils import KubeHelper
+
 
 logger = logging.getLogger(__name__)
 
@@ -24,18 +24,19 @@ class LogCleanupPoller:
         self._interval_sec = interval_sec
         self._kube_helper = KubeHelper()
 
-        self._task: Optional[asyncio.Task[None]] = None
+        self._task: asyncio.Task[None] | None = None
 
     async def __aenter__(self) -> "LogCleanupPoller":
         await self.start()
         return self
 
-    async def __aexit__(self, *args: Any) -> None:
+    async def __aexit__(self, *args: object) -> None:
         await self.stop()
 
     async def start(self) -> None:
         if self._task is not None:
-            raise RuntimeError("Concurrent usage of LogCleanupPoller not allowed")
+            msg = "Concurrent usage of LogCleanupPoller not allowed"
+            raise RuntimeError(msg)
         self._task = asyncio.create_task(self._run())
 
     async def stop(self) -> None:

@@ -9,10 +9,11 @@ def create_save_request_payload_validator(expected_image_domain: str) -> t.Trafa
         try:
             ref = Reference.parse(value)
         except InvalidReference as exc:
-            raise t.DataError(str(exc))
+            raise t.DataError(str(exc)) from exc
         domain, _ = ref.split_hostname()
         if domain != expected_image_domain:
-            raise t.DataError("Unknown registry host")
+            msg = "Unknown registry host"
+            raise t.DataError(msg)
         return value
 
     return t.Dict({"container": t.Dict({"image": t.String >> t.Call(_validate_image)})})
