@@ -55,7 +55,10 @@ docker_build:
 	. venv/bin/activate; \
 	pip install -U build; \
 	python -m build
-	docker build -t platformmonitoringapi:latest .
+	docker build -t \
+		--target service \
+		--build-arg PY_VERSION=$$(cat .python-version) \
+		platformmonitoringapi:latest .
 
 PLATFORMAPI_IMAGE = $(shell cat PLATFORMAPI_IMAGE)
 PLATFORMADMIN_IMAGE = $(shell cat PLATFORMADMIN_IMAGE)

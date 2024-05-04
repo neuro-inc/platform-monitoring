@@ -1,7 +1,6 @@
 import logging
 import os
 from pathlib import Path
-from typing import Optional
 
 from yarl import URL
 
@@ -24,19 +23,19 @@ from .config import (
     ZipkinConfig,
 )
 
+
 logger = logging.getLogger(__name__)
 
 
 class EnvironConfigFactory:
-    def __init__(self, environ: Optional[dict[str, str]] = None) -> None:
+    def __init__(self, environ: dict[str, str] | None = None) -> None:
         self._environ = environ or os.environ
 
-    def _get_url(self, name: str) -> Optional[URL]:
+    def _get_url(self, name: str) -> URL | None:
         value = self._environ[name]
         if value == "-":
             return None
-        else:
-            return URL(value)
+        return URL(value)
 
     def create(self) -> Config:
         return Config(
@@ -75,13 +74,13 @@ class EnvironConfigFactory:
         token = self._environ["NP_MONITORING_PLATFORM_CONFIG_TOKEN"]
         return PlatformConfig(url=url, token=token)
 
-    def _create_elasticsearch(self) -> Optional[ElasticsearchConfig]:
+    def _create_elasticsearch(self) -> ElasticsearchConfig | None:
         if not any(key.startswith("NP_MONITORING_ES") for key in self._environ.keys()):
             return None
         hosts = self._environ["NP_MONITORING_ES_HOSTS"].split(",")
         return ElasticsearchConfig(hosts=hosts)
 
-    def _create_s3(self) -> Optional[S3Config]:
+    def _create_s3(self) -> S3Config | None:
         if not any(key.startswith("NP_MONITORING_S3") for key in self._environ.keys()):
             return None
         endpoint_url = self._environ.get("NP_MONITORING_S3_ENDPOINT_URL", "")
@@ -195,7 +194,7 @@ class EnvironConfigFactory:
             ),
         )
 
-    def create_zipkin(self) -> Optional[ZipkinConfig]:
+    def create_zipkin(self) -> ZipkinConfig | None:
         if "NP_ZIPKIN_URL" not in self._environ:
             return None
 
@@ -206,7 +205,7 @@ class EnvironConfigFactory:
         )
         return ZipkinConfig(url=url, app_name=app_name, sample_rate=sample_rate)
 
-    def create_sentry(self) -> Optional[SentryConfig]:
+    def create_sentry(self) -> SentryConfig | None:
         if "NP_SENTRY_DSN" not in self._environ:
             return None
 

@@ -1,13 +1,13 @@
 import logging
 from asyncio.locks import Lock
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
-from typing import Any, Optional, Union
 
 import aiohttp
 from yarl import URL
 
 from .utils import asyncgeneratorcontextmanager
+
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +21,12 @@ class ContainerRuntimeClientError(ContainerRuntimeError):
 
 
 class ContainerNotFoundError(ContainerRuntimeClientError):
-    def __init__(self, id: str) -> None:
-        super().__init__(f"Container {id!r} not found")
+    def __init__(self, id_: str) -> None:
+        super().__init__(f"Container {id_!r} not found")
 
 
 class ContainerRuntimeClient:
-    def __init__(self, client: aiohttp.ClientSession, url: Union[URL, str]) -> None:
+    def __init__(self, client: aiohttp.ClientSession, url: URL | str) -> None:
         self._client = client
         self._containers_url = URL(url) / "api/v1/containers"
 
@@ -58,14 +58,12 @@ class ContainerRuntimeClient:
         except aiohttp.WSServerHandshakeError as ex:
             if ex.status == 404:
                 logger.warning("Container %r not found", container_id)
-                raise ContainerNotFoundError(container_id)
+                raise ContainerNotFoundError(container_id) from ex
             if 400 <= ex.status < 500:
-                raise ContainerRuntimeClientError(
-                    f"Attach container {container_id!r} client error: {ex}"
-                )
-            raise ContainerRuntimeError(
-                f"Attach container {container_id!r} error: {ex}"
-            )
+                msg = f"Attach container {container_id!r} client error: {ex}"
+                raise ContainerRuntimeClientError(msg) from ex
+            msg = f"Attach container {container_id!r} error: {ex}"
+            raise ContainerRuntimeError(msg) from ex
 
     @asynccontextmanager
     async def exec(
@@ -97,12 +95,12 @@ class ContainerRuntimeClient:
         except aiohttp.WSServerHandshakeError as ex:
             if ex.status == 404:
                 logger.warning("Container %r not found", container_id)
-                raise ContainerNotFoundError(container_id)
+                raise ContainerNotFoundError(container_id) from ex
             if 400 <= ex.status < 500:
-                raise ContainerRuntimeClientError(
-                    f"Exec container {container_id!r} client error: {ex}"
-                )
-            raise ContainerRuntimeError(f"Exec container {container_id!r} error: {ex}")
+                msg = f"Exec container {container_id!r} client error: {ex}"
+                raise ContainerRuntimeClientError(msg) from ex
+            msg = f"Exec container {container_id!r} error: {ex}"
+            raise ContainerRuntimeError(msg) from ex
 
     async def kill(self, container_id: str) -> None:
         async with self._client.post(
@@ -112,19 +110,17 @@ class ContainerRuntimeClient:
                 raise ContainerNotFoundError(container_id)
             if 400 <= resp.status < 500:
                 error = await _get_error(resp)
-                raise ContainerRuntimeClientError(
-                    f"Kill container {container_id!r} client error: {error}"
-                )
+                msg = f"Kill container {container_id!r} client error: {error}"
+                raise ContainerRuntimeClientError(msg)
             if resp.status >= 500:
                 error = await _get_error(resp)
-                raise ContainerRuntimeError(
-                    f"Kill container {container_id!r} error: {error}"
-                )
+                msg = f"Kill container {container_id!r} error: {error}"
+                raise ContainerRuntimeError(msg)
 
     @asyncgeneratorcontextmanager
     async def commit(
         self, container_id: str, image: str, username: str = "", password: str = ""
-    ) -> AsyncIterator[bytes]:
+    ) -> AsyncGenerator[bytes, None]:
         payload = {"image": image, "push": True}
         if username and password:
             payload["auth"] = {"username": username, "password": password}
@@ -137,23 +133,21 @@ class ContainerRuntimeClient:
                 raise ContainerNotFoundError(container_id)
             if 400 <= resp.status < 500:
                 error = await _get_error(resp)
-                raise ContainerRuntimeClientError(
-                    f"Commit container {container_id!r} client error: {error}"
-                )
+                msg = f"Commit container {container_id!r} client error: {error}"
+                raise ContainerRuntimeClientError(msg)
             if resp.status >= 500:
                 error = await _get_error(resp)
-                raise ContainerRuntimeError(
-                    f"Commit container {container_id!r} error: {error}"
-                )
+                msg = f"Commit container {container_id!r} error: {error}"
+                raise ContainerRuntimeError(msg)
             async for chunk in resp.content:
                 yield chunk
 
 
-def _encode_container_id(id: str) -> str:
-    return id.replace("/", "%2F")
+def _encode_container_id(id_: str) -> str:
+    return id_.replace("/", "%2F")
 
 
-def _bool_to_str(value: bool) -> str:
+def _bool_to_str(value: bool) -> str:  # noqa: FBT001
     return str(value).lower()
 
 
@@ -169,7 +163,7 @@ class ContainerRuntimeClientRegistry:
     def __init__(
         self,
         container_runtime_port: int,
-        trace_configs: Optional[list[aiohttp.TraceConfig]] = None,
+        trace_configs: list[aiohttp.TraceConfig] | None = None,
     ) -> None:
         self._port = container_runtime_port
         self._exit_stack = AsyncExitStack()
@@ -180,7 +174,7 @@ class ContainerRuntimeClientRegistry:
     async def __aenter__(self) -> "ContainerRuntimeClientRegistry":
         return self
 
-    async def __aexit__(self, *args: Any) -> None:
+    async def __aexit__(self, *args: object) -> None:
         await self._exit_stack.aclose()
 
     async def get(self, host: str) -> "ContainerRuntimeClient":

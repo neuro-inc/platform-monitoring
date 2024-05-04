@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import re
 import tempfile
 import uuid
@@ -18,7 +17,7 @@ from collections.abc import (
     Sequence,
 )
 from contextlib import AbstractAsyncContextManager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -66,15 +65,16 @@ from platform_monitoring.utils import parse_date
 from .conftest import ApiAddress, create_local_app_server
 from .conftest_kube import MyKubeClient, MyPodDescriptor
 
+
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture
+@pytest.fixture()
 def job_pod() -> MyPodDescriptor:
     return MyPodDescriptor(f"job-{uuid4()}")
 
 
-@pytest.fixture
+@pytest.fixture()
 async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
     async def _get_pod(request: web.Request) -> web.Response:
         payload: dict[str, Any] = {
@@ -103,8 +103,7 @@ async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
             auth_header = request.headers.get("Authorization", "")
             if auth_header.split(" ")[1] == "authorized":
                 return web.Response(content_type="text/plain")
-            else:
-                return web.Response(status=401)
+            return web.Response(status=401)
 
         return _inner
 
@@ -130,21 +129,21 @@ async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
         yield address
 
 
-@pytest.fixture
+@pytest.fixture()
 def elasticsearch_log_service(
     kube_client: MyKubeClient, es_client: Elasticsearch
 ) -> ElasticsearchLogsService:
     return ElasticsearchLogsService(kube_client, es_client)
 
 
-@pytest.fixture
+@pytest.fixture()
 def s3_logs_metadata_storage(
     s3_client: AioBaseClient, s3_logs_bucket: str
 ) -> S3LogsMetadataStorage:
     return S3LogsMetadataStorage(s3_client, s3_logs_bucket)
 
 
-@pytest.fixture
+@pytest.fixture()
 def s3_logs_metadata_service(
     s3_client: AioBaseClient,
     s3_logs_metadata_storage: S3LogsMetadataStorage,
@@ -155,7 +154,7 @@ def s3_logs_metadata_service(
     )
 
 
-@pytest.fixture
+@pytest.fixture()
 def s3_log_service(
     kube_client: MyKubeClient,
     s3_client: AioBaseClient,
@@ -165,7 +164,7 @@ def s3_log_service(
 
 
 class TestKubeClientTokenUpdater:
-    @pytest.fixture
+    @pytest.fixture()
     async def kube_app(self) -> aiohttp.web.Application:
         async def _get_nodes(request: aiohttp.web.Request) -> aiohttp.web.Response:
             auth = request.headers["Authorization"]
@@ -178,7 +177,7 @@ class TestKubeClientTokenUpdater:
         app.router.add_routes([aiohttp.web.get("/api/v1/nodes", _get_nodes)])
         return app
 
-    @pytest.fixture
+    @pytest.fixture()
     async def kube_server(
         self, kube_app: aiohttp.web.Application, unused_tcp_port_factory: Any
     ) -> AsyncIterator[str]:
@@ -187,14 +186,14 @@ class TestKubeClientTokenUpdater:
         ) as address:
             yield f"http://{address.host}:{address.port}"
 
-    @pytest.fixture
+    @pytest.fixture()
     def kube_token_path(self) -> Iterator[str]:
         _, path = tempfile.mkstemp()
         Path(path).write_text("token-1")
         yield path
-        os.remove(path)
+        Path(path).unlink()
 
-    @pytest.fixture
+    @pytest.fixture()
     async def kube_client(
         self, kube_server: str, kube_token_path: str
     ) -> AsyncIterator[KubeClient]:
@@ -532,7 +531,7 @@ class TestKubeClient:
             ):
                 pass
 
-    @pytest.mark.xfail
+    @pytest.mark.xfail()
     async def test_create_log_stream_creating(
         self, kube_client: MyKubeClient, job_pod: MyPodDescriptor
     ) -> None:
@@ -604,10 +603,10 @@ class TestKubeClient:
             await kube_client.delete_pod(job_pod.name)
 
     @pytest.mark.parametrize(
-        "token, is_valid",
+        ("token", "is_valid"),
         [
-            ["authorized", True],
-            ["badtoken", False],
+            ("authorized", True),
+            ("badtoken", False),
         ],
     )
     async def test_get_pod_container_gpu_stats_handles_unauthorized(
@@ -615,7 +614,7 @@ class TestKubeClient:
         mock_kubernetes_server: ApiAddress,
         tmp_path: Path,
         token: str,
-        is_valid: bool,
+        is_valid: bool,  # noqa: FBT001
     ) -> None:
         srv = mock_kubernetes_server
         token_path = tmp_path / "token"
@@ -655,7 +654,7 @@ class TestLogReader:
 
     def _remove_timestamps(self, data: bytes) -> bytes:
         result = []
-        for line in data.splitlines(True):
+        for line in data.splitlines(keepends=True):
             timestamp, rest = line.split(b" ", 1)
             assert re.fullmatch(
                 rb"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+Z",
@@ -869,7 +868,7 @@ class TestLogReader:
         await kube_client.wait_pod_is_terminated(job_pod.name)
 
         await self._check_kube_logs(
-            kube_client,
+            kube_client=kube_client,
             namespace_name=kube_config.namespace,
             pod_name=job_pod.name,
             container_name=job_pod.name,
@@ -879,7 +878,7 @@ class TestLogReader:
         await kube_client.delete_pod(job_pod.name)
         for timestamps in [False, True]:
             await self._check_es_logs(
-                es_client,
+                es_client=es_client,
                 namespace_name=kube_config.namespace,
                 pod_name=job_pod.name,
                 container_name=job_pod.name,
@@ -905,7 +904,7 @@ class TestLogReader:
             await kube_client.delete_pod(job_pod.name)
 
         await self._check_es_logs(
-            es_client,
+            es_client=es_client,
             namespace_name=kube_config.namespace,
             pod_name=job_pod.name,
             container_name=job_pod.name,
@@ -927,7 +926,7 @@ class TestLogReader:
         await kube_client.wait_pod_is_terminated(job_pod.name)
 
         await self._check_kube_logs(
-            kube_client,
+            kube_client=kube_client,
             namespace_name=kube_config.namespace,
             pod_name=job_pod.name,
             container_name=job_pod.name,
@@ -936,8 +935,8 @@ class TestLogReader:
         await kube_client.delete_pod(job_pod.name)
         for timestamps in [False, True]:
             await self._check_s3_logs(
-                s3_client,
-                s3_logs_metadata_service,
+                s3_client=s3_client,
+                metadata_service=s3_logs_metadata_service,
                 pod_name=job_pod.name,
                 expected_payload=expected_payload,
                 timestamps=timestamps,
@@ -961,8 +960,8 @@ class TestLogReader:
             await kube_client.delete_pod(job_pod.name)
 
         await self._check_s3_logs(
-            s3_client,
-            s3_logs_metadata_service,
+            s3_client=s3_client,
+            metadata_service=s3_logs_metadata_service,
             pod_name=job_pod.name,
             expected_payload=expected_payload * 2,
         )
@@ -981,8 +980,8 @@ class TestLogReader:
         await kube_client.wait_pod_is_terminated(job_pod.name)
 
         await self._check_s3_logs(
-            s3_client,
-            s3_logs_metadata_service,
+            s3_client=s3_client,
+            metadata_service=s3_logs_metadata_service,
             pod_name=job_pod.name,
             expected_payload=expected_payload,
         )
@@ -992,8 +991,8 @@ class TestLogReader:
         await service.drop_logs(job_pod.name)
 
         await self._check_s3_logs(
-            s3_client,
-            s3_logs_metadata_service,
+            s3_client=s3_client,
+            metadata_service=s3_logs_metadata_service,
             pod_name=job_pod.name,
             expected_payload=b"",
             timeout_s=1,
@@ -1001,6 +1000,7 @@ class TestLogReader:
 
     async def _check_kube_logs(
         self,
+        *,
         kube_client: KubeClient,
         namespace_name: str,
         pod_name: str,
@@ -1015,6 +1015,7 @@ class TestLogReader:
 
     async def _check_es_logs(
         self,
+        *,
         es_client: Elasticsearch,
         namespace_name: str,
         pod_name: str,
@@ -1041,11 +1042,12 @@ class TestLogReader:
                     if payload == expected_payload:
                         return
                     await asyncio.sleep(interval_s)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pytest.fail(f"Pod logs did not match. Last payload: {payload!r}")
 
     async def _check_s3_logs(
         self,
+        *,
         s3_client: AioBaseClient,
         metadata_service: S3LogsMetadataService,
         pod_name: str,
@@ -1070,7 +1072,7 @@ class TestLogReader:
                     if payload == expected_payload:
                         return
                     await asyncio.sleep(interval_s)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pytest.fail(f"Pod logs did not match. Last payload: {payload!r}")
 
     async def test_elasticsearch_log_reader_empty(
@@ -1196,11 +1198,11 @@ class TestLogReader:
         payloads = await asyncio.gather(*tasks)
 
         # Output for debugging
-        for i, (name, payload) in enumerate(zip(names, payloads)):
-            print(f"{i}. {name}: {payload!r}")
+        for i, (name, payload) in enumerate(zip(names, payloads, strict=False)):
+            print(f"{i}. {name}: {payload!r}")  # noqa: T201
 
         # All logs are completely either live or archive, no separator.
-        for name, payload in zip(names, payloads):
+        for name, payload in zip(names, payloads, strict=False):
             assert payload == b"", name
 
     async def test_elasticsearch_empty_log_reader(
@@ -1279,12 +1281,12 @@ class TestLogReader:
         payloads = await asyncio.gather(*tasks)
 
         # Output for debugging
-        for i, (name, payload) in enumerate(zip(names, payloads)):
-            print(f"{i}. {name}: {payload!r}")
+        for i, (name, payload) in enumerate(zip(names, payloads, strict=False)):
+            print(f"{i}. {name}: {payload!r}")  # noqa: T201
 
         expected_payload = "".join(f"{i}\n" for i in range(1, 6)).encode()
         # All logs are completely either live or archive, no separator.
-        for name, payload in zip(names, payloads):
+        for name, payload in zip(names, payloads, strict=False):
             assert payload == expected_payload, name
 
     async def test_elasticsearch_merged_log_reader(
@@ -1305,7 +1307,7 @@ class TestLogReader:
     ) -> None:
         await self._test_merged_log_reader(kube_client, job_pod, s3_log_service)
 
-    async def _test_merged_log_reader_restarted(
+    async def _test_merged_log_reader_restarted(  # noqa: C901
         self,
         kube_client: MyKubeClient,
         job_pod: MyPodDescriptor,
@@ -1371,16 +1373,16 @@ class TestLogReader:
         await kube_client.wait_pod_is_deleted(job_pod.name)
         run_log_reader("deleted")
 
-        payloads = await asyncio.gather(*tasks)
+        payloads: list[bytes] = await asyncio.gather(*tasks)  # type: ignore
 
         # Output for debugging
-        for i, (name, payload) in enumerate(zip(names, payloads)):
-            print(f"{i}. {name}: {payload!r}")
+        for i, (name, payload) in enumerate(zip(names, payloads, strict=False)):
+            print(f"{i}. {name}: {payload!r}")  # noqa: T201
 
         expected_payload = "".join(f"{i}\n" for i in range(1, 6)).encode()
         payload0 = payloads[0]
         assert re.sub(rb"\[.*?\]\n", b"", payload0) == expected_payload * 3
-        for i, (name, payload) in enumerate(zip(names, payloads)):
+        for i, (name, payload) in enumerate(zip(names, payloads, strict=False)):
             if i < 2 or i >= len(names) - 1:
                 # No separator in earlest (live only) and
                 # latest (archive only) logs.
@@ -1481,8 +1483,8 @@ class TestLogReader:
         payloads = await asyncio.gather(*tasks)
 
         # Output for debugging
-        for i, (since, payload) in enumerate(zip(starts, payloads)):
-            print(f"{i}. [{since:%T}] {payload!r}")
+        for i, (since, payload) in enumerate(zip(starts, payloads, strict=False)):
+            print(f"{i}. [{since:%T}] {payload!r}")  # noqa: T201
         assert payloads == [
             b"begin\nend\nbegin\nend\n",
             b"end\nbegin\nend\n",
@@ -1597,8 +1599,8 @@ class TestLogReader:
 
         for timestamps in [False, True]:
             await self._check_s3_logs(
-                s3_client,
-                s3_logs_metadata_service,
+                s3_client=s3_client,
+                metadata_service=s3_logs_metadata_service,
                 pod_name=job_pod.name,
                 expected_payload=expected_payload,
                 timestamps=timestamps,
@@ -1624,15 +1626,15 @@ class TestLogReader:
 
         for timestamps in [False, True]:
             await self._check_s3_logs(
-                s3_client,
-                s3_logs_metadata_service,
+                s3_client=s3_client,
+                metadata_service=s3_logs_metadata_service,
                 pod_name=job_pod.name,
                 expected_payload=expected_payload,
                 timestamps=timestamps,
             )
 
 
-@pytest.fixture
+@pytest.fixture()
 async def write_lines_to_s3(
     s3_client: AioBaseClient, s3_logs_bucket: str
 ) -> Callable[..., Awaitable[None]]:
@@ -1689,9 +1691,12 @@ class TestS3FileReader:
 
 
 class TestS3LogsMetadataStorage:
-    @pytest.mark.parametrize("cache_metadata", (True, False))
+    @pytest.mark.parametrize("cache_metadata", [(True,), (False,)])
     async def test_get(
-        self, s3_client: AioBaseClient, s3_logs_bucket: str, cache_metadata: bool
+        self,
+        s3_client: AioBaseClient,
+        s3_logs_bucket: str,
+        cache_metadata: bool,  # noqa: FBT001
     ) -> None:
         pod_name = f"test-{uuid.uuid4()}"
         metadata = S3LogsMetadata(
@@ -1706,9 +1711,12 @@ class TestS3LogsMetadataStorage:
 
         assert result == metadata
 
-    @pytest.mark.parametrize("cache_metadata", (True, False))
+    @pytest.mark.parametrize("cache_metadata", [(True,), (False,)])
     async def test_get__no_key(
-        self, s3_client: AioBaseClient, s3_logs_bucket: str, cache_metadata: bool
+        self,
+        s3_client: AioBaseClient,
+        s3_logs_bucket: str,
+        cache_metadata: bool,  # noqa: FBT001
     ) -> None:
         pod_name = f"test-{uuid.uuid4()}"
         storage = S3LogsMetadataStorage(
@@ -1719,9 +1727,12 @@ class TestS3LogsMetadataStorage:
 
         assert result == S3LogsMetadata()
 
-    @pytest.mark.parametrize("cache_metadata", (True, False))
+    @pytest.mark.parametrize("cache_metadata", [(True,), (False,)])
     async def test_put(
-        self, s3_client: AioBaseClient, s3_logs_bucket: str, cache_metadata: bool
+        self,
+        s3_client: AioBaseClient,
+        s3_logs_bucket: str,
+        cache_metadata: bool,  # noqa: FBT001
     ) -> None:
         pod_name = f"test-{uuid.uuid4()}"
         metadata = S3LogsMetadata(
@@ -1963,7 +1974,7 @@ class TestS3LogsMetadataService:
         pod_name = str(uuid.uuid4())
         raw_log_key_prefix = _create_raw_log_key_prefix(pod_name)
         metadata = S3LogsMetadata(
-            last_compaction_time=datetime.now(timezone.utc) - timedelta(hours=1)
+            last_compaction_time=datetime.now(UTC) - timedelta(hours=1)
         )
         await s3_logs_metadata_service.update_metadata(pod_name, metadata)
         await write_lines_to_s3(
@@ -1986,7 +1997,7 @@ class TestS3LogsMetadataService:
     ) -> None:
         pod_name = str(uuid.uuid4())
         raw_log_key_prefix = _create_raw_log_key_prefix(pod_name)
-        metadata = S3LogsMetadata(last_compaction_time=datetime.now(timezone.utc))
+        metadata = S3LogsMetadata(last_compaction_time=datetime.now(UTC))
         await s3_logs_metadata_service.update_metadata(pod_name, metadata)
         await write_lines_to_s3(
             f"{raw_log_key_prefix}/202301010000_0.gz", '{"log":"1"}'
@@ -2038,7 +2049,7 @@ class TestS3LogsMetadataService:
     ) -> None:
         pod_name = str(uuid.uuid4())
         metadata = S3LogsMetadata(
-            last_compaction_time=datetime.now(timezone.utc) - timedelta(hours=1)
+            last_compaction_time=datetime.now(UTC) - timedelta(hours=1)
         )
         await s3_logs_metadata_service.update_metadata(pod_name, metadata)
         await s3_logs_metadata_service.add_pod_to_cleanup_queue(pod_name)
@@ -2053,7 +2064,7 @@ class TestS3LogsMetadataService:
         self, s3_logs_metadata_service: S3LogsMetadataService
     ) -> None:
         pod_name = str(uuid.uuid4())
-        metadata = S3LogsMetadata(last_compaction_time=datetime.now(timezone.utc))
+        metadata = S3LogsMetadata(last_compaction_time=datetime.now(UTC))
         await s3_logs_metadata_service.update_metadata(pod_name, metadata)
         await s3_logs_metadata_service.add_pod_to_cleanup_queue(pod_name)
 
@@ -2063,7 +2074,7 @@ class TestS3LogsMetadataService:
 
 
 class TestS3LogRecordReader:
-    @pytest.fixture
+    @pytest.fixture()
     def reader(
         self, s3_client: AioBaseClient, s3_logs_bucket: str
     ) -> S3LogRecordsReader:
@@ -2091,13 +2102,13 @@ class TestS3LogRecordReader:
 
         assert result == [
             S3LogRecord(
-                time=datetime(2023, 1, 1, 12, 34, 56, 123456, timezone.utc),
+                time=datetime(2023, 1, 1, 12, 34, 56, 123456, UTC),
                 time_str="2023-01-01T12:34:56.123456",
                 message="1",
                 container_id="c1",
             ),
             S3LogRecord(
-                time=datetime(2023, 1, 1, 12, 34, 57, 123456, timezone.utc),
+                time=datetime(2023, 1, 1, 12, 34, 57, 123456, UTC),
                 time_str="2023-01-01T12:34:57.123456",
                 message="2",
                 container_id="c1",
@@ -2126,13 +2137,13 @@ class TestS3LogRecordReader:
 
         assert result == [
             S3LogRecord(
-                time=datetime(2023, 1, 1, 12, 34, 56, 123456, timezone.utc),
+                time=datetime(2023, 1, 1, 12, 34, 56, 123456, UTC),
                 time_str="2023-01-01T12:34:56.123456",
                 message="1",
                 container_id="c1",
             ),
             S3LogRecord(
-                time=datetime(2023, 1, 1, 12, 34, 57, 123456, timezone.utc),
+                time=datetime(2023, 1, 1, 12, 34, 57, 123456, UTC),
                 time_str="2023-01-01T12:34:57.123456",
                 message="2",
                 container_id="c1",
@@ -2153,7 +2164,7 @@ class TestS3LogRecordReader:
 
         assert result == [
             S3LogRecord(
-                time=datetime(2023, 1, 1, 12, 34, tzinfo=timezone.utc),
+                time=datetime(2023, 1, 1, 12, 34, tzinfo=UTC),
                 time_str="2023-01-01T12:34:00.000000",
                 message="1",
                 container_id="c1",
@@ -2182,19 +2193,19 @@ class TestS3LogRecordReader:
 
         assert result == [
             S3LogRecord(
-                time=datetime(2023, 1, 1, 12, 34, 56, 123456, timezone.utc),
+                time=datetime(2023, 1, 1, 12, 34, 56, 123456, UTC),
                 time_str="2023-01-01T12:34:56.123456",
                 message="1",
                 container_id="c1",
             ),
             S3LogRecord(
-                time=datetime(2023, 1, 1, 12, 34, 56, 123456, timezone.utc),
+                time=datetime(2023, 1, 1, 12, 34, 56, 123456, UTC),
                 time_str="2023-01-01T12:34:56.123456",
                 message="2",
                 container_id="c1",
             ),
             S3LogRecord(
-                time=datetime(2023, 1, 1, 12, 34, 56, 123456, timezone.utc),
+                time=datetime(2023, 1, 1, 12, 34, 56, 123456, UTC),
                 time_str="2023-01-01T12:34:56.123456",
                 message="3",
                 container_id="c1",
@@ -2203,23 +2214,23 @@ class TestS3LogRecordReader:
 
 
 class TestS3LogRecordWriter:
-    @pytest.fixture
+    @pytest.fixture()
     def records(self) -> list[S3LogRecord]:
         return [
             S3LogRecord(
-                time=datetime(2023, 1, 1, 12, 34, 56, 123456, timezone.utc),
+                time=datetime(2023, 1, 1, 12, 34, 56, 123456, UTC),
                 time_str="2023-01-01T12:34:56.123456",
                 message="1",
                 container_id="c1",
             ),
             S3LogRecord(
-                time=datetime(2023, 1, 1, 12, 34, 57, 123456, timezone.utc),
+                time=datetime(2023, 1, 1, 12, 34, 57, 123456, UTC),
                 time_str="2023-01-01T12:34:57.123456",
                 message="2",
                 container_id="c1",
             ),
             S3LogRecord(
-                time=datetime(2023, 1, 1, 12, 34, 58, 123456, timezone.utc),
+                time=datetime(2023, 1, 1, 12, 34, 58, 123456, UTC),
                 time_str="2023-01-01T12:34:58.123456",
                 message="2",
                 container_id="c1",
@@ -2350,7 +2361,7 @@ class TestS3LogRecordWriter:
 
 
 class TestS3LogsService:
-    @pytest.fixture
+    @pytest.fixture()
     def assert_records_written(
         self, s3_client: AioBaseClient, s3_logs_bucket: str
     ) -> Callable[..., Awaitable[None]]:
@@ -2370,7 +2381,7 @@ class TestS3LogsService:
         write_lines_to_s3: Callable[..., Awaitable[None]],
         assert_records_written: Callable[..., Awaitable[None]],
     ) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         pod_name = str(uuid.uuid4())
         raw_log_key_prefix = _create_raw_log_key_prefix(pod_name)
         pod_keys = [

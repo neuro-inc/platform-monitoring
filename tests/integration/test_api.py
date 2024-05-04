@@ -4,9 +4,9 @@ import re
 import signal
 import textwrap
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Union
+from typing import Any
 from unittest import mock
 from uuid import uuid4
 
@@ -48,8 +48,9 @@ async def expect_prompt(ws: aiohttp.ClientWebSocketResponse) -> bytes:
                 if ret_strip.endswith(b"#") or _exit_re.fullmatch(ret_strip):
                     break
             return ret
-    except asyncio.TimeoutError:
-        raise AssertionError(f"[Timeout] {ret!r}")
+    except TimeoutError:
+        err_msg = f"[Timeout] {ret!r}"
+        raise AssertionError(err_msg) from None
 
 
 @dataclass(frozen=True)
@@ -148,7 +149,7 @@ class MonitoringApiEndpoints:
             stderr=int(stderr),
         )
 
-    def generate_port_forward_url(self, job_id: str, port: Union[int, str]) -> URL:
+    def generate_port_forward_url(self, job_id: str, port: int | str) -> URL:
         return self.endpoint / job_id / "port_forward" / str(port)
 
 
@@ -172,14 +173,14 @@ class PlatformApiEndpoints:
         return self.jobs_base_url / job_id
 
 
-@pytest.fixture
+@pytest.fixture()
 async def monitoring_api(config: Config) -> AsyncIterator[MonitoringApiEndpoints]:
     app = await create_app(config)
     async with create_local_app_server(app, port=8080) as address:
         yield MonitoringApiEndpoints(address=address)
 
 
-@pytest.fixture
+@pytest.fixture()
 async def monitoring_api_s3_storage(
     config_s3_storage: Config,
 ) -> AsyncIterator[MonitoringApiEndpoints]:
@@ -188,11 +189,11 @@ async def monitoring_api_s3_storage(
         yield MonitoringApiEndpoints(address=address)
 
 
-@pytest.fixture
-async def platform_api(
+@pytest.fixture()
+def platform_api(
     platform_api_config: PlatformApiConfig,
-) -> AsyncIterator[PlatformApiEndpoints]:
-    yield PlatformApiEndpoints(url=platform_api_config.url)
+) -> PlatformApiEndpoints:
+    return PlatformApiEndpoints(url=platform_api_config.url)
 
 
 class JobsClient:
@@ -219,8 +220,7 @@ class JobsClient:
         async with self._client.get(url, headers=self.headers) as response:
             response_text = await response.text()
             assert response.status == HTTPOk.status_code, response_text
-            result = await response.json()
-        return result
+            return await response.json()
 
     async def get_job_materialized_by_id(
         self,
@@ -274,30 +274,30 @@ class JobsClient:
                 pytest.fail(f"too long: {current_time:.3f} sec;")
             interval_s *= 1.5
 
-    async def delete_job(self, job_id: str, assert_success: bool = True) -> None:
+    async def delete_job(self, job_id: str, *, assert_success: bool = True) -> None:
         url = self._platform_api.generate_job_url(job_id)
         async with self._client.delete(url, headers=self.headers) as response:
             if assert_success:
                 assert response.status == HTTPNoContent.status_code
 
-    async def drop_job(self, job_id: str, assert_success: bool = True) -> None:
+    async def drop_job(self, job_id: str, *, assert_success: bool = True) -> None:
         url = self._platform_api.generate_job_url(job_id) / "drop"
         async with self._client.post(url, headers=self.headers) as response:
             if assert_success:
                 assert response.status == HTTPNoContent.status_code
 
 
-@pytest.fixture
+@pytest.fixture()
 def jobs_client_factory(
     platform_api: PlatformApiEndpoints, client: aiohttp.ClientSession
-) -> Iterator[Callable[[_User], JobsClient]]:
+) -> Callable[[_User], JobsClient]:
     def impl(user: _User) -> JobsClient:
         return JobsClient(platform_api, client, user=user)
 
-    yield impl
+    return impl
 
 
-@pytest.fixture
+@pytest.fixture()
 async def jobs_client(
     regular_user1: _User,
     jobs_client_factory: Callable[[_User], JobsClient],
@@ -305,7 +305,7 @@ async def jobs_client(
     return jobs_client_factory(regular_user1)
 
 
-@pytest.fixture
+@pytest.fixture()
 def job_request_factory() -> Callable[[], dict[str, Any]]:
     def _factory() -> dict[str, Any]:
         return {
@@ -319,14 +319,14 @@ def job_request_factory() -> Callable[[], dict[str, Any]]:
     return _factory
 
 
-@pytest.fixture
+@pytest.fixture()
 async def job_submit(
-    job_request_factory: Callable[[], dict[str, Any]]
+    job_request_factory: Callable[[], dict[str, Any]],
 ) -> dict[str, Any]:
     return job_request_factory()
 
 
-@pytest.fixture
+@pytest.fixture()
 async def job_factory(
     jobs_client: JobsClient,
     job_request_factory: Callable[[], dict[str, Any]],
@@ -355,17 +355,17 @@ async def job_factory(
             await jobs_client.wait_job_dematerialized(job_id)
 
 
-@pytest.fixture
+@pytest.fixture()
 async def infinite_job(job_factory: Callable[[str], Awaitable[str]]) -> str:
     return await job_factory("tail -f /dev/null")
 
 
-@pytest.fixture
+@pytest.fixture()
 def job_name() -> str:
     return f"test-job-{random_str()}"
 
 
-@pytest.fixture
+@pytest.fixture()
 async def named_infinite_job(
     job_factory: Callable[[str, str], Awaitable[str]], job_name: str
 ) -> str:
@@ -972,14 +972,15 @@ class TestAttachApi:
         url = monitoring_api.generate_attach_url(
             job_id="anything", stdout=True, stderr=True
         )
-        try:
+
+        with pytest.raises(WSServerHandshakeError) as exc_info:
             async with client.ws_connect(url):
                 pass
-        except WSServerHandshakeError as e:
-            assert e.headers
-            assert e.headers.get("X-Error")
-            assert e.message == "Invalid response status"
-            assert e.status == HTTPUnauthorized.status_code
+
+        assert exc_info.value.headers
+        assert exc_info.value.headers.get("X-Error")
+        assert exc_info.value.message == "Invalid response status"
+        assert exc_info.value.status == HTTPUnauthorized.status_code
 
     async def test_attach_nontty_stdout(
         self,
@@ -1401,7 +1402,7 @@ class TestPortForward:
         async with client.get(url, headers=headers) as response:
             assert response.status == HTTPBadRequest.status_code, await response.text()
 
-    @pytest.mark.minikube
+    @pytest.mark.minikube()
     async def test_port_forward_ok(
         self,
         monitoring_api: MonitoringApiEndpoints,

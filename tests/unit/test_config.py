@@ -24,6 +24,7 @@ from platform_monitoring.config import (
 )
 from platform_monitoring.config_factory import EnvironConfigFactory
 
+
 CA_DATA_PEM = "this-is-certificate-authority-public-key"
 TOKEN = "this-is-token"
 
@@ -42,7 +43,7 @@ def token_path(tmp_path: Path) -> str:
     return str(token_path)
 
 
-@pytest.fixture
+@pytest.fixture()
 def environ(cert_authority_path: str, token_path: str) -> dict[str, Any]:
     return {
         "NP_MONITORING_CLUSTER_NAME": "default",
@@ -200,12 +201,12 @@ def test_create_with_logs_interval_custom(environ: dict[str, Any]) -> None:
 
 
 @pytest.mark.parametrize(
-    "url, expected_host",
-    (
+    ("url", "expected_host"),
+    [
         (URL("https://testdomain.com"), "testdomain.com"),
         (URL("https://testdomain.com:443"), "testdomain.com:443"),
         (URL("http://localhost:5000"), "localhost:5000"),
-    ),
+    ],
 )
 def test_registry_config_host(url: URL, expected_host: str) -> None:
     config = RegistryConfig(url)

@@ -2,7 +2,7 @@ import datetime
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -51,7 +51,7 @@ def get_pods_factory(
 
 
 def create_pod(
-    node_name: Optional[str],
+    node_name: str | None,
     cpu_m: int,
     memory: int,
     gpu: int = 0,
@@ -76,7 +76,7 @@ def create_pod(
     return Pod(payload)
 
 
-@pytest.fixture
+@pytest.fixture()
 def cluster() -> Cluster:
     return Cluster(
         name="default",
@@ -141,19 +141,19 @@ def get_cluster_factory(cluster: Cluster) -> Callable[[str], Awaitable[Cluster]]
     return get_cluster
 
 
-@pytest.fixture
+@pytest.fixture()
 def config_client(cluster: Cluster) -> mock.Mock:
     client = mock.Mock(spec=ConfigClient)
     client.get_cluster.side_effect = get_cluster_factory(cluster)
     return client
 
 
-@pytest.fixture
+@pytest.fixture()
 def jobs_client() -> mock.Mock:
     return mock.Mock(spec=JobsClient)
 
 
-@pytest.fixture
+@pytest.fixture()
 def kube_client() -> mock.Mock:
     async def get_nodes(label_selector: str = "") -> Sequence[Node]:
         assert label_selector == "platform.neuromation.io/job"
@@ -170,7 +170,7 @@ def kube_client() -> mock.Mock:
     return client
 
 
-@pytest.fixture
+@pytest.fixture()
 def service(
     config_client: ConfigClient, jobs_client: JobsClient, kube_client: KubeClient
 ) -> JobsService:

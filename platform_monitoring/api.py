@@ -7,7 +7,7 @@ from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from importlib.metadata import version
 from pathlib import Path
 from tempfile import mktemp
-from typing import Any, Optional, Union
+from typing import Any
 
 import aiobotocore.session
 import aiohttp
@@ -75,6 +75,7 @@ from .validators import (
     create_exec_create_request_payload_validator,
     create_save_request_payload_validator,
 )
+
 
 WS_ATTACH_PROTOCOL = "v2.channels.neu.ro"
 HEARTBEAT = 30
@@ -165,8 +166,8 @@ class MonitoringApiHandler:
         return json_response(result)
 
     async def stream_log(self, request: Request) -> StreamResponse:
-        timestamps = _get_bool_param(request, "timestamps", False)
-        debug = _get_bool_param(request, "debug", False)
+        timestamps = _get_bool_param(request, "timestamps", default=False)
+        debug = _get_bool_param(request, "debug", default=False)
         since_str = request.query.get("since")
         since = parse_date(since_str) if since_str else None
         archive_delay_s = float(
@@ -206,8 +207,8 @@ class MonitoringApiHandler:
         return response
 
     async def ws_log(self, request: Request) -> StreamResponse:
-        timestamps = _get_bool_param(request, "timestamps", False)
-        debug = _get_bool_param(request, "debug", False)
+        timestamps = _get_bool_param(request, "timestamps", default=False)
+        debug = _get_bool_param(request, "debug", default=False)
         since_str = request.query.get("since")
         since = parse_date(since_str) if since_str else None
         archive_delay_s = float(
@@ -368,8 +369,7 @@ class MonitoringApiHandler:
             logging.exception(msg_str)
             error = {"error": msg_str}
             await response.write(self._serialize_chunk(error, encoding))
-        finally:
-            return response
+        return response
 
     def _serialize_chunk(self, chunk: dict[str, Any], encoding: str = "utf-8") -> bytes:
         chunk_str = json.dumps(chunk) + "\r\n"
@@ -381,16 +381,18 @@ class MonitoringApiHandler:
         return json_response(None, status=204)
 
     async def ws_attach(self, request: Request) -> StreamResponse:
-        tty = _get_bool_param(request, "tty", False)
-        stdin = _get_bool_param(request, "stdin", False)
-        stdout = _get_bool_param(request, "stdout", True)
-        stderr = _get_bool_param(request, "stderr", True)
+        tty = _get_bool_param(request, "tty", default=False)
+        stdin = _get_bool_param(request, "stdin", default=False)
+        stdout = _get_bool_param(request, "stdout", default=True)
+        stderr = _get_bool_param(request, "stderr", default=True)
 
         if not (stdin or stdout or stderr):
-            raise ValueError("Required at least one of stdin, stdout or stderr")
+            msg = "Required at least one of stdin, stdout or stderr"
+            raise ValueError(msg)
 
         if tty and stdout and stderr:
-            raise ValueError("Stdout and stderr cannot be multiplexed in tty mode")
+            msg = "Stdout and stderr cannot be multiplexed in tty mode"
+            raise ValueError(msg)
 
         job = await self._resolve_job(request, "write")
 
@@ -402,26 +404,31 @@ class MonitoringApiHandler:
             job, tty=tty, stdin=stdin, stdout=stdout, stderr=stderr
         ) as ws:
             await response.prepare(request)
-            transfer = Transfer(response, ws, stdin, stdout or stderr)
+            transfer = Transfer(
+                response, ws, handle_input=stdin, handle_output=stdout or stderr
+            )
             await transfer.transfer()
 
         return response
 
     async def ws_exec(self, request: Request) -> StreamResponse:
         cmd = request.query.get("cmd")
-        tty = _get_bool_param(request, "tty", False)
-        stdin = _get_bool_param(request, "stdin", False)
-        stdout = _get_bool_param(request, "stdout", True)
-        stderr = _get_bool_param(request, "stderr", True)
+        tty = _get_bool_param(request, "tty", default=False)
+        stdin = _get_bool_param(request, "stdin", default=False)
+        stdout = _get_bool_param(request, "stdout", default=True)
+        stderr = _get_bool_param(request, "stderr", default=True)
 
         if not cmd:
-            raise ValueError("Command is required")
+            msg = "Command is required"
+            raise ValueError(msg)
 
         if not (stdin or stdout or stderr):
-            raise ValueError("Required at least one of stdin, stdout or stderr")
+            msg = "Required at least one of stdin, stdout or stderr"
+            raise ValueError(msg)
 
         if tty and stdout and stderr:
-            raise ValueError("Stdout and stderr cannot be multiplexed in tty mode")
+            msg = "Stdout and stderr cannot be multiplexed in tty mode"
+            raise ValueError(msg)
 
         job = await self._resolve_job(request, "write")
 
@@ -433,7 +440,9 @@ class MonitoringApiHandler:
             job, cmd=cmd, tty=tty, stdin=stdin, stdout=stdout, stderr=stderr
         ) as ws:
             await response.prepare(request)
-            transfer = Transfer(response, ws, stdin, stdout or stderr)
+            transfer = Transfer(
+                response, ws, handle_input=stdin, handle_output=stdout or stderr
+            )
             await transfer.transfer()
 
         return response
@@ -448,7 +457,7 @@ class MonitoringApiHandler:
                 text=payload,
                 content_type="application/json",
                 headers={"X-Error": payload},
-            )
+            ) from None
 
         job = await self._resolve_job(request, "write")
 
@@ -463,7 +472,7 @@ class MonitoringApiHandler:
             raise aiohttp.web.HTTPBadRequest(
                 text=payload,
                 content_type="application/json",
-            )
+            ) from None
 
         try:
             response = WebSocketResponse(heartbeat=HEARTBEAT)
@@ -482,7 +491,7 @@ async def _listen(ws: WebSocketResponse) -> None:
     # Maintain the WebSocket connection.
     # Process ping-pong game and perform closing handshake.
     async for msg in ws:
-        logger.info(f"Received unexpected WebSocket message: {msg!r}")
+        logger.info(f"Received unexpected WebSocket message: {msg!r}")  # noqa: G004
 
 
 async def _forward_bytes_iterating(
@@ -518,6 +527,7 @@ class Transfer:
         self,
         resp: WebSocketResponse,
         client_resp: ClientWebSocketResponse,
+        *,
         handle_input: bool,
         handle_output: bool,
     ) -> None:
@@ -539,8 +549,8 @@ class Transfer:
 
     async def _proxy(
         self,
-        src: Union[WebSocketResponse, ClientWebSocketResponse],
-        dst: Union[WebSocketResponse, ClientWebSocketResponse],
+        src: WebSocketResponse | ClientWebSocketResponse,
+        dst: WebSocketResponse | ClientWebSocketResponse,
     ) -> None:
         try:
             async for msg in src:
@@ -555,7 +565,8 @@ class Transfer:
                         "WS connection closed with exception %s", exc, exc_info=exc
                     )
                 else:
-                    raise ValueError(f"Unsupported WS message type {msg.type}")
+                    err_msg = f"Unsupported WS message type {msg.type}"
+                    raise ValueError(err_msg)
         finally:
             self._closing = True
 
@@ -629,7 +640,7 @@ async def create_monitoring_app(config: Config) -> aiohttp.web.Application:
 
 @asynccontextmanager
 async def create_platform_api_client(
-    url: URL, token: str, trace_configs: Optional[list[aiohttp.TraceConfig]] = None
+    url: URL, token: str, trace_configs: list[aiohttp.TraceConfig] | None = None
 ) -> AsyncIterator[PlatformApiClient]:
     tmp_config = Path(mktemp())
     platform_api_factory = PlatformClientFactory(
@@ -647,7 +658,7 @@ async def create_platform_api_client(
 
 @asynccontextmanager
 async def create_kube_client(
-    config: KubeConfig, trace_configs: Optional[list[aiohttp.TraceConfig]] = None
+    config: KubeConfig, trace_configs: list[aiohttp.TraceConfig] | None = None
 ) -> AsyncIterator[KubeClient]:
     client = KubeClient(
         base_url=config.endpoint_url,
@@ -710,8 +721,8 @@ async def create_s3_logs_bucket(client: AioBaseClient, config: S3Config) -> None
 def create_logs_service(
     config: Config,
     kube_client: KubeClient,
-    es_client: Optional[Elasticsearch] = None,
-    s3_client: Optional[AioBaseClient] = None,
+    es_client: Elasticsearch | None = None,
+    s3_client: AioBaseClient | None = None,
 ) -> LogsService:
     if config.logs.storage_type == LogsStorageType.ELASTICSEARCH:
         assert es_client
@@ -723,15 +734,15 @@ def create_logs_service(
             config, kube_client, s3_client, cache_log_metadata=False
         )
 
-    raise ValueError(
-        f"{config.logs.storage_type} storage is not supported"
-    )  # pragma: nocover
+    msg = f"{config.logs.storage_type} storage is not supported"
+    raise ValueError(msg)  # pragma: nocover
 
 
 def create_s3_logs_service(
     config: Config,
     kube_client: KubeClient,
     s3_client: AioBaseClient,
+    *,
     cache_log_metadata: bool = False,
 ) -> S3LogsService:
     assert config.s3
@@ -793,14 +804,14 @@ async def create_app(config: Config) -> aiohttp.web.Application:
                 app=app, auth_client=auth_client, auth_scheme=AuthScheme.BEARER
             )
 
-            es_client: Optional[Elasticsearch] = None
+            es_client: Elasticsearch | None = None
             if config.elasticsearch:
                 logger.info("Initializing Elasticsearch client")
                 es_client = await exit_stack.enter_async_context(
                     create_elasticsearch_client(config.elasticsearch)
                 )
 
-            s3_client: Optional[AioBaseClient] = None
+            s3_client: AioBaseClient | None = None
             if config.s3:
                 logger.info("Initializing S3 client")
                 s3_client = await exit_stack.enter_async_context(
@@ -919,7 +930,7 @@ def _job_uri_with_name(uri: URL, name: str) -> URL:
     return uri.with_name(name)
 
 
-def _get_bool_param(request: Request, name: str, default: bool = False) -> bool:
+def _get_bool_param(request: Request, name: str, *, default: bool = False) -> bool:
     param = request.query.get(name)
     if param is None:
         return default
@@ -928,7 +939,8 @@ def _get_bool_param(request: Request, name: str, default: bool = False) -> bool:
         return True
     if param in ("0", "false"):
         return False
-    raise ValueError(f'"{name}" request parameter can be "true"/"1" or "false"/"0"')
+    msg = f'"{name}" request parameter can be "true"/"1" or "false"/"0"'
+    raise ValueError(msg)
 
 
 def _getrandbytes(size: int) -> bytes:

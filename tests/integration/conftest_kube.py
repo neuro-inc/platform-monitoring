@@ -4,7 +4,7 @@ import shlex
 import subprocess
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 from _pytest.fixtures import FixtureRequest
@@ -29,7 +29,7 @@ class MyKubeClient(KubeClient):
         self._assert_resource_kind(expected_kind="Pod", payload=payload)
         return self._parse_pod_status(payload)
 
-    async def delete_pod(self, pod_name: str, force: bool = False) -> str:
+    async def delete_pod(self, pod_name: str, *, force: bool = False) -> str:
         url = self._generate_pod_url(pod_name)
         request_payload = None
         if force:
@@ -45,13 +45,15 @@ class MyKubeClient(KubeClient):
     def _parse_pod_status(self, payload: dict[str, Any]) -> str:
         if "status" in payload:
             return payload["status"]
-        raise ValueError(f"Missing pod status: `{payload}`")
+        msg = f"Missing pod status: `{payload}`"
+        raise ValueError(msg)
 
     async def wait_pod_is_terminated(
         self,
         pod_name: str,
         timeout_s: float = 10.0 * 60,
         interval_s: float = 1.0,
+        *,
         allow_pod_not_exists: bool = False,
     ) -> None:
         try:
@@ -68,7 +70,7 @@ class MyKubeClient(KubeClient):
                     if is_terminated:
                         return
                     await asyncio.sleep(interval_s)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pytest.fail(f"Pod {pod_name} has not terminated yet")
 
     async def wait_pod_is_deleted(
@@ -81,7 +83,7 @@ class MyKubeClient(KubeClient):
             async with timeout(timeout_s):
                 while await self.check_pod_exists(pod_name):
                     await asyncio.sleep(interval_s)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pytest.fail(f"Pod {pod_name} has not deleted yet")
 
     async def get_node_list(self) -> dict[str, Any]:
@@ -103,7 +105,7 @@ class MyKubeClient(KubeClient):
                     if status.restart_count >= count:
                         break
                     await asyncio.sleep(interval_s)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pytest.fail(f"Container {name} has not restarted yet")
 
 
@@ -184,17 +186,15 @@ def kube_config_user_payload(kube_config_payload: dict[str, Any]) -> Any:
 
 
 @pytest.fixture(scope="session")
-def cert_authority_data_pem(
-    kube_config_cluster_payload: dict[str, Any]
-) -> Optional[str]:
+def cert_authority_data_pem(kube_config_cluster_payload: dict[str, Any]) -> str | None:
     ca_path = kube_config_cluster_payload["certificate-authority"]
     if ca_path:
         return Path(ca_path).read_text()
     return None
 
 
-@pytest.fixture
-async def kube_config(request: FixtureRequest, in_minikube: bool) -> KubeConfig:
+@pytest.fixture()
+async def kube_config(request: FixtureRequest, in_minikube: bool) -> KubeConfig:  # noqa: FBT001
     if in_minikube:
         return KubeConfig(
             endpoint_url="https://kubernetes.default:443",
@@ -210,17 +210,16 @@ async def kube_config(request: FixtureRequest, in_minikube: bool) -> KubeConfig:
     cluster = request.getfixturevalue("kube_config_cluster_payload")
     user = request.getfixturevalue("kube_config_user_payload")
     ca_data_pem = request.getfixturevalue("cert_authority_data_pem")
-    kube_config = KubeConfig(
+    return KubeConfig(
         endpoint_url=cluster["server"],
         cert_authority_data_pem=ca_data_pem,
         auth_cert_path=user["client-certificate"],
         auth_cert_key_path=user["client-key"],
         namespace="default",
     )
-    return kube_config
 
 
-@pytest.fixture
+@pytest.fixture()
 async def kube_client(kube_config: KubeConfig) -> AsyncIterator[MyKubeClient]:
     # TODO (A Danshyn 06/06/18): create a factory method
     client = MyKubeClient(
@@ -241,19 +240,19 @@ async def kube_client(kube_config: KubeConfig) -> AsyncIterator[MyKubeClient]:
         yield client
 
 
-@pytest.fixture
+@pytest.fixture()
 async def _kube_node(kube_client: KubeClient) -> Node:
     nodes = await kube_client.get_nodes()
     assert len(nodes) == 1, "Should be exactly one minikube node"
     return nodes[0]
 
 
-@pytest.fixture
+@pytest.fixture()
 async def kube_node_name(_kube_node: Node) -> str:
     return _kube_node.name
 
 
-@pytest.fixture
+@pytest.fixture()
 async def kube_container_runtime(_kube_node: Node) -> str:
     version = _kube_node.container_runtime_version
     end = version.find("://")

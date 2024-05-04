@@ -7,12 +7,20 @@ import logging
 import sys
 import time
 import zlib
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Sequence
-from contextlib import AbstractAsyncContextManager, suppress
+from collections.abc import (
+    AsyncGenerator,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Iterable,
+    Sequence,
+)
+from contextlib import AbstractAsyncContextManager, aclosing, suppress
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timedelta, timezone
-from os.path import basename
-from typing import IO, Any
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from types import TracebackType
+from typing import IO, Any, Self
 
 import aiohttp
 import botocore.exceptions
@@ -23,12 +31,13 @@ from aioelasticsearch import Elasticsearch, RequestError
 from aioelasticsearch.helpers import Scan
 from async_timeout import timeout
 from cachetools import LRUCache
-from iso8601 import UTC, ParseError
+from iso8601 import ParseError
 from neuro_logging import trace, trace_cm
 
 from .base import LogReader
 from .kube_client import ContainerStatus, JobNotFoundException, KubeClient
-from .utils import aclosing, asyncgeneratorcontextmanager, parse_date
+from .utils import asyncgeneratorcontextmanager, parse_date
+
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +56,7 @@ error_prefixes = (
 max_error_prefix_len = max(map(len, error_prefixes))
 
 
-async def filter_out_rpc_error(stream: aiohttp.StreamReader) -> AsyncIterator[bytes]:
+async def filter_out_rpc_error(stream: aiohttp.StreamReader) -> AsyncIterator[bytes]:  # noqa: C901
     # https://github.com/neuromation/platform-api/issues/131
     # k8s API (and the underlying docker API) sometimes returns an rpc
     # error as the last log line. it says that the corresponding container
@@ -181,14 +190,19 @@ class PodContainerLogReader(LogReader):
             self._iterator = filter_out_rpc_error(stream)
         return self._iterator
 
-    async def __aexit__(self, *args: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
         assert self._iterator
         if hasattr(self._iterator, "aclose"):
             await self._iterator.aclose()
         assert self._stream_cm
         stream_cm = self._stream_cm
         self._stream_cm = None
-        await stream_cm.__aexit__(*args)
+        await stream_cm.__aexit__(exc_type, exc_value, traceback)
 
 
 class ElasticsearchLogReader(LogReader):
@@ -246,7 +260,7 @@ class ElasticsearchLogReader(LogReader):
         self._iterator = self._iterate()
         return self._iterator
 
-    async def __aexit__(self, *args: Any) -> None:
+    async def __aexit__(self, *args: object) -> None:
         assert self._iterator
         await self._iterator.aclose()  # type: ignore
         scan = self._scan
@@ -479,7 +493,7 @@ class S3LogsMetadataService:
             for obj in page.get("Contents", ()):
                 key = obj["Key"]
                 # get time slice from s3 key
-                time_slice_str = basename(key).split(".")[0].split("_")
+                time_slice_str = Path(key).name.split(".")[0].split("_")
                 start_time_str = time_slice_str[0]
                 index = int(time_slice_str[-1])
                 if start_time_str >= since_time_str:
@@ -634,14 +648,11 @@ class S3FileReader:
 
     async def _iter_decompressed_lines(
         self, body: StreamingBody
-    ) -> AsyncIterator[bytes]:
-        loop = asyncio.get_event_loop()
+    ) -> AsyncGenerator[bytes, None]:
         decompress_obj = zlib.decompressobj(wbits=ZLIB_WBITS)
         pending = b""
         async for chunk in body.iter_chunks(chunk_size=self._chunk_size):
-            chunk_d = await loop.run_in_executor(
-                None, lambda: decompress_obj.decompress(chunk)
-            )
+            chunk_d = await asyncio.to_thread(decompress_obj.decompress, chunk)
             if chunk_d:
                 lines = chunk_d.splitlines()
                 lines[0] = pending + lines[0]
@@ -652,7 +663,7 @@ class S3FileReader:
                     yield lines[-1]
                 else:
                     pending = lines[-1]
-        chunk_d = await loop.run_in_executor(None, decompress_obj.flush)
+        chunk_d = await asyncio.to_thread(decompress_obj.flush)
         if chunk_d:
             pending += chunk_d
         if pending:
@@ -697,10 +708,12 @@ class S3LogRecordsWriter:
     def get_key_prefix(cls, pod_name: str) -> str:
         return f"{cls.LOGS_KEY_PREFIX}/{pod_name}"
 
-    async def __aenter__(self) -> S3LogRecordsWriter:
+    async def __aenter__(self) -> Self:
         return self
 
-    async def __aexit__(self, exc_type: type[BaseException] | None, *args: Any) -> None:
+    async def __aexit__(
+        self, exc_type: type[BaseException] | None, *args: object
+    ) -> None:
         if exc_type is None:
             await self._flush()
 
@@ -745,7 +758,7 @@ class S3LogRecordsWriter:
                     self._write_buffer_timeout,
                 )
                 return
-            except asyncio.TimeoutError as err:
+            except TimeoutError as err:
                 last_err = err
                 logger.warning("Timeout while flushing records")
         else:
@@ -816,7 +829,7 @@ class S3LogRecordsReader:
 
     @classmethod
     def _get_key_time(cls, key: str) -> datetime:
-        time_str = basename(key).split("_")[0]
+        time_str = Path(key).name.split("_")[0]
         return datetime.strptime(time_str, "%Y%m%d%H%M").replace(tzinfo=UTC)
 
     @classmethod
@@ -853,7 +866,7 @@ class S3LogReader(LogReader):
         self._iterator = self._iterate()
         return self._iterator
 
-    async def __aexit__(self, *args: Any) -> None:
+    async def __aexit__(self, *args: object) -> None:
         assert self._iterator
         await self._iterator.aclose()  # type: ignore
 
@@ -868,14 +881,14 @@ class S3LogReader(LogReader):
                     continue
                 self.last_time = record.time
                 if self._debug and key:
-                    yield f"~~~ From file {basename(key)}\n".encode()
+                    yield f"~~~ From file {Path(key).name}\n".encode()
                     key = ""
                 yield self.encode_log(record.time_str, record.message)
 
 
 class LogsService(abc.ABC):
     @asyncgeneratorcontextmanager
-    async def get_pod_log_reader(
+    async def get_pod_log_reader(  # noqa: C901
         self,
         pod_name: str,
         *,
@@ -887,7 +900,7 @@ class LogsService(abc.ABC):
         archive_delay_s: float = DEFAULT_ARCHIVE_DELAY,
         debug: bool = False,
         stop_func: Callable[[], Awaitable[bool]] | None = None,
-    ) -> AsyncIterator[bytes]:
+    ) -> AsyncGenerator[bytes, None]:
         archive_delay = timedelta(seconds=archive_delay_s)
         if stop_func is None:
 
@@ -898,7 +911,7 @@ class LogsService(abc.ABC):
         def get_last_start(status: ContainerStatus) -> datetime | None:
             if status.is_running:
                 return status.started_at
-            elif status.is_pod_terminated:
+            if status.is_pod_terminated:
                 finish = status.finished_at
                 if finish is not None and _utcnow() - finish < archive_delay:
                     return status.started_at
@@ -1148,7 +1161,8 @@ class ElasticsearchLogsService(BaseLogsService):
         )
 
     async def drop_logs(self, pod_name: str) -> None:
-        raise NotImplementedError("Dropping logs for Elasticsearch is not implemented")
+        msg = "Dropping logs for Elasticsearch is not implemented"
+        raise NotImplementedError(msg)
 
 
 class S3LogsService(BaseLogsService):
@@ -1254,11 +1268,9 @@ class S3LogsService(BaseLogsService):
                     metadata = await self._resume_log_writing(writer, metadata, record)
                     log_writing_resumed = True
 
-        metadata = metadata.add_log_files(
+        return metadata.add_log_files(
             writer.get_output_files(), last_merged_key=raw_keys[-1], compaction_time=now
         )
-
-        return metadata
 
     def _create_log_record_writer(self, pod_name: str) -> S3LogRecordsWriter:
         # NOTE: write_buffer_timeout must be less than s3_client read_timeout,
@@ -1361,7 +1373,7 @@ async def get_first_log_entry_time(
                         time_str += chunk[:pos]
                         break
                     time_str += chunk
-    except (asyncio.TimeoutError, JobNotFoundException):
+    except (TimeoutError, JobNotFoundException):
         return None
     try:
         return parse_date(time_str.decode())
@@ -1370,7 +1382,7 @@ async def get_first_log_entry_time(
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 class UnknownS3Error(Exception):

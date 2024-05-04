@@ -4,7 +4,7 @@ import json
 import re
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 from async_timeout import timeout
@@ -27,18 +27,19 @@ from platform_monitoring.user import User
 from .conftest_auth import _User
 from .conftest_kube import MyKubeClient
 
+
 # arguments: (image, command, resources)
 JobFactory = Callable[..., Awaitable[Job]]
 
 
-@pytest.fixture
+@pytest.fixture()
 async def job_factory(
     platform_api_client: PlatformApiClient,
 ) -> AsyncIterator[JobFactory]:
     jobs = []
 
     async def _factory(
-        image: str, command: Optional[str], resources: Resources, tty: bool = False
+        image: str, command: str | None, resources: Resources, *, tty: bool = False
     ) -> Job:
         container = JobContainer(
             image=platform_api_client.parse.remote_image(image),
@@ -59,19 +60,19 @@ async def job_factory(
 
 @pytest.mark.usefixtures("cluster_name")
 class TestJobsService:
-    @pytest.fixture
+    @pytest.fixture()
     def user(self, regular_user1: _User) -> User:
         return User(name=regular_user1.name, token=regular_user1.token)
 
-    @pytest.fixture
+    @pytest.fixture()
     def registry_host(self) -> str:
         return "localhost:5000"
 
-    @pytest.fixture
+    @pytest.fixture()
     def image_tag(self) -> str:
         return str(uuid.uuid4())[:8]
 
-    @pytest.fixture
+    @pytest.fixture()
     async def platform_api_client(
         self, platform_api_config: PlatformApiConfig, user: User
     ) -> AsyncIterator[PlatformApiClient]:
@@ -80,7 +81,7 @@ class TestJobsService:
         ) as client:
             yield client
 
-    @pytest.fixture
+    @pytest.fixture()
     async def jobs_service(
         self,
         platform_config_client: ConfigClient,
@@ -112,7 +113,7 @@ class TestJobsService:
                     if condition(job):
                         return
                     await asyncio.sleep(interval_s)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pytest.fail(f"Job '{job.id}' has not reached the condition")
 
     async def wait_for_job_running(
@@ -173,7 +174,7 @@ class TestJobsService:
         image = f"{registry_host}/{user.name}/alpine:{image_tag}"
 
         async with jobs_service.save(job, user, image) as it:
-            async for chunk in it:
+            async for _ in it:
                 pass
 
         new_job = await job_factory(
@@ -209,7 +210,7 @@ class TestJobsService:
         image = f"{registry_host}/{user.name}/alpine"
 
         async with jobs_service.save(job, user, image) as it:
-            async for chunk in it:
+            async for _ in it:
                 pass
 
         new_job = await job_factory(
@@ -241,9 +242,9 @@ class TestJobsService:
 
         image = f"{registry_host}/{user.name}/alpine:{image_tag}"
 
-        with pytest.raises(JobException, match="is not running"):
+        with pytest.raises(JobException, match="is not running"):  # noqa: PT012
             async with jobs_service.save(job, user, image) as it:
-                async for chunk in it:
+                async for _ in it:
                     pass
 
     async def test_save_push_failure(
@@ -310,9 +311,9 @@ class TestJobsService:
         registry_host = "localhost:5000"
         image = f"{registry_host}/InvalidImageName:{image_tag}"
 
-        with pytest.raises(JobException, match="repository name must be lowercase"):
+        with pytest.raises(JobException, match="repository name must be lowercase"):  # noqa: PT012
             async with jobs_service.save(job, user, image) as it:
-                async for chunk in it:
+                async for _ in it:
                     pass
 
     async def test_get_available_jobs_count(self, jobs_service: JobsService) -> None:

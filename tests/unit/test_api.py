@@ -18,12 +18,12 @@ from platform_monitoring.kube_client import KubeClient
 from platform_monitoring.logs import ElasticsearchLogsService, S3LogsService
 
 
-@pytest.fixture
+@pytest.fixture()
 def kube_client() -> mock.Mock:
     return mock.Mock(spec=KubeClient)
 
 
-@pytest.fixture
+@pytest.fixture()
 def config_factory() -> Callable[[LogsStorageType], Config]:
     def _factory(storage_type: LogsStorageType) -> Config:
         return Config(

@@ -3,13 +3,13 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Optional
+from types import TracebackType
 
 
 class LogReader(ABC):
-    last_time: Optional[datetime] = None
+    last_time: datetime | None = None
 
-    def __init__(self, timestamps: bool = False) -> None:
+    def __init__(self, *, timestamps: bool = False) -> None:
         super().__init__()
 
         self._timestamps = timestamps
@@ -28,8 +28,13 @@ class LogReader(ABC):
     async def __aenter__(self) -> AsyncIterator[bytes]:
         pass
 
-    async def __aexit__(self, *args: Any) -> None:
-        pass
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        return None
 
 
 @dataclass(frozen=True)
@@ -37,8 +42,8 @@ class JobStats:
     cpu: float
     memory: float
 
-    gpu_utilization: Optional[int] = None
-    gpu_memory_used: Optional[int] = None
+    gpu_utilization: int | None = None
+    gpu_memory_used: int | None = None
 
     timestamp: float = field(default_factory=time.time)
 
@@ -47,9 +52,9 @@ class Telemetry(ABC):
     async def __aenter__(self) -> "Telemetry":
         return self
 
-    async def __aexit__(self, *args: Any) -> None:
-        pass
+    async def __aexit__(self, *args: object) -> None:
+        return None
 
     @abstractmethod
-    async def get_latest_stats(self) -> Optional[JobStats]:
+    async def get_latest_stats(self) -> JobStats | None:
         pass

@@ -1,15 +1,17 @@
+from __future__ import annotations
+
 import asyncio
 import enum
 import json
 import logging
 import re
 import ssl
+import typing as t
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
 from urllib.parse import quote_plus, urlsplit
 
 import aiohttp
@@ -20,6 +22,7 @@ from yarl import URL
 from .base import JobStats, Telemetry
 from .config import KubeClientAuthType, KubeConfig
 from .utils import format_date, parse_date
+
 
 logger = logging.getLogger(__name__)
 
@@ -60,14 +63,14 @@ class Resources:
     memory: int = 0
     gpu: int = 0
 
-    def add(self, other: "Resources") -> "Resources":
+    def add(self, other: Resources) -> Resources:
         return self.__class__(
             cpu_m=self.cpu_m + other.cpu_m,
             memory=self.memory + other.memory,
             gpu=self.gpu + other.gpu,
         )
 
-    def available(self, used: "Resources") -> "Resources":
+    def available(self, used: Resources) -> Resources:
         """Get amount of unused resources.
 
         Returns:
@@ -79,7 +82,7 @@ class Resources:
             gpu=max(0, self.gpu - used.gpu),
         )
 
-    def count(self, resources: "Resources") -> int:
+    def count(self, resources: Resources) -> int:
         """Get the number of times a client can be provided
         with the specified resources.
 
@@ -105,7 +108,7 @@ class ProxyClient:
 
 
 class Pod:
-    def __init__(self, payload: dict[str, Any]) -> None:
+    def __init__(self, payload: dict[str, t.Any]) -> None:
         self._payload = payload
 
     @property
@@ -113,7 +116,7 @@ class Pod:
         return self._payload["metadata"]["name"]
 
     @property
-    def node_name(self) -> Optional[str]:
+    def node_name(self) -> str | None:
         return self._payload["spec"].get("nodeName")
 
     @property
@@ -121,19 +124,20 @@ class Pod:
         return self._payload["spec"].get("restartPolicy") or "Never"
 
     @property
-    def _status_payload(self) -> dict[str, Any]:
+    def _status_payload(self) -> dict[str, t.Any]:
         payload = self._payload.get("status")
         if not payload:
-            raise ValueError("Missing pod status")
+            msg = "Missing pod status"
+            raise ValueError(msg)
         return payload
 
-    def get_container_status(self, name: str) -> dict[str, Any]:
+    def get_container_status(self, name: str) -> dict[str, t.Any]:
         for payload in self._status_payload.get("containerStatuses", []):
             if payload["name"] == name:
                 return payload
         return {}
 
-    def get_container_id(self, name: str) -> Optional[str]:
+    def get_container_id(self, name: str) -> str | None:
         id_ = self.get_container_status(name).get("containerID", "")
         # NOTE: URL(id_).host is failing because the container id is too long
         return id_.replace("docker://", "") or None
@@ -175,7 +179,7 @@ class Pod:
     def _parse_memory(self, memory: str) -> int:
         try:
             memory_b = int(memory)
-        except ValueError:
+        except ValueError as exc:
             if memory.endswith("Ki"):
                 memory_b = int(memory[:-2]) * 1024
             elif memory.endswith("k"):
@@ -193,7 +197,8 @@ class Pod:
             elif memory.endswith("T"):
                 memory_b = int(memory[:-1]) * 1000**4
             else:
-                raise KubeClientException("Memory unit is not supported")
+                msg = "Memory unit is not supported"
+                raise KubeClientException(msg) from exc
         return memory_b
 
     @property
@@ -222,7 +227,7 @@ class Pod:
 
 
 class Node:
-    def __init__(self, payload: dict[str, Any]) -> None:
+    def __init__(self, payload: dict[str, t.Any]) -> None:
         self._payload = payload
 
     @property
@@ -233,12 +238,12 @@ class Node:
     def container_runtime_version(self) -> str:
         return self._payload["status"]["nodeInfo"]["containerRuntimeVersion"]
 
-    def get_label(self, key: str) -> Optional[str]:
+    def get_label(self, key: str) -> str | None:
         return self._payload["metadata"].get("labels", {}).get(key)
 
 
 class ContainerStatus:
-    def __init__(self, payload: dict[str, Any], restart_policy: str) -> None:
+    def __init__(self, payload: dict[str, t.Any], restart_policy: str) -> None:
         self._payload = payload
         self._restart_policy = restart_policy
 
@@ -278,7 +283,7 @@ class ContainerStatus:
         return self._payload.get("restartCount") or 0
 
     @property
-    def started_at(self) -> Optional[datetime]:
+    def started_at(self) -> datetime | None:
         try:
             if self.is_running:
                 date_str = self._payload["state"]["running"]["startedAt"]
@@ -292,7 +297,7 @@ class ContainerStatus:
         return parse_date(date_str)
 
     @property
-    def finished_at(self) -> Optional[datetime]:
+    def finished_at(self) -> datetime | None:
         try:
             if self.is_terminated:
                 date_str = self._payload["state"]["terminated"]["finishedAt"]
@@ -312,20 +317,20 @@ class KubeClient:
         *,
         base_url: str,
         namespace: str,
-        cert_authority_path: Optional[str] = None,
-        cert_authority_data_pem: Optional[str] = None,
+        cert_authority_path: str | None = None,
+        cert_authority_data_pem: str | None = None,
         auth_type: KubeClientAuthType = KubeClientAuthType.CERTIFICATE,
-        auth_cert_path: Optional[str] = None,
-        auth_cert_key_path: Optional[str] = None,
-        token: Optional[str] = None,
-        token_path: Optional[str] = None,
+        auth_cert_path: str | None = None,
+        auth_cert_key_path: str | None = None,
+        token: str | None = None,
+        token_path: str | None = None,
         token_update_interval_s: int = 300,
         conn_timeout_s: int = 300,
         read_timeout_s: int = 100,
         conn_pool_size: int = 100,
         kubelet_node_port: int = KubeConfig.kubelet_node_port,
-        nvidia_dcgm_node_port: Optional[int] = KubeConfig.nvidia_dcgm_node_port,
-        trace_configs: Optional[list[aiohttp.TraceConfig]] = None,
+        nvidia_dcgm_node_port: int | None = KubeConfig.nvidia_dcgm_node_port,
+        trace_configs: list[aiohttp.TraceConfig] | None = None,
     ) -> None:
         self._base_url = base_url
         self._namespace = namespace
@@ -349,14 +354,14 @@ class KubeClient:
 
         self._trace_configs = trace_configs
 
-        self._client: Optional[aiohttp.ClientSession] = None
-        self._token_updater_task: Optional[asyncio.Task[None]] = None
+        self._client: aiohttp.ClientSession | None = None
+        self._token_updater_task: asyncio.Task[None] | None = None
 
     @property
     def _is_ssl(self) -> bool:
         return urlsplit(self._base_url).scheme == "https"
 
-    def _create_ssl_context(self) -> Optional[ssl.SSLContext]:
+    def _create_ssl_context(self) -> ssl.SSLContext | None:
         if not self._is_ssl:
             return None
         ssl_context = ssl.create_default_context(
@@ -414,11 +419,11 @@ class KubeClient:
                 await self._token_updater_task
             self._token_updater_task = None
 
-    async def __aenter__(self) -> "KubeClient":
+    async def __aenter__(self) -> t.Self:
         await self.init()
         return self
 
-    async def __aexit__(self, *args: Any) -> None:
+    async def __aexit__(self, *args: object) -> None:
         await self.close()
 
     @property
@@ -453,7 +458,7 @@ class KubeClient:
         proxy_url = self._generate_node_proxy_url(name, self._kubelet_port)
         return f"{proxy_url}/stats/summary"
 
-    def _generate_node_gpu_metrics_url(self, name: str) -> Optional[str]:
+    def _generate_node_gpu_metrics_url(self, name: str) -> str | None:
         if not self._nvidia_dcgm_port:
             return None
         proxy_url = self._generate_node_proxy_url(name, self._nvidia_dcgm_port)
@@ -461,18 +466,17 @@ class KubeClient:
 
     def _generate_pod_log_url(self, pod_name: str, container_name: str) -> str:
         url = self._generate_pod_url(pod_name)
-        url = f"{url}/log?container={pod_name}&follow=true"
-        return url
+        return f"{url}/log?container={pod_name}&follow=true"
 
     def _create_headers(
-        self, headers: Optional[dict[str, Any]] = None
-    ) -> dict[str, Any]:
+        self, headers: dict[str, t.Any] | None = None
+    ) -> dict[str, t.Any]:
         headers = dict(headers) if headers else {}
         if self._auth_type == KubeClientAuthType.TOKEN and self._token:
             headers["Authorization"] = "Bearer " + self._token
         return headers
 
-    async def _request(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    async def _request(self, *args: t.Any, **kwargs: t.Any) -> dict[str, t.Any]:
         headers = self._create_headers(kwargs.pop("headers", None))
         assert self._client, "client is not initialized"
         async with self._client.request(*args, headers=headers, **kwargs) as response:
@@ -481,7 +485,7 @@ class KubeClient:
             logger.debug("k8s response payload: %s", payload)
             return payload
 
-    async def get_raw_pod(self, pod_name: str) -> dict[str, Any]:
+    async def get_raw_pod(self, pod_name: str) -> dict[str, t.Any]:
         url = self._generate_pod_url(pod_name)
         payload = await self._request(method="GET", url=url)
         self._assert_resource_kind(
@@ -492,7 +496,7 @@ class KubeClient:
     async def get_pod(self, pod_name: str) -> Pod:
         return Pod(await self.get_raw_pod(pod_name))
 
-    async def _get_raw_container_state(self, pod_name: str) -> dict[str, Any]:
+    async def _get_raw_container_state(self, pod_name: str) -> dict[str, t.Any]:
         pod = await self.get_pod(pod_name)
         container_status = pod.get_container_status(pod_name)
         return container_status.get("state", {})
@@ -538,7 +542,7 @@ class KubeClient:
 
     async def get_pod_container_stats(
         self, node_name: str, pod_name: str, container_name: str
-    ) -> Optional["PodContainerStats"]:
+    ) -> PodContainerStats | None:
         """
         https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/apis/stats/v1alpha1/types.go
         """
@@ -551,8 +555,8 @@ class KubeClient:
             )
         except JobNotFoundException:
             return None
-        except ContentTypeError as e:
-            logger.info(f"Failed to parse response: {e}", exc_info=True)
+        except ContentTypeError as exc:
+            logger.info("Failed to parse response", exc, exc_info=True)
             return None
 
     async def get_pod_container_gpu_stats(
@@ -560,7 +564,7 @@ class KubeClient:
         node_name: str,
         pod_name: str,
         container_name: str,
-    ) -> Optional["PodContainerGPUStats"]:
+    ) -> PodContainerGPUStats | None:
         url = self._generate_node_gpu_metrics_url(node_name)
         if not url:
             return None
@@ -594,7 +598,7 @@ class KubeClient:
         conn_timeout_s: float = 60 * 5,
         read_timeout_s: float = 60 * 30,
         previous: bool = False,
-        since: Optional[datetime] = None,
+        since: datetime | None = None,
         timestamps: bool = False,
     ) -> AsyncIterator[aiohttp.StreamReader]:
         url = self._generate_pod_log_url(pod_name, container_name)
@@ -653,31 +657,39 @@ class KubeClient:
             raise KubeClientException(payload)
 
     def _assert_resource_kind(
-        self, expected_kind: str, payload: dict[str, Any], job_id: str = ""
+        self, expected_kind: str, payload: dict[str, t.Any], job_id: str = ""
     ) -> None:
         kind = payload["kind"]
         if kind == "Status":
             self._raise_for_status(payload, job_id=job_id)
-            raise JobError("unexpected error")
-        elif kind != expected_kind:
-            raise ValueError(f"unknown kind: {kind}")
+            msg = "unexpected error"
+            raise JobError(msg)
+        if kind != expected_kind:
+            msg = f"unknown kind: {kind}"
+            raise ValueError(msg)
 
-    def _raise_for_status(self, payload: dict[str, Any], job_id: Optional[str]) -> None:
+    def _raise_for_status(self, payload: dict[str, t.Any], job_id: str | None) -> None:
         if payload["code"] == 400:
             if "ContainerCreating" in payload["message"]:
-                raise JobNotFoundException(f"job '{job_id}' was not created yet")
+                msg = f"job '{job_id}' was not created yet"
+                raise JobNotFoundException(msg)
             if "is not available" in payload["message"]:
-                raise JobNotFoundException(f"job '{job_id}' has not created yet")
+                msg = f"job '{job_id}' has not created yet"
+                raise JobNotFoundException(msg)
             if "is terminated" in payload["message"]:
-                raise JobNotFoundException(f"job '{job_id}' is terminated")
+                msg = f"job '{job_id}' is terminated"
+                raise JobNotFoundException(msg)
         elif payload["code"] == 401:
             raise KubeClientUnauthorized(payload)
         elif payload["code"] == 404:
-            raise JobNotFoundException(f"job '{job_id}' was not found")
+            msg = f"job '{job_id}' was not found"
+            raise JobNotFoundException(msg)
         elif payload["code"] == 409:
-            raise JobError(f"job '{job_id}' already exist")
+            msg = f"job '{job_id}' already exist"
+            raise JobError(msg)
         elif payload["code"] == 422:
-            raise JobError(f"can not create job with id '{job_id}'")
+            msg = f"can not create job with id '{job_id}'"
+            raise JobError(msg)
 
 
 @dataclass(frozen=True)
@@ -686,7 +698,7 @@ class PodContainerStats:
     memory: float
 
     @classmethod
-    def from_primitive(cls, payload: dict[str, Any]) -> "PodContainerStats":
+    def from_primitive(cls, payload: dict[str, t.Any]) -> PodContainerStats:
         cpu = payload.get("cpu", {}).get("usageNanoCores", 0) / (10**9)
         memory = payload.get("memory", {}).get("workingSetBytes", 0)
         return cls(cpu=cpu, memory=memory)
@@ -713,7 +725,7 @@ class GPUCounters:
     counters: list[GPUCounter] = field(default_factory=list)
 
     @classmethod
-    def parse(cls, text: str) -> "GPUCounters":
+    def parse(cls, text: str) -> GPUCounters:
         counters = []
         for m in re.finditer(GPU_COUNTER_RE, text, re.MULTILINE):
             groups = m.groupdict()
@@ -756,19 +768,19 @@ class GPUCounters:
 
 
 class StatsSummary:
-    def __init__(self, payload: dict[str, Any]) -> None:
+    def __init__(self, payload: dict[str, t.Any]) -> None:
         self._validate_payload(payload)
         self._payload = payload
 
-    def _validate_payload(self, payload: dict[str, Any]) -> None:
+    def _validate_payload(self, payload: dict[str, t.Any]) -> None:
         if "pods" not in payload:
             err_msg = "Invalid stats summary response"
-            logging.error(err_msg + f": `{payload}`")
+            logging.error("%s: `%s`", err_msg, payload)
             raise JobError(err_msg)
 
     def _find_pod_in_stats_summary(
-        self, stats_summary: dict[str, Any], namespace_name: str, name: str
-    ) -> dict[str, Any]:
+        self, stats_summary: dict[str, t.Any], namespace_name: str, name: str
+    ) -> dict[str, t.Any]:
         for pod_stats in stats_summary["pods"]:
             ref = pod_stats["podRef"]
             if ref["namespace"] == namespace_name and ref["name"] == name:
@@ -776,8 +788,8 @@ class StatsSummary:
         return {}
 
     def _find_container_in_pod_stats(
-        self, pod_stats: dict[str, Any], name: str
-    ) -> dict[str, Any]:
+        self, pod_stats: dict[str, t.Any], name: str
+    ) -> dict[str, t.Any]:
         containers = pod_stats.get("containers") or []
         for container_stats in containers:
             if container_stats["name"] == name:
@@ -786,7 +798,7 @@ class StatsSummary:
 
     def get_pod_container_stats(
         self, namespace_name: str, pod_name: str, container_name: str
-    ) -> Optional[PodContainerStats]:
+    ) -> PodContainerStats | None:
         pod_stats = self._find_pod_in_stats_summary(
             self._payload, namespace_name, pod_name
         )
@@ -814,7 +826,7 @@ class KubeTelemetry(Telemetry):
         self._pod_name = pod_name
         self._container_name = container_name
 
-    async def get_latest_stats(self) -> Optional[JobStats]:
+    async def get_latest_stats(self) -> JobStats | None:
         pod = await self._kube_client.get_pod(self._pod_name)
         if not pod.node_name:
             return None
@@ -822,7 +834,7 @@ class KubeTelemetry(Telemetry):
             return await self._get_latest_gpu_pod_stats(pod.node_name)
         return await self._get_latest_cpu_pod_stats(pod.node_name)
 
-    async def _get_latest_cpu_pod_stats(self, node_name: str) -> Optional[JobStats]:
+    async def _get_latest_cpu_pod_stats(self, node_name: str) -> JobStats | None:
         pod_stats = await self._kube_client.get_pod_container_stats(
             node_name, self._pod_name, self._container_name
         )
@@ -830,7 +842,7 @@ class KubeTelemetry(Telemetry):
             return None
         return JobStats(cpu=pod_stats.cpu, memory=pod_stats.memory)
 
-    async def _get_latest_gpu_pod_stats(self, node_name: str) -> Optional[JobStats]:
+    async def _get_latest_gpu_pod_stats(self, node_name: str) -> JobStats | None:
         pod_stats_task = asyncio.create_task(
             self._kube_client.get_pod_container_stats(
                 node_name, self._pod_name, self._container_name
