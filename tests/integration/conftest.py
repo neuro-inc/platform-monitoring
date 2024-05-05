@@ -14,7 +14,6 @@ import aiohttp.web
 import pytest
 from _pytest.fixtures import FixtureRequest
 from aiobotocore.client import AioBaseClient
-from async_timeout import timeout
 from elasticsearch import AsyncElasticsearch
 from yarl import URL
 
@@ -88,11 +87,11 @@ async def wait_for_service(
     timeout_s: float = 30,
     interval_s: float = 1,
 ) -> None:
-    async with timeout(timeout_s):
+    async with asyncio.timeout(timeout_s):
         while True:
             try:
                 async with aiohttp.ClientSession() as client:
-                    async with timeout(1):
+                    async with asyncio.timeout(1):
                         async with client.get(service_ping_url) as resp:
                             assert resp.status == aiohttp.web.HTTPOk.status_code
                             return
@@ -164,7 +163,7 @@ async def es_config(
     else:
         es_host = get_service_url("elasticsearch-logging")
     async with AsyncElasticsearch(hosts=[es_host]) as client:
-        async with timeout(120):
+        async with asyncio.timeout(120):
             while True:
                 try:
                     await client.ping()

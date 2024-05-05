@@ -30,7 +30,6 @@ import botocore.exceptions
 import pytest
 from aiobotocore.client import AioBaseClient
 from aiohttp import web
-from async_timeout import timeout
 from elasticsearch import AsyncElasticsearch
 
 from platform_monitoring.config import KubeConfig
@@ -163,17 +162,20 @@ def s3_log_service(
     return S3LogsService(kube_client, s3_client, s3_logs_metadata_service)
 
 
+TOKEN_KEY = aiohttp.web.AppKey("token", dict[str, str])
+
+
 class TestKubeClientTokenUpdater:
     @pytest.fixture()
     async def kube_app(self) -> aiohttp.web.Application:
         async def _get_nodes(request: aiohttp.web.Request) -> aiohttp.web.Response:
             auth = request.headers["Authorization"]
             token = auth.split()[-1]
-            app["token"]["value"] = token
+            app[TOKEN_KEY]["value"] = token
             return aiohttp.web.json_response({"kind": "NodeList", "items": []})
 
         app = aiohttp.web.Application()
-        app["token"] = {"value": ""}
+        app[TOKEN_KEY] = {"value": ""}
         app.router.add_routes([aiohttp.web.get("/api/v1/nodes", _get_nodes)])
         return app
 
@@ -213,13 +215,13 @@ class TestKubeClientTokenUpdater:
         kube_token_path: str,
     ) -> None:
         await kube_client.get_nodes()
-        assert kube_app["token"]["value"] == "token-1"
+        assert kube_app[TOKEN_KEY]["value"] == "token-1"
 
         Path(kube_token_path).write_text("token-2")
         await asyncio.sleep(2)
 
         await kube_client.get_nodes()
-        assert kube_app["token"]["value"] == "token-2"
+        assert kube_app[TOKEN_KEY]["value"] == "token-2"
 
 
 class TestKubeClient:
@@ -537,7 +539,7 @@ class TestKubeClient:
     ) -> None:
         await kube_client.create_pod(job_pod.payload)
 
-        async with timeout(5.0):
+        async with asyncio.timeout(5.0):
             while True:
                 stream_cm = kube_client.create_pod_container_logs_stream(
                     pod_name=job_pod.name, container_name=job_pod.name
@@ -1027,7 +1029,7 @@ class TestLogReader:
     ) -> None:
         payload = b""
         try:
-            async with timeout(timeout_s):
+            async with asyncio.timeout(timeout_s):
                 while True:
                     log_reader = ElasticsearchLogReader(
                         es_client,
@@ -1058,7 +1060,7 @@ class TestLogReader:
     ) -> None:
         payload = b""
         try:
-            async with timeout(timeout_s):
+            async with asyncio.timeout(timeout_s):
                 while True:
                     log_reader = S3LogReader(
                         s3_client,
@@ -1165,7 +1167,7 @@ class TestLogReader:
             async def coro() -> bytes | Exception:
                 await asyncio.sleep(delay)
                 try:
-                    async with timeout(timeout_s):
+                    async with asyncio.timeout(timeout_s):
                         log_reader = factory.get_pod_log_reader(
                             job_pod.name,
                             separator=b"===",
@@ -1247,7 +1249,7 @@ class TestLogReader:
             async def coro() -> bytes | Exception:
                 await asyncio.sleep(delay)
                 try:
-                    async with timeout(timeout_s):
+                    async with asyncio.timeout(timeout_s):
                         log_reader = factory.get_pod_log_reader(
                             job_pod.name,
                             separator=b"===",
@@ -1334,7 +1336,7 @@ class TestLogReader:
             async def coro() -> bytes | Exception:
                 await asyncio.sleep(delay)
                 try:
-                    async with timeout(timeout_s):
+                    async with asyncio.timeout(timeout_s):
                         log_reader = factory.get_pod_log_reader(
                             job_pod.name,
                             separator=b"===",
