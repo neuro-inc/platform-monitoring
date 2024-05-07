@@ -786,7 +786,7 @@ class KubeClient:
         if field_selector:
             params["fieldSelector"] = field_selector
         payload = await self._request(method="get", url=url, params=params)
-        self._assert_resource_kind(expected_kind="PodList", payload=payload)
+        self._assert_resource_kind("PodList", payload)
         pod_list = ListResult.from_primitive(payload, resource_cls=Pod)
         return pod_list.items
         payload = await self._request(method="get", url=self._pods_url, params=params)
@@ -795,7 +795,7 @@ class KubeClient:
 
     async def get_node(self, name: str) -> Node:
         payload = await self._request(method="get", url=self._generate_node_url(name))
-        self._assert_resource_kind(expected_kind="Node", payload=payload)
+        self._assert_resource_kind("Node", payload)
         return Node.from_primitive(payload)
 
     async def get_nodes(self, *, label_selector: str | None = None) -> list[Node]:
@@ -803,7 +803,7 @@ class KubeClient:
         if label_selector:
             params = {"labelSelector": label_selector}
         payload = await self._request(method="get", url=self._nodes_url, params=params)
-        self._assert_resource_kind(expected_kind="NodeList", payload=payload)
+        self._assert_resource_kind("NodeList", payload)
         node_list = ListResult.from_primitive(payload, resource_cls=Node)
         return node_list.items
         self._assert_resource_kind("NodeList", payload)
