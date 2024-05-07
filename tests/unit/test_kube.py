@@ -152,7 +152,7 @@ class TestPod:
                 "spec": {"containers": [{"resources": {"requests": {"cpu": "100m"}}}]},
             }
         )
-        assert pod.resource_requests == ContainerResources(cpu=100)
+        assert pod.resource_requests == ContainerResources(cpu_m=100)
 
     def test_resource_requests_cpu_cores(self) -> None:
         pod = Pod.from_primitive(
@@ -162,7 +162,7 @@ class TestPod:
                 "spec": {"containers": [{"resources": {"requests": {"cpu": "1"}}}]},
             }
         )
-        assert pod.resource_requests == ContainerResources(cpu=1000)
+        assert pod.resource_requests == ContainerResources(cpu_m=1000)
 
     def test_resource_requests_memory_mebibytes(self) -> None:
         pod = Pod.from_primitive(
@@ -255,7 +255,7 @@ class TestPod:
             }
         )
         assert pod.resource_requests == ContainerResources(
-            cpu=1500, memory=1536 * 2**20, nvidia_gpu=1, amd_gpu=2
+            cpu_m=1500, memory=1536 * 2**20, nvidia_gpu=1, amd_gpu=2
         )
 
 
@@ -665,36 +665,40 @@ class TestNode:
 class TestContainerResources:
     def test_add(self) -> None:
         resources1 = ContainerResources(
-            cpu=1, memory=2 * 2**20, nvidia_gpu=3, amd_gpu=4
+            cpu_m=1, memory=2 * 2**20, nvidia_gpu=3, amd_gpu=4
         )
         resources2 = ContainerResources(
-            cpu=4, memory=5 * 2**20, nvidia_gpu=6, amd_gpu=7
+            cpu_m=4, memory=5 * 2**20, nvidia_gpu=6, amd_gpu=7
         )
         assert resources1 + resources2 == ContainerResources(
-            cpu=5, memory=7 * 2**20, nvidia_gpu=9, amd_gpu=11
+            cpu_m=5, memory=7 * 2**20, nvidia_gpu=9, amd_gpu=11
         )
 
     def test_sub(self) -> None:
         total = ContainerResources(
-            cpu=1000, memory=1024 * 2**20, nvidia_gpu=2, amd_gpu=4
+            cpu_m=1000, memory=1024 * 2**20, nvidia_gpu=2, amd_gpu=4
         )
-        used = ContainerResources(cpu=100, memory=256 * 2**20, nvidia_gpu=1, amd_gpu=2)
+        used = ContainerResources(
+            cpu_m=100, memory=256 * 2**20, nvidia_gpu=1, amd_gpu=2
+        )
         assert total - used == ContainerResources(
-            cpu=900, memory=768 * 2**20, nvidia_gpu=1, amd_gpu=2
+            cpu_m=900, memory=768 * 2**20, nvidia_gpu=1, amd_gpu=2
         )
 
     def test_floordiv(self) -> None:
         total = ContainerResources(
-            cpu=1000, memory=1024 * 2**20, nvidia_gpu=2, amd_gpu=4
+            cpu_m=1000, memory=1024 * 2**20, nvidia_gpu=2, amd_gpu=4
         )
 
         assert (
             total
-            // ContainerResources(cpu=100, memory=128 * 2**20, nvidia_gpu=1, amd_gpu=2)
+            // ContainerResources(
+                cpu_m=100, memory=128 * 2**20, nvidia_gpu=1, amd_gpu=2
+            )
             == 2
         )
-        assert total // ContainerResources(cpu=100, memory=128 * 2**20) == 8
-        assert total // ContainerResources(cpu=100) == 10
-        assert total // ContainerResources(cpu=1100) == 0
+        assert total // ContainerResources(cpu_m=100, memory=128 * 2**20) == 8
+        assert total // ContainerResources(cpu_m=100) == 10
+        assert total // ContainerResources(cpu_m=1100) == 0
         assert total // ContainerResources() == 110
         assert ContainerResources() // ContainerResources() == 0

@@ -70,52 +70,6 @@ class JobNotFoundException(JobException):
     pass
 
 
-def _assert_resource_kind(
-    expected_kind: str, payload: JSON, job_id: str | None = None
-) -> None:
-    kind = payload["kind"]
-    if kind == "Status":
-        _raise_for_status(payload, job_id=job_id)
-    elif kind != expected_kind:
-        msg = f"unknown kind: {kind}"
-        raise ValueError(msg)
-
-
-def _raise_for_status(payload: JSON, job_id: str | None = None) -> t.NoReturn:  # noqa: C901
-    code = payload["code"]
-    reason = payload.get("reason")
-    if code == 400 and job_id:
-        if "ContainerCreating" in payload["message"]:
-            msg = f"Job '{job_id}' has not been created yet"
-            raise JobNotFoundException(msg)
-        if "is not available" in payload["message"]:
-            msg = f"Job '{job_id}' is not available"
-            raise JobNotFoundException(msg)
-        if "is terminated" in payload["message"]:
-            msg = f"Job '{job_id}' is terminated"
-            raise JobNotFoundException(msg)
-    elif code == 401:
-        raise KubeClientUnauthorizedException(payload)
-    elif code == 404 and job_id:
-        msg = f"Job '{job_id}' not found"
-        raise JobNotFoundException(msg)
-    elif code == 404:
-        raise JobNotFoundException(payload)
-    elif code == 409 and job_id:
-        msg = f"Job '{job_id}' already exists"
-        raise JobError(msg)
-    elif code == 409:
-        raise ConflictException(payload)
-    elif code == 410:
-        raise ResourceGoneException(payload)
-    elif code == 422:
-        msg = f"Cannot create job with id '{job_id}'"
-        raise JobError(msg)
-    elif reason == "Expired":
-        raise ExpiredException(payload)
-    raise KubeClientException(payload)
-
-
 class PodPhase(enum.StrEnum):
     PENDING = "Pending"
     RUNNING = "Running"
@@ -126,7 +80,7 @@ class PodPhase(enum.StrEnum):
 
 @dataclass(frozen=True)
 class ContainerResources:
-    cpu: int = 0
+    cpu_m: int = 0
     memory: int = 0
     nvidia_gpu: int = 0
     amd_gpu: int = 0
@@ -137,14 +91,14 @@ class ContainerResources:
     @classmethod
     def from_primitive(cls, payload: JSON) -> t.Self:
         return cls(
-            cpu=cls._parse_cpu(str(payload.get("cpu", "0"))),
+            cpu_m=cls._parse_cpu_m(str(payload.get("cpu", "0"))),
             memory=cls._parse_memory(str(payload.get("memory", "0"))),
             nvidia_gpu=int(payload.get(cls.nvidia_gpu_key, 0)),
             amd_gpu=int(payload.get(cls.amd_gpu_key, 0)),
         )
 
     @classmethod
-    def _parse_cpu(cls, value: str) -> int:
+    def _parse_cpu_m(cls, value: str) -> int:
         if value.endswith("m"):
             return int(value[:-1])
         return int(float(value) * 1000)
@@ -169,7 +123,7 @@ class ContainerResources:
 
     def __bool__(self) -> bool:
         return (
-            self.cpu != 0
+            self.cpu_m != 0
             or self.memory != 0
             or self.nvidia_gpu != 0
             or self.amd_gpu != 0
@@ -178,7 +132,7 @@ class ContainerResources:
     def __add__(self, other: ContainerResources) -> t.Self:
         return replace(
             self,
-            cpu=self.cpu + other.cpu,
+            cpu_m=self.cpu_m + other.cpu_m,
             memory=self.memory + other.memory,
             nvidia_gpu=self.nvidia_gpu + other.nvidia_gpu,
             amd_gpu=self.amd_gpu + other.amd_gpu,
@@ -187,7 +141,7 @@ class ContainerResources:
     def __sub__(self, used: ContainerResources) -> t.Self:
         return replace(
             self,
-            cpu=max(0, self.cpu - used.cpu),
+            cpu_m=max(0, self.cpu_m - used.cpu_m),
             memory=max(0, self.memory - used.memory),
             nvidia_gpu=max(0, self.nvidia_gpu - used.nvidia_gpu),
             amd_gpu=max(0, self.amd_gpu - used.amd_gpu),
@@ -197,8 +151,8 @@ class ContainerResources:
         if not self:
             return 0
         result = DEFAULT_MAX_PODS_PER_NODE
-        if resources.cpu:
-            result = min(result, self.cpu // resources.cpu)
+        if resources.cpu_m:
+            result = min(result, self.cpu_m // resources.cpu_m)
         if resources.memory:
             result = min(result, self.memory // resources.memory)
         if resources.nvidia_gpu:
@@ -230,9 +184,8 @@ class ListResult(t.Generic[TResource]):
 
     @classmethod
     def from_primitive(
-        cls, payload: JSON, *, resource_kind: str, resource_cls: type[TResource]
+        cls, payload: JSON, *, resource_cls: type[TResource]
     ) -> ListResult[TResource]:
-        _assert_resource_kind(resource_kind, payload)
         return cls(
             metadata=Metadata.from_primitive(payload["metadata"]),
             items=[resource_cls.from_primitive(item) for item in payload["items"]],
@@ -321,7 +274,6 @@ class Pod(Resource):
 
     @classmethod
     def from_primitive(cls, payload: JSON) -> t.Self:
-        _assert_resource_kind("Pod", payload)
         return cls(
             metadata=Metadata.from_primitive(payload["metadata"]),
             spec=PodSpec.from_primitive(payload["spec"]),
@@ -423,7 +375,6 @@ class Node(Resource):
 
     @classmethod
     def from_primitive(cls, payload: JSON) -> Node:
-        _assert_resource_kind("Node", payload)
         return cls(
             metadata=Metadata.from_primitive(payload["metadata"]),
             status=NodeStatus.from_primitive(payload["status"]),
@@ -692,12 +643,13 @@ class KubeClient:
     async def get_raw_pod(self, pod_name: str) -> dict[str, t.Any]:
         url = self._generate_pod_url(pod_name)
         payload = await self._request(method="GET", url=url)
-        _assert_resource_kind(expected_kind="Pod", payload=payload, job_id=pod_name)
+        self._assert_resource_kind(
+            expected_kind="Pod", payload=payload, job_id=pod_name
+        )
         return payload
 
     async def get_pod(self, pod_name: str) -> Pod:
-        url = self._generate_pod_url(pod_name)
-        payload = await self._request(method="GET", url=url)
+        payload = await self.get_raw_pod(pod_name)
         return Pod.from_primitive(payload)
 
     async def _get_raw_container_state(self, pod_name: str) -> dict[str, t.Any]:
@@ -834,9 +786,8 @@ class KubeClient:
         if field_selector:
             params["fieldSelector"] = field_selector
         payload = await self._request(method="get", url=url, params=params)
-        pod_list = ListResult.from_primitive(
-            payload, resource_kind="PodList", resource_cls=Pod
-        )
+        self._assert_resource_kind(expected_kind="PodList", payload=payload)
+        pod_list = ListResult.from_primitive(payload, resource_cls=Pod)
         return pod_list.items
         payload = await self._request(method="get", url=self._pods_url, params=params)
         self._assert_resource_kind("PodList", payload)
@@ -844,6 +795,7 @@ class KubeClient:
 
     async def get_node(self, name: str) -> Node:
         payload = await self._request(method="get", url=self._generate_node_url(name))
+        self._assert_resource_kind(expected_kind="Node", payload=payload)
         return Node.from_primitive(payload)
 
     async def get_nodes(self, *, label_selector: str | None = None) -> list[Node]:
@@ -851,9 +803,8 @@ class KubeClient:
         if label_selector:
             params = {"labelSelector": label_selector}
         payload = await self._request(method="get", url=self._nodes_url, params=params)
-        node_list = ListResult.from_primitive(
-            payload, resource_kind="NodeList", resource_cls=Node
-        )
+        self._assert_resource_kind(expected_kind="NodeList", payload=payload)
+        node_list = ListResult.from_primitive(payload, resource_cls=Node)
         return node_list.items
         self._assert_resource_kind("NodeList", payload)
         return [Node(item) for item in payload["items"]]
@@ -867,7 +818,51 @@ class KubeClient:
                 pod = json.loads(payload)
             except ValueError:
                 pod = {"code": response.status, "message": payload}
-            _raise_for_status(pod, job_id=job_id)
+            self._raise_for_status(pod, job_id=job_id)
+
+    def _assert_resource_kind(
+        self, expected_kind: str, payload: JSON, job_id: str | None = None
+    ) -> None:
+        kind = payload["kind"]
+        if kind == "Status":
+            self._raise_for_status(payload, job_id=job_id)
+        elif kind != expected_kind:
+            msg = f"unknown kind: {kind}"
+            raise ValueError(msg)
+
+    def _raise_for_status(self, payload: JSON, job_id: str | None = None) -> t.NoReturn:  # noqa: C901
+        code = payload["code"]
+        reason = payload.get("reason")
+        if code == 400 and job_id:
+            if "ContainerCreating" in payload["message"]:
+                msg = f"Job '{job_id}' has not been created yet"
+                raise JobNotFoundException(msg)
+            if "is not available" in payload["message"]:
+                msg = f"Job '{job_id}' is not available"
+                raise JobNotFoundException(msg)
+            if "is terminated" in payload["message"]:
+                msg = f"Job '{job_id}' is terminated"
+                raise JobNotFoundException(msg)
+        elif code == 401:
+            raise KubeClientUnauthorizedException(payload)
+        elif code == 404 and job_id:
+            msg = f"Job '{job_id}' not found"
+            raise JobNotFoundException(msg)
+        elif code == 404:
+            raise JobNotFoundException(payload)
+        elif code == 409 and job_id:
+            msg = f"Job '{job_id}' already exists"
+            raise JobError(msg)
+        elif code == 409:
+            raise ConflictException(payload)
+        elif code == 410:
+            raise ResourceGoneException(payload)
+        elif code == 422:
+            msg = f"Cannot create job with id '{job_id}'"
+            raise JobError(msg)
+        elif reason == "Expired":
+            raise ExpiredException(payload)
+        raise KubeClientException(payload)
 
 
 @dataclass(frozen=True)

@@ -230,7 +230,7 @@ class JobsService:
         for preset in cluster.orchestrator.resource_presets:
             available_jobs_count = 0
             preset_resources = ContainerResources(
-                cpu=int(preset.cpu * 1000),
+                cpu_m=int(preset.cpu * 1000),
                 memory=preset.memory,
                 nvidia_gpu=preset.nvidia_gpu or 0,
                 amd_gpu=preset.amd_gpu or 0,
@@ -309,7 +309,7 @@ class JobsService:
         self, node_pool: ResourcePoolType
     ) -> ContainerResources:
         return ContainerResources(
-            cpu=int(node_pool.available_cpu * 1000),
+            cpu_m=int(node_pool.available_cpu * 1000),
             memory=node_pool.available_memory,
             nvidia_gpu=node_pool.nvidia_gpu or 0,
             amd_gpu=node_pool.amd_gpu or 0,
