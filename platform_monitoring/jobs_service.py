@@ -15,6 +15,7 @@ from .container_runtime_client import (
     ContainerRuntimeError,
 )
 from .kube_client import (
+    DEFAULT_MAX_PODS_PER_NODE,
     ContainerResources,
     JobNotFoundException,
     KubeClient,
@@ -254,8 +255,9 @@ class JobsService:
                 # get number of jobs that can be scheduled on free nodes
                 # in the current node pool
                 if free_nodes_count > 0:
-                    available_jobs_count += free_nodes_count * (
-                        node_resource_limit // preset_resources
+                    available_jobs_count += free_nodes_count * min(
+                        DEFAULT_MAX_PODS_PER_NODE,
+                        node_resource_limit // preset_resources,
                     )
             result[preset.name] = available_jobs_count
         return result

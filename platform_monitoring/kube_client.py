@@ -54,10 +54,6 @@ class ResourceGoneException(KubeClientException):
     pass
 
 
-class NotFoundException(KubeClientException):
-    pass
-
-
 class ConflictException(KubeClientException):
     pass
 
@@ -90,23 +86,23 @@ def _raise_for_status(payload: JSON, job_id: str | None = None) -> t.NoReturn:  
     reason = payload.get("reason")
     if code == 400 and job_id:
         if "ContainerCreating" in payload["message"]:
-            msg = f"job '{job_id}' was not created yet"
+            msg = f"Job '{job_id}' has not been created yet"
             raise JobNotFoundException(msg)
         if "is not available" in payload["message"]:
-            msg = f"job '{job_id}' has not created yet"
+            msg = f"Job '{job_id}' is not available"
             raise JobNotFoundException(msg)
         if "is terminated" in payload["message"]:
-            msg = f"job '{job_id}' is terminated"
+            msg = f"Job '{job_id}' is terminated"
             raise JobNotFoundException(msg)
     elif code == 401:
         raise KubeClientUnauthorizedException(payload)
     elif code == 404 and job_id:
-        msg = f"job '{job_id}' was not found"
+        msg = f"Job '{job_id}' not found"
         raise JobNotFoundException(msg)
     elif code == 404:
-        raise NotFoundException(payload)
+        raise JobNotFoundException(payload)
     elif code == 409 and job_id:
-        msg = f"job '{job_id}' already exists"
+        msg = f"Job '{job_id}' already exists"
         raise JobError(msg)
     elif code == 409:
         raise ConflictException(payload)
@@ -141,8 +137,8 @@ class ContainerResources:
     @classmethod
     def from_primitive(cls, payload: JSON) -> t.Self:
         return cls(
-            cpu=cls._parse_cpu(payload.get("cpu", "0")),
-            memory=cls._parse_memory(payload.get("memory", "0")),
+            cpu=cls._parse_cpu(str(payload.get("cpu", "0"))),
+            memory=cls._parse_memory(str(payload.get("memory", "0"))),
             nvidia_gpu=int(payload.get(cls.nvidia_gpu_key, 0)),
             amd_gpu=int(payload.get(cls.amd_gpu_key, 0)),
         )
