@@ -15,7 +15,6 @@ from platform_monitoring.kube_client import (
     KubeClient,
     KubeClientAuthType,
     Node,
-    _assert_resource_kind,
 )
 
 
@@ -26,7 +25,7 @@ class MyKubeClient(KubeClient):
         payload = await self._request(
             method="POST", url=self._namespaced_pods_url, json=job_pod_descriptor
         )
-        _assert_resource_kind(expected_kind="Pod", payload=payload)
+        self._assert_resource_kind(expected_kind="Pod", payload=payload)
         return self._parse_pod_status(payload)
 
     async def delete_pod(self, pod_name: str, *, force: bool = False) -> str:
@@ -39,7 +38,7 @@ class MyKubeClient(KubeClient):
                 "gracePeriodSeconds": 0,
             }
         payload = await self._request(method="DELETE", url=url, json=request_payload)
-        _assert_resource_kind(expected_kind="Pod", payload=payload)
+        self._assert_resource_kind(expected_kind="Pod", payload=payload)
         return self._parse_pod_status(payload)
 
     def _parse_pod_status(self, payload: dict[str, Any]) -> str:
