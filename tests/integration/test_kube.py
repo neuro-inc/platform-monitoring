@@ -572,7 +572,9 @@ class TestKubeClient:
 
         nodes = await kube_client.get_nodes(label_selector="kubernetes.io/os=linux")
         assert nodes
-        assert all(node.get_label("kubernetes.io/os") == "linux" for node in nodes)
+        assert all(
+            node.metadata.labels.get("kubernetes.io/os") == "linux" for node in nodes
+        )
 
     async def test_get_pods(
         self, kube_client: MyKubeClient, job_pod: MyPodDescriptor
@@ -582,11 +584,11 @@ class TestKubeClient:
 
             pods = await kube_client.get_pods()
             assert pods
-            assert any(pod.name == job_pod.name for pod in pods)
+            assert any(pod.metadata.name == job_pod.name for pod in pods)
 
             pods = await kube_client.get_pods(label_selector=f"job={job_pod.name}")
             assert len(pods) == 1
-            assert pods[0].name == job_pod.name
+            assert pods[0].metadata.name == job_pod.name
 
             pods = await kube_client.get_pods(
                 field_selector=",".join(
@@ -599,7 +601,7 @@ class TestKubeClient:
             )
             assert pods
             assert all(
-                pod.phase in (PodPhase.PENDING, PodPhase.RUNNING) for pod in pods
+                pod.status.phase in (PodPhase.PENDING, PodPhase.RUNNING) for pod in pods
             )
         finally:
             await kube_client.delete_pod(job_pod.name)

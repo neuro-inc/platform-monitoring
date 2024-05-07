@@ -170,9 +170,6 @@ class EnvironConfigFactory:
                 if "NP_MONITORING_K8S_NVIDIA_DCGM_PORT" in self._environ
                 else KubeConfig.nvidia_dcgm_node_port
             ),
-            job_label=self._environ.get(
-                "NP_MONITORING_NODE_LABEL_JOB", KubeConfig.job_label
-            ),
             node_pool_label=self._environ.get(
                 "NP_MONITORING_NODE_LABEL_NODE_POOL", KubeConfig.node_pool_label
             ),

@@ -128,7 +128,7 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
             - matchExpressions:
-              - key: {{ .Values.nodeLabels.job | quote }}
+              - key: {{ .Values.nodeLabels.nodePool | quote }}
                 operator: Exists
       {{- if .Values.fluentbit.tolerations }}
       tolerations: {{ toYaml .Values.fluentbit.tolerations | nindent 8 }}

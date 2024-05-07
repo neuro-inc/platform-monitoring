@@ -49,7 +49,6 @@ sentry:
   sampleRate: 0.002
 
 nodeLabels:
-  job: platform.neuromation.io/job
   nodePool: platform.neuromation.io/nodepool
 
 fluentbit:

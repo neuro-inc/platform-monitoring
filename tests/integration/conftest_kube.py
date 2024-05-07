@@ -15,6 +15,7 @@ from platform_monitoring.kube_client import (
     KubeClient,
     KubeClientAuthType,
     Node,
+    _assert_resource_kind,
 )
 
 
@@ -23,9 +24,9 @@ class MyKubeClient(KubeClient):
 
     async def create_pod(self, job_pod_descriptor: dict[str, Any]) -> str:
         payload = await self._request(
-            method="POST", url=self._pods_url, json=job_pod_descriptor
+            method="POST", url=self._namespaced_pods_url, json=job_pod_descriptor
         )
-        self._assert_resource_kind(expected_kind="Pod", payload=payload)
+        _assert_resource_kind(expected_kind="Pod", payload=payload)
         return self._parse_pod_status(payload)
 
     async def delete_pod(self, pod_name: str, *, force: bool = False) -> str:
@@ -38,7 +39,7 @@ class MyKubeClient(KubeClient):
                 "gracePeriodSeconds": 0,
             }
         payload = await self._request(method="DELETE", url=url, json=request_payload)
-        self._assert_resource_kind(expected_kind="Pod", payload=payload)
+        _assert_resource_kind(expected_kind="Pod", payload=payload)
         return self._parse_pod_status(payload)
 
     def _parse_pod_status(self, payload: dict[str, Any]) -> str:
@@ -248,11 +249,12 @@ async def _kube_node(kube_client: KubeClient) -> Node:
 
 @pytest.fixture()
 async def kube_node_name(_kube_node: Node) -> str:
-    return _kube_node.name
+    assert _kube_node.metadata.name
+    return _kube_node.metadata.name
 
 
 @pytest.fixture()
 async def kube_container_runtime(_kube_node: Node) -> str:
-    version = _kube_node.container_runtime_version
+    version = _kube_node.status.node_info.container_runtime_version
     end = version.find("://")
     return version[0:end]

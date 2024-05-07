@@ -21,27 +21,44 @@ from platform_monitoring.jobs_service import JobsService, NodeNotFoundException
 from platform_monitoring.kube_client import KubeClient, Node, Pod
 
 
-def create_node(node_pool_name: str, node_name: str) -> Node:
-    return Node(
+def create_node(
+    node_pool_name: str,
+    node_name: str,
+    cpu: float,
+    memory: int,
+    nvidia_gpu: int = 0,
+    amd_gpu: int = 0,
+) -> Node:
+    return Node.from_primitive(
         {
+            "kind": "Node",
             "metadata": {
                 "name": node_name,
-                "labels": {
-                    "platform.neuromation.io/job": "true",
-                    "platform.neuromation.io/nodepool": node_pool_name,
+                "labels": {"platform.neuromation.io/nodepool": node_pool_name},
+            },
+            "status": {
+                "allocatable": {
+                    "cpu": str(cpu),
+                    "memory": str(memory),
+                    "nvidia.com/gpu": str(nvidia_gpu),
+                    "amd.com/gpu": str(amd_gpu),
                 },
-            }
+                "nodeInfo": {"containerRuntimeVersion": "containerd"},
+            },
         }
     )
 
 
 def get_pods_factory(
     *pods: Pod,
-) -> Callable[[str, str], Awaitable[Sequence[Pod]]]:
+) -> Callable[[bool, str, str], Awaitable[Sequence[Pod]]]:
     async def _get_pods(
-        label_selector: str = "", field_selector: str = ""
+        all_namespaces: bool = False,  # noqa: FBT001 FBT002
+        label_selector: str | None = None,
+        field_selector: str | None = None,
     ) -> Sequence[Pod]:
-        assert label_selector == "platform.neuromation.io/job"
+        assert all_namespaces is True
+        assert label_selector is None
         assert field_selector == (
             "status.phase!=Failed,status.phase!=Succeeded,status.phase!=Unknown"
         )
@@ -54,16 +71,20 @@ def create_pod(
     node_name: str | None,
     cpu_m: int,
     memory: int,
-    gpu: int = 0,
+    nvidia_gpu: int = 0,
+    amd_gpu: int = 0,
 ) -> Pod:
     job_id = f"job-{uuid.uuid4()}"
     resources = {
         "cpu": f"{cpu_m}m",
         "memory": f"{memory}",
     }
-    if gpu:
-        resources["nvidia.com/gpu"] = str(gpu)
+    if nvidia_gpu:
+        resources["nvidia.com/gpu"] = str(nvidia_gpu)
+    if amd_gpu:
+        resources["amd.com/gpu"] = str(amd_gpu)
     payload: dict[str, Any] = {
+        "kind": "Pod",
         "metadata": {
             "name": job_id,
             "labels": {"job": job_id, "platform.neuromation.io/job": job_id},
@@ -73,7 +94,7 @@ def create_pod(
     }
     if node_name:
         payload["spec"]["nodeName"] = node_name
-    return Pod(payload)
+    return Pod.from_primitive(payload)
 
 
 @pytest.fixture()
@@ -89,19 +110,14 @@ def cluster() -> Cluster:
             job_schedule_timeout_s=1,
             job_schedule_scale_up_timeout_s=1,
             resource_pool_types=[
-                ResourcePoolType(
-                    name="minikube-cpu",
-                    max_size=2,
-                    available_cpu=1,
-                    available_memory=2**30,
-                ),
+                ResourcePoolType(name="minikube-cpu", max_size=2, cpu=1, memory=2**30),
                 ResourcePoolType(
                     name="minikube-gpu",
                     max_size=2,
-                    available_cpu=1,
-                    available_memory=2**30,
-                    gpu=1,
-                    gpu_model="nvidia-tesla-k80",
+                    cpu=1,
+                    memory=2**30,
+                    nvidia_gpu=1,
+                    amd_gpu=2,
                 ),
             ],
             resource_presets=[
@@ -110,7 +126,7 @@ def cluster() -> Cluster:
                     credits_per_hour=Decimal(10),
                     cpu=0.2,
                     memory=100 * 2**20,
-                    resource_affinity=["minikube-cpu"],
+                    available_resource_pool_names=["minikube-cpu"],
                 ),
                 ResourcePreset(
                     name="cpu-p",
@@ -121,13 +137,20 @@ def cluster() -> Cluster:
                     preemptible_node=True,
                 ),
                 ResourcePreset(
-                    name="gpu",
+                    name="nvidia-gpu",
                     credits_per_hour=Decimal(10),
                     cpu=0.2,
                     memory=100 * 2**20,
-                    gpu=1,
-                    gpu_model="nvidia-tesla-k80",
-                    resource_affinity=["minikube-gpu"],
+                    nvidia_gpu=1,
+                    available_resource_pool_names=["minikube-gpu"],
+                ),
+                ResourcePreset(
+                    name="amd-gpu",
+                    credits_per_hour=Decimal(10),
+                    cpu=0.2,
+                    memory=100 * 2**20,
+                    amd_gpu=1,
+                    available_resource_pool_names=["minikube-gpu"],
                 ),
             ],
         ),
@@ -156,12 +179,26 @@ def jobs_client() -> mock.Mock:
 @pytest.fixture()
 def kube_client() -> mock.Mock:
     async def get_nodes(label_selector: str = "") -> Sequence[Node]:
-        assert label_selector == "platform.neuromation.io/job"
+        assert label_selector == "platform.neuromation.io/nodepool"
         return [
-            create_node("minikube-cpu", "minikube-cpu-1"),
-            create_node("minikube-cpu", "minikube-cpu-2"),
-            create_node("minikube-gpu", "minikube-gpu-1"),
-            create_node("minikube-gpu", "minikube-gpu-2"),
+            create_node("minikube-cpu", "minikube-cpu-1", cpu=1, memory=2**30),
+            create_node("minikube-cpu", "minikube-cpu-2", cpu=1, memory=2**30),
+            create_node(
+                "minikube-gpu",
+                "minikube-gpu-1",
+                cpu=1,
+                memory=2**30,
+                nvidia_gpu=1,
+                amd_gpu=2,
+            ),
+            create_node(
+                "minikube-gpu",
+                "minikube-gpu-2",
+                cpu=1,
+                memory=2**30,
+                nvidia_gpu=1,
+                amd_gpu=2,
+            ),
         ]
 
     client = mock.Mock(spec=KubeClient)
@@ -191,20 +228,21 @@ class TestJobsService:
     ) -> None:
         kube_client.get_pods.side_effect = get_pods_factory(
             create_pod("minikube-cpu-1", cpu_m=50, memory=128 * 2**20),
-            create_pod("minikube-gpu-1", cpu_m=100, memory=256 * 2**20, gpu=1),
+            create_pod("minikube-gpu-1", cpu_m=100, memory=256 * 2**20, nvidia_gpu=1),
             create_pod("minikube-cpu-2", cpu_m=50, memory=128 * 2**20),
+            create_pod("minikube-gpu-1", cpu_m=100, memory=256 * 2**20, amd_gpu=1),
         )
 
         result = await service.get_available_jobs_counts()
 
-        assert result == {"cpu": 8, "gpu": 1, "cpu-p": 0}
+        assert result == {"cpu": 8, "nvidia-gpu": 1, "amd-gpu": 3, "cpu-p": 0}
 
     async def test_get_available_jobs_count_free_nodes(
         self, service: JobsService
     ) -> None:
         result = await service.get_available_jobs_counts()
 
-        assert result == {"cpu": 10, "gpu": 2, "cpu-p": 0}
+        assert result == {"cpu": 10, "nvidia-gpu": 2, "amd-gpu": 4, "cpu-p": 0}
 
     async def test_get_available_jobs_count_busy_nodes(
         self, service: JobsService, kube_client: mock.Mock
@@ -212,13 +250,13 @@ class TestJobsService:
         kube_client.get_pods.side_effect = get_pods_factory(
             create_pod("minikube-cpu-1", cpu_m=1000, memory=2**30),
             create_pod("minikube-cpu-2", cpu_m=1000, memory=2**30),
-            create_pod("minikube-gpu-1", cpu_m=1000, memory=2**30, gpu=1),
-            create_pod("minikube-gpu-2", cpu_m=1000, memory=2**30, gpu=1),
+            create_pod("minikube-gpu-1", cpu_m=1000, memory=2**30, nvidia_gpu=1),
+            create_pod("minikube-gpu-2", cpu_m=1000, memory=2**30, nvidia_gpu=1),
         )
 
         result = await service.get_available_jobs_counts()
 
-        assert result == {"cpu": 0, "gpu": 0, "cpu-p": 0}
+        assert result == {"cpu": 0, "nvidia-gpu": 0, "amd-gpu": 0, "cpu-p": 0}
 
     async def test_get_available_jobs_count_for_pods_without_nodes(
         self, service: JobsService, kube_client: mock.Mock
@@ -229,7 +267,7 @@ class TestJobsService:
 
         result = await service.get_available_jobs_counts()
 
-        assert result == {"cpu": 10, "gpu": 2, "cpu-p": 0}
+        assert result == {"cpu": 10, "nvidia-gpu": 2, "amd-gpu": 4, "cpu-p": 0}
 
     async def test_get_available_jobs_count_node_not_found(
         self, service: JobsService, kube_client: mock.Mock

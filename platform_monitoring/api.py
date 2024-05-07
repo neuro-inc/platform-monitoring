@@ -820,7 +820,6 @@ async def create_app(config: Config) -> aiohttp.web.Application:
                 kube_client=kube_client,
                 container_runtime_client_registry=container_runtime_client_registry,
                 cluster_name=config.cluster_name,
-                kube_job_label=config.kube.job_label,
                 kube_node_pool_label=config.kube.node_pool_label,
             )
             app[MONITORING_APP_KEY][JOBS_SERVICE_KEY] = jobs_service

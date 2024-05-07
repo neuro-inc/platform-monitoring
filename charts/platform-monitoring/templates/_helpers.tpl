@@ -120,10 +120,6 @@ release: {{ .Release.Name | quote }}
 - name: SENTRY_SAMPLE_RATE
   value: {{ .Values.sentry.sampleRate | default 0 | quote }}
 {{- end }}
-{{- if .Values.nodeLabels.job }}
-- name: NP_MONITORING_NODE_LABEL_JOB
-  value: {{ .Values.nodeLabels.job }}
-{{- end }}
 {{- if .Values.nodeLabels.nodePool }}
 - name: NP_MONITORING_NODE_LABEL_NODE_POOL
   value: {{ .Values.nodeLabels.nodePool }}

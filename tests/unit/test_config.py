@@ -116,12 +116,10 @@ def test_create_without_auth_url(environ: dict[str, Any]) -> None:
 
 
 def test_create_with_kubernetes_labels(environ: dict[str, Any]) -> None:
-    environ["NP_MONITORING_NODE_LABEL_JOB"] = "job"
     environ["NP_MONITORING_NODE_LABEL_NODE_POOL"] = "node-pool"
 
     config = EnvironConfigFactory(environ).create()
 
-    assert config.kube.job_label == "job"
     assert config.kube.node_pool_label == "node-pool"
 
 
