@@ -235,10 +235,8 @@ class JobsService:
                 nvidia_gpu=preset.nvidia_gpu or 0,
                 amd_gpu=preset.amd_gpu or 0,
             )
-            resource_pools = [
-                pool_types[r] for r in preset.available_resource_pool_names
-            ]
-            for node_pool in resource_pools:
+            node_pools = [pool_types[r] for r in preset.available_resource_pool_names]
+            for node_pool in node_pools:
                 node_resource_limit = self._get_node_resource_limit(node_pool)
                 node_pool_available_resources = available_resources.get(
                     node_pool.name, []
