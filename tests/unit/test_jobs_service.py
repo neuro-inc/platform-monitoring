@@ -31,10 +31,11 @@ def create_node(
 ) -> Node:
     return Node.from_primitive(
         {
-            "kind": "Node",
             "metadata": {
                 "name": node_name,
-                "labels": {"platform.neuromation.io/nodepool": node_pool_name},
+                "labels": {
+                    "platform.neuromation.io/nodepool": node_pool_name,
+                },
             },
             "status": {
                 "allocatable": {
@@ -84,7 +85,6 @@ def create_pod(
     if amd_gpu:
         resources["amd.com/gpu"] = str(amd_gpu)
     payload: dict[str, Any] = {
-        "kind": "Pod",
         "metadata": {
             "name": job_id,
             "labels": {"job": job_id, "platform.neuromation.io/job": job_id},

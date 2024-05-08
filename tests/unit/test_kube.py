@@ -22,15 +22,12 @@ from platform_monitoring.logs import filter_out_rpc_error
 
 class TestPod:
     def test_no_node_name(self) -> None:
-        pod = Pod.from_primitive(
-            {"kind": "Pod", "metadata": {"name": "pod"}, "spec": {}}
-        )
+        pod = Pod.from_primitive({"metadata": {"name": "pod"}, "spec": {}})
         assert pod.spec.node_name is None
 
     def test_node_name(self) -> None:
         pod = Pod.from_primitive(
             {
-                "kind": "Pod",
                 "metadata": {"name": "pod"},
                 "spec": {"nodeName": "testnode"},
             }
@@ -38,16 +35,13 @@ class TestPod:
         assert pod.spec.node_name == "testnode"
 
     def test_no_status(self) -> None:
-        pod = Pod.from_primitive(
-            {"kind": "Pod", "metadata": {"name": "pod"}, "spec": {}}
-        )
+        pod = Pod.from_primitive({"metadata": {"name": "pod"}, "spec": {}})
         with pytest.raises(ValueError, match="Container testcontainer not found"):
             pod.get_container_status("testcontainer")
 
     def test_no_container_status(self) -> None:
         pod = Pod.from_primitive(
             {
-                "kind": "Pod",
                 "metadata": {"name": "pod"},
                 "spec": {},
                 "status": {"containerStatuses": []},
@@ -59,7 +53,6 @@ class TestPod:
     def test_container_status(self) -> None:
         pod = Pod.from_primitive(
             {
-                "kind": "Pod",
                 "metadata": {"name": "pod"},
                 "spec": {},
                 "status": {
@@ -73,7 +66,6 @@ class TestPod:
     def test_no_container_id(self) -> None:
         pod = Pod.from_primitive(
             {
-                "kind": "Pod",
                 "metadata": {"name": "pod"},
                 "spec": {},
                 "status": {"containerStatuses": [{"name": "testcontainer"}]},
@@ -85,7 +77,6 @@ class TestPod:
     def test_container_id(self) -> None:
         pod = Pod.from_primitive(
             {
-                "kind": "Pod",
                 "metadata": {"name": "pod"},
                 "spec": {},
                 "status": {
@@ -104,7 +95,6 @@ class TestPod:
     def test_phase(self) -> None:
         pod = Pod.from_primitive(
             {
-                "kind": "Pod",
                 "metadata": {"name": "pod"},
                 "spec": {},
                 "status": {"phase": "Running"},
@@ -115,7 +105,6 @@ class TestPod:
     def test_phase_is_running_false(self) -> None:
         pod = Pod.from_primitive(
             {
-                "kind": "Pod",
                 "metadata": {"name": "pod"},
                 "spec": {},
                 "status": {"phase": "Pending"},
@@ -126,7 +115,6 @@ class TestPod:
     def test_phase_is_running(self) -> None:
         pod = Pod.from_primitive(
             {
-                "kind": "Pod",
                 "metadata": {"name": "pod"},
                 "spec": {},
                 "status": {"phase": "Running"},
@@ -137,7 +125,6 @@ class TestPod:
     def test_no_resource_requests(self) -> None:
         pod = Pod.from_primitive(
             {
-                "kind": "Pod",
                 "metadata": {"name": "pod"},
                 "spec": {"containers": [{"resources": {}}]},
             }
@@ -147,7 +134,6 @@ class TestPod:
     def test_resource_requests_cpu_milicores(self) -> None:
         pod = Pod.from_primitive(
             {
-                "kind": "Pod",
                 "metadata": {"name": "pod"},
                 "spec": {"containers": [{"resources": {"requests": {"cpu": "100m"}}}]},
             }
@@ -157,7 +143,6 @@ class TestPod:
     def test_resource_requests_cpu_cores(self) -> None:
         pod = Pod.from_primitive(
             {
-                "kind": "Pod",
                 "metadata": {"name": "pod"},
                 "spec": {"containers": [{"resources": {"requests": {"cpu": "1"}}}]},
             }
@@ -167,7 +152,6 @@ class TestPod:
     def test_resource_requests_memory_mebibytes(self) -> None:
         pod = Pod.from_primitive(
             {
-                "kind": "Pod",
                 "metadata": {"name": "pod"},
                 "spec": {
                     "containers": [{"resources": {"requests": {"memory": "1000Mi"}}}]
@@ -179,7 +163,6 @@ class TestPod:
     def test_resource_requests_memory_gibibytes(self) -> None:
         pod = Pod.from_primitive(
             {
-                "kind": "Pod",
                 "metadata": {"name": "pod"},
                 "spec": {
                     "containers": [{"resources": {"requests": {"memory": "1Gi"}}}]
@@ -191,7 +174,6 @@ class TestPod:
     def test_resource_requests_memory_terabytes(self) -> None:
         pod = Pod.from_primitive(
             {
-                "kind": "Pod",
                 "metadata": {"name": "pod"},
                 "spec": {"containers": [{"resources": {"requests": {"memory": "4T"}}}]},
             }
@@ -201,7 +183,6 @@ class TestPod:
     def test_resource_requests_memory_tebibytes(self) -> None:
         pod = Pod.from_primitive(
             {
-                "kind": "Pod",
                 "metadata": {"name": "pod"},
                 "spec": {
                     "containers": [{"resources": {"requests": {"memory": "4Ti"}}}]
@@ -213,7 +194,6 @@ class TestPod:
     def test_resource_requests_gpu(self) -> None:
         pod = Pod.from_primitive(
             {
-                "kind": "Pod",
                 "metadata": {"name": "pod"},
                 "spec": {
                     "containers": [
@@ -235,7 +215,6 @@ class TestPod:
     def test_resource_requests_for_multiple_containers(self) -> None:
         pod = Pod.from_primitive(
             {
-                "kind": "Pod",
                 "metadata": {"name": "pod"},
                 "spec": {
                     "containers": [
@@ -644,7 +623,6 @@ class TestNode:
     def test_name(self) -> None:
         node = Node.from_primitive(
             {
-                "kind": "Node",
                 "metadata": {"name": "default"},
                 "status": {"nodeInfo": {"containerRuntimeVersion": "containerd"}},
             }
@@ -654,7 +632,6 @@ class TestNode:
     def test_labels(self) -> None:
         node = Node.from_primitive(
             {
-                "kind": "Node",
                 "metadata": {"labels": {"hello": "world"}},
                 "status": {"nodeInfo": {"containerRuntimeVersion": "containerd"}},
             }
