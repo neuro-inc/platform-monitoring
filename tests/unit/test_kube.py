@@ -15,6 +15,7 @@ from platform_monitoring.kube_client import (
     Pod,
     PodContainerStats,
     PodPhase,
+    PodRestartPolicy,
     StatsSummary,
 )
 from platform_monitoring.logs import filter_out_rpc_error
@@ -63,7 +64,9 @@ class TestPod:
             }
         )
         container_status = pod.get_container_status("testcontainer")
-        assert container_status == ContainerStatus(name="testcontainer")
+        assert container_status == ContainerStatus(
+            name="testcontainer", pod_restart_policy=PodRestartPolicy.NEVER
+        )
 
     def test_no_container_id(self) -> None:
         pod = Pod.from_primitive(

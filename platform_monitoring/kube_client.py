@@ -278,8 +278,10 @@ class Pod(Resource):
     def get_container_status(self, name: str) -> ContainerStatus:
         for status in self.status.container_statuses:
             if status.name == name:
-                return status.with_pod_restart_policy(self.spec.restart_policy)
-        return ContainerStatus(name=name)
+                break
+        else:
+            status = ContainerStatus(name=name)
+        return status.with_pod_restart_policy(self.spec.restart_policy)
 
     def get_container_id(self, name: str) -> str | None:
         for status in self.status.container_statuses:
@@ -383,7 +385,7 @@ class ContainerStatus:
     state: t.Mapping[str, t.Any] = field(default_factory=dict)
     last_state: t.Mapping[str, t.Any] = field(default_factory=dict)
 
-    pod_restart_policy: PodRestartPolicy = PodRestartPolicy.NEVER
+    pod_restart_policy: PodRestartPolicy = PodRestartPolicy.ALWAYS
 
     @classmethod
     def from_primitive(cls, payload: JSON) -> t.Self:
