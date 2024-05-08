@@ -16,7 +16,6 @@ from urllib.parse import quote_plus, urlsplit
 
 import aiohttp
 from aiohttp import ContentTypeError
-from yarl import URL
 
 from .base import JobStats, Telemetry
 from .config import KubeClientAuthType, KubeConfig
@@ -28,14 +27,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_MAX_PODS_PER_NODE = 110
 
 JSON: t.TypeAlias = dict[str, t.Any]
-
-
-class Resource(t.Protocol):
-    @classmethod
-    def from_primitive(cls, payload: JSON) -> t.Self: ...
-
-
-TResource = t.TypeVar("TResource", bound=Resource)
 
 
 class KubeClientException(Exception):
@@ -68,6 +59,46 @@ class JobError(JobException):
 
 class JobNotFoundException(JobException):
     pass
+
+
+class Resource(t.Protocol):
+    @classmethod
+    def from_primitive(cls, payload: JSON) -> t.Self: ...
+
+
+TResource = t.TypeVar("TResource", bound=Resource)
+
+
+@dataclass(frozen=True)
+class Metadata:
+    name: str | None = None
+    resource_version: str | None = None
+    labels: t.Mapping[str, str] = field(default_factory=dict)
+
+    @classmethod
+    def from_primitive(cls, payload: JSON) -> Metadata:
+        return cls(
+            name=payload.get("name"),
+            resource_version=payload.get("resourceVersion"),
+            labels=payload.get("labels", {}),
+        )
+
+
+@dataclass(frozen=True)
+class ListResult(t.Generic[TResource]):
+    metadata: Metadata
+    items: list[TResource]
+
+    @classmethod
+    def from_primitive(
+        cls, payload: JSON, *, resource_cls: type[TResource]
+    ) -> ListResult[TResource]:
+        return cls(
+            metadata=Metadata.from_primitive(payload.get("metadata", {})),
+            items=[
+                resource_cls.from_primitive(item) for item in payload.get("items", ())
+            ],
+        )
 
 
 class PodPhase(enum.StrEnum):
@@ -160,42 +191,6 @@ class ContainerResources:
         if resources.amd_gpu:
             result = min(result, self.amd_gpu // resources.amd_gpu)
         return result
-
-
-@dataclass(frozen=True)
-class Metadata:
-    name: str | None = None
-    resource_version: str | None = None
-    labels: t.Mapping[str, str] = field(default_factory=dict)
-
-    @classmethod
-    def from_primitive(cls, payload: JSON) -> Metadata:
-        return cls(
-            name=payload.get("name"),
-            resource_version=payload.get("resourceVersion"),
-            labels=payload.get("labels", {}),
-        )
-
-
-@dataclass(frozen=True)
-class ListResult(t.Generic[TResource]):
-    metadata: Metadata
-    items: list[TResource]
-
-    @classmethod
-    def from_primitive(
-        cls, payload: JSON, *, resource_cls: type[TResource]
-    ) -> ListResult[TResource]:
-        return cls(
-            metadata=Metadata.from_primitive(payload["metadata"]),
-            items=[resource_cls.from_primitive(item) for item in payload["items"]],
-        )
-
-
-@dataclass(frozen=True)
-class ProxyClient:
-    url: URL
-    session: aiohttp.ClientSession
 
 
 class PodRestartPolicy(enum.StrEnum):
@@ -332,9 +327,9 @@ class NodeResources(ContainerResources):
         return cls(
             **{
                 **asdict(resources),
-                "pods": payload.get("pods", cls.pods),
-                "ephemeral_storage": payload.get(
-                    "ephemeral-storage", cls.ephemeral_storage
+                "pods": int(payload.get("pods", cls.pods)),
+                "ephemeral_storage": cls._parse_memory(
+                    payload.get("ephemeral-storage", cls.ephemeral_storage)
                 ),
             }
         )
