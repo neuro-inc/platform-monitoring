@@ -36,8 +36,9 @@ class TestPod:
 
     def test_no_status(self) -> None:
         pod = Pod.from_primitive({"metadata": {"name": "pod"}, "spec": {}})
-        with pytest.raises(ValueError, match="Container testcontainer not found"):
-            pod.get_container_status("testcontainer")
+        assert pod.get_container_status("testcontainer") == ContainerStatus(
+            name="testcontainer"
+        )
 
     def test_no_container_status(self) -> None:
         pod = Pod.from_primitive(
@@ -47,8 +48,9 @@ class TestPod:
                 "status": {"containerStatuses": []},
             }
         )
-        with pytest.raises(ValueError, match="Container testcontainer not found"):
-            pod.get_container_status("testcontainer")
+        assert pod.get_container_status("testcontainer") == ContainerStatus(
+            name="testcontainer"
+        )
 
     def test_container_status(self) -> None:
         pod = Pod.from_primitive(

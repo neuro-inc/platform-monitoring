@@ -279,8 +279,7 @@ class Pod(Resource):
         for status in self.status.container_statuses:
             if status.name == name:
                 return status.with_pod_restart_policy(self.spec.restart_policy)
-        msg = f"Container {name} not found"
-        raise ValueError(msg)
+        return ContainerStatus(name=name)
 
     def get_container_id(self, name: str) -> str | None:
         for status in self.status.container_statuses:
