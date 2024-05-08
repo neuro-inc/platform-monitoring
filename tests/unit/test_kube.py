@@ -56,7 +56,7 @@ class TestPod:
         pod = Pod.from_primitive(
             {
                 "metadata": {"name": "pod"},
-                "spec": {},
+                "spec": {"restartPolicy": "Never"},
                 "status": {
                     "containerStatuses": [{"name": ""}, {"name": "testcontainer"}]
                 },

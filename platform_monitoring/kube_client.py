@@ -383,7 +383,7 @@ class ContainerStatus:
     state: t.Mapping[str, t.Any] = field(default_factory=dict)
     last_state: t.Mapping[str, t.Any] = field(default_factory=dict)
 
-    pod_restart_policy: PodRestartPolicy = PodRestartPolicy.ALWAYS
+    pod_restart_policy: PodRestartPolicy = PodRestartPolicy.NEVER
 
     @classmethod
     def from_primitive(cls, payload: JSON) -> t.Self:
