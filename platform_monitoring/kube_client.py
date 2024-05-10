@@ -319,7 +319,7 @@ class Pod(Resource):
 
 @dataclass(frozen=True)
 class NodeResources(ContainerResources):
-    pods: int = 110
+    pods: int = DEFAULT_MAX_PODS_PER_NODE
     ephemeral_storage: int = 0
 
     @classmethod
