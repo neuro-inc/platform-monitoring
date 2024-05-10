@@ -6,6 +6,8 @@ import aiohttp
 import pytest
 
 from platform_monitoring.kube_client import (
+    ContainerResources,
+    ContainerStatus,
     GPUCounter,
     GPUCounters,
     JobError,
@@ -13,7 +15,7 @@ from platform_monitoring.kube_client import (
     Pod,
     PodContainerStats,
     PodPhase,
-    Resources,
+    PodRestartPolicy,
     StatsSummary,
 )
 from platform_monitoring.logs import filter_out_rpc_error
@@ -21,45 +23,66 @@ from platform_monitoring.logs import filter_out_rpc_error
 
 class TestPod:
     def test_no_node_name(self) -> None:
-        pod = Pod({"spec": {}})
-        assert pod.node_name is None
+        pod = Pod.from_primitive({"metadata": {"name": "pod"}, "spec": {}})
+        assert pod.spec.node_name is None
 
     def test_node_name(self) -> None:
-        pod = Pod({"spec": {"nodeName": "testnode"}})
-        assert pod.node_name == "testnode"
+        pod = Pod.from_primitive(
+            {
+                "metadata": {"name": "pod"},
+                "spec": {"nodeName": "testnode"},
+            }
+        )
+        assert pod.spec.node_name == "testnode"
 
     def test_no_status(self) -> None:
-        pod = Pod({"spec": {}})
-        with pytest.raises(ValueError, match="Missing pod status"):
-            pod.get_container_status("testcontainer")
+        pod = Pod.from_primitive({"metadata": {"name": "pod"}, "spec": {}})
+        assert pod.get_container_status("testcontainer") == ContainerStatus(
+            name="testcontainer"
+        )
 
     def test_no_container_status(self) -> None:
-        pod = Pod({"spec": {}, "status": {"containerStatuses": []}})
-        container_status = pod.get_container_status("testcontainer")
-        assert container_status == {}
+        pod = Pod.from_primitive(
+            {
+                "metadata": {"name": "pod"},
+                "spec": {},
+                "status": {"containerStatuses": []},
+            }
+        )
+        assert pod.get_container_status("testcontainer") == ContainerStatus(
+            name="testcontainer"
+        )
 
     def test_container_status(self) -> None:
-        pod = Pod(
+        pod = Pod.from_primitive(
             {
-                "spec": {},
+                "metadata": {"name": "pod"},
+                "spec": {"restartPolicy": "Never"},
                 "status": {
                     "containerStatuses": [{"name": ""}, {"name": "testcontainer"}]
                 },
             }
         )
         container_status = pod.get_container_status("testcontainer")
-        assert container_status == {"name": "testcontainer"}
+        assert container_status == ContainerStatus(
+            name="testcontainer", pod_restart_policy=PodRestartPolicy.NEVER
+        )
 
     def test_no_container_id(self) -> None:
-        pod = Pod(
-            {"spec": {}, "status": {"containerStatuses": [{"name": "testcontainer"}]}}
+        pod = Pod.from_primitive(
+            {
+                "metadata": {"name": "pod"},
+                "spec": {},
+                "status": {"containerStatuses": [{"name": "testcontainer"}]},
+            }
         )
         container_id = pod.get_container_id("testcontainer")
         assert container_id is None
 
     def test_container_id(self) -> None:
-        pod = Pod(
+        pod = Pod.from_primitive(
             {
+                "metadata": {"name": "pod"},
                 "spec": {},
                 "status": {
                     "containerStatuses": [
@@ -75,72 +98,129 @@ class TestPod:
         assert container_id == "testcontainerid"
 
     def test_phase(self) -> None:
-        pod = Pod({"spec": {}, "status": {"phase": "Running"}})
-        assert pod.phase == PodPhase.RUNNING
+        pod = Pod.from_primitive(
+            {
+                "metadata": {"name": "pod"},
+                "spec": {},
+                "status": {"phase": "Running"},
+            }
+        )
+        assert pod.status.phase == PodPhase.RUNNING
 
-    def test_is_phase_running_false(self) -> None:
-        pod = Pod({"spec": {}, "status": {"phase": "Pending"}})
-        assert not pod.is_phase_running
+    def test_phase_is_running_false(self) -> None:
+        pod = Pod.from_primitive(
+            {
+                "metadata": {"name": "pod"},
+                "spec": {},
+                "status": {"phase": "Pending"},
+            }
+        )
+        assert not pod.status.is_running
 
-    def test_is_phase_running(self) -> None:
-        pod = Pod({"spec": {}, "status": {"phase": "Running"}})
-        assert pod.is_phase_running
+    def test_phase_is_running(self) -> None:
+        pod = Pod.from_primitive(
+            {
+                "metadata": {"name": "pod"},
+                "spec": {},
+                "status": {"phase": "Running"},
+            }
+        )
+        assert pod.status.is_running
 
     def test_no_resource_requests(self) -> None:
-        pod = Pod({"spec": {"containers": [{"resources": {}}]}})
-        assert pod.resource_requests == Resources()
+        pod = Pod.from_primitive(
+            {
+                "metadata": {"name": "pod"},
+                "spec": {"containers": [{"resources": {}}]},
+            }
+        )
+        assert pod.resource_requests == ContainerResources()
 
     def test_resource_requests_cpu_milicores(self) -> None:
-        pod = Pod(
-            {"spec": {"containers": [{"resources": {"requests": {"cpu": "100m"}}}]}}
+        pod = Pod.from_primitive(
+            {
+                "metadata": {"name": "pod"},
+                "spec": {"containers": [{"resources": {"requests": {"cpu": "100m"}}}]},
+            }
         )
-        assert pod.resource_requests == Resources(cpu_m=100)
+        assert pod.resource_requests == ContainerResources(cpu_m=100)
 
     def test_resource_requests_cpu_cores(self) -> None:
-        pod = Pod({"spec": {"containers": [{"resources": {"requests": {"cpu": "1"}}}]}})
-        assert pod.resource_requests == Resources(cpu_m=1000)
+        pod = Pod.from_primitive(
+            {
+                "metadata": {"name": "pod"},
+                "spec": {"containers": [{"resources": {"requests": {"cpu": "1"}}}]},
+            }
+        )
+        assert pod.resource_requests == ContainerResources(cpu_m=1000)
 
     def test_resource_requests_memory_mebibytes(self) -> None:
-        pod = Pod(
+        pod = Pod.from_primitive(
             {
+                "metadata": {"name": "pod"},
                 "spec": {
                     "containers": [{"resources": {"requests": {"memory": "1000Mi"}}}]
-                }
+                },
             }
         )
-        assert pod.resource_requests == Resources(memory=1000 * 2**20)
+        assert pod.resource_requests == ContainerResources(memory=1000 * 2**20)
 
     def test_resource_requests_memory_gibibytes(self) -> None:
-        pod = Pod(
-            {"spec": {"containers": [{"resources": {"requests": {"memory": "1Gi"}}}]}}
-        )
-        assert pod.resource_requests == Resources(memory=1024 * 2**20)
-
-    def test_resource_requests_memory_terabytes(self) -> None:
-        pod = Pod(
-            {"spec": {"containers": [{"resources": {"requests": {"memory": "4T"}}}]}}
-        )
-        assert pod.resource_requests == Resources(memory=4 * 10**12)
-
-    def test_resource_requests_memory_tebibytes(self) -> None:
-        pod = Pod(
-            {"spec": {"containers": [{"resources": {"requests": {"memory": "4Ti"}}}]}}
-        )
-        assert pod.resource_requests == Resources(memory=4 * 2**40)
-
-    def test_resource_requests_gpu(self) -> None:
-        pod = Pod(
+        pod = Pod.from_primitive(
             {
+                "metadata": {"name": "pod"},
                 "spec": {
-                    "containers": [{"resources": {"requests": {"nvidia.com/gpu": "1"}}}]
-                }
+                    "containers": [{"resources": {"requests": {"memory": "1Gi"}}}]
+                },
             }
         )
-        assert pod.resource_requests == Resources(gpu=1)
+        assert pod.resource_requests == ContainerResources(memory=1024 * 2**20)
+
+    def test_resource_requests_memory_terabytes(self) -> None:
+        pod = Pod.from_primitive(
+            {
+                "metadata": {"name": "pod"},
+                "spec": {"containers": [{"resources": {"requests": {"memory": "4T"}}}]},
+            }
+        )
+        assert pod.resource_requests == ContainerResources(memory=4 * 10**12)
+
+    def test_resource_requests_memory_tebibytes(self) -> None:
+        pod = Pod.from_primitive(
+            {
+                "metadata": {"name": "pod"},
+                "spec": {
+                    "containers": [{"resources": {"requests": {"memory": "4Ti"}}}]
+                },
+            }
+        )
+        assert pod.resource_requests == ContainerResources(memory=4 * 2**40)
+
+    def test_resource_requests_gpu(self) -> None:
+        pod = Pod.from_primitive(
+            {
+                "metadata": {"name": "pod"},
+                "spec": {
+                    "containers": [
+                        {
+                            "resources": {
+                                "requests": {
+                                    "nvidia.com/gpu": "1",
+                                    "amd.com/gpu": "2",
+                                }
+                            }
+                        }
+                    ]
+                },
+            }
+        )
+        assert pod.resource_requests.has_gpu
+        assert pod.resource_requests == ContainerResources(nvidia_gpu=1, amd_gpu=2)
 
     def test_resource_requests_for_multiple_containers(self) -> None:
-        pod = Pod(
+        pod = Pod.from_primitive(
             {
+                "metadata": {"name": "pod"},
                 "spec": {
                     "containers": [
                         {"resources": {"requests": {"cpu": "0.5", "memory": "512Mi"}}},
@@ -150,15 +230,16 @@ class TestPod:
                                     "cpu": "1",
                                     "memory": "1Gi",
                                     "nvidia.com/gpu": "1",
+                                    "amd.com/gpu": "2",
                                 }
                             }
                         },
                     ]
-                }
+                },
             }
         )
-        assert pod.resource_requests == Resources(
-            cpu_m=1500, memory=1536 * 2**20, gpu=1
+        assert pod.resource_requests == ContainerResources(
+            cpu_m=1500, memory=1536 * 2**20, nvidia_gpu=1, amd_gpu=2
         )
 
 
@@ -545,35 +626,61 @@ class TestFilterOutRPCError:
 
 class TestNode:
     def test_name(self) -> None:
-        node = Node({"metadata": {"name": "default"}})
-        assert node.name == "default"
+        node = Node.from_primitive(
+            {
+                "metadata": {"name": "default"},
+                "status": {"nodeInfo": {"containerRuntimeVersion": "containerd"}},
+            }
+        )
+        assert node.metadata.name == "default"
 
-    def test_get_label(self) -> None:
-        node = Node({"metadata": {"labels": {"hello": "world"}}})
-        assert node.get_label("hello") == "world"
+    def test_labels(self) -> None:
+        node = Node.from_primitive(
+            {
+                "metadata": {"labels": {"hello": "world"}},
+                "status": {"nodeInfo": {"containerRuntimeVersion": "containerd"}},
+            }
+        )
+        assert node.metadata.labels == {"hello": "world"}
 
-    def test_get_label_is_none(self) -> None:
-        node = Node({"metadata": {}})
-        assert node.get_label("hello") is None
 
-
-class TestResources:
+class TestContainerResources:
     def test_add(self) -> None:
-        resources1 = Resources(cpu_m=1, memory=2 * 2**20, gpu=3)
-        resources2 = Resources(cpu_m=4, memory=5 * 2**20, gpu=6)
-        assert resources1.add(resources2) == Resources(cpu_m=5, memory=7 * 2**20, gpu=9)
+        resources1 = ContainerResources(
+            cpu_m=1, memory=2 * 2**20, nvidia_gpu=3, amd_gpu=4
+        )
+        resources2 = ContainerResources(
+            cpu_m=4, memory=5 * 2**20, nvidia_gpu=6, amd_gpu=7
+        )
+        assert resources1 + resources2 == ContainerResources(
+            cpu_m=5, memory=7 * 2**20, nvidia_gpu=9, amd_gpu=11
+        )
 
-    def test_available(self) -> None:
-        total = Resources(cpu_m=1000, memory=1024 * 2**20, gpu=2)
-        used = Resources(cpu_m=100, memory=256 * 2**20, gpu=1)
-        assert total.available(used) == Resources(cpu_m=900, memory=768 * 2**20, gpu=1)
+    def test_sub(self) -> None:
+        total = ContainerResources(
+            cpu_m=1000, memory=1024 * 2**20, nvidia_gpu=2, amd_gpu=4
+        )
+        used = ContainerResources(
+            cpu_m=100, memory=256 * 2**20, nvidia_gpu=1, amd_gpu=2
+        )
+        assert total - used == ContainerResources(
+            cpu_m=900, memory=768 * 2**20, nvidia_gpu=1, amd_gpu=2
+        )
 
-    def test_count(self) -> None:
-        total = Resources(cpu_m=1000, memory=1024 * 2**20, gpu=2)
+    def test_floordiv(self) -> None:
+        total = ContainerResources(
+            cpu_m=1000, memory=1024 * 2**20, nvidia_gpu=2, amd_gpu=4
+        )
 
-        assert total.count(Resources(cpu_m=100, memory=128 * 2**20, gpu=1)) == 2
-        assert total.count(Resources(cpu_m=100, memory=128 * 2**20)) == 8
-        assert total.count(Resources(cpu_m=100)) == 10
-        assert total.count(Resources(cpu_m=1100)) == 0
-        assert total.count(Resources()) == 110
-        assert Resources().count(Resources()) == 0
+        assert (
+            total
+            // ContainerResources(
+                cpu_m=100, memory=128 * 2**20, nvidia_gpu=1, amd_gpu=2
+            )
+            == 2
+        )
+        assert total // ContainerResources(cpu_m=100, memory=128 * 2**20) == 8
+        assert total // ContainerResources(cpu_m=100) == 10
+        assert total // ContainerResources(cpu_m=1100) == 0
+        assert total // ContainerResources() == 110
+        assert ContainerResources() // ContainerResources() == 0

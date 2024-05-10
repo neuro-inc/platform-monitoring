@@ -7,16 +7,15 @@ import logging
 import re
 import ssl
 import typing as t
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote_plus, urlsplit
 
 import aiohttp
 from aiohttp import ContentTypeError
-from yarl import URL
 
 from .base import JobStats, Telemetry
 from .config import KubeClientAuthType, KubeConfig
@@ -27,12 +26,26 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_PODS_PER_NODE = 110
 
+JSON: t.TypeAlias = dict[str, t.Any]
+
 
 class KubeClientException(Exception):
     pass
 
 
-class KubeClientUnauthorized(KubeClientException):
+class KubeClientUnauthorizedException(KubeClientException):
+    pass
+
+
+class ExpiredException(KubeClientException):
+    pass
+
+
+class ResourceGoneException(KubeClientException):
+    pass
+
+
+class ConflictException(KubeClientException):
     pass
 
 
@@ -48,7 +61,47 @@ class JobNotFoundException(JobException):
     pass
 
 
-class PodPhase(str, enum.Enum):
+class Resource(t.Protocol):
+    @classmethod
+    def from_primitive(cls, payload: JSON) -> t.Self: ...
+
+
+TResource = t.TypeVar("TResource", bound=Resource)
+
+
+@dataclass(frozen=True)
+class Metadata:
+    name: str | None = None
+    resource_version: str | None = None
+    labels: t.Mapping[str, str] = field(default_factory=dict)
+
+    @classmethod
+    def from_primitive(cls, payload: JSON) -> Metadata:
+        return cls(
+            name=payload.get("name"),
+            resource_version=payload.get("resourceVersion"),
+            labels=payload.get("labels", {}),
+        )
+
+
+@dataclass(frozen=True)
+class ListResult(t.Generic[TResource]):
+    metadata: Metadata
+    items: list[TResource]
+
+    @classmethod
+    def from_primitive(
+        cls, payload: JSON, *, resource_cls: type[TResource]
+    ) -> ListResult[TResource]:
+        return cls(
+            metadata=Metadata.from_primitive(payload.get("metadata", {})),
+            items=[
+                resource_cls.from_primitive(item) for item in payload.get("items", ())
+            ],
+        )
+
+
+class PodPhase(enum.StrEnum):
     PENDING = "Pending"
     RUNNING = "Running"
     SUCCEEDED = "Succeeded"
@@ -57,209 +110,308 @@ class PodPhase(str, enum.Enum):
 
 
 @dataclass(frozen=True)
-class Resources:
+class ContainerResources:
     cpu_m: int = 0
     memory: int = 0
-    gpu: int = 0
+    nvidia_gpu: int = 0
+    amd_gpu: int = 0
 
-    def add(self, other: Resources) -> Resources:
-        return self.__class__(
+    nvidia_gpu_key: t.ClassVar[str] = "nvidia.com/gpu"
+    amd_gpu_key: t.ClassVar[str] = "amd.com/gpu"
+
+    @classmethod
+    def from_primitive(cls, payload: JSON) -> t.Self:
+        return cls(
+            cpu_m=cls._parse_cpu_m(str(payload.get("cpu", "0"))),
+            memory=cls._parse_memory(str(payload.get("memory", "0"))),
+            nvidia_gpu=int(payload.get(cls.nvidia_gpu_key, 0)),
+            amd_gpu=int(payload.get(cls.amd_gpu_key, 0)),
+        )
+
+    @classmethod
+    def _parse_cpu_m(cls, value: str) -> int:
+        if value.endswith("m"):
+            return int(value[:-1])
+        return int(float(value) * 1000)
+
+    @classmethod
+    def _parse_memory(cls, memory: str) -> int:
+        try:
+            return int(memory)
+        except ValueError:
+            pass
+        for suffix, power in (("K", 1), ("M", 2), ("G", 3), ("T", 4), ("P", 5)):
+            if memory.endswith(suffix):
+                return int(memory[:-1]) * 1000**power
+            if memory.endswith(f"{suffix}i"):
+                return int(memory[:-2]) * 1024**power
+        msg = f"Memory unit for {memory} is not supported"
+        raise KubeClientException(msg)
+
+    @property
+    def has_gpu(self) -> bool:
+        return self.nvidia_gpu != 0 or self.amd_gpu != 0
+
+    def __bool__(self) -> bool:
+        return (
+            self.cpu_m != 0
+            or self.memory != 0
+            or self.nvidia_gpu != 0
+            or self.amd_gpu != 0
+        )
+
+    def __add__(self, other: ContainerResources) -> t.Self:
+        return replace(
+            self,
             cpu_m=self.cpu_m + other.cpu_m,
             memory=self.memory + other.memory,
-            gpu=self.gpu + other.gpu,
+            nvidia_gpu=self.nvidia_gpu + other.nvidia_gpu,
+            amd_gpu=self.amd_gpu + other.amd_gpu,
         )
 
-    def available(self, used: Resources) -> Resources:
-        """Get amount of unused resources.
-
-        Returns:
-            Resources: the difference between resources in {self} and {used}
-        """
-        return self.__class__(
+    def __sub__(self, used: ContainerResources) -> t.Self:
+        return replace(
+            self,
             cpu_m=max(0, self.cpu_m - used.cpu_m),
             memory=max(0, self.memory - used.memory),
-            gpu=max(0, self.gpu - used.gpu),
+            nvidia_gpu=max(0, self.nvidia_gpu - used.nvidia_gpu),
+            amd_gpu=max(0, self.amd_gpu - used.amd_gpu),
         )
 
-    def count(self, resources: Resources) -> int:
-        """Get the number of times a client can be provided
-        with the specified resources.
-
-        Returns:
-            int: count
-        """
-        if self.cpu_m == 0 and self.memory == 0 and self.gpu == 0:
+    def __floordiv__(self, resources: ContainerResources) -> int:
+        if not self:
             return 0
         result = DEFAULT_MAX_PODS_PER_NODE
         if resources.cpu_m:
             result = min(result, self.cpu_m // resources.cpu_m)
         if resources.memory:
             result = min(result, self.memory // resources.memory)
-        if resources.gpu:
-            result = min(result, self.gpu // resources.gpu)
+        if resources.nvidia_gpu:
+            result = min(result, self.nvidia_gpu // resources.nvidia_gpu)
+        if resources.amd_gpu:
+            result = min(result, self.amd_gpu // resources.amd_gpu)
         return result
 
 
+class PodRestartPolicy(enum.StrEnum):
+    ALWAYS = "Always"
+    NEVER = "Never"
+    ON_FAILURE = "OnFailure"
+
+
 @dataclass(frozen=True)
-class ProxyClient:
-    url: URL
-    session: aiohttp.ClientSession
+class Container:
+    resource_requests: ContainerResources
+    stdin: bool | None
+    stdin_once: bool | None
+    tty: bool | None
+
+    @classmethod
+    def from_primitive(cls, payload: JSON) -> t.Self:
+        return cls(
+            resource_requests=ContainerResources.from_primitive(
+                payload.get("resources", {}).get("requests", {})
+            ),
+            stdin=payload.get("stdin"),
+            stdin_once=payload.get("stdinOnce"),
+            tty=payload.get("tty"),
+        )
 
 
-class Pod:
-    def __init__(self, payload: dict[str, t.Any]) -> None:
-        self._payload = payload
+@dataclass(frozen=True)
+class PodSpec:
+    node_name: str | None = None
+    restart_policy: PodRestartPolicy = PodRestartPolicy.ALWAYS
+    containers: t.Sequence[Container] = field(default_factory=list)
+
+    @classmethod
+    def from_primitive(cls, payload: JSON) -> t.Self:
+        return cls(
+            node_name=payload.get("nodeName"),
+            restart_policy=PodRestartPolicy(
+                payload.get("restartPolicy", cls.restart_policy)
+            ),
+            containers=[
+                Container.from_primitive(c) for c in payload.get("containers", ())
+            ],
+        )
+
+
+@dataclass(frozen=True)
+class PodStatus:
+    phase: PodPhase
+    pod_ip: str | None
+    host_ip: str | None
+    container_statuses: t.Sequence[ContainerStatus] = field(default_factory=list)
+
+    @classmethod
+    def from_primitive(cls, payload: JSON) -> t.Self:
+        return cls(
+            phase=PodPhase(payload.get("phase", PodPhase.PENDING.value)),
+            pod_ip=payload.get("podIP") or None,
+            host_ip=payload.get("hostIP") or None,
+            container_statuses=[
+                ContainerStatus.from_primitive(s)
+                for s in payload.get("containerStatuses", ())
+            ],
+        )
 
     @property
-    def name(self) -> str:
-        return self._payload["metadata"]["name"]
+    def is_running(self) -> bool:
+        return self.phase == PodPhase.RUNNING
 
-    @property
-    def node_name(self) -> str | None:
-        return self._payload["spec"].get("nodeName")
 
-    @property
-    def restart_policy(self) -> str:
-        return self._payload["spec"].get("restartPolicy") or "Never"
+@dataclass(frozen=True)
+class Pod(Resource):
+    metadata: Metadata
+    spec: PodSpec
+    status: PodStatus
 
-    @property
-    def _status_payload(self) -> dict[str, t.Any]:
-        payload = self._payload.get("status")
-        if not payload:
-            msg = "Missing pod status"
-            raise ValueError(msg)
-        return payload
+    @classmethod
+    def from_primitive(cls, payload: JSON) -> t.Self:
+        return cls(
+            metadata=Metadata.from_primitive(payload["metadata"]),
+            spec=PodSpec.from_primitive(payload["spec"]),
+            status=PodStatus.from_primitive(payload.get("status", {})),
+        )
 
-    def get_container_status(self, name: str) -> dict[str, t.Any]:
-        for payload in self._status_payload.get("containerStatuses", []):
-            if payload["name"] == name:
-                return payload
-        return {}
+    def get_container_status(self, name: str) -> ContainerStatus:
+        for status in self.status.container_statuses:
+            if status.name == name:
+                break
+        else:
+            status = ContainerStatus(name=name)
+        return status.with_pod_restart_policy(self.spec.restart_policy)
 
     def get_container_id(self, name: str) -> str | None:
-        id_ = self.get_container_status(name).get("containerID", "")
-        # NOTE: URL(id_).host is failing because the container id is too long
-        return id_.replace("docker://", "") or None
+        for status in self.status.container_statuses:
+            if status.name == name:
+                return status.container_id
+        return None
 
     @property
-    def phase(self) -> PodPhase:
-        return PodPhase(self._status_payload.get("phase", PodPhase.PENDING.value))
-
-    @property
-    def is_phase_running(self) -> bool:
-        return self._status_payload.get("phase") == "Running"
-
-    @property
-    def pod_ip(self) -> str:
-        return self._status_payload["podIP"]
-
-    @property
-    def host_ip(self) -> str:
-        return self._status_payload["hostIP"]
-
-    @property
-    def resource_requests(self) -> Resources:
-        cpu_m = 0
-        memory = 0
-        gpu = 0
-        for container in self._payload["spec"]["containers"]:
-            requests = container.get("resources", {}).get("requests")
-            if requests:
-                cpu_m += self._parse_cpu_m(requests.get("cpu", "0"))
-                memory += self._parse_memory(requests.get("memory", "0Mi"))
-                gpu += int(requests.get("nvidia.com/gpu", 0))
-        return Resources(cpu_m=cpu_m, memory=memory, gpu=gpu)
-
-    def _parse_cpu_m(self, value: str) -> int:
-        if value.endswith("m"):
-            return int(value[:-1])
-        return int(float(value) * 1000)
-
-    def _parse_memory(self, memory: str) -> int:
-        try:
-            memory_b = int(memory)
-        except ValueError as exc:
-            if memory.endswith("Ki"):
-                memory_b = int(memory[:-2]) * 1024
-            elif memory.endswith("k"):
-                memory_b = int(memory[:-1]) * 1000
-            elif memory.endswith("Mi"):
-                memory_b = int(memory[:-2]) * 1024**2
-            elif memory.endswith("M"):
-                memory_b = int(memory[:-1]) * 1000**2
-            elif memory.endswith("Gi"):
-                memory_b = int(memory[:-2]) * 1024**3
-            elif memory.endswith("G"):
-                memory_b = int(memory[:-1]) * 1000**3
-            elif memory.endswith("Ti"):
-                memory_b = int(memory[:-2]) * 1024**4
-            elif memory.endswith("T"):
-                memory_b = int(memory[:-1]) * 1000**4
-            else:
-                msg = "Memory unit is not supported"
-                raise KubeClientException(msg) from exc
-        return memory_b
+    def resource_requests(self) -> ContainerResources:
+        return sum(
+            (c.resource_requests for c in self.spec.containers), ContainerResources()
+        )
 
     @property
     def stdin(self) -> bool:
-        for container in self._payload["spec"]["containers"]:
-            stdin = container.get("stdin")
-            if stdin is not None:
-                return stdin
+        for container in self.spec.containers:
+            if container.stdin is not None:
+                return container.stdin
         return False
 
     @property
     def stdin_once(self) -> bool:
-        for container in self._payload["spec"]["containers"]:
-            stdin_once = container.get("stdinOnce")
-            if stdin_once is not None:
-                return stdin_once
+        for container in self.spec.containers:
+            if container.stdin_once is not None:
+                return container.stdin_once
         return False
 
     @property
     def tty(self) -> bool:
-        for container in self._payload["spec"]["containers"]:
-            tty = container.get("tty")
-            if tty is not None:
-                return tty
+        for container in self.spec.containers:
+            if container.tty is not None:
+                return container.tty
         return False
 
 
-class Node:
-    def __init__(self, payload: dict[str, t.Any]) -> None:
-        self._payload = payload
+@dataclass(frozen=True)
+class NodeResources(ContainerResources):
+    pods: int = DEFAULT_MAX_PODS_PER_NODE
+    ephemeral_storage: int = 0
 
-    @property
-    def name(self) -> str:
-        return self._payload["metadata"]["name"]
+    @classmethod
+    def from_primitive(cls, payload: JSON) -> t.Self:
+        resources = super().from_primitive(payload)
+        return cls(
+            **{
+                **asdict(resources),
+                "pods": int(payload.get("pods", cls.pods)),
+                "ephemeral_storage": cls._parse_memory(
+                    payload.get("ephemeral-storage", cls.ephemeral_storage)
+                ),
+            }
+        )
 
-    @property
-    def container_runtime_version(self) -> str:
-        return self._payload["status"]["nodeInfo"]["containerRuntimeVersion"]
-
-    def get_label(self, key: str) -> str | None:
-        return self._payload["metadata"].get("labels", {}).get(key)
+    def with_pods(self, value: int) -> t.Self:
+        return replace(self, pods=max(0, value))
 
 
+@dataclass(frozen=True)
+class NodeStatus:
+    @dataclass(frozen=True)
+    class NodeInfo:
+        container_runtime_version: str
+
+        @classmethod
+        def from_primitive(cls, payload: JSON) -> t.Self:
+            return cls(
+                container_runtime_version=payload["containerRuntimeVersion"],
+            )
+
+    capacity: NodeResources
+    allocatable: NodeResources
+    node_info: NodeInfo
+
+    @classmethod
+    def from_primitive(cls, payload: JSON) -> t.Self:
+        return cls(
+            capacity=NodeResources.from_primitive(payload.get("capacity", {})),
+            allocatable=NodeResources.from_primitive(payload.get("allocatable", {})),
+            node_info=cls.NodeInfo.from_primitive(payload["nodeInfo"]),
+        )
+
+
+@dataclass(frozen=True)
+class Node(Resource):
+    metadata: Metadata
+    status: NodeStatus
+
+    @classmethod
+    def from_primitive(cls, payload: JSON) -> Node:
+        return cls(
+            metadata=Metadata.from_primitive(payload["metadata"]),
+            status=NodeStatus.from_primitive(payload["status"]),
+        )
+
+
+@dataclass(frozen=True)
 class ContainerStatus:
-    def __init__(self, payload: dict[str, t.Any], restart_policy: str) -> None:
-        self._payload = payload
-        self._restart_policy = restart_policy
+    name: str
+    container_id: str | None = None
+    restart_count: int = 0
+    state: t.Mapping[str, t.Any] = field(default_factory=dict)
+    last_state: t.Mapping[str, t.Any] = field(default_factory=dict)
+
+    pod_restart_policy: PodRestartPolicy = PodRestartPolicy.ALWAYS
+
+    @classmethod
+    def from_primitive(cls, payload: JSON) -> t.Self:
+        return cls(
+            name=payload["name"],
+            container_id=payload.get("containerID", "").replace("docker://", "")
+            or None,
+            restart_count=payload.get("restartCount", 0),
+            state=payload.get("state", {}),
+            last_state=payload.get("lastState", {}),
+        )
+
+    def with_pod_restart_policy(self, value: PodRestartPolicy) -> t.Self:
+        return replace(self, pod_restart_policy=value)
 
     @property
     def is_waiting(self) -> bool:
-        state = self._payload.get("state")
-        return "waiting" in state if state else True
+        return "waiting" in self.state if self.state else True
 
     @property
     def is_running(self) -> bool:
-        state = self._payload.get("state")
-        return "running" in state if state else False
+        return "running" in self.state
 
     @property
     def is_terminated(self) -> bool:
-        state = self._payload.get("state")
-        return "terminated" in state if state else False
+        return "terminated" in self.state
 
     @property
     def is_pod_terminated(self) -> bool:
@@ -267,27 +419,23 @@ class ContainerStatus:
 
     @property
     def can_restart(self) -> bool:
-        if self._restart_policy == "Never":
+        if self.pod_restart_policy == PodRestartPolicy.NEVER:
             return False
-        if self._restart_policy == "Always":
+        if self.pod_restart_policy == PodRestartPolicy.ALWAYS:
             return True
-        assert self._restart_policy == "OnFailure"
+        assert self.pod_restart_policy == PodRestartPolicy.ON_FAILURE
         try:
-            return self._payload["state"]["terminated"]["exitCode"] != 0
+            return self.state["terminated"]["exitCode"] != 0
         except KeyError:
             return True
-
-    @property
-    def restart_count(self) -> int:
-        return self._payload.get("restartCount") or 0
 
     @property
     def started_at(self) -> datetime | None:
         try:
             if self.is_running:
-                date_str = self._payload["state"]["running"]["startedAt"]
+                date_str = self.state["running"]["startedAt"]
             else:
-                date_str = self._payload["state"]["terminated"]["startedAt"]
+                date_str = self.state["terminated"]["startedAt"]
                 if not date_str:
                     return None
         except KeyError:
@@ -299,9 +447,9 @@ class ContainerStatus:
     def finished_at(self) -> datetime | None:
         try:
             if self.is_terminated:
-                date_str = self._payload["state"]["terminated"]["finishedAt"]
+                date_str = self.state["terminated"]["finishedAt"]
             else:
-                date_str = self._payload["lastState"]["terminated"]["finishedAt"]
+                date_str = self.last_state["terminated"]["finishedAt"]
             if not date_str:
                 return None
         except KeyError:
@@ -445,10 +593,14 @@ class KubeClient:
 
     @property
     def _pods_url(self) -> str:
+        return f"{self._api_v1_url}/pods"
+
+    @property
+    def _namespaced_pods_url(self) -> str:
         return f"{self._namespace_url}/pods"
 
     def _generate_pod_url(self, pod_name: str) -> str:
-        return f"{self._pods_url}/{pod_name}"
+        return f"{self._namespaced_pods_url}/{pod_name}"
 
     def _generate_node_proxy_url(self, name: str, port: int) -> str:
         return f"{self._api_v1_url}/nodes/{name}:{port}/proxy"
@@ -493,19 +645,17 @@ class KubeClient:
         return payload
 
     async def get_pod(self, pod_name: str) -> Pod:
-        return Pod(await self.get_raw_pod(pod_name))
+        payload = await self.get_raw_pod(pod_name)
+        return Pod.from_primitive(payload)
 
     async def _get_raw_container_state(self, pod_name: str) -> dict[str, t.Any]:
         pod = await self.get_pod(pod_name)
         container_status = pod.get_container_status(pod_name)
-        return container_status.get("state", {})
+        return {**container_status.state}
 
     async def get_container_status(self, name: str) -> ContainerStatus:
         pod = await self.get_pod(name)
-        return ContainerStatus(
-            pod.get_container_status(name),
-            restart_policy=pod.restart_policy,
-        )
+        return pod.get_container_status(name)
 
     async def wait_pod_is_running(
         self, pod_name: str, *, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
@@ -619,13 +769,22 @@ class KubeClient:
             yield response.content
 
     async def get_pods(
-        self, label_selector: str = "", field_selector: str = ""
-    ) -> Sequence[Pod]:
+        self,
+        *,
+        all_namespaces: bool = False,
+        label_selector: str | None = None,
+        field_selector: str | None = None,
+    ) -> list[Pod]:
+        url = self._pods_url if all_namespaces else self._namespaced_pods_url
         params = {}
         if label_selector:
             params["labelSelector"] = label_selector
         if field_selector:
             params["fieldSelector"] = field_selector
+        payload = await self._request(method="get", url=url, params=params)
+        self._assert_resource_kind("PodList", payload)
+        pod_list = ListResult.from_primitive(payload, resource_cls=Pod)
+        return pod_list.items
         payload = await self._request(method="get", url=self._pods_url, params=params)
         self._assert_resource_kind("PodList", payload)
         return [Pod(p) for p in payload["items"]]
@@ -633,18 +792,21 @@ class KubeClient:
     async def get_node(self, name: str) -> Node:
         payload = await self._request(method="get", url=self._generate_node_url(name))
         self._assert_resource_kind("Node", payload)
-        return Node(payload)
+        return Node.from_primitive(payload)
 
-    async def get_nodes(self, label_selector: str = "") -> Sequence[Node]:
+    async def get_nodes(self, *, label_selector: str | None = None) -> list[Node]:
         params = None
         if label_selector:
             params = {"labelSelector": label_selector}
         payload = await self._request(method="get", url=self._nodes_url, params=params)
         self._assert_resource_kind("NodeList", payload)
+        node_list = ListResult.from_primitive(payload, resource_cls=Node)
+        return node_list.items
+        self._assert_resource_kind("NodeList", payload)
         return [Node(item) for item in payload["items"]]
 
     async def _check_response_status(
-        self, response: aiohttp.ClientResponse, job_id: str = ""
+        self, response: aiohttp.ClientResponse, job_id: str | None = None
     ) -> None:
         if not 200 <= response.status < 300:
             payload = await response.text()
@@ -653,42 +815,50 @@ class KubeClient:
             except ValueError:
                 pod = {"code": response.status, "message": payload}
             self._raise_for_status(pod, job_id=job_id)
-            raise KubeClientException(payload)
 
     def _assert_resource_kind(
-        self, expected_kind: str, payload: dict[str, t.Any], job_id: str = ""
+        self, expected_kind: str, payload: JSON, job_id: str | None = None
     ) -> None:
         kind = payload["kind"]
         if kind == "Status":
             self._raise_for_status(payload, job_id=job_id)
-            msg = "unexpected error"
-            raise JobError(msg)
-        if kind != expected_kind:
+        elif kind != expected_kind:
             msg = f"unknown kind: {kind}"
             raise ValueError(msg)
 
-    def _raise_for_status(self, payload: dict[str, t.Any], job_id: str | None) -> None:
-        if payload["code"] == 400:
+    def _raise_for_status(self, payload: JSON, job_id: str | None = None) -> t.NoReturn:  # noqa: C901
+        code = payload["code"]
+        reason = payload.get("reason")
+        if code == 400 and job_id:
             if "ContainerCreating" in payload["message"]:
-                msg = f"job '{job_id}' was not created yet"
+                msg = f"Job '{job_id}' has not been created yet"
                 raise JobNotFoundException(msg)
             if "is not available" in payload["message"]:
-                msg = f"job '{job_id}' has not created yet"
+                msg = f"Job '{job_id}' is not available"
                 raise JobNotFoundException(msg)
             if "is terminated" in payload["message"]:
-                msg = f"job '{job_id}' is terminated"
+                msg = f"Job '{job_id}' is terminated"
                 raise JobNotFoundException(msg)
-        elif payload["code"] == 401:
-            raise KubeClientUnauthorized(payload)
-        elif payload["code"] == 404:
-            msg = f"job '{job_id}' was not found"
+        elif code == 401:
+            raise KubeClientUnauthorizedException(payload)
+        elif code == 404 and job_id:
+            msg = f"Job '{job_id}' not found"
             raise JobNotFoundException(msg)
-        elif payload["code"] == 409:
-            msg = f"job '{job_id}' already exist"
+        elif code == 404:
+            raise JobNotFoundException(payload)
+        elif code == 409 and job_id:
+            msg = f"Job '{job_id}' already exists"
             raise JobError(msg)
-        elif payload["code"] == 422:
-            msg = f"can not create job with id '{job_id}'"
+        elif code == 409:
+            raise ConflictException(payload)
+        elif code == 410:
+            raise ResourceGoneException(payload)
+        elif code == 422:
+            msg = f"Cannot create job with id '{job_id}'"
             raise JobError(msg)
+        elif reason == "Expired":
+            raise ExpiredException(payload)
+        raise KubeClientException(payload)
 
 
 @dataclass(frozen=True)
@@ -827,11 +997,11 @@ class KubeTelemetry(Telemetry):
 
     async def get_latest_stats(self) -> JobStats | None:
         pod = await self._kube_client.get_pod(self._pod_name)
-        if not pod.node_name:
+        if not pod.spec.node_name:
             return None
-        if pod.resource_requests.gpu:
-            return await self._get_latest_gpu_pod_stats(pod.node_name)
-        return await self._get_latest_cpu_pod_stats(pod.node_name)
+        if pod.resource_requests.has_gpu:
+            return await self._get_latest_gpu_pod_stats(pod.spec.node_name)
+        return await self._get_latest_cpu_pod_stats(pod.spec.node_name)
 
     async def _get_latest_cpu_pod_stats(self, node_name: str) -> JobStats | None:
         pod_stats = await self._kube_client.get_pod_container_stats(

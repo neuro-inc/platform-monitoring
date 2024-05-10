@@ -15,7 +15,6 @@ function minikube::start {
         --wait-timeout=5m
     kubectl config use-context minikube
     kubectl get nodes -o name | xargs -I {} kubectl label {} --overwrite \
-        platform.neuromation.io/job=true \
         platform.neuromation.io/nodepool=minikube
 }
 

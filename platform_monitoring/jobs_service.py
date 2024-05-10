@@ -1,8 +1,8 @@
 import asyncio
+from collections import defaultdict
 from collections.abc import AsyncGenerator, AsyncIterator, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
-from functools import reduce
 
 import aiohttp
 from neuro_config_client import ConfigClient, ResourcePoolType
@@ -14,7 +14,14 @@ from .container_runtime_client import (
     ContainerRuntimeClientRegistry,
     ContainerRuntimeError,
 )
-from .kube_client import JobNotFoundException, KubeClient, Pod, Resources
+from .kube_client import (
+    DEFAULT_MAX_PODS_PER_NODE,
+    ContainerResources,
+    JobNotFoundException,
+    KubeClient,
+    NodeResources,
+    Pod,
+)
 from .user import User
 from .utils import KubeHelper, asyncgeneratorcontextmanager
 
@@ -44,12 +51,12 @@ class NodeNotFoundException(Exception):
 class JobsService:
     def __init__(
         self,
+        *,
         config_client: ConfigClient,
         jobs_client: JobsClient,
         kube_client: KubeClient,
         container_runtime_client_registry: ContainerRuntimeClientRegistry,
         cluster_name: str,
-        kube_job_label: str = KubeConfig.job_label,
         kube_node_pool_label: str = KubeConfig.node_pool_label,
     ) -> None:
         self._config_client = config_client
@@ -58,7 +65,6 @@ class JobsService:
         self._kube_helper = KubeHelper()
         self._container_runtime_client_registry = container_runtime_client_registry
         self._cluster_name = cluster_name
-        self._kube_job_label = kube_job_label
         self._kube_node_pool_label = kube_node_pool_label
 
     async def get(self, job_id: str) -> Job:
@@ -91,7 +97,10 @@ class JobsService:
         cont_id = pod.get_container_id(pod_name)
         assert cont_id
 
-        runtime_client = await self._container_runtime_client_registry.get(pod.host_ip)
+        assert pod.status.host_ip
+        runtime_client = await self._container_runtime_client_registry.get(
+            pod.status.host_ip
+        )
 
         try:
             async with runtime_client.commit(
@@ -138,7 +147,10 @@ class JobsService:
         if not pod.tty:
             tty = False
 
-        runtime_client = await self._container_runtime_client_registry.get(pod.host_ip)
+        assert pod.status.host_ip
+        runtime_client = await self._container_runtime_client_registry.get(
+            pod.status.host_ip
+        )
 
         async with runtime_client.attach(
             cont_id, tty=tty, stdin=stdin, stdout=stdout, stderr=stderr
@@ -161,7 +173,10 @@ class JobsService:
         cont_id = pod.get_container_id(pod_name)
         assert cont_id
 
-        runtime_client = await self._container_runtime_client_registry.get(pod.host_ip)
+        assert pod.status.host_ip
+        runtime_client = await self._container_runtime_client_registry.get(
+            pod.status.host_ip
+        )
 
         async with runtime_client.exec(
             cont_id, cmd, tty=tty, stdin=stdin, stdout=stdout, stderr=stderr
@@ -175,7 +190,10 @@ class JobsService:
         cont_id = pod.get_container_id(pod_name)
         assert cont_id
 
-        runtime_client = await self._container_runtime_client_registry.get(pod.host_ip)
+        assert pod.status.host_ip
+        runtime_client = await self._container_runtime_client_registry.get(
+            pod.status.host_ip
+        )
 
         await runtime_client.kill(cont_id)
 
@@ -184,14 +202,14 @@ class JobsService:
     ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         pod_name = self._kube_helper.get_job_pod_name(job)
         pod = await self._get_running_jobs_pod(pod_name)
-        reader, writer = await asyncio.open_connection(pod.pod_ip, port)
+        reader, writer = await asyncio.open_connection(pod.status.pod_ip, port)
         return reader, writer
 
     async def _get_running_jobs_pod(self, job_id: str) -> Pod:
         pod: Pod | None
         try:
             pod = await self._kube_client.get_pod(job_id)
-            if not pod.is_phase_running:
+            if not pod.status.is_running:
                 pod = None
         except JobNotFoundException:
             # job's pod does not exist: it might be already garbage-collected
@@ -207,39 +225,47 @@ class JobsService:
         result: dict[str, int] = {}
         cluster = await self._config_client.get_cluster(self._cluster_name)
         assert cluster.orchestrator is not None
-        resource_requests = await self._get_resource_requests_by_node_pool()
+        available_resources = await self._get_available_resources_by_node_pool()
         pool_types = {p.name: p for p in cluster.orchestrator.resource_pool_types}
         for preset in cluster.orchestrator.resource_presets:
             available_jobs_count = 0
-            preset_resources = Resources(
+            preset_resources = ContainerResources(
                 cpu_m=int(preset.cpu * 1000),
                 memory=preset.memory,
-                gpu=preset.gpu or 0,
+                nvidia_gpu=preset.nvidia_gpu or 0,
+                amd_gpu=preset.amd_gpu or 0,
             )
-            preset_pool_types = [pool_types[r] for r in preset.resource_affinity]
-            for node_pool in preset_pool_types:
+            node_pools = [pool_types[r] for r in preset.available_resource_pool_names]
+            for node_pool in node_pools:
                 node_resource_limit = self._get_node_resource_limit(node_pool)
-                node_resource_requests = resource_requests.get(node_pool.name, [])
-                running_nodes_count = len(node_resource_requests)
+                node_pool_available_resources = available_resources.get(
+                    node_pool.name, []
+                )
+                running_nodes_count = len(node_pool_available_resources)
                 free_nodes_count = node_pool.max_size - running_nodes_count
                 # get number of jobs that can be scheduled on running nodes
                 # in the current node pool
-                for request in node_resource_requests:
-                    available_resources = node_resource_limit.available(request)
-                    available_jobs_count += available_resources.count(preset_resources)
+                for node_available_resources in node_pool_available_resources:
+                    available_jobs_count += min(
+                        node_available_resources // preset_resources,
+                        node_available_resources.pods,
+                    )
                 # get number of jobs that can be scheduled on free nodes
                 # in the current node pool
                 if free_nodes_count > 0:
-                    available_jobs_count += (
-                        free_nodes_count * node_resource_limit.count(preset_resources)
+                    available_jobs_count += free_nodes_count * min(
+                        DEFAULT_MAX_PODS_PER_NODE,
+                        node_resource_limit // preset_resources,
                     )
             result[preset.name] = available_jobs_count
         return result
 
-    async def _get_resource_requests_by_node_pool(self) -> dict[str, list[Resources]]:
-        result: dict[str, list[Resources]] = {}
+    async def _get_available_resources_by_node_pool(
+        self,
+    ) -> dict[str, list[NodeResources]]:
+        result: dict[str, list[NodeResources]] = defaultdict(list)
         pods = await self._kube_client.get_pods(
-            label_selector=self._kube_job_label,
+            all_namespaces=True,
             field_selector=",".join(
                 (
                     "status.phase!=Failed",
@@ -248,36 +274,41 @@ class JobsService:
                 ),
             ),
         )
-        nodes = await self._kube_client.get_nodes(label_selector=self._kube_job_label)
-        for node_name, node_pods in self._group_pods_by_node(pods).items():
-            if not node_name:
-                continue
+        nodes = await self._kube_client.get_nodes(
+            label_selector=self._kube_node_pool_label
+        )
+        for node_name, node_pods in self._get_pods_by_node(pods).items():
             for node in nodes:
-                if node.name == node_name:
+                if node.metadata.name == node_name:
                     break
             else:
                 raise NodeNotFoundException(node_name)
-            node_pool_name = node.get_label(self._kube_node_pool_label)
+            node_pool_name = node.metadata.labels.get(self._kube_node_pool_label)
             if not node_pool_name:  # pragma: no coverage
                 continue
-            pod_resources = [p.resource_requests for p in node_pods]
-            node_resources = reduce(Resources.add, pod_resources, Resources())
-            result.setdefault(node_pool_name, []).append(node_resources)
+            resource_requests = sum(
+                (pod.resource_requests for pod in node_pods), ContainerResources()
+            )
+            available_resources = node.status.allocatable - resource_requests
+            available_resources = available_resources.with_pods(
+                available_resources.pods - len(node_pods)
+            )
+            result[node_pool_name].append(available_resources)
         return result
 
-    def _group_pods_by_node(self, pods: Sequence[Pod]) -> dict[str | None, list[Pod]]:
-        result: dict[str | None, list[Pod]] = {}
+    def _get_pods_by_node(self, pods: Sequence[Pod]) -> dict[str, list[Pod]]:
+        result: dict[str, list[Pod]] = defaultdict(list)
         for pod in pods:
-            group = result.get(pod.node_name)
-            if not group:
-                group = []
-                result[pod.node_name] = group
-            group.append(pod)
+            if pod.spec.node_name:
+                result[pod.spec.node_name].append(pod)
         return result
 
-    def _get_node_resource_limit(self, node_pool: ResourcePoolType) -> Resources:
-        return Resources(
+    def _get_node_resource_limit(
+        self, node_pool: ResourcePoolType
+    ) -> ContainerResources:
+        return ContainerResources(
             cpu_m=int(node_pool.available_cpu * 1000),
             memory=node_pool.available_memory,
-            gpu=node_pool.gpu or 0,
+            nvidia_gpu=node_pool.nvidia_gpu or 0,
+            amd_gpu=node_pool.amd_gpu or 0,
         )
