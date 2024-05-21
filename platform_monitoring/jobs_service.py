@@ -277,15 +277,11 @@ class JobsService:
         nodes = await self._kube_client.get_nodes(
             label_selector=self._kube_node_pool_label
         )
+        nodes_by_name = {node.metadata.name: node for node in nodes}
         for node_name, node_pods in self._get_pods_by_node(pods).items():
-            for node in nodes:
-                if node.metadata.name == node_name:
-                    break
-            else:
-                raise NodeNotFoundException(node_name)
-            node_pool_name = node.metadata.labels.get(self._kube_node_pool_label)
-            if not node_pool_name:  # pragma: no coverage
+            if not (node := nodes_by_name.get(node_name)):
                 continue
+            node_pool_name = node.metadata.labels[self._kube_node_pool_label]
             resource_requests = sum(
                 (pod.resource_requests for pod in node_pods), ContainerResources()
             )

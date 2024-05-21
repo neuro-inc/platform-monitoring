@@ -17,7 +17,7 @@ from neuro_config_client import (
 from neuro_sdk import Jobs as JobsClient
 
 from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
-from platform_monitoring.jobs_service import JobsService, NodeNotFoundException
+from platform_monitoring.jobs_service import JobsService
 from platform_monitoring.kube_client import KubeClient, Node, Pod
 
 
@@ -268,13 +268,3 @@ class TestJobsService:
         result = await service.get_available_jobs_counts()
 
         assert result == {"cpu": 10, "nvidia-gpu": 2, "amd-gpu": 4, "cpu-p": 0}
-
-    async def test_get_available_jobs_count_node_not_found(
-        self, service: JobsService, kube_client: mock.Mock
-    ) -> None:
-        kube_client.get_pods.side_effect = get_pods_factory(
-            create_pod("unknown", cpu_m=1000, memory=2**30)
-        )
-
-        with pytest.raises(NodeNotFoundException, match="Node 'unknown' was not found"):
-            await service.get_available_jobs_counts()
