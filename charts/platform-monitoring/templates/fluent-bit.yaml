@@ -44,48 +44,15 @@ spec:
         image: {{ .repository }}:{{ .tag }}
         {{- end }}
         env:
-        {{- if eq .Values.logs.persistence.type "aws" }}
-        {{- if .Values.logs.persistence.aws.accessKeyId }}
+        {{- if eq .Values.logs.persistence.type "s3" }}
+        {{- if .Values.logs.persistence.s3.accessKeyId }}
         - name: AWS_ACCESS_KEY_ID
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
-              key: access_key_id
+          {{- toYaml .Values.logs.persistence.s3.accessKeyId | nindent 10 }}
         {{- end }}
-        {{- if .Values.logs.persistence.aws.secretAccessKey }}
+        {{- if .Values.logs.persistence.s3.secretAccessKey }}
         - name: AWS_SECRET_ACCESS_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
-              key: secret_access_key
+          {{- toYaml .Values.logs.persistence.s3.secretAccessKey | nindent 10 }}
         {{- end }}
-        {{- else if eq .Values.logs.persistence.type "minio" }}
-        - name: AWS_ACCESS_KEY_ID
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
-              key: access_key
-        - name: AWS_SECRET_ACCESS_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
-              key: secret_key
-        {{- else if eq .Values.logs.persistence.type "gcp" }}
-        - name: AWS_ACCESS_KEY_ID
-          value: minio_access_key
-        - name: AWS_SECRET_ACCESS_KEY
-          value: minio_secret_key
-        {{- else if eq .Values.logs.persistence.type "azure" }}
-        - name: AWS_ACCESS_KEY_ID
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
-              key: account_name
-        - name: AWS_SECRET_ACCESS_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ include "platformMonitoring.logs.storage.keySecret" . }}
-              key: account_key
         {{- end }}
         volumeMounts:
         - mountPath: /var/log

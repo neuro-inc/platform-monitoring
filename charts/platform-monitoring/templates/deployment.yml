@@ -24,7 +24,6 @@ spec:
         release: {{ .Release.Name }}
         service: platform-monitoring
       annotations:
-        checksum/logs-secret: {{ include (print $.Template.BasePath "/logs-storage-key-secret.yaml") . | sha256sum }}
         {{- if .Values.secrets }}
         checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
         {{- end }}

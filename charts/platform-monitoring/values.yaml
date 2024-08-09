@@ -72,24 +72,6 @@ fluentbit:
     directory: /var/lib/platform-monitoring-fluent-bit
   logLevel: info
 
-minioGateway:
-  nameOverride: minio-gateway
-  fullnameOverride: minio-gateway
-  image:
-    repository: ghcr.io/neuro-inc/minio
-    # minio gateway was removed from minio, we need to stick to old minio version
-    tag: RELEASE.2022-03-08T22-28-51Z
-  port: 9000
-  replicas: 2
-  resources:
-    requests:
-      cpu: 50m
-      memory: 128Mi
-    limits:
-      cpu: 100m
-      memory: 256Mi
-  podAnnotations: {}
-
 logs:
   cleanup_interval_sec: 900
 
@@ -105,7 +87,7 @@ logs:
         memory: "512Mi"
 
   persistence:
-    type: es
+    type: es # Possible values: es, s3
 
     keySecret: ""
 
@@ -113,33 +95,11 @@ logs:
       host: elasticsearch
       port: 9200
 
-    # aws:
-    #   accessKeyId: access_key # optional
-    #   secretAccessKey: access_key # optional
+    # s3:
     #   region: us-east-1
+    #   accessKeyId: {} # optional
+    #   secretAccessKey: {} # optional
     #   bucket: logs
     #   endpoint: ""
-    #   forcePathStyle: false
-
-    # gcp:
-    #   serviceAccountKeyBase64:
-    #   project: project
-    #   location: us
-    #   bucket: logs
-
-    # azure:
-    #   storageAccountName: account_name
-    #   storageAccountKey: account_key
-    #   bucket: logs
-
-    ## minio is for on_prem clusters which do not have
-    ## any object storage service.
-    ##
-    # minio:
-    #   url: http://minio:9000
-    #   accessKey: access_key
-    #   secretKey: secret_key
-    #   region: region
-    #   bucket: logs
 
 priorityClassName: ""

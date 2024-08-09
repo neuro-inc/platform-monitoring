@@ -30,13 +30,21 @@ service:
 
 logs:
   persistence:
-    type: gcp
+    type: s3
 
-    keySecret: gcp-key
-
-    gcp:
-      project: development-374312
-      location: us-central1
+    s3:
+      region: minio
+      accessKeyId:
+        valueFrom:
+          secretKeyRef:
+            name: minio-gateway
+            key: root-user
+      secretAccessKey:
+        valueFrom:
+          secretKeyRef:
+            name: minio-gateway
+            key: root-password
+      endpoint: http://minio-gateway:9000
       bucket: neuro-dev-logs
 
 sentry:
