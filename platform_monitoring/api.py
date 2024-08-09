@@ -637,7 +637,7 @@ async def create_platform_api_client(
     platform_api_factory = PlatformClientFactory(
         tmp_config, trace_configs=trace_configs
     )
-    await platform_api_factory.login_with_token(url=url, token=token)
+    await platform_api_factory.login_with_token(url=url / "api/v1", token=token)
     client = None
     try:
         client = await platform_api_factory.get()
