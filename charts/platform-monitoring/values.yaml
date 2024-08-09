@@ -19,7 +19,7 @@ platform:
   clusterName: ""
   authUrl: https://staging.neu.ro
   configUrl: https://staging.neu.ro
-  apiUrl: https://staging.neu.ro/api/v1
+  apiUrl: https://staging.neu.ro
   registryUrl: ""
   token: {}
 
