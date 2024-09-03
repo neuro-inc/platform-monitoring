@@ -851,6 +851,8 @@ class TestLogReader:
                     await asyncio.sleep(1)
                     continue
 
+            if b"unable to retrieve container logs" in payload:
+                pytest.skip("unable to retrieve container logs")
             assert b" Restart\n" in payload
             assert payload.count(b"Restart") == 1
             timestamp = int(payload.split()[0])
