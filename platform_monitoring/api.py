@@ -69,6 +69,9 @@ from .validators import (
 
 
 WS_ATTACH_PROTOCOL = "v2.channels.neu.ro"
+WS_ATTACH_PROTOCOL2 = "attach.apolo.us"
+WS_LOGS_PROTOCOL = "logs.apolo.us"
+WS_TOP_PROTOCOL = "top.apolo.us"
 HEARTBEAT = 30
 
 
@@ -224,7 +227,10 @@ class MonitoringApiHandler:
             archive_delay_s=archive_delay_s,
             stop_func=stop_func,
         ) as it:
-            response = WebSocketResponse(heartbeat=HEARTBEAT)
+            response = WebSocketResponse(
+                protocols=[WS_LOGS_PROTOCOL],
+                heartbeat=HEARTBEAT,
+            )
             await response.prepare(request)
             await _run_concurrently(
                 _listen(response),
@@ -244,7 +250,7 @@ class MonitoringApiHandler:
 
         telemetry = await self._get_job_telemetry(job)
         async with telemetry:
-            response = WebSocketResponse()
+            response = WebSocketResponse(protocols=[WS_TOP_PROTOCOL])
             await response.prepare(request)
             await _run_concurrently(
                 _listen(response),
@@ -388,7 +394,7 @@ class MonitoringApiHandler:
         job = await self._resolve_job(request, "write")
 
         response = WebSocketResponse(
-            protocols=[WS_ATTACH_PROTOCOL], heartbeat=HEARTBEAT
+            protocols=[WS_ATTACH_PROTOCOL, WS_ATTACH_PROTOCOL2], heartbeat=HEARTBEAT
         )
 
         async with self._jobs_service.attach(
