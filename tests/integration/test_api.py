@@ -153,16 +153,16 @@ class PlatformApiEndpoints:
     url: URL
 
     @property
-    def endpoint(self) -> URL:
-        return self.url
+    def api_v1_endpoint(self) -> URL:
+        return self.url / "api/v1"
 
     @property
     def platform_config_url(self) -> URL:
-        return self.endpoint / "config"
+        return self.api_v1_endpoint / "config"
 
     @property
     def jobs_base_url(self) -> URL:
-        return self.endpoint / "jobs"
+        return self.api_v1_endpoint / "jobs"
 
     def generate_job_url(self, job_id: str) -> URL:
         return self.jobs_base_url / job_id

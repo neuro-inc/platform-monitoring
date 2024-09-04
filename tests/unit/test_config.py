@@ -48,11 +48,11 @@ def environ(cert_authority_path: str, token_path: str) -> dict[str, Any]:
         "NP_MONITORING_CONTAINER_RUNTIME_PORT": "1234",
         "NP_MONITORING_API_HOST": "0.0.0.0",
         "NP_MONITORING_API_PORT": 8080,
-        "NP_MONITORING_PLATFORM_API_URL": "http://platformapi/api/v1",
+        "NP_MONITORING_PLATFORM_API_URL": "http://platformapi",
         "NP_MONITORING_PLATFORM_API_TOKEN": "platform-api-token",
-        "NP_MONITORING_PLATFORM_AUTH_URL": "http://platformauthapi/api/v1",
+        "NP_MONITORING_PLATFORM_AUTH_URL": "http://platformauthapi",
         "NP_MONITORING_PLATFORM_AUTH_TOKEN": "platform-auth-token",
-        "NP_MONITORING_PLATFORM_CONFIG_URL": "http://platformconfig/api/v1",
+        "NP_MONITORING_PLATFORM_CONFIG_URL": "http://platformconfig",
         "NP_MONITORING_PLATFORM_CONFIG_TOKEN": "platform-config-token",
         "NP_MONITORING_ES_HOSTS": "http://es1,http://es2",
         "NP_MONITORING_K8S_API_URL": "https://localhost:8443",
@@ -77,13 +77,13 @@ def test_create(environ: dict[str, Any], token_path: str) -> None:
         cluster_name="default",
         server=ServerConfig(host="0.0.0.0", port=8080),
         platform_api=PlatformApiConfig(
-            url=URL("http://platformapi/api/v1"), token="platform-api-token"
+            url=URL("http://platformapi"), token="platform-api-token"
         ),
         platform_auth=PlatformAuthConfig(
-            url=URL("http://platformauthapi/api/v1"), token="platform-auth-token"
+            url=URL("http://platformauthapi"), token="platform-auth-token"
         ),
         platform_config=PlatformConfig(
-            url=URL("http://platformconfig/api/v1"), token="platform-config-token"
+            url=URL("http://platformconfig"), token="platform-config-token"
         ),
         elasticsearch=ElasticsearchConfig(hosts=["http://es1", "http://es2"]),
         logs=LogsConfig(storage_type=LogsStorageType.ELASTICSEARCH),

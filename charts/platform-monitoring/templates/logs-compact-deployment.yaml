@@ -1,4 +1,4 @@
-{{- if ne .Values.logs.persistence.type "es" }}
+{{- if eq .Values.logs.persistence.type "s3" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
