@@ -37,9 +37,9 @@ class ElasticsearchConfig:
 @dataclass(frozen=True)
 class S3Config:
     region: str
-    access_key_id: str = field(repr=False)
-    secret_access_key: str = field(repr=False)
     job_logs_bucket_name: str
+    access_key_id: str | None = field(default=None, repr=False)
+    secret_access_key: str | None = field(default=None, repr=False)
     endpoint_url: URL | None = None
 
 

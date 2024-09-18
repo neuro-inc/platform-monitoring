@@ -123,6 +123,25 @@ def test_create_with_kubernetes_labels(environ: dict[str, Any]) -> None:
     assert config.kube.node_pool_label == "node-pool"
 
 
+def test_create_with_s3__default(environ: dict[str, Any]) -> None:
+    environ["NP_MONITORING_S3_REGION"] = "us-east-1"
+    environ["NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME"] = "logs"
+
+    config = EnvironConfigFactory(environ).create()
+
+    assert config.s3 == S3Config(
+        region="us-east-1",
+        job_logs_bucket_name="logs",
+    )
+
+    environ["NP_MONITORING_S3_ENDPOINT_URL"] = "http://minio:9000"
+
+    config = EnvironConfigFactory(environ).create()
+
+    assert config.s3
+    assert config.s3.endpoint_url == URL("http://minio:9000")
+
+
 def test_create_with_s3(environ: dict[str, Any]) -> None:
     environ["NP_MONITORING_S3_REGION"] = "us-east-1"
     environ["NP_MONITORING_S3_ACCESS_KEY_ID"] = "access_key"
