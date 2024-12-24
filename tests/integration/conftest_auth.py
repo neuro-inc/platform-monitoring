@@ -1,14 +1,13 @@
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from dataclasses import dataclass
 
 import pytest
-from aiohttp.hdrs import AUTHORIZATION
 from jose import jwt
-from neuro_auth_client import AuthClient, Permission, User as AuthClientUser
+from neuro_auth_client import AuthClient, Permission
 from yarl import URL
 
 from platform_monitoring.config import PlatformAuthConfig
-from tests.integration.conftest import get_service_url
+
+from .conftest import ProjectUser, get_service_url
 
 
 @pytest.fixture(scope="session")
@@ -54,24 +53,16 @@ async def auth_client(
         yield client
 
 
-@dataclass(frozen=True)
-class _User(AuthClientUser):
-    token: str = ""
-
-    @property
-    def headers(self) -> dict[str, str]:
-        return {AUTHORIZATION: f"Bearer {self.token}"}
-
-
 @pytest.fixture()
 async def share_job(
     auth_client: AuthClient, cluster_name: str
-) -> Callable[[_User, _User, str, str], Awaitable[None]]:
+) -> Callable[[ProjectUser, ProjectUser, str, str], Awaitable[None]]:
     async def _impl(
-        owner: _User, follower: _User, job_id: str, action: str = "read"
+        owner: ProjectUser, follower: ProjectUser, job_id: str, action: str = "read"
     ) -> None:
         permission = Permission(
-            uri=f"job://{cluster_name}/{owner.name}/{job_id}", action=action
+            uri=f"job://{cluster_name}/{owner.org_name}/{owner.project_name}/{job_id}",
+            action=action,
         )
         await auth_client.grant_user_permissions(
             follower.name, [permission], token=owner.token

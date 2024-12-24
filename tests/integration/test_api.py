@@ -29,7 +29,7 @@ from platform_monitoring.api import create_app
 from platform_monitoring.config import Config, ContainerRuntimeConfig, PlatformApiConfig
 
 from .conftest import ApiAddress, create_local_app_server, random_str
-from .conftest_auth import _User
+from .conftest_admin import ProjectUser
 from .conftest_kube import MyKubeClient
 
 
@@ -196,14 +196,14 @@ class JobsClient:
         self,
         platform_api: PlatformApiEndpoints,
         client: aiohttp.ClientSession,
-        user: _User,
+        user: ProjectUser,
     ) -> None:
         self._platform_api = platform_api
         self._client = client
         self._user = user
 
     @property
-    def user(self) -> _User:
+    def user(self) -> ProjectUser:
         return self._user
 
     @property
@@ -232,6 +232,9 @@ class JobsClient:
     async def run_job(self, job_submit: dict[str, Any]) -> str:
         headers = self.headers
         url = self._platform_api.jobs_base_url
+        job_submit["cluster_name"] = self._user.cluster_name
+        job_submit["org_name"] = self._user.org_name
+        job_submit["project_name"] = self._user.project_name
         async with self._client.post(url, headers=headers, json=job_submit) as response:
             assert response.status == HTTPAccepted.status_code, await response.text()
             result = await response.json()
@@ -285,8 +288,8 @@ class JobsClient:
 @pytest.fixture()
 def jobs_client_factory(
     platform_api: PlatformApiEndpoints, client: aiohttp.ClientSession
-) -> Callable[[_User], JobsClient]:
-    def impl(user: _User) -> JobsClient:
+) -> Callable[[ProjectUser], JobsClient]:
+    def impl(user: ProjectUser) -> JobsClient:
         return JobsClient(platform_api, client, user=user)
 
     return impl
@@ -294,8 +297,8 @@ def jobs_client_factory(
 
 @pytest.fixture()
 async def jobs_client(
-    regular_user1: _User,
-    jobs_client_factory: Callable[[_User], JobsClient],
+    regular_user1: ProjectUser,
+    jobs_client_factory: Callable[[ProjectUser], JobsClient],
 ) -> JobsClient:
     return jobs_client_factory(regular_user1)
 
@@ -386,7 +389,7 @@ class TestApi:
     async def test_get_capacity(
         self,
         monitoring_api: MonitoringApiEndpoints,
-        regular_user1: _User,
+        regular_user1: ProjectUser,
         client: aiohttp.ClientSession,
     ) -> None:
         async with client.get(
@@ -400,7 +403,7 @@ class TestApi:
     async def test_get_capacity_forbidden(
         self,
         monitoring_api: MonitoringApiEndpoints,
-        regular_user_factory: Callable[..., Awaitable[_User]],
+        regular_user_factory: Callable[..., Awaitable[ProjectUser]],
         client: aiohttp.ClientSession,
         cluster_name: str,
     ) -> None:
@@ -456,7 +459,7 @@ class TestTopApi:
         jobs_client: JobsClient,
         job_name: str,
         named_infinite_job: str,
-        regular_user2: _User,
+        regular_user2: ProjectUser,
         share_job: Callable[..., Awaitable[None]],
     ) -> None:
         await share_job(jobs_client.user, regular_user2, job_name)
@@ -470,8 +473,8 @@ class TestTopApi:
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         infinite_job: str,
-        regular_user1: _User,
-        regular_user2: _User,
+        regular_user1: ProjectUser,
+        regular_user2: ProjectUser,
     ) -> None:
         url = monitoring_api.generate_top_url(infinite_job)
         with pytest.raises(WSServerHandshakeError) as err:
@@ -601,8 +604,8 @@ class TestLogApi:
         self,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
-        regular_user1: _User,
-        regular_user2: _User,
+        regular_user1: ProjectUser,
+        regular_user2: ProjectUser,
         infinite_job: str,
         cluster_name: str,
     ) -> None:
@@ -610,7 +613,10 @@ class TestLogApi:
         async with client.get(url, headers=regular_user2.headers) as resp:
             assert resp.status == HTTPForbidden.status_code
             result = await resp.json()
-            job_uri = f"job://{cluster_name}/{regular_user1.name}/{infinite_job}"
+            job_uri = (
+                f"job://{cluster_name}/{regular_user1.org_name}/"
+                f"{regular_user1.project_name}/{infinite_job}"
+            )
             assert result == {"missing": [{"uri": job_uri, "action": "read"}]}
 
     async def test_log_no_auth_token_provided_unauthorized(
@@ -679,9 +685,9 @@ class TestLogApi:
         client: aiohttp.ClientSession,
         named_infinite_job: str,
         job_name: str,
-        regular_user1: _User,
-        regular_user2: _User,
-        share_job: Callable[[_User, _User, str], Awaitable[None]],
+        regular_user1: ProjectUser,
+        regular_user2: ProjectUser,
+        share_job: Callable[[ProjectUser, ProjectUser, str], Awaitable[None]],
     ) -> None:
         await share_job(regular_user1, regular_user2, job_name)
 
@@ -750,8 +756,8 @@ class TestSaveApi:
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         infinite_job: str,
-        regular_user1: _User,
-        regular_user2: _User,
+        regular_user1: ProjectUser,
+        regular_user2: ProjectUser,
         cluster_name: str,
     ) -> None:
         url = monitoring_api.generate_save_url(infinite_job)
@@ -910,7 +916,7 @@ class TestSaveApi:
         jobs_client: JobsClient,
         job_name: str,
         named_infinite_job: str,
-        regular_user2: _User,
+        regular_user2: ProjectUser,
         share_job: Callable[..., Awaitable[None]],
         config: Config,
     ) -> None:
@@ -986,7 +992,7 @@ class TestAttachApi:
         jobs_client: JobsClient,
         job_submit: dict[str, Any],
         job_name: str,
-        regular_user2: _User,
+        regular_user2: ProjectUser,
         share_job: Callable[..., Awaitable[None]],
     ) -> None:
         command = 'bash -c "for i in {0..9}; do echo $i; sleep 1; done"'
@@ -1193,7 +1199,7 @@ class TestExecApi:
         jobs_client: JobsClient,
         job_name: str,
         named_infinite_job: str,
-        regular_user2: _User,
+        regular_user2: ProjectUser,
         share_job: Callable[..., Awaitable[None]],
     ) -> None:
         await share_job(jobs_client.user, regular_user2, job_name, action="write")
@@ -1322,7 +1328,7 @@ class TestKillApi:
         jobs_client: JobsClient,
         job_name: str,
         named_infinite_job: str,
-        regular_user2: _User,
+        regular_user2: ProjectUser,
         share_job: Callable[..., Awaitable[None]],
     ) -> None:
         await share_job(jobs_client.user, regular_user2, job_name, action="write")

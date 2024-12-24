@@ -4,26 +4,31 @@ import json
 import re
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
+from pathlib import Path
+from tempfile import mktemp
 from typing import Any
 
 import pytest
-from neuro_config_client import ConfigClient
-from neuro_sdk import (
-    Client as PlatformApiClient,
+from apolo_sdk import (
+    Client as JobsClient,
     Container as JobContainer,
+    Factory as ClientFactory,
     IllegalArgumentError,
     JobDescription as Job,
     JobStatus,
     Resources,
 )
+from neuro_config_client import ConfigClient
+from yarl import URL
 
 from platform_monitoring.api import create_platform_api_client
 from platform_monitoring.config import PlatformApiConfig
 from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
 from platform_monitoring.jobs_service import JobException, JobsService
+from platform_monitoring.platform_api_client import ApiClient
 from platform_monitoring.user import User
 
-from .conftest_auth import _User
+from .conftest_admin import ProjectUser
 from .conftest_kube import MyKubeClient
 
 
@@ -31,9 +36,29 @@ from .conftest_kube import MyKubeClient
 JobFactory = Callable[..., Awaitable[Job]]
 
 
+@contextlib.asynccontextmanager
+async def create_apolo_client(
+    url: URL, *, user: ProjectUser
+) -> AsyncIterator[JobsClient]:
+    config_path = Path(mktemp())
+    client_factory = ClientFactory(config_path)
+    await client_factory.login_with_token(url=url / "api/v1", token=user.token)
+    client = None
+    try:
+        client = await client_factory.get()
+        await client.config.switch_org(user.org_name)
+        await client.config.switch_cluster(user.cluster_name)
+        await client.config.switch_project(user.project_name)
+
+        yield client
+    finally:
+        if client:
+            await client.close()
+
+
 @pytest.fixture()
 async def job_factory(
-    platform_api_client: PlatformApiClient,
+    apolo_client: JobsClient,
 ) -> AsyncIterator[JobFactory]:
     jobs = []
 
@@ -41,12 +66,12 @@ async def job_factory(
         image: str, command: str | None, resources: Resources, *, tty: bool = False
     ) -> Job:
         container = JobContainer(
-            image=platform_api_client.parse.remote_image(image),
+            image=apolo_client.parse.remote_image(image),
             command=command,
             resources=resources,
             tty=tty,
         )
-        job = await platform_api_client.jobs.run(container)
+        job = await apolo_client.jobs.run(container)
         jobs.append(job)
         return job
 
@@ -54,13 +79,13 @@ async def job_factory(
 
     for job in jobs:
         with contextlib.suppress(IllegalArgumentError):  # Ignore if job was dropped
-            await platform_api_client.jobs.kill(job.id)
+            await apolo_client.jobs.kill(job.id)
 
 
 @pytest.mark.usefixtures("cluster_name")
 class TestJobsService:
     @pytest.fixture()
-    def user(self, regular_user1: _User) -> User:
+    async def user(self, regular_user1: ProjectUser) -> User:
         return User(name=regular_user1.name, token=regular_user1.token)
 
     @pytest.fixture()
@@ -72,9 +97,18 @@ class TestJobsService:
         return str(uuid.uuid4())[:8]
 
     @pytest.fixture()
+    async def apolo_client(
+        self, platform_api_config: PlatformApiConfig, regular_user1: ProjectUser
+    ) -> AsyncIterator[JobsClient]:
+        async with create_apolo_client(
+            platform_api_config.url, user=regular_user1
+        ) as client:
+            yield client
+
+    @pytest.fixture()
     async def platform_api_client(
         self, platform_api_config: PlatformApiConfig, user: User
-    ) -> AsyncIterator[PlatformApiClient]:
+    ) -> AsyncIterator[ApiClient]:
         async with create_platform_api_client(
             platform_api_config.url, user.token
         ) as client:
@@ -84,14 +118,14 @@ class TestJobsService:
     async def jobs_service(
         self,
         platform_config_client: ConfigClient,
-        platform_api_client: PlatformApiClient,
+        platform_api_client: ApiClient,
         kube_client: MyKubeClient,
         container_runtime_client_registry: ContainerRuntimeClientRegistry,
         cluster_name: str,
     ) -> JobsService:
         return JobsService(
             config_client=platform_config_client,
-            jobs_client=platform_api_client.jobs,
+            jobs_client=platform_api_client,
             kube_client=kube_client,
             container_runtime_client_registry=container_runtime_client_registry,
             cluster_name=cluster_name,
@@ -100,7 +134,7 @@ class TestJobsService:
     async def wait_for_job(
         self,
         job: Job,
-        platform_api_client: PlatformApiClient,
+        apolo_client: JobsClient,
         condition: Callable[[Job], bool],
         timeout_s: float = 300.0,
         interval_s: float = 1.0,
@@ -108,7 +142,7 @@ class TestJobsService:
         try:
             async with asyncio.timeout(timeout_s):
                 while True:
-                    job = await platform_api_client.jobs.status(job.id)
+                    job = await apolo_client.jobs.status(job.id)
                     if condition(job):
                         return
                     await asyncio.sleep(interval_s)
@@ -118,7 +152,7 @@ class TestJobsService:
     async def wait_for_job_running(
         self,
         job: Job,
-        platform_api_client: PlatformApiClient,
+        apolo_client: JobsClient,
         *args: Any,
         **kwargs: Any,
     ) -> None:
@@ -129,12 +163,12 @@ class TestJobsService:
                 pytest.fail(f"Job '{job.id} has been cancelled'")
             return job.status == JobStatus.RUNNING
 
-        await self.wait_for_job(job, platform_api_client, _condition, *args, **kwargs)
+        await self.wait_for_job(job, apolo_client, _condition, *args, **kwargs)
 
     async def wait_for_job_succeeded(
         self,
         job: Job,
-        platform_api_client: PlatformApiClient,
+        apolo_client: JobsClient,
         *args: Any,
         **kwargs: Any,
     ) -> None:
@@ -145,12 +179,12 @@ class TestJobsService:
                 pytest.fail(f"Job '{job.id} has been cancelled'")
             return job.status == JobStatus.SUCCEEDED
 
-        await self.wait_for_job(job, platform_api_client, _condition, *args, **kwargs)
+        await self.wait_for_job(job, apolo_client, _condition, *args, **kwargs)
 
     async def test_save_ok(
         self,
         job_factory: JobFactory,
-        platform_api_client: PlatformApiClient,
+        apolo_client: JobsClient,
         jobs_service: JobsService,
         user: User,
         registry_host: str,
@@ -159,16 +193,16 @@ class TestJobsService:
         resources = Resources(
             memory=32 * 1024**2,
             cpu=0.1,
-            gpu=None,
             shm=False,
-            gpu_model=None,
+            nvidia_gpu=None,
+            nvidia_gpu_model=None,
             tpu_type=None,
             tpu_software_version=None,
         )
         job = await job_factory(
             "alpine:latest", "sh -c 'echo -n 123 > /test; sleep 300'", resources
         )
-        await self.wait_for_job_running(job, platform_api_client)
+        await self.wait_for_job_running(job, apolo_client)
 
         image = f"{registry_host}/{user.name}/alpine:{image_tag}"
 
@@ -179,12 +213,12 @@ class TestJobsService:
         new_job = await job_factory(
             image, 'sh -c \'[ "$(cat /test)" = "123" ]\'', resources
         )
-        await self.wait_for_job_succeeded(new_job, platform_api_client)
+        await self.wait_for_job_succeeded(new_job, apolo_client)
 
     async def test_save_no_tag(
         self,
         job_factory: JobFactory,
-        platform_api_client: PlatformApiClient,
+        apolo_client: JobsClient,
         jobs_service: JobsService,
         user: User,
         registry_host: str,
@@ -193,9 +227,9 @@ class TestJobsService:
         resources = Resources(
             memory=32 * 1024**2,
             cpu=0.1,
-            gpu=None,
             shm=False,
-            gpu_model=None,
+            nvidia_gpu=None,
+            nvidia_gpu_model=None,
             tpu_type=None,
             tpu_software_version=None,
         )
@@ -204,7 +238,7 @@ class TestJobsService:
             f"sh -c 'echo -n {image_tag} > /test; sleep 300'",
             resources,
         )
-        await self.wait_for_job_running(job, platform_api_client)
+        await self.wait_for_job_running(job, apolo_client)
 
         image = f"{registry_host}/{user.name}/alpine"
 
@@ -217,12 +251,12 @@ class TestJobsService:
             f'sh -c \'[ "$(cat /test)" = "{image_tag}" ]\'',
             resources,
         )
-        await self.wait_for_job_succeeded(new_job, platform_api_client)
+        await self.wait_for_job_succeeded(new_job, apolo_client)
 
     async def test_save_pending_job(
         self,
         job_factory: JobFactory,
-        platform_api_client: PlatformApiClient,
+        apolo_client: JobsClient,
         jobs_service: JobsService,
         user: User,
         registry_host: str,
@@ -231,9 +265,9 @@ class TestJobsService:
         resources = Resources(
             memory=2**60,
             cpu=0.1,
-            gpu=None,
             shm=False,
-            gpu_model=None,
+            nvidia_gpu=None,
+            nvidia_gpu_model=None,
             tpu_type=None,
             tpu_software_version=None,
         )
@@ -249,7 +283,7 @@ class TestJobsService:
     async def test_save_push_failure(
         self,
         job_factory: JobFactory,
-        platform_api_client: PlatformApiClient,
+        apolo_client: JobsClient,
         jobs_service: JobsService,
         user: User,
         image_tag: str,
@@ -257,14 +291,14 @@ class TestJobsService:
         resources = Resources(
             memory=32 * 1024**2,
             cpu=0.1,
-            gpu=None,
             shm=False,
-            gpu_model=None,
+            nvidia_gpu=None,
+            nvidia_gpu_model=None,
             tpu_type=None,
             tpu_software_version=None,
         )
         job = await job_factory("alpine:latest", "sh -c 'sleep 300'", resources)
-        await self.wait_for_job_running(job, platform_api_client)
+        await self.wait_for_job_running(job, apolo_client)
 
         registry_host = "unknown:5000"
         image = f"{registry_host}/{user.name}/alpine:{image_tag}"
@@ -290,7 +324,7 @@ class TestJobsService:
     async def test_save_commit_fails_with_exception(
         self,
         job_factory: JobFactory,
-        platform_api_client: PlatformApiClient,
+        apolo_client: JobsClient,
         jobs_service: JobsService,
         user: User,
         image_tag: str,
@@ -298,14 +332,14 @@ class TestJobsService:
         resources = Resources(
             memory=32 * 1024**2,
             cpu=0.1,
-            gpu=None,
             shm=False,
-            gpu_model=None,
+            nvidia_gpu=None,
+            nvidia_gpu_model=None,
             tpu_type=None,
             tpu_software_version=None,
         )
         job = await job_factory("alpine:latest", "sh -c 'sleep 300'", resources)
-        await self.wait_for_job_running(job, platform_api_client)
+        await self.wait_for_job_running(job, apolo_client)
 
         registry_host = "localhost:5000"
         image = f"{registry_host}/InvalidImageName:{image_tag}"
@@ -323,11 +357,15 @@ class TestJobsService:
     async def test_mark_logs_dropped(
         self,
         job_factory: JobFactory,
-        platform_api_client: PlatformApiClient,
+        apolo_client: JobsClient,
         jobs_service: JobsService,
     ) -> None:
         resources = Resources(
-            memory=16 * 1024**2, cpu=0.1, gpu=None, shm=False, gpu_model=None
+            memory=16 * 1024**2,
+            cpu=0.1,
+            shm=False,
+            nvidia_gpu=None,
+            nvidia_gpu_model=None,
         )
         job = await job_factory(
             "alpine:latest",
@@ -335,21 +373,21 @@ class TestJobsService:
             resources,
             tty=False,
         )
-        await self.wait_for_job_succeeded(job, platform_api_client)
+        await self.wait_for_job_succeeded(job, apolo_client)
 
-        await platform_api_client.jobs.kill(job.id)
+        await apolo_client.jobs.kill(job.id)
 
         # Drop request
         # TODO: replace with sdk call when available
-        url = platform_api_client._config.api_url / "jobs" / job.id / "drop"
-        auth = await platform_api_client._config._api_auth()
-        async with platform_api_client._core.request("POST", url, auth=auth):
+        url = apolo_client._config.api_url / "jobs" / job.id / "drop"
+        auth = await apolo_client._config._api_auth()
+        async with apolo_client._core.request("POST", url, auth=auth):
             pass
 
         # Job should be still there
-        assert await platform_api_client.jobs.status(job.id)
+        assert await apolo_client.jobs.status(job.id)
 
         await jobs_service.mark_logs_dropped(job.id)
 
         with pytest.raises(IllegalArgumentError):
-            await platform_api_client.jobs.status(job.id)
+            await apolo_client.jobs.status(job.id)

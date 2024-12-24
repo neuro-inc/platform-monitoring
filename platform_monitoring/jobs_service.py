@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 import aiohttp
 from neuro_config_client import ConfigClient, ResourcePoolType
-from neuro_sdk import JobDescription as Job, Jobs as JobsClient
 
 from .config import KubeConfig
 from .container_runtime_client import (
@@ -22,6 +21,7 @@ from .kube_client import (
     NodeResources,
     Pod,
 )
+from .platform_api_client import ApiClient, Job
 from .user import User
 from .utils import KubeHelper, asyncgeneratorcontextmanager
 
@@ -53,7 +53,7 @@ class JobsService:
         self,
         *,
         config_client: ConfigClient,
-        jobs_client: JobsClient,
+        jobs_client: ApiClient,
         kube_client: KubeClient,
         container_runtime_client_registry: ContainerRuntimeClientRegistry,
         cluster_name: str,
@@ -68,25 +68,19 @@ class JobsService:
         self._kube_node_pool_label = kube_node_pool_label
 
     async def get(self, job_id: str) -> Job:
-        return await self._jobs_client.status(job_id)
+        return await self._jobs_client.get_job(job_id)
 
     def get_jobs_for_log_removal(
         self,
-    ) -> AbstractAsyncContextManager[AsyncIterator[Job]]:
-        return self._jobs_client.list(
+    ) -> AbstractAsyncContextManager[AsyncGenerator[Job, None]]:
+        return self._jobs_client.get_jobs(
             cluster_name=self._cluster_name,
-            _being_dropped=True,
-            _logs_removed=False,
+            being_dropped=True,
+            logs_removed=False,
         )
 
     async def mark_logs_dropped(self, job_id: str) -> None:
-        url = self._jobs_client._config.api_url / "jobs" / job_id / "drop_progress"
-        payload = {"logs_removed": True}
-        auth = await self._jobs_client._config._api_auth()
-        async with self._jobs_client._core.request(
-            "POST", url, auth=auth, json=payload
-        ):
-            pass
+        await self._jobs_client.mark_job_logs_dropped(job_id)
 
     @asyncgeneratorcontextmanager
     async def save(

@@ -5,7 +5,8 @@ from datetime import datetime
 from typing import Any, TypeVar
 
 import iso8601
-from neuro_sdk import JobDescription as Job, JobStatus
+
+from .platform_api_client import Job
 
 
 T_co = TypeVar("T_co", covariant=True)
@@ -25,13 +26,13 @@ def asyncgeneratorcontextmanager(
 
 class JobsHelper:
     def is_job_running(self, job: Job) -> bool:
-        return job.status == JobStatus.RUNNING
+        return job.status == Job.Status.RUNNING
 
     def is_job_finished(self, job: Job) -> bool:
         return job.status in (
-            JobStatus.SUCCEEDED,
-            JobStatus.FAILED,
-            JobStatus.CANCELLED,
+            Job.Status.SUCCEEDED,
+            Job.Status.FAILED,
+            Job.Status.CANCELLED,
         )
 
 
