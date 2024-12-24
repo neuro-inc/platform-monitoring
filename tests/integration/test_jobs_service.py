@@ -26,7 +26,6 @@ from platform_monitoring.config import PlatformApiConfig
 from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
 from platform_monitoring.jobs_service import JobException, JobsService
 from platform_monitoring.platform_api_client import ApiClient
-from platform_monitoring.user import User
 
 from .conftest_admin import ProjectUser
 from .conftest_kube import MyKubeClient
@@ -47,7 +46,6 @@ async def create_apolo_client(
     try:
         client = await client_factory.get()
         await client.config.switch_org(user.org_name)
-        await client.config.switch_cluster(user.cluster_name)
         await client.config.switch_project(user.project_name)
 
         yield client
@@ -85,8 +83,8 @@ async def job_factory(
 @pytest.mark.usefixtures("cluster_name")
 class TestJobsService:
     @pytest.fixture()
-    async def user(self, regular_user1: ProjectUser) -> User:
-        return User(name=regular_user1.name, token=regular_user1.token)
+    async def user(self, regular_user1: ProjectUser) -> ProjectUser:
+        return regular_user1
 
     @pytest.fixture()
     def registry_host(self) -> str:
@@ -107,7 +105,7 @@ class TestJobsService:
 
     @pytest.fixture()
     async def platform_api_client(
-        self, platform_api_config: PlatformApiConfig, user: User
+        self, platform_api_config: PlatformApiConfig, user: ProjectUser
     ) -> AsyncIterator[ApiClient]:
         async with create_platform_api_client(
             platform_api_config.url, user.token
@@ -186,7 +184,7 @@ class TestJobsService:
         job_factory: JobFactory,
         apolo_client: JobsClient,
         jobs_service: JobsService,
-        user: User,
+        user: ProjectUser,
         registry_host: str,
         image_tag: str,
     ) -> None:
@@ -204,7 +202,9 @@ class TestJobsService:
         )
         await self.wait_for_job_running(job, apolo_client)
 
-        image = f"{registry_host}/{user.name}/alpine:{image_tag}"
+        image = (
+            f"{registry_host}/{user.org_name}/{user.project_name}/alpine:{image_tag}"
+        )
 
         async with jobs_service.save(job, user, image) as it:
             async for _ in it:
@@ -220,7 +220,7 @@ class TestJobsService:
         job_factory: JobFactory,
         apolo_client: JobsClient,
         jobs_service: JobsService,
-        user: User,
+        user: ProjectUser,
         registry_host: str,
         image_tag: str,
     ) -> None:
@@ -240,7 +240,7 @@ class TestJobsService:
         )
         await self.wait_for_job_running(job, apolo_client)
 
-        image = f"{registry_host}/{user.name}/alpine"
+        image = f"{registry_host}/{user.org_name}/{user.project_name}/alpine"
 
         async with jobs_service.save(job, user, image) as it:
             async for _ in it:
@@ -258,7 +258,7 @@ class TestJobsService:
         job_factory: JobFactory,
         apolo_client: JobsClient,
         jobs_service: JobsService,
-        user: User,
+        user: ProjectUser,
         registry_host: str,
         image_tag: str,
     ) -> None:
@@ -273,7 +273,9 @@ class TestJobsService:
         )
         job = await job_factory("alpine:latest", None, resources)
 
-        image = f"{registry_host}/{user.name}/alpine:{image_tag}"
+        image = (
+            f"{registry_host}/{user.org_name}/{user.project_name}/alpine:{image_tag}"
+        )
 
         with pytest.raises(JobException, match="is not running"):  # noqa: PT012
             async with jobs_service.save(job, user, image) as it:
@@ -285,7 +287,7 @@ class TestJobsService:
         job_factory: JobFactory,
         apolo_client: JobsClient,
         jobs_service: JobsService,
-        user: User,
+        user: ProjectUser,
         image_tag: str,
     ) -> None:
         resources = Resources(
@@ -301,8 +303,10 @@ class TestJobsService:
         await self.wait_for_job_running(job, apolo_client)
 
         registry_host = "unknown:5000"
-        image = f"{registry_host}/{user.name}/alpine:{image_tag}"
-        repository = f"{registry_host}/{user.name}/alpine"
+        image = (
+            f"{registry_host}/{user.org_name}/{user.project_name}/alpine:{image_tag}"
+        )
+        repository = f"{registry_host}/{user.org_name}/{user.project_name}/alpine"
 
         async with jobs_service.save(job, user, image) as it:
             data = [json.loads(chunk) async for chunk in it]
@@ -326,7 +330,7 @@ class TestJobsService:
         job_factory: JobFactory,
         apolo_client: JobsClient,
         jobs_service: JobsService,
-        user: User,
+        user: ProjectUser,
         image_tag: str,
     ) -> None:
         resources = Resources(
@@ -342,7 +346,10 @@ class TestJobsService:
         await self.wait_for_job_running(job, apolo_client)
 
         registry_host = "localhost:5000"
-        image = f"{registry_host}/InvalidImageName:{image_tag}"
+        image = (
+            f"{registry_host}/{user.org_name}/{user.project_name}/"
+            f"InvalidImageName:{image_tag}"
+        )
 
         with pytest.raises(JobException, match="repository name must be lowercase"):  # noqa: PT012
             async with jobs_service.save(job, user, image) as it:

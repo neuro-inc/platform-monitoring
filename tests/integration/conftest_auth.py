@@ -1,13 +1,13 @@
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Callable
 
 import pytest
 from jose import jwt
-from neuro_auth_client import AuthClient, Permission
+from neuro_auth_client import AuthClient
 from yarl import URL
 
 from platform_monitoring.config import PlatformAuthConfig
 
-from .conftest import ProjectUser, get_service_url
+from .conftest import get_service_url
 
 
 @pytest.fixture(scope="session")
@@ -51,21 +51,3 @@ async def auth_client(
     async with AuthClient(auth_config.url, auth_config.token) as client:
         await client.ping()
         yield client
-
-
-@pytest.fixture()
-async def share_job(
-    auth_client: AuthClient, cluster_name: str
-) -> Callable[[ProjectUser, ProjectUser, str, str], Awaitable[None]]:
-    async def _impl(
-        owner: ProjectUser, follower: ProjectUser, job_id: str, action: str = "read"
-    ) -> None:
-        permission = Permission(
-            uri=f"job://{cluster_name}/{owner.org_name}/{owner.project_name}/{job_id}",
-            action=action,
-        )
-        await auth_client.grant_user_permissions(
-            follower.name, [permission], token=owner.token
-        )
-
-    return _impl

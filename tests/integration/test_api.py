@@ -764,7 +764,10 @@ class TestSaveApi:
         async with client.post(url, headers=regular_user2.headers) as resp:
             assert resp.status == HTTPForbidden.status_code
             result = await resp.json()
-            job_uri = f"job://{cluster_name}/{regular_user1.name}/{infinite_job}"
+            job_uri = (
+                f"job://{cluster_name}/{regular_user1.org_name}/"
+                f"{regular_user1.project_name}/{infinite_job}"
+            )
             assert result == {"missing": [{"uri": job_uri, "action": "write"}]}
 
     async def test_save_no_auth_token_provided_unauthorized(

@@ -1,11 +1,14 @@
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Protocol
 
 import aiohttp
 import pytest
+from aiohttp.hdrs import AUTHORIZATION
+from neuro_auth_client import AuthClient, Permission
 from yarl import URL
 
-from .conftest import ProjectUser, get_service_url, random_str
+from .conftest import get_service_url, random_str
 
 
 @pytest.fixture(scope="session")
@@ -15,6 +18,19 @@ def admin_url(in_minikube: bool) -> URL:  # noqa: FBT001
     else:
         platform_admin = get_service_url("platformadmin", namespace="default")
     return URL(platform_admin)
+
+
+@dataclass(frozen=True)
+class ProjectUser:
+    name: str
+    token: str
+    cluster_name: str
+    org_name: str
+    project_name: str
+
+    @property
+    def headers(self) -> dict[str, str]:
+        return {AUTHORIZATION: f"Bearer {self.token}"}
 
 
 class UserFactory(Protocol):
@@ -135,3 +151,21 @@ async def regular_user2(
     regular_user_factory: Callable[..., Awaitable[ProjectUser]],
 ) -> ProjectUser:
     return await regular_user_factory()
+
+
+@pytest.fixture()
+async def share_job(
+    auth_client: AuthClient, cluster_name: str
+) -> Callable[[ProjectUser, ProjectUser, str, str], Awaitable[None]]:
+    async def _impl(
+        owner: ProjectUser, follower: ProjectUser, job_id: str, action: str = "read"
+    ) -> None:
+        permission = Permission(
+            uri=f"job://{cluster_name}/{owner.org_name}/{owner.project_name}/{job_id}",
+            action=action,
+        )
+        await auth_client.grant_user_permissions(
+            follower.name, [permission], token=owner.token
+        )
+
+    return _impl

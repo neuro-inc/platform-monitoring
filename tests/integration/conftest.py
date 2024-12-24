@@ -14,7 +14,6 @@ import aiohttp.web
 import pytest
 from _pytest.fixtures import FixtureRequest
 from aiobotocore.client import AioBaseClient
-from aiohttp.hdrs import AUTHORIZATION
 from elasticsearch import AsyncElasticsearch
 from yarl import URL
 
@@ -38,19 +37,6 @@ from platform_monitoring.logs import s3_client_error
 
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class ProjectUser:
-    name: str
-    token: str
-    cluster_name: str
-    org_name: str
-    project_name: str
-
-    @property
-    def headers(self) -> dict[str, str]:
-        return {AUTHORIZATION: f"Bearer {self.token}"}
 
 
 @pytest.fixture(scope="session")
