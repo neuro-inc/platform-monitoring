@@ -14,11 +14,11 @@ from neuro_config_client import (
     ResourcePoolType,
     ResourcePreset,
 )
-from neuro_sdk import Jobs as JobsClient
 
 from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
 from platform_monitoring.jobs_service import JobsService
 from platform_monitoring.kube_client import KubeClient, Node, Pod
+from platform_monitoring.platform_api_client import ApiClient
 
 
 def create_node(
@@ -173,7 +173,7 @@ def config_client(cluster: Cluster) -> mock.Mock:
 
 @pytest.fixture()
 def jobs_client() -> mock.Mock:
-    return mock.Mock(spec=JobsClient)
+    return mock.Mock(spec=ApiClient)
 
 
 @pytest.fixture()
@@ -209,7 +209,7 @@ def kube_client() -> mock.Mock:
 
 @pytest.fixture()
 def service(
-    config_client: ConfigClient, jobs_client: JobsClient, kube_client: KubeClient
+    config_client: ConfigClient, jobs_client: ApiClient, kube_client: KubeClient
 ) -> JobsService:
     return JobsService(
         config_client=config_client,

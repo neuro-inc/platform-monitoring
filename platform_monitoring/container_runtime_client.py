@@ -50,8 +50,7 @@ class ContainerRuntimeClient:
                     stdout=_bool_to_str(stdout),
                     stderr=_bool_to_str(stderr),
                 ),
-                timeout=None,  # type: ignore
-                receive_timeout=None,
+                timeout=aiohttp.ClientWSTimeout(),
                 heartbeat=30,
             ) as ws:
                 yield ws
@@ -87,8 +86,7 @@ class ContainerRuntimeClient:
                     stdout=_bool_to_str(stdout),
                     stderr=_bool_to_str(stderr),
                 ),
-                timeout=None,  # type: ignore
-                receive_timeout=None,
+                timeout=aiohttp.ClientWSTimeout(),
                 heartbeat=30,
             ) as ws:
                 yield ws

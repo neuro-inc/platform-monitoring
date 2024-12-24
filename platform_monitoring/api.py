@@ -5,8 +5,6 @@ import random
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from importlib.metadata import version
-from pathlib import Path
-from tempfile import mktemp
 from typing import Any
 
 import aiobotocore.session
@@ -33,11 +31,6 @@ from neuro_auth_client import AuthClient, Permission, check_permissions
 from neuro_auth_client.security import AuthScheme, setup_security
 from neuro_config_client import ConfigClient
 from neuro_logging import init_logging, setup_sentry
-from neuro_sdk import (
-    Client as PlatformApiClient,
-    Factory as PlatformClientFactory,
-    JobDescription as Job,
-)
 from yarl import URL
 
 from .base import JobStats, Telemetry
@@ -60,6 +53,7 @@ from .logs import (
     S3LogsService,
     s3_client_error,
 )
+from .platform_api_client import ApiClient, Job
 from .user import untrusted_user
 from .utils import JobsHelper, KubeHelper, parse_date
 from .validators import (
@@ -638,19 +632,9 @@ async def create_monitoring_app(config: Config) -> aiohttp.web.Application:
 @asynccontextmanager
 async def create_platform_api_client(
     url: URL, token: str, trace_configs: list[aiohttp.TraceConfig] | None = None
-) -> AsyncIterator[PlatformApiClient]:
-    tmp_config = Path(mktemp())
-    platform_api_factory = PlatformClientFactory(
-        tmp_config, trace_configs=trace_configs
-    )
-    await platform_api_factory.login_with_token(url=url / "api/v1", token=token)
-    client = None
-    try:
-        client = await platform_api_factory.get()
+) -> AsyncIterator[ApiClient]:
+    async with ApiClient(url=url, token=token, trace_configs=trace_configs) as client:
         yield client
-    finally:
-        if client:
-            await client.close()
 
 
 @asynccontextmanager
@@ -768,7 +752,7 @@ async def create_app(config: Config) -> aiohttp.web.Application:
     async def _init_app(app: aiohttp.web.Application) -> AsyncIterator[None]:
         async with AsyncExitStack() as exit_stack:
             logger.info("Initializing Platform API client")
-            platform_client = await exit_stack.enter_async_context(
+            platform_api_client = await exit_stack.enter_async_context(
                 create_platform_api_client(
                     config.platform_api.url, config.platform_api.token
                 )
@@ -822,7 +806,7 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             )
             jobs_service = JobsService(
                 config_client=config_client,
-                jobs_client=platform_client.jobs,
+                jobs_client=platform_api_client,
                 kube_client=kube_client,
                 container_runtime_client_registry=container_runtime_client_registry,
                 cluster_name=config.cluster_name,
