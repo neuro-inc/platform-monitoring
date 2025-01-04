@@ -168,14 +168,14 @@ class PlatformApiEndpoints:
         return self.jobs_base_url / job_id
 
 
-@pytest.fixture()
+@pytest.fixture
 async def monitoring_api(config: Config) -> AsyncIterator[MonitoringApiEndpoints]:
     app = await create_app(config)
     async with create_local_app_server(app, port=8080) as address:
         yield MonitoringApiEndpoints(address=address)
 
 
-@pytest.fixture()
+@pytest.fixture
 async def monitoring_api_s3_storage(
     config_s3_storage: Config,
 ) -> AsyncIterator[MonitoringApiEndpoints]:
@@ -184,7 +184,7 @@ async def monitoring_api_s3_storage(
         yield MonitoringApiEndpoints(address=address)
 
 
-@pytest.fixture()
+@pytest.fixture
 def platform_api(
     platform_api_config: PlatformApiConfig,
 ) -> PlatformApiEndpoints:
@@ -285,7 +285,7 @@ class JobsClient:
                 assert response.status == HTTPNoContent.status_code
 
 
-@pytest.fixture()
+@pytest.fixture
 def jobs_client_factory(
     platform_api: PlatformApiEndpoints, client: aiohttp.ClientSession
 ) -> Callable[[ProjectUser], JobsClient]:
@@ -295,7 +295,7 @@ def jobs_client_factory(
     return impl
 
 
-@pytest.fixture()
+@pytest.fixture
 async def jobs_client(
     regular_user1: ProjectUser,
     jobs_client_factory: Callable[[ProjectUser], JobsClient],
@@ -303,7 +303,7 @@ async def jobs_client(
     return jobs_client_factory(regular_user1)
 
 
-@pytest.fixture()
+@pytest.fixture
 def job_request_factory() -> Callable[[], dict[str, Any]]:
     def _factory() -> dict[str, Any]:
         return {
@@ -317,14 +317,14 @@ def job_request_factory() -> Callable[[], dict[str, Any]]:
     return _factory
 
 
-@pytest.fixture()
+@pytest.fixture
 async def job_submit(
     job_request_factory: Callable[[], dict[str, Any]],
 ) -> dict[str, Any]:
     return job_request_factory()
 
 
-@pytest.fixture()
+@pytest.fixture
 async def job_factory(
     jobs_client: JobsClient,
     job_request_factory: Callable[[], dict[str, Any]],
@@ -353,17 +353,17 @@ async def job_factory(
             await jobs_client.wait_job_dematerialized(job_id)
 
 
-@pytest.fixture()
+@pytest.fixture
 async def infinite_job(job_factory: Callable[[str], Awaitable[str]]) -> str:
     return await job_factory("tail -f /dev/null")
 
 
-@pytest.fixture()
+@pytest.fixture
 def job_name() -> str:
     return f"test-job-{random_str()}"
 
 
-@pytest.fixture()
+@pytest.fixture
 async def named_infinite_job(
     job_factory: Callable[[str, str], Awaitable[str]], job_name: str
 ) -> str:
@@ -1375,7 +1375,7 @@ class TestPortForward:
         async with client.get(url, headers=headers) as response:
             assert response.status == HTTPBadRequest.status_code, await response.text()
 
-    @pytest.mark.minikube()
+    @pytest.mark.minikube
     async def test_port_forward_ok(
         self,
         monitoring_api: MonitoringApiEndpoints,
