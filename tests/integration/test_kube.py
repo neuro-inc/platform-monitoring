@@ -68,12 +68,12 @@ from .conftest_kube import MyKubeClient, MyPodDescriptor
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture()
+@pytest.fixture
 def job_pod() -> MyPodDescriptor:
     return MyPodDescriptor(f"job-{uuid4()}")
 
 
-@pytest.fixture()
+@pytest.fixture
 async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
     async def _get_pod(request: web.Request) -> web.Response:
         payload: dict[str, Any] = {
@@ -128,21 +128,21 @@ async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
         yield address
 
 
-@pytest.fixture()
+@pytest.fixture
 def elasticsearch_log_service(
     kube_client: MyKubeClient, es_client: AsyncElasticsearch
 ) -> ElasticsearchLogsService:
     return ElasticsearchLogsService(kube_client, es_client)
 
 
-@pytest.fixture()
+@pytest.fixture
 def s3_logs_metadata_storage(
     s3_client: AioBaseClient, s3_logs_bucket: str
 ) -> S3LogsMetadataStorage:
     return S3LogsMetadataStorage(s3_client, s3_logs_bucket)
 
 
-@pytest.fixture()
+@pytest.fixture
 def s3_logs_metadata_service(
     s3_client: AioBaseClient,
     s3_logs_metadata_storage: S3LogsMetadataStorage,
@@ -153,7 +153,7 @@ def s3_logs_metadata_service(
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def s3_log_service(
     kube_client: MyKubeClient,
     s3_client: AioBaseClient,
@@ -166,7 +166,7 @@ TOKEN_KEY = aiohttp.web.AppKey("token", dict[str, str])
 
 
 class TestKubeClientTokenUpdater:
-    @pytest.fixture()
+    @pytest.fixture
     async def kube_app(self) -> aiohttp.web.Application:
         async def _get_nodes(request: aiohttp.web.Request) -> aiohttp.web.Response:
             auth = request.headers["Authorization"]
@@ -179,7 +179,7 @@ class TestKubeClientTokenUpdater:
         app.router.add_routes([aiohttp.web.get("/api/v1/nodes", _get_nodes)])
         return app
 
-    @pytest.fixture()
+    @pytest.fixture
     async def kube_server(
         self, kube_app: aiohttp.web.Application, unused_tcp_port_factory: Any
     ) -> AsyncIterator[str]:
@@ -188,14 +188,14 @@ class TestKubeClientTokenUpdater:
         ) as address:
             yield f"http://{address.host}:{address.port}"
 
-    @pytest.fixture()
+    @pytest.fixture
     def kube_token_path(self) -> Iterator[str]:
         _, path = tempfile.mkstemp()
         Path(path).write_text("token-1")
         yield path
         Path(path).unlink()
 
-    @pytest.fixture()
+    @pytest.fixture
     async def kube_client(
         self, kube_server: str, kube_token_path: str
     ) -> AsyncIterator[KubeClient]:
@@ -533,7 +533,7 @@ class TestKubeClient:
             ):
                 pass
 
-    @pytest.mark.xfail()
+    @pytest.mark.xfail
     async def test_create_log_stream_creating(
         self, kube_client: MyKubeClient, job_pod: MyPodDescriptor
     ) -> None:
@@ -1640,7 +1640,7 @@ class TestLogReader:
             )
 
 
-@pytest.fixture()
+@pytest.fixture
 async def write_lines_to_s3(
     s3_client: AioBaseClient, s3_logs_bucket: str
 ) -> Callable[..., Awaitable[None]]:
@@ -2080,7 +2080,7 @@ class TestS3LogsMetadataService:
 
 
 class TestS3LogRecordReader:
-    @pytest.fixture()
+    @pytest.fixture
     def reader(
         self, s3_client: AioBaseClient, s3_logs_bucket: str
     ) -> S3LogRecordsReader:
@@ -2220,7 +2220,7 @@ class TestS3LogRecordReader:
 
 
 class TestS3LogRecordWriter:
-    @pytest.fixture()
+    @pytest.fixture
     def records(self) -> list[S3LogRecord]:
         return [
             S3LogRecord(
@@ -2367,7 +2367,7 @@ class TestS3LogRecordWriter:
 
 
 class TestS3LogsService:
-    @pytest.fixture()
+    @pytest.fixture
     def assert_records_written(
         self, s3_client: AioBaseClient, s3_logs_bucket: str
     ) -> Callable[..., Awaitable[None]]:
