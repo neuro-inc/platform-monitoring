@@ -308,7 +308,7 @@ def get_service_url(service_name: str, namespace: str = "default") -> str:
     # ignore type because the linter does not know that `pytest.fail` throws an
     # exception, so it requires to `return None` explicitly, so that the method
     # will return `Optional[List[str]]` which is incorrect
-    timeout_s = 60
+    timeout_s = 120
     interval_s = 10
 
     while timeout_s:

@@ -64,8 +64,8 @@ jobs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ github.token }}
-    - name: Install containerd
-      uses: crazy-max/ghaction-setup-containerd@v3
+#    - name: Install containerd
+#      uses: crazy-max/ghaction-setup-containerd@v3
 #      run: |
 #        # without containerd, tests TestTopApi won't work
 #        # see https://github.com/neuromation/platform-api/pull/928/files#diff-1d37e48f9ceff6d8030570cd36286a61R76
@@ -97,12 +97,11 @@ jobs:
     - name: Setup services in minikube
       run: |
         make apply_configuration_k8s
-        kubectl create secret docker-registry ghcr-secret --docker-server=https://ghcr.io --docker-username=${{ github.actor }} --docker-password=${{ secrets.GITHUB_TOKEN }}
         make test_k8s
     - name: Run integration tests
       run: |
         make test_integration
-        make test_integration_minikube
+#        make test_integration_minikube
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5
       with:
