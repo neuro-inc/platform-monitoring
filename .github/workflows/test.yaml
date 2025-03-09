@@ -81,10 +81,17 @@ jobs:
 #          containerd.io=1.6.20-1
     - name: Start minikube
       uses: medyagh/setup-minikube@latest
+      id: minikube
+      with:
+        minikube-version: 1.34.0
+        driver: docker
+        container-runtime: containerd
+        kubernetes-version: v1.31.0
+        addons: registry
     - name: Try the cluster!
       run: kubectl get pods -A
-    - name: Start minikube
-      run: make start_k8s
+#    - name: Start minikube
+#      run: make start_k8s
     - name: Pull test images
       run: make docker_pull_test_images
     - name: Setup services in minikube
