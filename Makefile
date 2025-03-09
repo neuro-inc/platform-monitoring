@@ -38,7 +38,7 @@ test_integration:
 		--durations=10 \
 		-m "not exclude" \
 		tests/integration \
-		-n 8
+		-n 12
 		# -k "test_save_no_tag" tests/integration/test_jobs_service.py
 		# --log-cli-level=info \
 		# -m "not minikube" \

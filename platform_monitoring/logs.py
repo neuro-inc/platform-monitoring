@@ -964,6 +964,14 @@ class LogsService(abc.ABC):
                                 first = await self.get_first_log_entry_time(
                                     pod_name, timeout_s=archive_delay_s
                                 )
+                                if (
+                                    first
+                                    and self.__class__.__name__
+                                    == "ElasticsearchLogsService"
+                                ):
+                                    first = first.replace(
+                                        microsecond=first.microsecond // 1000 * 1000
+                                    )
                                 until = first or start
                                 if log_reader.last_time >= until:
                                     since = until
