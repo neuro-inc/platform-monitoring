@@ -51,6 +51,25 @@ function k8s::apply_all_configurations {
 }
 
 
+function k8s::wait_for_all_pods_running {
+    local timeout=120
+    local interval=5
+    local end=$((SECONDS + timeout))
+
+    while [ $SECONDS -lt $end ]; do
+        if [ "$(kubectl get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded -o jsonpath='{.items}')" == "[]" ]; then
+            echo "All pods are Running or Succeeded."
+            return 0
+        fi
+        echo "Waiting for pods to be Running or Succeeded..."
+        sleep $interval
+    done
+
+    echo "Timeout waiting for pods to be Running or Succeeded."
+    return 1
+}
+
+
 function k8s::stop {
     sudo -E minikube stop || :
     sudo -E minikube delete || :
@@ -91,6 +110,9 @@ case "${1:-}" in
         ;;
     test)
         k8s::test
+        ;;
+    wait)
+        k8s::wait_for_all_pods_running
         ;;
 esac
 
