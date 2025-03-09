@@ -10,8 +10,8 @@ function k8s::install_minikube {
     curl -Lo minikube https://storage.googleapis.com/minikube/releases/${minikube_version}/minikube-linux-amd64
     chmod +x minikube
     sudo mv minikube /usr/local/bin/
-    sudo -E minikube config set WantReportErrorPrompt false
-    sudo -E minikube config set WantNoneDriverWarning false
+#    sudo -E minikube config set WantReportErrorPrompt false
+#    sudo -E minikube config set WantNoneDriverWarning false
 }
 
 function k8s::start {
@@ -19,10 +19,10 @@ function k8s::start {
     mkdir -p $(dirname $KUBECONFIG)
     touch $KUBECONFIG
 
-    export MINIKUBE_WANTUPDATENOTIFICATION=false
-    export MINIKUBE_WANTREPORTERRORPROMPT=false
-    export MINIKUBE_HOME=$HOME
-    export CHANGE_MINIKUBE_NONE_USER=true
+#    export MINIKUBE_WANTUPDATENOTIFICATION=false
+#    export MINIKUBE_WANTREPORTERRORPROMPT=false
+#    export MINIKUBE_HOME=$HOME
+#    export CHANGE_MINIKUBE_NONE_USER=true
 
     minikube start \
         --vm-driver=docker \
