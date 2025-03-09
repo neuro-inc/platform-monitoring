@@ -12,10 +12,12 @@ spec:
       labels:
         service: platformauthapi
     spec:
+      imagePullSecrets:
+        - name: ghcr-secret
       containers:
       - name: platformauthapi
-        image: platformauthapi:latest
-        imagePullPolicy: Never
+        image: ghcr.io/neuro-inc/platformauthapi:latest
+        imagePullPolicy: IfNotPresent
         env:
         - name: NP_LOG_LEVEL
           value: INFO

@@ -17,6 +17,7 @@ def admin_url(in_minikube: bool) -> URL:  # noqa: FBT001
         platform_admin = "http://platformadmin:8080"
     else:
         platform_admin = get_service_url("platformadmin", namespace="default")
+    # print(111111111, 'admin_url')
     return URL(platform_admin)
 
 

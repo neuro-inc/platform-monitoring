@@ -15,8 +15,8 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
       - name: platform-container-runtime
-        image: platformcontainerruntime:latest
-        imagePullPolicy: Never
+        image: ghcr.io/neuro-inc/platformcontainerruntime:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 9000
           hostPort: 9000

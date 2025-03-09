@@ -238,13 +238,15 @@ class TestJobsService:
             f"sh -c 'echo -n {image_tag} > /test; sleep 300'",
             resources,
         )
+        # print(1111111, job, image_tag)
         await self.wait_for_job_running(job, apolo_client)
 
         image = f"{registry_host}/{user.org_name}/{user.project_name}/alpine"
-
+        # print(22222222, image)
         async with jobs_service.save(job, user, image) as it:
             async for _ in it:
                 pass
+        # print('AAAAAAAAA')
 
         new_job = await job_factory(
             image,

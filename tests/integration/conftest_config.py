@@ -20,7 +20,7 @@ def cluster_token(token_factory: Callable[[str], str]) -> str:
     return token_factory("cluster")
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 async def platform_config_url(
     platform_api_config: PlatformApiConfig,
     in_minikube: bool,  # noqa: FBT001
@@ -28,6 +28,7 @@ async def platform_config_url(
     await asyncio.wait_for(_wait_for_platform_api_config(platform_api_config), 30)
     if in_minikube:
         return URL("http://platformconfig.default:8080")
+    # print(11111111, 'platform_config_url')
     return URL(get_service_url("platformconfig", namespace="default"))
 
 

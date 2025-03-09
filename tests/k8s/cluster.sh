@@ -4,7 +4,7 @@
 # https://github.com/kubernetes/minikube#linux-continuous-integration-without-vm-support
 
 function k8s::install_minikube {
-    local minikube_version="v1.25.2"
+    local minikube_version="v1.34.0"
     sudo apt-get update
     sudo apt-get install -y conntrack
     curl -Lo minikube https://storage.googleapis.com/minikube/releases/${minikube_version}/minikube-linux-amd64
@@ -24,8 +24,9 @@ function k8s::start {
     export MINIKUBE_HOME=$HOME
     export CHANGE_MINIKUBE_NONE_USER=true
 
-    sudo -E minikube start \
-        --vm-driver=none \
+    minikube start \
+        --vm-driver=docker \
+        --container-runtime=containerd \
         --install-addons=true \
         --addons=registry \
         --wait=all \
@@ -46,6 +47,7 @@ function k8s::apply_all_configurations {
     kubectl apply -f tests/k8s/platformapi.yml
     kubectl apply -f tests/k8s/platformnotifications.yml
     kubectl apply -f tests/k8s/platformcontainerruntime.yml
+    kubectl apply -f tests/k8s/platformmonitoring.yml
 }
 
 
@@ -91,3 +93,17 @@ case "${1:-}" in
         k8s::test
         ;;
 esac
+
+
+# VERSION="v1.31.0"  # Set this to the version that aligns with your Kubernetes environment
+# wget https://github.com/kubernetes-sigs/cri-tools/releases/download/$VERSION/crictl-$VERSION-linux-amd64.tar.gz
+# tar zxvf crictl-$VERSION-linux-amd64.tar.gz
+# sudo mv crictl /usr/local/bin/
+# crictl --version
+
+# Please install cri-dockerd using these instructions:
+# https://github.com/Mirantis/cri-dockerd/releases
+# https://github.com/Mirantis/cri-dockerd
+
+#  Please install containernetworking-plugins using these instructions:
+# https://minikube.sigs.k8s.io/docs/faq/#how-do-i-install-containernetworking-plugins-for-none-driver

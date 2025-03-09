@@ -32,18 +32,21 @@ test_unit:
 .PHONY: test_integration
 test_integration:
 	. venv/bin/activate; \
-	pytest -vv \
-		--maxfail=3 \
+	pytest -svv \
+		--maxfail=100 \
 		--cov=platform_monitoring --cov-report xml:.coverage-integration.xml \
 		--durations=10 \
 		tests/integration \
-		-m "not minikube"
+		-n 4
+		# -k "test_save_no_tag" tests/integration/test_jobs_service.py
+		# --log-cli-level=info \
+		# -m "not minikube" \
 
 .PHONY: test_integration_minikube
 test_integration_minikube:
 	. venv/bin/activate; \
 	pytest -vv \
-		--log-cli-level=debug \
+		--log-cli-level=info \
 		--durations=10 \
 		tests/integration \
 		-m minikube
@@ -88,5 +91,14 @@ docker_pull_test_images:
 		docker tag $(PLATFORMCONFIG_IMAGE) platformconfig:latest; \
 		docker tag $(PLATFORMNOTIFICATIONS_IMAGE) platformnotifications:latest; \
 		docker tag $(PLATFORMCONTAINERRUNTIME_IMAGE) platformcontainerruntime:latest
+
+#	@eval $$(minikube -p minikube docker-env --unset); \
+#		minikube image load platformapi:latest; \
+#		minikube image load platformadmin:latest; \
+#		minikube image load platformauthapi:latest; \
+#		minikube image load platformconfig:latest; \
+#		minikube image load platformnotifications:latest; \
+#		minikube image load platformcontainerruntime:latest
+
 
 include k8s.mk
