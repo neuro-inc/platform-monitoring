@@ -80,9 +80,11 @@ jobs:
 #          docker-ce-cli=5:20.10.24~3-0~ubuntu-$RELEASE \
 #          containerd.io=1.6.20-1
     - name: Start minikube
-      run: |
-        make install_k8s
-        make start_k8s
+      uses: medyagh/setup-minikube@latest
+    - name: Try the cluster!
+      run: kubectl get pods -A
+    - name: Start minikube
+      run: make start_k8s
     - name: Pull test images
       run: make docker_pull_test_images
     - name: Setup services in minikube
