@@ -189,6 +189,8 @@ async def platform_monitoring_api_address(in_minikube: bool) -> "ApiAddress":  #
     if in_minikube:
         return ApiAddress("platform-monitoring", 8080)
     url = URL(get_service_url("platform-monitoring"))
+    assert url.host
+    assert url.port
     return ApiAddress(url.host, url.port)
 
 

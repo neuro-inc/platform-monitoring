@@ -36,12 +36,14 @@ test_integration:
 		--maxfail=100 \
 		--cov=platform_monitoring --cov-report xml:.coverage-integration.xml \
 		--durations=10 \
-		-m "not exclude" \
 		tests/integration \
 		-n 12
-		# -k "test_save_no_tag" tests/integration/test_jobs_service.py
+		# -k "test_save_ok" tests/integration/test_jobs_service.py
+		# -n 12
+		# -k "test_save_no_tag" tests/integration/test_jobs_service.py tests/integration/test_api.py
 		# --log-cli-level=info \
 		# -m "not minikube" \
+		# -m "not exclude" \
 
 .PHONY: test_integration_minikube
 test_integration_minikube:
