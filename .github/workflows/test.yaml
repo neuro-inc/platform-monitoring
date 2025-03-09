@@ -92,8 +92,8 @@ jobs:
       run: kubectl get pods -A
 #    - name: Start minikube
 #      run: make start_k8s
-    - name: Pull test images
-      run: make docker_pull_test_images
+#    - name: Pull test images
+#      run: make docker_pull_test_images
     - name: Setup services in minikube
       run: |
         make apply_configuration_k8s
