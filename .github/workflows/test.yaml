@@ -96,6 +96,8 @@ jobs:
 #      run: make docker_pull_test_images
     - name: Setup services in minikube
       run: |
+        sleep 300
+        kubectl get pods -A
         make apply_configuration_k8s
         make test_k8s
     - name: Run integration tests
