@@ -285,7 +285,7 @@ class ElasticsearchLogReader(LogReader):
         async for doc in self._scan:
             try:
                 source = doc["_source"]
-                time_str = source["time"]
+                time_str = source.get("@timestamp", source.get("time"))
                 time = parse_date(time_str)
                 if self._since is not None and time < self._since:
                     continue

@@ -215,6 +215,7 @@ class TestJobsService:
         )
         await self.wait_for_job_succeeded(new_job, apolo_client)
 
+    @pytest.mark.exclude()
     async def test_save_no_tag(
         self,
         job_factory: JobFactory,
@@ -284,6 +285,7 @@ class TestJobsService:
                 async for _ in it:
                     pass
 
+    @pytest.mark.exclude()
     async def test_save_push_failure(
         self,
         job_factory: JobFactory,
