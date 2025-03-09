@@ -1239,7 +1239,7 @@ class TestLogReader:
         job_pod: MyPodDescriptor,
         factory: LogsService,
     ) -> None:
-        command = 'bash -c "for i in {1..5}; do sleep 1; echo $i; done"'
+        command = 'bash -c "for i in {1..5}; do sleep 1; echo $i; done; sleep 2"'
         job_pod.set_command(command)
         names = []
         tasks = []
