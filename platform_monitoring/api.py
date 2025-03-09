@@ -34,7 +34,14 @@ from neuro_logging import init_logging, setup_sentry
 from yarl import URL
 
 from .base import JobStats, Telemetry
-from .config import Config, ElasticsearchConfig, KubeConfig, LogsStorageType, S3Config
+from .config import (
+    Config,
+    ElasticsearchConfig,
+    KubeConfig,
+    LogsStorageType,
+    LokiConfig,
+    S3Config,
+)
 from .config_factory import EnvironConfigFactory
 from .container_runtime_client import (
     ContainerNotFoundError,
@@ -48,11 +55,13 @@ from .logs import (
     DEFAULT_ARCHIVE_DELAY,
     ElasticsearchLogsService,
     LogsService,
+    LokiLogsService,
     S3LogsMetadataService,
     S3LogsMetadataStorage,
     S3LogsService,
     s3_client_error,
 )
+from .loki_client import LokiClient
 from .platform_api_client import ApiClient, Job
 from .user import untrusted_user
 from .utils import JobsHelper, KubeHelper, parse_date
@@ -71,6 +80,7 @@ HEARTBEAT = 30
 
 CONFIG_KEY = aiohttp.web.AppKey("config", Config)
 KUBE_CLIENT_KEY = aiohttp.web.AppKey("kube_client", KubeClient)
+LOKI_CLIENT_KEY = aiohttp.web.AppKey("loki_client", LokiClient)
 JOBS_SERVICE_KEY = aiohttp.web.AppKey("jobs_service", JobsService)
 LOGS_SERVICE_KEY = aiohttp.web.AppKey("logs_service", LogsService)
 CONFIG_CLIENT_KEY = aiohttp.web.AppKey("config_client", ConfigClient)
@@ -123,6 +133,8 @@ class MonitoringApiHandler:
                 aiohttp.web.post("/{job_id}/kill", self.kill),
                 aiohttp.web.post("/{job_id}/port_forward/{port}", self.port_forward),
                 aiohttp.web.get("/{job_id}/port_forward/{port}", self.port_forward),
+                aiohttp.web.get("/test", self.test),
+                aiohttp.web.get("/test_ws", self.test_ws),
             ]
         )
 
@@ -133,6 +145,10 @@ class MonitoringApiHandler:
     @property
     def _kube_client(self) -> KubeClient:
         return self._app[KUBE_CLIENT_KEY]
+
+    @property
+    def _loki_client(self) -> LokiClient:
+        return self._app[LOKI_CLIENT_KEY]
 
     @property
     def _logs_service(self) -> LogsService:
@@ -153,15 +169,86 @@ class MonitoringApiHandler:
         result = await self._jobs_service.get_available_jobs_counts()
         return json_response(result)
 
+    def get_archive_delay(self) -> float:
+        if self._config.logs.storage_type == LogsStorageType.LOKI:
+            return self._config.loki.archive_delay_sec
+        return DEFAULT_ARCHIVE_DELAY
+
+    # async def test(self, request: Request) -> StreamResponse:
+    #     response = StreamResponse(status=200)
+    #     response.enable_chunked_encoding()
+    #     response.enable_compression(aiohttp.web.ContentCoding.identity)
+    #     response.content_type = "text/plain"
+    #     response.charset = "utf-8"
+    #     response.headers["X-Separator"] = "separator"
+    #     await response.prepare(request)
+    #
+    #     res = await self._loki_client.query_range(query='{project="pr_project"}')
+    #
+    #     # print(11111111111, res)
+    #
+    #     # print(f"Sending request to {request.url}")
+    #     for i in range(10):
+    #         await response.write((("qwe" * i) + "\n").encode())
+    #         await asyncio.sleep(1)
+    #
+    #     await response.write_eof()
+    #     return response
+    #
+    # async def test_ws(self, request: Request) -> StreamResponse:
+    #     response = WebSocketResponse(
+    #         protocols=[WS_LOGS_PROTOCOL],
+    #         heartbeat=HEARTBEAT,
+    #     )
+    #     await response.prepare(request)
+    #
+    #     async def qwe(ws: WebSocketResponse):
+    #         # print(f"Sending request to {request.url}")
+    #
+    #         start = str(int(time.time() - 60 * 60 * 24 * 1) * 1_000_000_000)
+    #         end = str(int(time.time()) * 1_000_000_000)
+    #
+    #         async for res in self._loki_client.query_range_page_iterate(
+    #             query='{project="pr_project"}', start=start, end=end
+    #         ):
+    #             await ws.send_bytes((json.dumps(res["data"]["result"])).encode())
+    #
+    #         start = str(int(end) + 1)
+    #
+    #         while True:
+    #             end = int(time.time()) * 1_000_000_000
+    #             params = {"query": '{project="pr_project"}',
+    #             "start": start, "end": end}
+    #             async for res in self._loki_client.query_range_page_iterate(**params):
+    #                 # print(222222222222, res)
+    #                 # print(11111111111, len(res['data']['result']),
+    #                 es['data']['stats']['summary']['totalEntriesReturned'])
+    #                 if res["data"]["result"]:
+    #                     await ws.send_bytes(
+    #                         (json.dumps(res["data"]["result"])).encode()
+    #                     )
+    #             await asyncio.sleep(5)
+    #             start = str(int(end) + 1)
+    #             # print(11111111111, len(res['data']['result']))
+    #
+    #     await _run_concurrently(
+    #         _listen(response),
+    #         qwe(response),
+    #     )
+    #     # await qwe(response)
+    #
+    #     return response
+
     async def stream_log(self, request: Request) -> StreamResponse:
         timestamps = _get_bool_param(request, "timestamps", default=False)
         debug = _get_bool_param(request, "debug", default=False)
         since_str = request.query.get("since")
-        since = parse_date(since_str) if since_str else None
         archive_delay_s = float(
-            request.query.get("archive_delay", DEFAULT_ARCHIVE_DELAY)
+            request.query.get("archive_delay", self.get_archive_delay())
         )
         job = await self._resolve_job(request, "read")
+        # logger.info(f"1111 job: {job}")
+        since = parse_date(since_str) if since_str else parse_date(job.created_at)
 
         pod_name = self._kube_helper.get_job_pod_name(job)
         separator = request.query.get("separator")
@@ -198,11 +285,12 @@ class MonitoringApiHandler:
         timestamps = _get_bool_param(request, "timestamps", default=False)
         debug = _get_bool_param(request, "debug", default=False)
         since_str = request.query.get("since")
-        since = parse_date(since_str) if since_str else None
         archive_delay_s = float(
-            request.query.get("archive_delay", DEFAULT_ARCHIVE_DELAY)
+            request.query.get("archive_delay", self.get_archive_delay())
         )
         job = await self._resolve_job(request, "read")
+        # logger.info(f"1111 job: {job}")
+        since = parse_date(since_str) if since_str else parse_date(job.created_at)
 
         pod_name = self._kube_helper.get_job_pod_name(job)
         separator = request.query.get("separator")
@@ -666,6 +754,21 @@ async def create_kube_client(
 
 
 @asynccontextmanager
+async def create_loki_client(config: LokiConfig) -> AsyncIterator[LokiClient]:
+    client = LokiClient(
+        base_url=config.endpoint_url,
+        conn_timeout_s=config.client_conn_timeout_s,
+        read_timeout_s=config.client_read_timeout_s,
+        conn_pool_size=config.client_conn_pool_size,
+    )
+    try:
+        await client.init()
+        yield client
+    finally:
+        await client.close()
+
+
+@asynccontextmanager
 async def create_elasticsearch_client(
     config: ElasticsearchConfig,
 ) -> AsyncIterator[AsyncElasticsearch]:
@@ -704,6 +807,7 @@ def create_logs_service(
     kube_client: KubeClient,
     es_client: AsyncElasticsearch | None = None,
     s3_client: AioBaseClient | None = None,
+    loki_client: LokiClient | None = None,
 ) -> LogsService:
     if config.logs.storage_type == LogsStorageType.ELASTICSEARCH:
         assert es_client
@@ -714,6 +818,10 @@ def create_logs_service(
         return create_s3_logs_service(
             config, kube_client, s3_client, cache_log_metadata=False
         )
+
+    if config.logs.storage_type == LogsStorageType.LOKI:
+        assert loki_client
+        return LokiLogsService(kube_client, loki_client, config.loki.retention_period_s)
 
     msg = f"{config.logs.storage_type} storage is not supported"
     raise ValueError(msg)  # pragma: nocover
@@ -782,6 +890,13 @@ async def create_app(config: Config) -> aiohttp.web.Application:
                 )
                 await create_s3_logs_bucket(s3_client, config.s3)
 
+            loki_client: LokiClient | None = None
+            if config.loki:
+                logger.info("Initializing Loki client")
+                loki_client = await exit_stack.enter_async_context(
+                    create_loki_client(config.loki)
+                )
+
             logger.info("Initializing Kubernetes client")
             kube_client = await exit_stack.enter_async_context(
                 create_kube_client(config.kube)
@@ -795,7 +910,7 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             app[MONITORING_APP_KEY][CONFIG_CLIENT_KEY] = config_client
 
             logs_service = create_logs_service(
-                config, kube_client, es_client, s3_client
+                config, kube_client, es_client, s3_client, loki_client
             )
             app[MONITORING_APP_KEY][LOGS_SERVICE_KEY] = logs_service
 

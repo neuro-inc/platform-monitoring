@@ -46,6 +46,7 @@ class S3Config:
 class LogsStorageType(str, enum.Enum):
     ELASTICSEARCH = "elasticsearch"
     S3 = "s3"
+    LOKI = "loki"
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,18 @@ class KubeConfig:
 
 
 @dataclass(frozen=True)
+class LokiConfig:
+    endpoint_url: URL
+    client_conn_timeout_s: int = 300
+    client_read_timeout_s: int = 300
+    client_conn_pool_size: int = 100
+    archive_delay_sec: int = 10
+    retention_period_s: int = (
+        60 * 60 * 24 * 30
+    )  # 30d max history query length # TODO add func 30d -> sec
+
+
+@dataclass(frozen=True)
 class RegistryConfig:
     url: URL
 
@@ -118,3 +131,4 @@ class Config:
     registry: RegistryConfig
     elasticsearch: ElasticsearchConfig | None = None
     s3: S3Config | None = None
+    loki: LokiConfig | None = None

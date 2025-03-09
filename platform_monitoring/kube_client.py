@@ -599,6 +599,9 @@ class KubeClient:
     def _namespaced_pods_url(self) -> str:
         return f"{self._namespace_url}/pods"
 
+    def _port_forward_(self, pod_name) -> str:
+        return f"{self._namespace_url}/pods"
+
     def _generate_pod_url(self, pod_name: str) -> str:
         return f"{self._namespaced_pods_url}/{pod_name}"
 
@@ -765,6 +768,7 @@ class KubeClient:
         async with self._client.get(
             url, headers=self._create_headers(), timeout=client_timeout
         ) as response:
+            # logger.info(f"{time.time()} _client.get requested")
             await self._check_response_status(response, job_id=pod_name)
             yield response.content
 
