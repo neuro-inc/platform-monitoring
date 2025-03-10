@@ -28,7 +28,6 @@ async def platform_config_url(
     await asyncio.wait_for(_wait_for_platform_api_config(platform_api_config), 30)
     if in_minikube:
         return URL("http://platformconfig.default:8080")
-    # print(11111111, 'platform_config_url')
     return URL(get_service_url("platformconfig", namespace="default"))
 
 

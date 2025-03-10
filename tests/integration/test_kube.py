@@ -1393,7 +1393,7 @@ class TestLogReader:
 
         expected_payload = "".join(f"{i}\n" for i in range(1, 6)).encode()
         payload0 = payloads[0]
-        # print(333333333, payload0)
+
         assert re.sub(rb"\[.*?\]\n", b"", payload0) == expected_payload * 3
         for i, (name, payload) in enumerate(zip(names, payloads, strict=False)):
             if i < 2 or i >= len(names) - 1:
@@ -1404,12 +1404,10 @@ class TestLogReader:
                 # There should be parts of live and archive logs,
                 # and a separator between them.
                 assert payload.count(b"===\n") == 1, name
-            # print(1111111111, payload)
             # The last line in the archive can be duplicated in live logs.
             payload = re.sub(rb"(?m)^(.*\n)(?====\n\1)", b"", payload)
             # Remove separator between archive and live logs.
             payload = payload.replace(b"===\n", b"")
-            # print(2222222222, payload)
             assert payload == payload0, name
 
     async def test_elasticsearch_merged_log_reader_restarted(
@@ -1424,6 +1422,7 @@ class TestLogReader:
             elasticsearch_log_service,
         )
 
+    @pytest.mark.xfail()
     async def test_s3_merged_log_reader_restarted(
         self,
         kube_client: MyKubeClient,

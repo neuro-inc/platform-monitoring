@@ -382,7 +382,6 @@ class TestApi:
         self, monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession, config: Config
     ) -> None:
-        # print(44444444444, config)
         async with client.get(monitoring_api.ping_url) as resp:
             assert resp.status == HTTPOk.status_code
             text = await resp.text()
@@ -486,7 +485,6 @@ class TestTopApi:
         regular_user2: ProjectUser,
     ) -> None:
         url = monitoring_api.generate_top_url(infinite_job)
-        # print(123123, url, regular_user2)
         with pytest.raises(WSServerHandshakeError) as err:
             async with client.ws_connect(url, headers=regular_user2.headers):
                 pass
@@ -726,7 +724,6 @@ class TestLogApi:
         url = monitoring_api_s3_storage.generate_log_url(job_id)
         async with client.get(url, headers=headers) as response:
             actual_payload = await response.read()
-            # print(345345, url, job_id, actual_payload)
             expected_payload = "\n".join(str(i) for i in range(1, 6)) + "\n"
             assert actual_payload == expected_payload.encode()
 
