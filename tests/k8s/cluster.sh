@@ -49,7 +49,7 @@ function k8s::apply_all_configurations {
 
 
 function k8s::wait_for_all_pods_running {
-    local timeout=120
+    local timeout=180
     local interval=5
     local end=$((SECONDS + timeout))
 
@@ -63,6 +63,7 @@ function k8s::wait_for_all_pods_running {
     done
 
     echo "Timeout waiting for pods to be Running or Succeeded."
+    kubectl get pods -A
     return 1
 }
 
