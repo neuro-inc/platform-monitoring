@@ -33,7 +33,6 @@ test_unit:
 test_integration:
 	. venv/bin/activate; \
 	pytest -vv \
-		--maxfail=2 \
 		--cov=platform_monitoring --cov-report xml:.coverage-integration.xml \
 		--durations=10 \
 		tests/integration \
