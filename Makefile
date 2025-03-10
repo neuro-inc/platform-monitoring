@@ -32,18 +32,12 @@ test_unit:
 .PHONY: test_integration
 test_integration:
 	. venv/bin/activate; \
-	pytest -svv \
-		--maxfail=100 \
+	pytest -vv \
+		--maxfail=2 \
 		--cov=platform_monitoring --cov-report xml:.coverage-integration.xml \
 		--durations=10 \
 		tests/integration \
 	    -n 12
-
-		# -n 12
-		# -k "test_s3_merged_log_reader_restarted" tests/integration/test_jobs_service.py tests/integration/test_api.py tests/integration/test_kube.py
-		# --log-cli-level=info \
-		# -m "not minikube" \
-		# -m "not exclude" \
 
 
 .PHONY: docker_build

@@ -969,6 +969,7 @@ class LogsService(abc.ABC):
                                     and self.__class__.__name__
                                     == "ElasticsearchLogsService"
                                 ):
+                                    # Es time logs precision is 1ms, so we micro -> ms
                                     first = first.replace(
                                         microsecond=first.microsecond // 1000 * 1000
                                     )

@@ -149,23 +149,6 @@ class MyPodDescriptor:
         self._payload["spec"]["restartPolicy"]
         self._payload["spec"]["restartPolicy"] = policy
 
-    def set_max_user_watches(self, value: int) -> None:
-        pass
-        # self._payload["spec"]["securityContext"] = {
-        #     "privileged": True,
-        #     "sysctls": [{"name": "fs.inotify.max_user_watches", "value": str(value)}],
-        # }
-
-        # self._payload["spec"]["initContainers"] = [
-        #     {
-        #         "name": "set-inotify",
-        #         "image": "busybox",
-        #         "command": ["sh", "-c", f"echo 1048576 >
-        #         /proc/sys/fs/inotify/max_user_watches"],
-        #         "securityContext": {"privileged": True},
-        #     }
-        # ]
-
     @property
     def payload(self) -> dict[str, Any]:
         return self._payload

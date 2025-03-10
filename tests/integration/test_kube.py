@@ -557,7 +557,6 @@ class TestKubeClient:
         kube_client: MyKubeClient,
         job_pod: MyPodDescriptor,
     ) -> None:
-        job_pod.set_max_user_watches(524288)
         await kube_client.create_pod(job_pod.payload)
         await kube_client.wait_pod_is_not_waiting(pod_name=job_pod.name, timeout_s=60.0)
         stream_cm = kube_client.create_pod_container_logs_stream(
@@ -722,7 +721,6 @@ class TestLogReader:
     ) -> None:
         command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
         job_pod.set_command(command)
-        job_pod.set_max_user_watches(524288)
         await kube_client.create_pod(job_pod.payload)
         log_reader = PodContainerLogReader(
             client=kube_client, pod_name=job_pod.name, container_name=job_pod.name
@@ -739,7 +737,6 @@ class TestLogReader:
     ) -> None:
         command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
         job_pod.set_command(command)
-        job_pod.set_max_user_watches(524288)
         await kube_client.create_pod(job_pod.payload)
         log_reader = PodContainerLogReader(
             client=kube_client,
@@ -907,7 +904,6 @@ class TestLogReader:
         job_pod.set_command(command)
         job_pod.set_restart_policy("Always")
         try:
-            job_pod.set_max_user_watches(524288)
             await kube_client.create_pod(job_pod.payload)
             await kube_client.wait_container_is_restarted(job_pod.name, 2)
         finally:
@@ -1274,7 +1270,6 @@ class TestLogReader:
             tasks.append(task)
 
         try:
-            job_pod.set_max_user_watches(524288)
             await kube_client.create_pod(job_pod.payload)
             run_log_reader("created", timeout_s=120)
             await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=120)
@@ -1362,7 +1357,6 @@ class TestLogReader:
             tasks.append(task)
 
         try:
-            job_pod.set_max_user_watches(524288)
             await kube_client.create_pod(job_pod.payload)
             run_log_reader("created", timeout_s=180)
             await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=120)
@@ -1524,7 +1518,7 @@ class TestLogReader:
             elasticsearch_log_service,
         )
 
-    async def test_s3_merged_log_reader_restarte3d_since(
+    async def test_s3_merged_log_reader_restarte3_since(
         self,
         kube_client: MyKubeClient,
         s3_log_service: LogsService,

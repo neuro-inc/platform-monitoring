@@ -10,19 +10,12 @@ function k8s::install_minikube {
     curl -Lo minikube https://storage.googleapis.com/minikube/releases/${minikube_version}/minikube-linux-amd64
     chmod +x minikube
     sudo mv minikube /usr/local/bin/
-#    sudo -E minikube config set WantReportErrorPrompt false
-#    sudo -E minikube config set WantNoneDriverWarning false
 }
 
 function k8s::start {
     export KUBECONFIG=$HOME/.kube/config
     mkdir -p $(dirname $KUBECONFIG)
     touch $KUBECONFIG
-
-#    export MINIKUBE_WANTUPDATENOTIFICATION=false
-#    export MINIKUBE_WANTREPORTERRORPROMPT=false
-#    export MINIKUBE_HOME=$HOME
-#    export CHANGE_MINIKUBE_NONE_USER=true
 
     minikube start \
         --vm-driver=docker \
@@ -115,17 +108,3 @@ case "${1:-}" in
         k8s::wait_for_all_pods_running
         ;;
 esac
-
-
-# VERSION="v1.31.0"  # Set this to the version that aligns with your Kubernetes environment
-# wget https://github.com/kubernetes-sigs/cri-tools/releases/download/$VERSION/crictl-$VERSION-linux-amd64.tar.gz
-# tar zxvf crictl-$VERSION-linux-amd64.tar.gz
-# sudo mv crictl /usr/local/bin/
-# crictl --version
-
-# Please install cri-dockerd using these instructions:
-# https://github.com/Mirantis/cri-dockerd/releases
-# https://github.com/Mirantis/cri-dockerd
-
-#  Please install containernetworking-plugins using these instructions:
-# https://minikube.sigs.k8s.io/docs/faq/#how-do-i-install-containernetworking-plugins-for-none-driver
