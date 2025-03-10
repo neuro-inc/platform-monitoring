@@ -227,13 +227,9 @@ async def registry_config(request: FixtureRequest, in_minikube: bool) -> Registr
     if in_minikube:
         external_url = URL("http://registry.kube-system")
     else:
-        minikube_ip = request.getfixturevalue("minikube_ip")
-        external_url = URL(f"http://{minikube_ip}:5000")
-    logger.info(external_url)
-    # await wait_for_service("registry", external_url / "v2/", timeout_s=120)
-    # localhost will be insecure by default, so use that
-    # return RegistryConfig(URL("http://localhost:5000"))
-    return RegistryConfig(URL(get_service_url("registry", namespace="kube-system")))
+        external_url = URL(get_service_url("registry", namespace="kube-system"))
+    await wait_for_service("registry", external_url / "v2/", timeout_s=120)
+    return RegistryConfig(external_url)
 
 
 @pytest.fixture()

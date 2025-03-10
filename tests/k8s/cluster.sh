@@ -41,6 +41,10 @@ function k8s::apply_all_configurations {
     kubectl apply -f tests/k8s/platformnotifications.yml
     kubectl apply -f tests/k8s/platformcontainerruntime.yml
     kubectl apply -f tests/k8s/platformmonitoring.yml
+
+    # for local development you need to run also
+    # kubectl create secret docker-registry ghcr-secret --docker-server=ghcr.io
+    # --docker-username=<your_github_username> --docker-password=<your_github_token_with_ghcr_access>
 }
 
 
