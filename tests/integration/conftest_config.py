@@ -20,7 +20,7 @@ def cluster_token(token_factory: Callable[[str], str]) -> str:
     return token_factory("cluster")
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 async def platform_config_url(
     platform_api_config: PlatformApiConfig,
     in_minikube: bool,  # noqa: FBT001

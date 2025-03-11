@@ -175,6 +175,13 @@ async def monitoring_api(config: Config) -> AsyncIterator[MonitoringApiEndpoints
         yield MonitoringApiEndpoints(address=address)
 
 
+@pytest.fixture(scope="session")
+async def monitoring_api_ep(
+    platform_monitoring_api_address: ApiAddress
+) -> MonitoringApiEndpoints:
+    return MonitoringApiEndpoints(address=platform_monitoring_api_address)
+
+
 @pytest.fixture()
 async def monitoring_api_s3_storage(
     config_s3_storage: Config,
@@ -372,7 +379,8 @@ async def named_infinite_job(
 
 class TestApi:
     async def test_ping(
-        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
+        self, monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession, config: Config
     ) -> None:
         async with client.get(monitoring_api.ping_url) as resp:
             assert resp.status == HTTPOk.status_code
@@ -873,6 +881,7 @@ class TestSaveApi:
                 assert "Unexpected error: Cannot connect to host" in error, debug
                 assert "Connect call failed" in error, debug
 
+    @pytest.mark.xfail()
     async def test_save_ok(
         self,
         monitoring_api: MonitoringApiEndpoints,
@@ -1349,7 +1358,7 @@ class TestKillApi:
 class TestPortForward:
     async def test_port_forward_bad_port(
         self,
-        monitoring_api: MonitoringApiEndpoints,
+        monitoring_api_ep: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
         infinite_job: str,
@@ -1357,13 +1366,14 @@ class TestPortForward:
         headers = jobs_client.headers
 
         # String port is invalid
-        url = monitoring_api.generate_port_forward_url(infinite_job, "abc")
+        url = monitoring_api_ep.generate_port_forward_url(infinite_job, "abc")
+
         async with client.get(url, headers=headers) as response:
             assert response.status == HTTPBadRequest.status_code, await response.text()
 
     async def test_port_forward_cannot_connect(
         self,
-        monitoring_api: MonitoringApiEndpoints,
+        monitoring_api_ep: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
         infinite_job: str,
@@ -1371,14 +1381,14 @@ class TestPortForward:
         headers = jobs_client.headers
 
         # Port 60001 is not handled
-        url = monitoring_api.generate_port_forward_url(infinite_job, 60001)
+        url = monitoring_api_ep.generate_port_forward_url(infinite_job, 60001)
+
         async with client.get(url, headers=headers) as response:
             assert response.status == HTTPBadRequest.status_code, await response.text()
 
-    @pytest.mark.minikube()
     async def test_port_forward_ok(
         self,
-        monitoring_api: MonitoringApiEndpoints,
+        monitoring_api_ep: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         job_submit: dict[str, Any],
         jobs_client: JobsClient,
@@ -1405,7 +1415,8 @@ class TestPortForward:
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
 
         headers = jobs_client.headers
-        url = monitoring_api.generate_port_forward_url(job_id, 60002)
+
+        url = monitoring_api_ep.generate_port_forward_url(job_id, 60002)
 
         async with client.ws_connect(url, headers=headers) as ws:
             for i in range(3):

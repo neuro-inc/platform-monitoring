@@ -4,14 +4,12 @@
 # https://github.com/kubernetes/minikube#linux-continuous-integration-without-vm-support
 
 function k8s::install_minikube {
-    local minikube_version="v1.25.2"
+    local minikube_version="v1.34.0"
     sudo apt-get update
     sudo apt-get install -y conntrack
     curl -Lo minikube https://storage.googleapis.com/minikube/releases/${minikube_version}/minikube-linux-amd64
     chmod +x minikube
     sudo mv minikube /usr/local/bin/
-    sudo -E minikube config set WantReportErrorPrompt false
-    sudo -E minikube config set WantNoneDriverWarning false
 }
 
 function k8s::start {
@@ -19,13 +17,9 @@ function k8s::start {
     mkdir -p $(dirname $KUBECONFIG)
     touch $KUBECONFIG
 
-    export MINIKUBE_WANTUPDATENOTIFICATION=false
-    export MINIKUBE_WANTREPORTERRORPROMPT=false
-    export MINIKUBE_HOME=$HOME
-    export CHANGE_MINIKUBE_NONE_USER=true
-
-    sudo -E minikube start \
-        --vm-driver=none \
+    minikube start \
+        --vm-driver=docker \
+        --container-runtime=containerd \
         --install-addons=true \
         --addons=registry \
         --wait=all \
@@ -46,6 +40,31 @@ function k8s::apply_all_configurations {
     kubectl apply -f tests/k8s/platformapi.yml
     kubectl apply -f tests/k8s/platformnotifications.yml
     kubectl apply -f tests/k8s/platformcontainerruntime.yml
+    kubectl apply -f tests/k8s/platformmonitoring.yml
+
+    # for local development you need to run also
+    # kubectl create secret docker-registry ghcr-secret --docker-server=ghcr.io
+    # --docker-username=<your_github_username> --docker-password=<your_github_token_with_ghcr_access>
+}
+
+
+function k8s::wait_for_all_pods_running {
+    local timeout=180
+    local interval=5
+    local end=$((SECONDS + timeout))
+
+    while [ $SECONDS -lt $end ]; do
+        if [ "$(kubectl get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded -o jsonpath='{.items}')" == "[]" ]; then
+            echo "All pods are Running or Succeeded."
+            return 0
+        fi
+        echo "Waiting for pods to be Running or Succeeded..."
+        sleep $interval
+    done
+
+    echo "Timeout waiting for pods to be Running or Succeeded."
+    kubectl get pods -A
+    return 1
 }
 
 
@@ -89,5 +108,8 @@ case "${1:-}" in
         ;;
     test)
         k8s::test
+        ;;
+    wait)
+        k8s::wait_for_all_pods_running
         ;;
 esac

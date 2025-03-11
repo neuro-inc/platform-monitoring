@@ -42,7 +42,7 @@ from .utils import asyncgeneratorcontextmanager, parse_date
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_ARCHIVE_DELAY = 3 * 60
+DEFAULT_ARCHIVE_DELAY = 3.0 * 60
 ZLIB_WBITS = 16 + zlib.MAX_WBITS
 
 error_prefixes = (
@@ -886,10 +886,9 @@ class S3LogReader(LogReader):
         keys = await self._metadata_service.get_log_keys(
             self._pod_name, since=self._since
         )
-        # logger.info(f"keys: {keys}")
+
         for key in keys:
             async for record in self._record_reader.iter_records(key):
-                # logger.info(f"record: {record}")
                 if self._since is not None and record.time < self._since:
                     continue
                 self.last_time = record.time
@@ -966,16 +965,16 @@ class LogsService(abc.ABC):
                                 first = await self.get_first_log_entry_time(
                                     pod_name, timeout_s=archive_delay_s
                                 )
-                                # TODO !!!
-                                # if first and self.__class__.__name__ ==
-                                # "ElasticsearchLogsService":
-                                #     first = first.replace(microsecond=
-                                #     first.microsecond // 1000 * 1000)
-                                # if label == "restarted 10":
-                                #     print(f"{first=}")
+                                if (
+                                    first
+                                    and self.__class__.__name__
+                                    == "ElasticsearchLogsService"
+                                ):
+                                    # Es time logs precision is 1ms, so we micro -> ms
+                                    first = first.replace(
+                                        microsecond=first.microsecond // 1000 * 1000
+                                    )
                                 until = first or start
-                                # if label == "restarted 10":
-                                #     print(f"{until=}")
                                 if log_reader.last_time >= until:
                                     since = until
                                     # There is a line in the container logs,
@@ -987,8 +986,6 @@ class LogsService(abc.ABC):
                         else:
                             until = _utcnow()
                     has_archive = True
-                    # if label == "restarted 10":
-                    #     print(222222, 'archive', chunk)
                     yield chunk
                 else:
                     # No log line with timestamp >= until is found.
@@ -1033,8 +1030,7 @@ class LogsService(abc.ABC):
 
         if not has_archive:
             separator = None
-        # if label == "restarted 10":
-        #     print(33333, start, since)
+
         try:
             if start is None:
                 status = await self.wait_pod_is_running(
@@ -1048,8 +1044,6 @@ class LogsService(abc.ABC):
                 async with self.get_pod_live_log_reader(
                     pod_name, since=since, timestamps=timestamps, debug=debug
                 ) as it:
-                    # if label == "restarted 10":
-                    #     print(44444, since)
                     if debug:
                         if separator:
                             yield separator + b"\n"
@@ -1061,8 +1055,6 @@ class LogsService(abc.ABC):
                         if separator:
                             yield separator + b"\n"
                             separator = None
-                        # if label == "restarted 10":
-                        #     print(22222, 'live', chunk)
                         yield chunk
 
                 if not status.can_restart:

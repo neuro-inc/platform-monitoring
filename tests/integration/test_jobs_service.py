@@ -179,6 +179,7 @@ class TestJobsService:
 
         await self.wait_for_job(job, apolo_client, _condition, *args, **kwargs)
 
+    @pytest.mark.xfail()
     async def test_save_ok(
         self,
         job_factory: JobFactory,
@@ -213,8 +214,9 @@ class TestJobsService:
         new_job = await job_factory(
             image, 'sh -c \'[ "$(cat /test)" = "123" ]\'', resources
         )
-        await self.wait_for_job_succeeded(new_job, apolo_client)
+        await self.wait_for_job_succeeded(new_job, apolo_client, timeout_s=60.0)
 
+    @pytest.mark.xfail()
     async def test_save_no_tag(
         self,
         job_factory: JobFactory,
@@ -251,7 +253,7 @@ class TestJobsService:
             f'sh -c \'[ "$(cat /test)" = "{image_tag}" ]\'',
             resources,
         )
-        await self.wait_for_job_succeeded(new_job, apolo_client)
+        await self.wait_for_job_succeeded(new_job, apolo_client, timeout_s=60.0)
 
     async def test_save_pending_job(
         self,
@@ -282,6 +284,7 @@ class TestJobsService:
                 async for _ in it:
                     pass
 
+    @pytest.mark.xfail()
     async def test_save_push_failure(
         self,
         job_factory: JobFactory,

@@ -52,6 +52,8 @@ spec:
       labels:
         service: platformnotifications
     spec:
+      imagePullSecrets:
+        - name: ghcr-secret
       initContainers:
       - name: wait-for-config
         image: curlimages/curl:8.4.0
@@ -74,8 +76,8 @@ spec:
           value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6Im5vdGlmaWNhdGlvbiIsImh0dHBzOi8vcGxhdGZvcm0ubmV1cm9tYXRpb24uaW8vdXNlciI6Im5vdGlmaWNhdGlvbiJ9.XiHClMa0aNPK7L6mm8NJrux8UQ414tN3UdVoxR6ybv8
       containers:
       - name: platformnotifications
-        image: platformnotifications:latest
-        imagePullPolicy: Never
+        image: ghcr.io/neuro-inc/platformnotificationsapi:latest
+        imagePullPolicy: IfNotPresent
         env:
         - name: NP_LOG_LEVEL
           value: INFO
@@ -95,6 +97,12 @@ spec:
           value: redis://platformnotifications-redis:6379/0
         - name: NP_NOTIFICATIONS_TRANSPORT
           value:
+        - name: SECURITY_PRIVATE_KEY_BASE64
+          value: cHJpdmF0ZSBrZXk=
+        - name: SECURITY_JWK_KID
+          value: kid
+        - name: NP_CONSOLE_URL
+          value: http://localhsot:8080
 ---
 apiVersion: v1
 kind: Service
@@ -107,3 +115,16 @@ spec:
     targetPort: 8080
   selector:
     service: platformnotifications
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry
+  namespace: kube-system
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 5000
+    targetPort: 5000
+  selector:
+    kubernetes.io/minikube-addons: registry
