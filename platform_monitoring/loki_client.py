@@ -1,7 +1,8 @@
 import logging
 from collections.abc import AsyncIterator
 from itertools import chain
-from typing import Self
+from operator import itemgetter
+from typing import Any, NoReturn, Self
 
 import aiohttp
 from yarl import URL
@@ -33,11 +34,12 @@ class LokiClient:
             connect=self._conn_timeout_s, total=self._read_timeout_s
         )
 
-        async def custom_check(response):
+        async def custom_check(response: aiohttp.ClientResponse) -> None | NoReturn:
             if not 200 <= response.status < 300:
                 text = await response.text()
                 exc_text = f"Loki response status is not 2xx. Response: {text}"
                 raise Exception(exc_text)
+            return None
 
         self._session = aiohttp.ClientSession(
             connector=connector,
@@ -66,14 +68,15 @@ class LokiClient:
     def _query_range_url(self) -> URL:
         return self._api_v1_url / "query_range"
 
-    async def _request(self, *args, **kwargs) -> dict:
+    async def _request(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        assert self._session
         async with self._session.request(*args, **kwargs) as response:
             payload = await response.json()
             logger.debug("Loki response payload: %s", payload)
             return payload
 
-    async def query_range(self, **params) -> dict:
-        params = {k: v for k, v in params.items() if v is not None}
+    async def query_range(self, **params: Any) -> dict[str, Any]:
+        params = {k: v for k, v in params.items() if v is not None}  # TODO
         start, end = params.get("start"), params.get("end")
         if start and end and int(start) > int(end):
             exc_text = f"Invalid range: {start=} > {end=}"
@@ -85,7 +88,7 @@ class LokiClient:
             chain.from_iterable(
                 log_data["values"] for log_data in result["data"]["result"]
             ),
-            key=lambda x: x[0],
+            key=itemgetter(0),
             reverse=params.get("direction") == "backward",
         )
 
@@ -97,9 +100,9 @@ class LokiClient:
         query: str,
         start: str | int | None,
         end: str | int | None,
-        direction="forward",
+        direction: str = "forward",
         limit: int = 100,
-    ) -> AsyncIterator[dict]:
+    ) -> AsyncIterator[dict[str, Any]]:
         while True:
             response = await self.query_range(
                 query=query, start=start, end=end, limit=limit, direction=direction

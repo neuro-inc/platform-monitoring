@@ -599,9 +599,6 @@ class KubeClient:
     def _namespaced_pods_url(self) -> str:
         return f"{self._namespace_url}/pods"
 
-    def _port_forward_(self, pod_name) -> str:
-        return f"{self._namespace_url}/pods"
-
     def _generate_pod_url(self, pod_name: str) -> str:
         return f"{self._namespaced_pods_url}/{pod_name}"
 

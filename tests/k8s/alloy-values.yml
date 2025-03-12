@@ -1,0 +1,81 @@
+# https://github.com/grafana/alloy/blob/main/operations/helm/charts/alloy/values.yaml
+
+alloy:
+  configMap:
+    # -- Create a new ConfigMap for the config file.
+    create: true
+    # -- Content to assign to the new ConfigMap.  This is passed into `tpl` allowing for templating from values.
+    content: |-
+      loki.write "default" {
+        endpoint {
+          url = "http://loki-gateway.default.svc.cluster.local/loki/api/v1/push"
+        }
+      }
+
+      discovery.kubernetes "kubernetes_pods" {
+        role = "pod"
+
+        selectors {
+          role = "pod"
+          field = "spec.nodeName=" + coalesce(env("HOSTNAME"), constants.hostname)
+        }
+      }
+
+      discovery.relabel "kubernetes_pods" {
+        targets = discovery.kubernetes.kubernetes_pods.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_node_name"]
+          target_label  = "node_name"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_platform_apolo_us_org"]
+          target_label  = "org"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_platform_apolo_us_project"]
+          target_label  = "project"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          regex = "([a-z]+)-([a-z]+)"
+          target_label  = "apolo_org"
+          replacement = "$1"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "apolo_project"
+          regex = "([a-z]+)-([a-z]+)"
+          replacement = "$2"
+        }
+      }
+
+      loki.source.kubernetes "kubernetes_pods" {
+        targets    = discovery.relabel.kubernetes_pods.output
+        forward_to = [loki.process.kubernetes_pods.receiver]
+      }
+
+      loki.process "kubernetes_pods" {
+        forward_to = [loki.write.default.receiver]
+      }
+
+# helm upgrade alloy grafana/alloy  -f tests/k8s/alloy-values.yml --install

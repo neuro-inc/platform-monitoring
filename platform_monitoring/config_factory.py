@@ -73,14 +73,12 @@ class EnvironConfigFactory:
         return PlatformConfig(url=url, token=token)
 
     def _create_elasticsearch(self) -> ElasticsearchConfig | None:
-        return None
         if not any(key.startswith("NP_MONITORING_ES") for key in self._environ.keys()):
             return None
         hosts = self._environ["NP_MONITORING_ES_HOSTS"].split(",")
         return ElasticsearchConfig(hosts=hosts)
 
     def _create_s3(self) -> S3Config | None:
-        return None
         if not any(key.startswith("NP_MONITORING_S3") for key in self._environ.keys()):
             return None
         endpoint_url = self._environ.get("NP_MONITORING_S3_ENDPOINT_URL", "")
@@ -93,28 +91,29 @@ class EnvironConfigFactory:
         )
 
     def _create_loki(self) -> LokiConfig | None:
-        # if not any(key.startswith("NP_MONITORING_LOKI")
-        # for key in self._environ.keys()):
-        #     return None
-        # return LokiConfig(
-        #     endpoint_url=URL(self._environ["NP_MONITORING_LOKI_ENDPOINT_URL"]),
-        # )
+        if not any(
+            key.startswith("NP_MONITORING_LOKI") for key in self._environ.keys()
+        ):
+            return None
         return LokiConfig(
-            endpoint_url=URL(
-                "http://observability-loki-gateway.platform.svc.cluster.local"
-                # "http://localhost:3100"
-            ),
+            endpoint_url=URL(self._environ["NP_MONITORING_LOKI_ENDPOINT_URL"]),
         )
+        # return LokiConfig(
+        #     endpoint_url=URL(
+        #         "http://observability-loki-gateway.platform.svc.cluster.local"
+        #         # "http://localhost:3100"
+        #     ),
+        # )
 
     def _create_logs(self) -> LogsConfig:
         return LogsConfig(
-            storage_type=LogsStorageType.LOKI,
-            # storage_type=LogsStorageType(
-            #     self._environ.get(
-            #         "NP_MONITORING_LOGS_STORAGE_TYPE",
-            #         LogsStorageType.ELASTICSEARCH.value,
-            #     )
-            # ),
+            # storage_type=LogsStorageType.LOKI,
+            storage_type=LogsStorageType(
+                self._environ.get(
+                    "NP_MONITORING_LOGS_STORAGE_TYPE",
+                    LogsStorageType.ELASTICSEARCH.value,
+                )
+            ),
             cleanup_interval_sec=float(
                 self._environ.get(
                     "NP_MONITORING_LOGS_CLEANUP_INTERVAL_SEC",

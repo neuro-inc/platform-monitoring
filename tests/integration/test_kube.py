@@ -46,6 +46,7 @@ from platform_monitoring.logs import (
     ElasticsearchLogReader,
     ElasticsearchLogsService,
     LogsService,
+    LokiLogsService,
     PodContainerLogReader,
     S3FileReader,
     S3LogFile,
@@ -59,6 +60,7 @@ from platform_monitoring.logs import (
     S3LogsService,
     get_first_log_entry_time,
 )
+from platform_monitoring.loki_client import LokiClient
 from platform_monitoring.utils import parse_date
 
 from .conftest import ApiAddress, create_local_app_server
@@ -160,6 +162,14 @@ def s3_log_service(
     s3_logs_metadata_service: S3LogsMetadataService,
 ) -> S3LogsService:
     return S3LogsService(kube_client, s3_client, s3_logs_metadata_service)
+
+
+@pytest.fixture()
+def loki_log_service(
+    kube_client: MyKubeClient,
+    loki_client: LokiClient
+) -> LokiLogsService:
+    return LokiLogsService(kube_client, loki_client, 60 * 60 * 24)
 
 
 TOKEN_KEY = aiohttp.web.AppKey("token", dict[str, str])
@@ -1146,6 +1156,14 @@ class TestLogReader:
         job_pod: MyPodDescriptor,
     ) -> None:
         await self._test_get_job_log_reader(kube_client, s3_log_service, job_pod)
+
+    async def test_get_job_loki_log_reader(
+        self,
+        kube_client: MyKubeClient,
+        loki_log_service: LokiLogsService,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        await self._test_get_job_log_reader(kube_client, loki_log_service, job_pod)
 
     async def _test_empty_log_reader(
         self,

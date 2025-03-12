@@ -18,7 +18,11 @@ from aiobotocore.client import AioBaseClient
 from elasticsearch import AsyncElasticsearch
 from yarl import URL
 
-from platform_monitoring.api import create_elasticsearch_client, create_s3_client
+from platform_monitoring.api import (
+    create_elasticsearch_client,
+    create_loki_client,
+    create_s3_client,
+)
 from platform_monitoring.config import (
     Config,
     ContainerRuntimeConfig,
@@ -26,6 +30,7 @@ from platform_monitoring.config import (
     KubeConfig,
     LogsConfig,
     LogsStorageType,
+    LokiConfig,
     PlatformApiConfig,
     PlatformAuthConfig,
     PlatformConfig,
@@ -35,6 +40,7 @@ from platform_monitoring.config import (
 )
 from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
 from platform_monitoring.logs import s3_client_error
+from platform_monitoring.loki_client import LokiClient
 
 
 logger = logging.getLogger(__name__)
@@ -207,8 +213,20 @@ def s3_config() -> S3Config:
 
 
 @pytest.fixture()
+def loki_config() -> LokiConfig:
+    # return LokiConfig(endpoint_url=URL("http://loki-gateway.default.svc.cluster.local"))
+    return LokiConfig(endpoint_url=URL(get_service_url("loki-gt", namespace="default")))
+
+
+@pytest.fixture()
 async def s3_client(s3_config: S3Config) -> AsyncIterator[AioBaseClient]:
     async with create_s3_client(s3_config) as client:
+        yield client
+
+
+@pytest.fixture()
+async def loki_client(loki_config: LokiClient) -> AsyncIterator[LokiClient]:
+    async with create_loki_client(loki_config) as client:
         yield client
 
 

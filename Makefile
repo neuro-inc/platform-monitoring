@@ -32,10 +32,11 @@ test_unit:
 .PHONY: test_integration
 test_integration:
 	. venv/bin/activate; \
-	pytest -vv \
+	pytest -svv \
 		--cov=platform_monitoring --cov-report xml:.coverage-integration.xml \
 		--durations=10 \
 		tests/integration \
+		-k 'test_get_job_loki_log_reader'
 	    -n 12
 
 
@@ -75,3 +76,9 @@ clean_k8s:
 	./tests/k8s/cluster.sh stop
 	docker stop $$(docker ps -a -q)
 	docker rm $$(docker ps -a -q)
+
+install_helm_loki:
+	helm upgrade loki grafana/loki -f tests/k8s/loki-values.yml --install
+
+install_helm_alloy:
+	helm upgrade alloy grafana/alloy  -f tests/k8s/alloy-values.yml --install

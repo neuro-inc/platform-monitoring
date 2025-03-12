@@ -133,8 +133,6 @@ class MonitoringApiHandler:
                 aiohttp.web.post("/{job_id}/kill", self.kill),
                 aiohttp.web.post("/{job_id}/port_forward/{port}", self.port_forward),
                 aiohttp.web.get("/{job_id}/port_forward/{port}", self.port_forward),
-                aiohttp.web.get("/test", self.test),
-                aiohttp.web.get("/test_ws", self.test_ws),
             ]
         )
 
@@ -171,73 +169,9 @@ class MonitoringApiHandler:
 
     def get_archive_delay(self) -> float:
         if self._config.logs.storage_type == LogsStorageType.LOKI:
+            assert self._config.loki
             return self._config.loki.archive_delay_sec
         return DEFAULT_ARCHIVE_DELAY
-
-    # async def test(self, request: Request) -> StreamResponse:
-    #     response = StreamResponse(status=200)
-    #     response.enable_chunked_encoding()
-    #     response.enable_compression(aiohttp.web.ContentCoding.identity)
-    #     response.content_type = "text/plain"
-    #     response.charset = "utf-8"
-    #     response.headers["X-Separator"] = "separator"
-    #     await response.prepare(request)
-    #
-    #     res = await self._loki_client.query_range(query='{project="pr_project"}')
-    #
-    #     # print(11111111111, res)
-    #
-    #     # print(f"Sending request to {request.url}")
-    #     for i in range(10):
-    #         await response.write((("qwe" * i) + "\n").encode())
-    #         await asyncio.sleep(1)
-    #
-    #     await response.write_eof()
-    #     return response
-    #
-    # async def test_ws(self, request: Request) -> StreamResponse:
-    #     response = WebSocketResponse(
-    #         protocols=[WS_LOGS_PROTOCOL],
-    #         heartbeat=HEARTBEAT,
-    #     )
-    #     await response.prepare(request)
-    #
-    #     async def qwe(ws: WebSocketResponse):
-    #         # print(f"Sending request to {request.url}")
-    #
-    #         start = str(int(time.time() - 60 * 60 * 24 * 1) * 1_000_000_000)
-    #         end = str(int(time.time()) * 1_000_000_000)
-    #
-    #         async for res in self._loki_client.query_range_page_iterate(
-    #             query='{project="pr_project"}', start=start, end=end
-    #         ):
-    #             await ws.send_bytes((json.dumps(res["data"]["result"])).encode())
-    #
-    #         start = str(int(end) + 1)
-    #
-    #         while True:
-    #             end = int(time.time()) * 1_000_000_000
-    #             params = {"query": '{project="pr_project"}',
-    #             "start": start, "end": end}
-    #             async for res in self._loki_client.query_range_page_iterate(**params):
-    #                 # print(222222222222, res)
-    #                 # print(11111111111, len(res['data']['result']),
-    #                 es['data']['stats']['summary']['totalEntriesReturned'])
-    #                 if res["data"]["result"]:
-    #                     await ws.send_bytes(
-    #                         (json.dumps(res["data"]["result"])).encode()
-    #                     )
-    #             await asyncio.sleep(5)
-    #             start = str(int(end) + 1)
-    #             # print(11111111111, len(res['data']['result']))
-    #
-    #     await _run_concurrently(
-    #         _listen(response),
-    #         qwe(response),
-    #     )
-    #     # await qwe(response)
-    #
-    #     return response
 
     async def stream_log(self, request: Request) -> StreamResponse:
         timestamps = _get_bool_param(request, "timestamps", default=False)
@@ -821,6 +755,7 @@ def create_logs_service(
 
     if config.logs.storage_type == LogsStorageType.LOKI:
         assert loki_client
+        assert config.loki
         return LokiLogsService(kube_client, loki_client, config.loki.retention_period_s)
 
     msg = f"{config.logs.storage_type} storage is not supported"
