@@ -91,14 +91,6 @@ jobs:
         kubectl get pods -A
         kubectl get svc -A
         make test_k8s
-        echo "======== Loki alloy ========"
-        kubectl get pods --no-headers | grep '^alloy' | awk '{print $1}' | xargs -I {} kubectl logs {}
-        echo "======== Loki write ========"
-        kubectl get pods --no-headers | grep '^loki-write' | awk '{print $1}' | xargs -I {} kubectl logs {}
-        echo "======== Loki backend ========"
-        kubectl get pods --no-headers | grep '^loki-backend' | awk '{print $1}' | xargs -I {} kubectl logs {}
-        echo "======== Loki read ========"
-        kubectl get pods --no-headers | grep '^loki-read' | awk '{print $1}' | xargs -I {} kubectl logs {}
     - name: Run integration tests
       run: |
         make test_integration
