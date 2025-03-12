@@ -86,14 +86,8 @@ jobs:
         make install_helm_alloy
         make wait_k8s_running
         kubectl get pods -A
-        kubectl logs loki-0 -n default
-        kubectl describe pod loki-0 -n default
-        kubectl get po loki-0 -o yaml -n default
         sleep 20
         kubectl get pods -A
-        kubectl logs loki-0 -n default
-        kubectl describe pod loki-0 -n default
-        kubectl get po loki-0 -o yaml -n default
         make test_k8s
     - name: Run integration tests
       run: make test_integration
