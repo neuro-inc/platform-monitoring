@@ -1449,7 +1449,10 @@ class LokiLogReader(LogReader):
         await self._iterator.aclose()  # type: ignore
 
     def encode_and_handle_log(self, log_data: list[Any]) -> bytes:
-        log = orjson.loads(log_data[1])["_entry"]
+        try:
+            log = orjson.loads(log_data[1])["_entry"]
+        except orjson.JSONDecodeError:
+            log = log_data[1]
         if log and log[-1] != "\n":
             log = f"{log}\n"
         if self._timestamps:
@@ -1459,7 +1462,7 @@ class LokiLogReader(LogReader):
         return log.encode()
 
     def build_query(self) -> str:
-        return f'{{app="{self._pod_name}"}}'
+        return f'{{container="{self._pod_name}"}}'
 
     async def _iterate(self) -> AsyncIterator[bytes]:
         async for res in self._loki_client.query_range_page_iterate(

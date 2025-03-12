@@ -1122,8 +1122,7 @@ class TestLogReader:
         factory: LogsService,
         job_pod: MyPodDescriptor,
     ) -> None:
-        command = 'bash -c "echo hello; sleep 1"'
-        # command = 'bash -c "for i in {1..5}; do sleep 1; echo $i; done; sleep 2"'
+        command = 'bash -c "echo hello"'
         job_pod.set_command(command)
         await kube_client.create_pod(job_pod.payload)
 
