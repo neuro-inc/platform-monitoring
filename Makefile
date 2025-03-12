@@ -37,7 +37,7 @@ test_integration:
 		--durations=10 \
 		--log-level=INFO \
 		tests/integration \
-		-k 'test_get_job_loki_log_reader'
+		-k 'test_loki_empty_log_reader'
 	    -n 12
 
 
@@ -79,7 +79,7 @@ clean_k8s:
 	docker rm $$(docker ps -a -q)
 
 install_helm_loki:
-	helm upgrade loki grafana/loki -f tests/k8s/loki-values.yml --install
+	helm upgrade loki grafana/loki -f tests/k8s/loki-values.yml --version 6.28.0 --install
 
 install_helm_alloy:
-	helm upgrade alloy grafana/alloy  -f tests/k8s/alloy-values.yml --install
+	helm upgrade alloy grafana/alloy  -f tests/k8s/alloy-values.yml --version 0.12.3 --install

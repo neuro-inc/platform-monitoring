@@ -32,8 +32,7 @@ from aiobotocore.client import AioBaseClient
 from aiohttp import web
 from elasticsearch import AsyncElasticsearch
 
-from platform_monitoring.api import create_s3_logs_bucket
-from platform_monitoring.config import KubeConfig, S3Config
+from platform_monitoring.config import KubeConfig
 from platform_monitoring.kube_client import (
     JobNotFoundException,
     KubeClient,
@@ -1132,7 +1131,6 @@ class TestLogReader:
 
         log_reader = factory.get_pod_log_reader(pod_name, archive_delay_s=10.0)
         payload = await self._consume_log_reader(log_reader)
-        logger.info("Payload: %r", payload)
         assert payload == b"hello\n"
 
         await asyncio.sleep(10)
@@ -1140,7 +1138,6 @@ class TestLogReader:
 
         log_reader = factory.get_pod_log_reader(pod_name, archive_delay_s=10.0)
         payload = await self._consume_log_reader(log_reader)
-        logger.info("Payload: %r", payload)
         assert payload == b"hello\n"
 
     async def test_get_job_elasticsearch_log_reader(
@@ -1166,10 +1163,10 @@ class TestLogReader:
         kube_client: MyKubeClient,
         loki_log_service: LokiLogsService,
         job_pod: MyPodDescriptor,
-        s3_client: AioBaseClient,
-        s3_config: S3Config,
+        # s3_client: AioBaseClient,
+        # s3_config: S3Config,
     ) -> None:
-        await create_s3_logs_bucket(s3_client, s3_config)
+        # await create_s3_logs_bucket(s3_client, s3_config)
         await self._test_get_job_log_reader(kube_client, loki_log_service, job_pod)
 
     async def _test_empty_log_reader(
@@ -1253,6 +1250,14 @@ class TestLogReader:
         job_pod: MyPodDescriptor,
     ) -> None:
         await self._test_empty_log_reader(kube_client, job_pod, s3_log_service)
+
+    async def test_loki_empty_log_reader(
+        self,
+        kube_client: MyKubeClient,
+        loki_log_service: LokiLogsService,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        await self._test_empty_log_reader(kube_client, job_pod, loki_log_service)
 
     async def _test_merged_log_reader(
         self,

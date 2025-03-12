@@ -1515,43 +1515,32 @@ class LokiLogsService(BaseLogsService):
 
         should_get_archive_logs = True
         should_get_live_logs = True
-        # print(111111, f"{archive_border_dt=}")
         try:
             status = await self._kube_client.wait_pod_is_not_waiting(
                 pod_name, timeout_s=timeout_s, interval_s=interval_s
             )
-            # print(222222, f"{status=}")
+
             if (
                 status.is_running
                 and status.started_at
                 and status.started_at > archive_border_dt
             ):
                 should_get_archive_logs = False
-            if (
-                status.is_pod_terminated
-                and status.finished_at
-                and status.finished_at < archive_border_dt
-            ):
-                should_get_live_logs = False
+            if status.is_pod_terminated and status.finished_at:
+                if status.finished_at < archive_border_dt:
+                    should_get_live_logs = False
+                else:
+                    should_get_archive_logs = False
         except JobNotFoundException:
             should_get_live_logs = False
-
-        logger.info(
-            "Getting logs for pod %s: %s archive, %s live",
-            pod_name,
-            "with" if should_get_archive_logs else "without",
-            "with" if should_get_live_logs else "without",
-        )
 
         if should_get_archive_logs:
             start = int(start_dt.timestamp() * 1_000_000_000)
             end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
-            # print(333333, f"{start=}, {end=}")
             async with self.get_pod_archive_log_reader(
                 pod_name, start=start, end=end, timestamps=timestamps
             ) as it:
                 async for chunk in it:
-                    logger.info("Archive log chunk: %s", chunk)
                     yield chunk
 
         if should_get_live_logs:
@@ -1567,7 +1556,6 @@ class LokiLogsService(BaseLogsService):
                     if separator:
                         yield separator + b"\n"
                         separator = None
-                    logger.info("Live log chunk: %s", chunk)
                     yield chunk
 
     def get_pod_archive_log_reader(  # type: ignore
