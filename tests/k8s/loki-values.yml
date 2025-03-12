@@ -6,6 +6,7 @@ singleBinary:
   persistence:
       size: 1Gi
       storageClass: standard
+      enabled: false
 
 resultsCache:
   allocatedMemory: 128
