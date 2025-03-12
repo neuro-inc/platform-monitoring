@@ -93,6 +93,8 @@ class LokiClient:
         )
 
         result["data"]["result"] = data_result
+        log = f"{params=} {result=}"
+        logger.info(log)
         return result
 
     async def query_range_page_iterate(

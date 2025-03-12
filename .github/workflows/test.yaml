@@ -91,8 +91,15 @@ jobs:
         kubectl get pods -A
         kubectl get svc -A
         make test_k8s
+        kubectl get pods --no-headers | grep '^alloy' | awk '{print $1}' | xargs -I {} kubectl logs {}
+        kubectl get pods --no-headers | grep '^loki-write' | awk '{print $1}' | xargs -I {} kubectl logs {}
+        kubectl get pods --no-headers | grep '^loki-backend' | awk '{print $1}' | xargs -I {} kubectl logs {}
     - name: Run integration tests
-      run: make test_integration
+      run: |
+        make test_integration
+        kubectl get pods --no-headers | grep '^alloy' | awk '{print $1}' | xargs -I {} kubectl logs {}
+        kubectl get pods --no-headers | grep '^loki-write' | awk '{print $1}' | xargs -I {} kubectl logs {}
+        kubectl get pods --no-headers | grep '^loki-backend' | awk '{print $1}' | xargs -I {} kubectl logs {}
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5
       with:

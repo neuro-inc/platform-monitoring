@@ -35,6 +35,7 @@ test_integration:
 	pytest -svv \
 		--cov=platform_monitoring --cov-report xml:.coverage-integration.xml \
 		--durations=10 \
+		--log-level=INFO \
 		tests/integration \
 		-k 'test_get_job_loki_log_reader'
 	    -n 12
