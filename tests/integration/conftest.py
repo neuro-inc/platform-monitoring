@@ -225,7 +225,7 @@ async def s3_client(s3_config: S3Config) -> AsyncIterator[AioBaseClient]:
 
 
 @pytest.fixture()
-async def loki_client(loki_config: LokiClient) -> AsyncIterator[LokiClient]:
+async def loki_client(loki_config: LokiConfig) -> AsyncIterator[LokiClient]:
     async with create_loki_client(loki_config) as client:
         yield client
 
