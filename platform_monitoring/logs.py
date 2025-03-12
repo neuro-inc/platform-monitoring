@@ -1533,6 +1533,13 @@ class LokiLogsService(BaseLogsService):
         except JobNotFoundException:
             should_get_live_logs = False
 
+        logger.info(
+            "Getting logs for pod %s: %s archive, %s live",
+            pod_name,
+            "with" if should_get_archive_logs else "without",
+            "with" if should_get_live_logs else "without",
+        )
+
         if should_get_archive_logs:
             start = int(start_dt.timestamp() * 1_000_000_000)
             end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
@@ -1541,6 +1548,7 @@ class LokiLogsService(BaseLogsService):
                 pod_name, start=start, end=end, timestamps=timestamps
             ) as it:
                 async for chunk in it:
+                    logger.info("Archive log chunk: %s", chunk)
                     yield chunk
 
         if should_get_live_logs:
@@ -1556,6 +1564,7 @@ class LokiLogsService(BaseLogsService):
                     if separator:
                         yield separator + b"\n"
                         separator = None
+                    logger.info("Live log chunk: %s", chunk)
                     yield chunk
 
     def get_pod_archive_log_reader(  # type: ignore

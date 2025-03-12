@@ -660,6 +660,7 @@ class TestLogReader:
             async with log_reader as it:
                 async for chunk in it:
                     buffer += chunk
+                    logger.info("Buffer: %s", buffer)
                     if delay:
                         await asyncio.sleep(delay)
         except asyncio.CancelledError:
@@ -1121,7 +1122,7 @@ class TestLogReader:
         factory: LogsService,
         job_pod: MyPodDescriptor,
     ) -> None:
-        command = 'bash -c "echo hello; sleep 2"'
+        command = 'bash -c "echo hello; sleep 1"'
         # command = 'bash -c "for i in {1..5}; do sleep 1; echo $i; done; sleep 2"'
         job_pod.set_command(command)
         await kube_client.create_pod(job_pod.payload)
@@ -1132,6 +1133,7 @@ class TestLogReader:
 
         log_reader = factory.get_pod_log_reader(pod_name, archive_delay_s=10.0)
         payload = await self._consume_log_reader(log_reader)
+        logger.info("Payload: %r", payload)
         assert payload == b"hello\n"
 
         await asyncio.sleep(10)
@@ -1139,6 +1141,7 @@ class TestLogReader:
 
         log_reader = factory.get_pod_log_reader(pod_name, archive_delay_s=10.0)
         payload = await self._consume_log_reader(log_reader)
+        logger.info("Payload: %r", payload)
         assert payload == b"hello\n"
 
     async def test_get_job_elasticsearch_log_reader(
