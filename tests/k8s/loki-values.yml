@@ -1,5 +1,10 @@
 
 deploymentMode: SingleBinary
+
+global:
+  extraArgs:
+    - -log.level=debug
+
 singleBinary:
   replicas: 1
 
@@ -7,6 +12,13 @@ singleBinary:
       size: 1Gi
       storageClass: standard
       enabled: false
+
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
 
 resultsCache:
   allocatedMemory: 128
