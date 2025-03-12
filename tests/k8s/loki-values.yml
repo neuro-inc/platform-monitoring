@@ -15,15 +15,21 @@ singleBinary:
 
   resources:
     requests:
-      memory: 1024Mi
-      cpu: 200m
+      memory: 2Gi
+      cpu: 1
     limits:
-      memory: 1024Mi
+      memory: 2Gi
+    extraEnv:
+      # Keep a little bit lower than memory limits
+      - name: GOMEMLIMIT
+        value: 1950MiB
 
 resultsCache:
   allocatedMemory: 128
 chunksCache:
   allocatedMemory: 512
+  writebackSizeLimit: 10MB
+
 
 test:
   enabled: false
