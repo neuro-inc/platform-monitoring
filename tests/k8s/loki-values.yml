@@ -29,7 +29,7 @@ loki:
     storage:
       type: s3
       s3:
-        bucketnames: loki-logs
+        bucketnames: logs
         insecure: false
         region: minio
         access_key_id: access_key
@@ -49,14 +49,14 @@ loki:
 
   storage:
     bucketNames:
-      chunks: loki-logs
-      ruler: loki-logs
-      admin: loki-logs
+      chunks: logs
+      ruler: logs
+      admin: logs
     type: s3
 
   storage_config:
     aws:
-      bucketnames: loki-logs
+      bucketnames: logs
       endpoint: http://minio:9000
       region: minio
       access_key_id: access_key
