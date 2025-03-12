@@ -94,10 +94,10 @@ jobs:
     - name: Run integration tests
       run: |
         make test_integration
-        echo "======== Loki alloy ========"
-        kubectl get pods --no-headers | grep '^alloy' | awk '{print $1}' | xargs -I {} kubectl logs {}
-        echo "======== Loki write ========"
-        kubectl get pods --no-headers | grep '^loki-write' | awk '{print $1}' | xargs -I {} kubectl logs {}
+        # echo "======== Loki alloy ========"
+        # kubectl get pods --no-headers | grep '^alloy' | awk '{print $1}' | xargs -I {} kubectl logs {}
+        # echo "======== Loki write ========"
+        # kubectl get pods --no-headers | grep '^loki-write' | awk '{print $1}' | xargs -I {} kubectl logs {}
         echo "======== Loki backend ========"
         kubectl get pods --no-headers | grep '^loki-backend' | awk '{print $1}' | xargs -I {} kubectl logs {}
         echo "======== Loki read ========"
