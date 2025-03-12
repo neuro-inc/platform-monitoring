@@ -60,6 +60,16 @@ function k8s::wait_for_all_pods_running {
             echo "All pods are Running or Succeeded."
             return 0
         fi
+
+#        not_ready_pods=$(kubectl get pods -A \
+#          --field-selector=status.phase!=Running,status.phase!=Succeeded \
+#          -o jsonpath='{.items[?(@.status.containerStatuses[*].ready==false)]}')
+#
+#        if [ -z "$not_ready_pods" ]; then
+#            echo "All pods are Running and Ready."
+#            return 0
+#        fi
+
         echo "Waiting for pods to be Running or Succeeded..."
         sleep $interval
     done

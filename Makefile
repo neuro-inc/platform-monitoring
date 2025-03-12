@@ -35,9 +35,10 @@ test_integration:
 	pytest -svv \
 		--cov=platform_monitoring --cov-report xml:.coverage-integration.xml \
 		--durations=10 \
+		--maxfail=10 \
 		--log-level=INFO \
 		tests/integration \
-		-k 'test_loki_empty_log_reader'
+		-k 'loki' \
 	    -n 12
 
 
