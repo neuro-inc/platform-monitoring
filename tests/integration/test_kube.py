@@ -1159,7 +1159,6 @@ class TestLogReader:
     ) -> None:
         await self._test_get_job_log_reader(kube_client, s3_log_service, job_pod)
 
-    @pytest.mark.xfail()
     async def test_get_job_loki_log_reader(
         self,
         kube_client: MyKubeClient,
