@@ -3,6 +3,10 @@ deploymentMode: SingleBinary
 singleBinary:
   replicas: 1
 
+  persistence:
+      size: 1Gi
+      storageClass: standard
+
 resultsCache:
   allocatedMemory: 128
 chunksCache:
