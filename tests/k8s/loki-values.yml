@@ -8,6 +8,9 @@ deploymentMode: SimpleScalable
 loki:
   auth_enabled: false
 
+  commonConfig:
+    replication_factor: 1
+
   rulerConfig:
     storage:
       type: s3

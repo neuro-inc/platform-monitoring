@@ -89,8 +89,6 @@ jobs:
         kubectl get pods -A
         sleep 60
         kubectl get pods -A
-        sleep 60
-        kubectl get pods -A
         kubectl get svc -A
         make test_k8s
     - name: Run integration tests
