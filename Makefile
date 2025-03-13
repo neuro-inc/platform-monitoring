@@ -38,8 +38,8 @@ test_integration:
 		--maxfail=10 \
 		--log-level=INFO \
 		tests/integration \
-		-k 'test_loki_merged_log_reader_restarte_since' \
-	    -n 12
+		-k 'log_reader_restarted_since' \
+	    # -n 12
 
 
 .PHONY: docker_build

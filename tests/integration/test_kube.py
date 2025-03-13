@@ -1504,12 +1504,14 @@ class TestLogReader:
             await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=120)
             await kube_client.wait_pod_is_terminated(job_pod.name)
             status = await kube_client.get_container_status(job_pod.name)
+            logger.info(f"status 1: {status}")  # noqa: G004
             finished1 = status.finished_at
             assert finished1
 
             await kube_client.wait_container_is_restarted(job_pod.name, 1)
             await kube_client.wait_pod_is_running(job_pod.name)
             status = await kube_client.get_container_status(job_pod.name)
+            logger.info(f"status 2: {status}")  # noqa: G004
             started2 = status.started_at
             assert started2
             run_log_reader(since=started2)
@@ -1517,6 +1519,7 @@ class TestLogReader:
 
             await kube_client.wait_pod_is_terminated(job_pod.name)
             status = await kube_client.get_container_status(job_pod.name)
+            logger.info(f"status 3: {status}")  # noqa: G004
             assert status.started_at == started2
             finished2 = status.finished_at
             assert finished2
@@ -1568,7 +1571,7 @@ class TestLogReader:
             elasticsearch_log_service,
         )
 
-    async def test_s3_merged_log_reader_restarte_since(
+    async def test_s3_merged_log_reader_restarted_since(
         self,
         kube_client: MyKubeClient,
         s3_log_service: LogsService,
@@ -1578,7 +1581,7 @@ class TestLogReader:
             kube_client, job_pod, s3_log_service
         )
 
-    async def test_loki_merged_log_reader_restarte_since(
+    async def test_loki_merged_log_reader_restarted_since(
         self,
         kube_client: MyKubeClient,
         loki_log_service: LokiLogsService,
@@ -1611,13 +1614,21 @@ class TestLogReader:
         expected_payload = "".join(f"{i + 1}\n" for i in range(num))
         assert payload == expected_payload
 
-    async def test_large_log_reader(
+    async def test_s3_large_log_reader(
         self,
         kube_client: MyKubeClient,
         s3_log_service: LogsService,
         job_pod: MyPodDescriptor,
     ) -> None:
         await self._test_large_log_reader(kube_client, job_pod, s3_log_service)
+
+    async def test_loki_large_log_reader(
+        self,
+        kube_client: MyKubeClient,
+        loki_log_service: LokiLogsService,
+        job_pod: MyPodDescriptor,
+    ) -> None:
+        await self._test_large_log_reader(kube_client, job_pod, loki_log_service)
 
     async def test_get_first_log_entry_time(
         self,
