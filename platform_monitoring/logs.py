@@ -1450,7 +1450,11 @@ class LokiLogReader(LogReader):
 
     def encode_and_handle_log(self, log_data: list[Any]) -> bytes:
         try:
-            log = orjson.loads(log_data[1])["_entry"]
+            log = orjson.loads(log_data[1])
+            if isinstance(log, dict):
+                log = log["_entry"]
+            else:
+                log = str(log)
         except orjson.JSONDecodeError:
             log = log_data[1]
         if log and log[-1] != "\n":
@@ -1534,6 +1538,7 @@ class LokiLogsService(BaseLogsService):
                     should_get_archive_logs = False
         except JobNotFoundException:
             should_get_live_logs = False
+            archive_border_dt = now_dt
 
         has_archive = False
 
