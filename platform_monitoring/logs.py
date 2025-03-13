@@ -1506,7 +1506,7 @@ class LokiLogsService(BaseLogsService):
         label: str | None = None,
     ) -> AsyncGenerator[bytes, None]:
         # what if job exist in API db but no starts in k8s?
-        debug = True
+
         now_dt = datetime.now(UTC)
         start_dt = (
             now_dt - timedelta(seconds=self._retention_period_s) + timedelta(hours=1)
@@ -1527,8 +1527,18 @@ class LokiLogsService(BaseLogsService):
             )
 
             if start_dt >= archive_border_dt:
-                should_get_archive_logs = False
                 archive_border_dt = start_dt
+
+            if (
+                status.is_running
+                and status.started_at
+                and status.started_at > archive_border_dt
+            ):
+                archive_border_dt = status.started_at
+
+            if status.is_pod_terminated and status.finished_at:
+                archive_border_dt = status.finished_at
+
             # else:
             #     if (
             #         status.is_running
@@ -1549,18 +1559,24 @@ class LokiLogsService(BaseLogsService):
         has_archive = False
 
         if should_get_archive_logs:
-            start = int(start_dt.timestamp() * 1_000_000_000)
-            end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
-            async with self.get_pod_archive_log_reader(
-                pod_name, start=start, end=end, timestamps=timestamps
-            ) as it:
-                logger.info(f"123 Archive log  {label=} {start_dt=} "  # noqa: G004
-                            f"{archive_border_dt=}")  # noqa: G004
-                async for chunk in it:
-                    has_archive = True
-                    logger.info(f"123 Live log  {label=} {chunk=} "  # noqa: G004
-                                f"{start_dt=} {archive_border_dt=}")  # noqa: G004
-                    yield chunk
+            while True:
+                start = int(start_dt.timestamp() * 1_000_000_000)
+                end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
+                async with self.get_pod_archive_log_reader(
+                    pod_name, start=start, end=end, timestamps=timestamps
+                ) as it:
+                    async for chunk in it:
+                        has_archive = True
+                        logger.info(
+                            f"123 Live log  {label=} {chunk=} "  # noqa: G004
+                            f"{start_dt=} {archive_border_dt=}"
+                        )  # noqa: G004
+                        yield chunk
+
+                # last_status_created_at = status.created_at
+                # status = await self.get_container_status(pod_name)
+                # if status.is_running:
+                #     break
 
         if not has_archive:
             separator = None
@@ -1584,9 +1600,11 @@ class LokiLogsService(BaseLogsService):
                             if separator:
                                 yield separator + b"\n"
                                 separator = None
-                                logger.info(f"123 Live log  {label=} {chunk=} "  # noqa: G004
-                                            f"{label=} "  # noqa: G004
-                                            f"{archive_border_dt=}")  # noqa: G004
+                                logger.info(
+                                    f"123 Live log  {label=} {chunk=} "  # noqa: G004
+                                    f"{label=} "  # noqa: G004
+                                    f"{archive_border_dt=}"
+                                )  # noqa: G004
                             yield chunk
 
                     if not status.can_restart:

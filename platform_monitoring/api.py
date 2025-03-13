@@ -694,6 +694,7 @@ async def create_loki_client(config: LokiConfig) -> AsyncIterator[LokiClient]:
         conn_timeout_s=config.client_conn_timeout_s,
         read_timeout_s=config.client_read_timeout_s,
         conn_pool_size=config.client_conn_pool_size,
+        archive_delay_s=config.archive_delay_s,
     )
     try:
         await client.init()

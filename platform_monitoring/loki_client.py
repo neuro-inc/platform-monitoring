@@ -19,12 +19,14 @@ class LokiClient:
         conn_timeout_s: int,
         read_timeout_s: int,
         conn_pool_size: int,
+        archive_delay_s: int,
     ) -> None:
         self._base_url = base_url
 
         self._conn_timeout_s = conn_timeout_s
         self._read_timeout_s = read_timeout_s
         self._conn_pool_size = conn_pool_size
+        self._archive_delay_s = archive_delay_s
 
         self._session: aiohttp.ClientSession | None = None
 
