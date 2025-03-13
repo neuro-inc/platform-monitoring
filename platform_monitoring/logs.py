@@ -1528,19 +1528,19 @@ class LokiLogsService(BaseLogsService):
             if start_dt >= archive_border_dt:
                 should_get_archive_logs = False
                 archive_border_dt = start_dt
-            else:
-                if (
-                    status.is_running
-                    and status.started_at
-                    and status.started_at > archive_border_dt
-                ):
-                    should_get_archive_logs = False
-
-                if status.is_pod_terminated and status.finished_at:
-                    if status.finished_at < archive_border_dt:
-                        should_get_live_logs = False
-                    else:
-                        should_get_archive_logs = False
+            # else:
+            #     if (
+            #         status.is_running
+            #         and status.started_at
+            #         and status.started_at > archive_border_dt
+            #     ):
+            #         should_get_archive_logs = False
+            #
+            #     if status.is_pod_terminated and status.finished_at:
+            #         if status.finished_at < archive_border_dt:
+            #             should_get_live_logs = False
+            #         else:
+            #             should_get_archive_logs = False
         except JobNotFoundException:
             should_get_live_logs = False
             archive_border_dt = now_dt
