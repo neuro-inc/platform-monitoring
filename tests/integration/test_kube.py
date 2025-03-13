@@ -660,7 +660,6 @@ class TestLogReader:
             async with log_reader as it:
                 async for chunk in it:
                     buffer += chunk
-                    logger.info("Buffer: %s", buffer)
                     if delay:
                         await asyncio.sleep(delay)
         except asyncio.CancelledError:
@@ -1319,7 +1318,8 @@ class TestLogReader:
 
         # Output for debugging
         for i, (name, payload) in enumerate(zip(names, payloads, strict=False)):
-            print(f"{i}. {name}: {payload!r}")  # noqa: T201
+            print(f"111111111 {i}. {name}: {payload!r}")  # noqa: T201
+            logger.info("222222222 %s: %r", name, payload)
 
         expected_payload = "".join(f"{i}\n" for i in range(1, 6)).encode()
         # All logs are completely either live or archive, no separator.

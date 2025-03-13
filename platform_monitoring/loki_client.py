@@ -93,8 +93,8 @@ class LokiClient:
         )
 
         result["data"]["result"] = data_result
-        log = f"{params=} {result=}"
-        logger.info(log)
+        # log = f"{params=} {result=}"
+        # logger.info(log)
         return result
 
     async def query_range_page_iterate(
@@ -113,10 +113,10 @@ class LokiClient:
             yield response
 
             # remove
-            logger.info(
-                "Total entries returned: %s",
-                response["data"]["stats"]["summary"]["totalEntriesReturned"],
-            )
+            # logger.debug(
+            #     "Total entries returned: %s",
+            #     response["data"]["stats"]["summary"]["totalEntriesReturned"],
+            # )
 
             if response["data"]["stats"]["summary"]["totalEntriesReturned"] < limit:
                 break
@@ -127,4 +127,4 @@ class LokiClient:
                 end = int(response["data"]["result"][-1][0]) - 1
 
             # remove
-            logger.info("%s", f"{start=} {end=}")
+            # logger.debug("%s", f"{start=} {end=}")

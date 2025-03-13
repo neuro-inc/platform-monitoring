@@ -52,7 +52,7 @@ function k8s::apply_all_configurations {
 
 function k8s::wait_for_all_pods_running {
 
-    kubectl wait --for=condition=ready deployment/loki-read  --timeout=300s
+    kubectl wait --for=condition=ready deployment/loki-read  --timeout=200s
     return 0
 
 #    local timeout=180
