@@ -1520,15 +1520,15 @@ class LokiLogsService(BaseLogsService):
         should_get_archive_logs = True
         should_get_live_logs = True
 
-        if start_dt >= archive_border_dt:
-            should_get_archive_logs = False
-            archive_border_dt = start_dt
-        else:
-            try:
-                status = await self._kube_client.wait_pod_is_not_waiting(
-                    pod_name, timeout_s=timeout_s, interval_s=interval_s
-                )
+        try:
+            status = await self._kube_client.wait_pod_is_not_waiting(
+                pod_name, timeout_s=timeout_s, interval_s=interval_s
+            )
 
+            if start_dt >= archive_border_dt:
+                should_get_archive_logs = False
+                archive_border_dt = start_dt
+            else:
                 if (
                     status.is_running
                     and status.started_at
@@ -1541,9 +1541,9 @@ class LokiLogsService(BaseLogsService):
                         should_get_live_logs = False
                     else:
                         should_get_archive_logs = False
-            except JobNotFoundException:
-                should_get_live_logs = False
-                archive_border_dt = now_dt
+        except JobNotFoundException:
+            should_get_live_logs = False
+            archive_border_dt = now_dt
 
         has_archive = False
 
