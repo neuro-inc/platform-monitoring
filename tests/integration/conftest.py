@@ -132,6 +132,7 @@ async def platform_api_config(
         token=token_factory("compute"),  # token is hard-coded in the yaml configuration
     )
 
+
 @pytest.fixture(scope="session")
 async def container_runtime_config(in_minikube: bool) -> ContainerRuntimeConfig:  # noqa: FBT001
     if in_minikube:
@@ -308,7 +309,7 @@ async def create_local_app_server(
     app: aiohttp.web.Application, port: int = 8080
 ) -> AsyncIterator[ApiAddress]:
     runner = aiohttp.web.AppRunner(app)
-    worker_id = int(os.getenv('PYTEST_XDIST_WORKER', '0').replace('gw', ''))
+    worker_id = int(os.getenv("PYTEST_XDIST_WORKER", "0").replace("gw", ""))
     try:
         await runner.setup()
         api_address = ApiAddress("0.0.0.0", port + worker_id)

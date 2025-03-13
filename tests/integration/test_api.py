@@ -177,7 +177,7 @@ async def monitoring_api(config: Config) -> AsyncIterator[MonitoringApiEndpoints
 
 @pytest.fixture(scope="session")
 async def monitoring_api_ep(
-    platform_monitoring_api_address: ApiAddress
+    platform_monitoring_api_address: ApiAddress,
 ) -> MonitoringApiEndpoints:
     return MonitoringApiEndpoints(address=platform_monitoring_api_address)
 
@@ -379,8 +379,10 @@ async def named_infinite_job(
 
 class TestApi:
     async def test_ping(
-        self, monitoring_api: MonitoringApiEndpoints,
-        client: aiohttp.ClientSession, config: Config
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        config: Config,
     ) -> None:
         async with client.get(monitoring_api.ping_url) as resp:
             assert resp.status == HTTPOk.status_code

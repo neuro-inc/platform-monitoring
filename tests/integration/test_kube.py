@@ -167,8 +167,7 @@ def s3_log_service(
 
 @pytest.fixture()
 def loki_log_service(
-    kube_client: MyKubeClient,
-    loki_client: LokiClient
+    kube_client: MyKubeClient, loki_client: LokiClient
 ) -> LokiLogsService:
     return LokiLogsService(kube_client, loki_client, 60 * 60 * 24)
 
@@ -1545,7 +1544,7 @@ class TestLogReader:
         # Output for debugging
         for i, (since, payload) in enumerate(zip(starts, payloads, strict=False)):
             print(f"{i}. [{since:%T}] {payload!r}")  # noqa: T201
-            logger.info("333333333333 %d [%s] %r",i, since, payload)
+            logger.info("333333333333 %d [%s] %r", i, since, payload)
         assert payloads == [
             b"begin\nend\nbegin\nend\n",
             b"end\nbegin\nend\n",

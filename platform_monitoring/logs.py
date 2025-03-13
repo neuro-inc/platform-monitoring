@@ -1556,19 +1556,36 @@ class LokiLogsService(BaseLogsService):
             separator = None
 
         if should_get_live_logs:
-            async with self.get_pod_live_log_reader(
-                pod_name, since=archive_border_dt, timestamps=timestamps, debug=debug
-            ) as it:
-                if debug:
-                    yield (
-                        f"=== Live logs from {since=} "
-                        f"(started at {archive_border_dt=}) ===\n"
-                    ).encode()
-                async for chunk in it:
-                    if separator:
-                        yield separator + b"\n"
-                        separator = None
-                    yield chunk
+            try:
+                while True:
+                    async with self.get_pod_live_log_reader(
+                        pod_name,
+                        since=archive_border_dt,
+                        timestamps=timestamps,
+                        debug=debug,
+                    ) as it:
+                        if debug:
+                            yield (
+                                f"=== Live logs from {since=} "
+                                f"(started at {archive_border_dt=}) ===\n"
+                            ).encode()
+                        async for chunk in it:
+                            if separator:
+                                yield separator + b"\n"
+                                separator = None
+                            yield chunk
+
+                    if not status.can_restart:
+                        break
+
+                    status = await self.wait_pod_is_running(
+                        pod_name,
+                        status.started_at,
+                        timeout_s=timeout_s,
+                        interval_s=interval_s,
+                    )
+            except JobNotFoundException:
+                pass
 
     def get_pod_archive_log_reader(  # type: ignore
         self,
