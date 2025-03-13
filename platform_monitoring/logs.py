@@ -1540,6 +1540,10 @@ class LokiLogsService(BaseLogsService):
             should_get_live_logs = False
             archive_border_dt = now_dt
 
+        if since > archive_border_dt:
+            should_get_archive_logs = False
+            archive_border_dt = since
+
         has_archive = False
 
         if should_get_archive_logs:
