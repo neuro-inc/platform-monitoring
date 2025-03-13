@@ -1319,7 +1319,6 @@ class TestLogReader:
         # Output for debugging
         for i, (name, payload) in enumerate(zip(names, payloads, strict=False)):
             print(f"111111111 {i}. {name}: {payload!r}")  # noqa: T201
-            logger.info("222222222 %s: %r", name, payload)
 
         expected_payload = "".join(f"{i}\n" for i in range(1, 6)).encode()
         # All logs are completely either live or archive, no separator.
@@ -1423,6 +1422,7 @@ class TestLogReader:
         # Output for debugging
         for i, (name, payload) in enumerate(zip(names, payloads, strict=False)):
             print(f"{i}. {name}: {payload!r}")  # noqa: T201
+            logger.info("44444444 %d %s %r", i, name, payload)
 
         expected_payload = "".join(f"{i}\n" for i in range(1, 6)).encode()
         payload0 = payloads[0]
@@ -1466,7 +1466,6 @@ class TestLogReader:
             kube_client, job_pod, s3_log_service
         )
 
-    @pytest.mark.xfail()
     async def test_loki_merged_log_reader_restarted(
         self,
         kube_client: MyKubeClient,
@@ -1543,6 +1542,7 @@ class TestLogReader:
         # Output for debugging
         for i, (since, payload) in enumerate(zip(starts, payloads, strict=False)):
             print(f"{i}. [{since:%T}] {payload!r}")  # noqa: T201
+            logger.info("333333333333 %d [%s] %r",i, since, payload)
         assert payloads == [
             b"begin\nend\nbegin\nend\n",
             b"end\nbegin\nend\n",
