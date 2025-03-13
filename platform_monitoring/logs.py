@@ -1526,6 +1526,7 @@ class LokiLogsService(BaseLogsService):
                 and status.started_at > archive_border_dt
             ):
                 should_get_archive_logs = False
+
             if status.is_pod_terminated and status.finished_at:
                 if status.finished_at < archive_border_dt:
                     should_get_live_logs = False
@@ -1534,6 +1535,8 @@ class LokiLogsService(BaseLogsService):
         except JobNotFoundException:
             should_get_live_logs = False
 
+        has_archive = False
+
         if should_get_archive_logs:
             start = int(start_dt.timestamp() * 1_000_000_000)
             end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
@@ -1541,7 +1544,11 @@ class LokiLogsService(BaseLogsService):
                 pod_name, start=start, end=end, timestamps=timestamps
             ) as it:
                 async for chunk in it:
+                    has_archive = True
                     yield chunk
+
+        if not has_archive:
+            separator = None
 
         if should_get_live_logs:
             async with self.get_pod_live_log_reader(

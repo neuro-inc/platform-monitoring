@@ -51,32 +51,27 @@ function k8s::apply_all_configurations {
 
 
 function k8s::wait_for_all_pods_running {
-    local timeout=180
-    local interval=5
-    local end=$((SECONDS + timeout))
 
-    while [ $SECONDS -lt $end ]; do
-        if [ "$(kubectl get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded -o jsonpath='{.items}')" == "[]" ]; then
-            echo "All pods are Running or Succeeded."
-            return 0
-        fi
+    kubectl wait --for=condition=ready deployment/loki-read  --timeout=300s
+    return 0
 
-#        not_ready_pods=$(kubectl get pods -A \
-#          --field-selector=status.phase!=Running,status.phase!=Succeeded \
-#          -o jsonpath='{.items[?(@.status.containerStatuses[*].ready==false)]}')
+#    local timeout=180
+#    local interval=5
+#    local end=$((SECONDS + timeout))
 #
-#        if [ -z "$not_ready_pods" ]; then
-#            echo "All pods are Running and Ready."
+#    while [ $SECONDS -lt $end ]; do
+#        if [ "$(kubectl get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded -o jsonpath='{.items}')" == "[]" ]; then
+#            echo "All pods are Running or Succeeded."
 #            return 0
 #        fi
-
-        echo "Waiting for pods to be Running or Succeeded..."
-        sleep $interval
-    done
-
-    echo "Timeout waiting for pods to be Running or Succeeded."
-    kubectl get pods -A
-    return 1
+#
+#        echo "Waiting for pods to be Running or Succeeded..."
+#        sleep $interval
+#    done
+#
+#    echo "Timeout waiting for pods to be Running or Succeeded."
+#    kubectl get pods -A
+#    return 1
 }
 
 

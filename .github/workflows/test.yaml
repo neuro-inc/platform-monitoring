@@ -87,11 +87,6 @@ jobs:
         make install_helm_alloy
         make wait_k8s_running
         kubectl get pods -A
-        sleep 60
-        kubectl get pods -A
-        sleep 60
-        kubectl get pods -A
-        kubectl get svc -A
         make test_k8s
     - name: Run integration tests
       run: |

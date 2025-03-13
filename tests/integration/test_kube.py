@@ -1568,7 +1568,7 @@ class TestLogReader:
             elasticsearch_log_service,
         )
 
-    async def test_s3_merged_log_reader_restarte3_since(
+    async def test_s3_merged_log_reader_restarte_since(
         self,
         kube_client: MyKubeClient,
         s3_log_service: LogsService,
@@ -1578,7 +1578,7 @@ class TestLogReader:
             kube_client, job_pod, s3_log_service
         )
 
-    async def test_loki_merged_log_reader_restarte3_since(
+    async def test_loki_merged_log_reader_restarte_since(
         self,
         kube_client: MyKubeClient,
         loki_log_service: LokiLogsService,
