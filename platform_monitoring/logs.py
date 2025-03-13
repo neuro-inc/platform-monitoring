@@ -1503,9 +1503,10 @@ class LokiLogsService(BaseLogsService):
         archive_delay_s: float = 5,
         debug: bool = False,
         stop_func: Callable[[], Awaitable[bool]] | None = None,
+        label: str | None = None,
     ) -> AsyncGenerator[bytes, None]:
         # what if job exist in API db but no starts in k8s?
-
+        debug = True
         now_dt = datetime.now(UTC)
         start_dt = (
             now_dt - timedelta(seconds=self._retention_period_s) + timedelta(hours=1)
@@ -1516,7 +1517,7 @@ class LokiLogsService(BaseLogsService):
         archive_border_dt = (now_dt - timedelta(seconds=archive_delay_s)).replace(
             microsecond=0
         )  # kube api log can't work with microseconds
-
+        logger.info(f"22222222222 {label=} {since=} {now_dt=} {archive_border_dt=}")  # noqa: G004
         should_get_archive_logs = True
         should_get_live_logs = True
 
@@ -1553,8 +1554,12 @@ class LokiLogsService(BaseLogsService):
             async with self.get_pod_archive_log_reader(
                 pod_name, start=start, end=end, timestamps=timestamps
             ) as it:
+                logger.info(f"123 Archive log  {label=} {start_dt=} "  # noqa: G004
+                            f"{archive_border_dt=}")  # noqa: G004
                 async for chunk in it:
                     has_archive = True
+                    logger.info(f"123 Live log  {label=} {chunk=} "  # noqa: G004
+                                f"{start_dt=} {archive_border_dt=}")  # noqa: G004
                     yield chunk
 
         if not has_archive:
@@ -1579,6 +1584,9 @@ class LokiLogsService(BaseLogsService):
                             if separator:
                                 yield separator + b"\n"
                                 separator = None
+                                logger.info(f"123 Live log  {label=} {chunk=} "  # noqa: G004
+                                            f"{label=} "  # noqa: G004
+                                            f"{archive_border_dt=}")  # noqa: G004
                             yield chunk
 
                     if not status.can_restart:
@@ -1591,6 +1599,7 @@ class LokiLogsService(BaseLogsService):
                         interval_s=interval_s,
                     )
                     since = status.started_at
+                    logger.info(f"123 Live log {label=}  {since=} {status=}")  # noqa: G004
             except JobNotFoundException:
                 pass
 
