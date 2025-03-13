@@ -1556,11 +1556,12 @@ class LokiLogsService(BaseLogsService):
             separator = None
 
         if should_get_live_logs:
+            since = archive_border_dt
             try:
                 while True:
                     async with self.get_pod_live_log_reader(
                         pod_name,
-                        since=archive_border_dt,
+                        since=since,
                         timestamps=timestamps,
                         debug=debug,
                     ) as it:
@@ -1584,6 +1585,7 @@ class LokiLogsService(BaseLogsService):
                         timeout_s=timeout_s,
                         interval_s=interval_s,
                     )
+                    since = status.started_at
             except JobNotFoundException:
                 pass
 
