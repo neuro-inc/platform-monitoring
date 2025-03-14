@@ -35,10 +35,11 @@ test_integration:
 	pytest -svv \
 		--cov=platform_monitoring --cov-report xml:.coverage-integration.xml \
 		--durations=10 \
-		--maxfail=0 \
+		--maxfail=2 \
 		--log-level=INFO \
 		tests/integration \
-		-k 'test_attach_nontty_stdout_shared_by_name'
+		-n 12
+		# -k 'test_attach_nontty_stdout_shared_by_name'
 		# -n 12
 
 
