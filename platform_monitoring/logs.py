@@ -1525,7 +1525,7 @@ class LokiLogsService(BaseLogsService):
             status = await self._kube_client.wait_pod_is_not_waiting(
                 pod_name, timeout_s=timeout_s, interval_s=interval_s
             )
-
+            logger.info(f"33333333333 {label=} {status=}")  # noqa: G004
             if start_dt >= archive_border_dt:
                 archive_border_dt = start_dt
 
@@ -1583,6 +1583,8 @@ class LokiLogsService(BaseLogsService):
 
         if should_get_live_logs:
             since = archive_border_dt
+            status = await self._kube_client.get_container_status(pod_name)
+            logger.info(f"5555555555 {label=} {status=}")  # noqa: G004
             try:
                 while True:
                     async with self.get_pod_live_log_reader(
