@@ -1502,8 +1502,7 @@ class LokiLogsService(BaseLogsService):
         interval_s: float = 1.0,
         archive_delay_s: float = 5,
         debug: bool = False,
-        stop_func: Callable[[], Awaitable[bool]] | None = None,
-        label: str | None = None,
+        stop_func: Callable[[], Awaitable[bool]] | None = None
     ) -> AsyncGenerator[bytes, None]:
         # what if job exist in API db but no starts in k8s?
 
@@ -1517,7 +1516,7 @@ class LokiLogsService(BaseLogsService):
         archive_border_dt = (now_dt - timedelta(seconds=archive_delay_s)).replace(
             microsecond=0
         )  # kube api log can't work with microseconds
-        logger.info(f"22222222222 {label=} {since=} {now_dt=} {archive_border_dt=}")  # noqa: G004
+
         should_get_archive_logs = True
         should_get_live_logs = True
 
@@ -1525,7 +1524,7 @@ class LokiLogsService(BaseLogsService):
             status = await self._kube_client.wait_pod_is_not_waiting(
                 pod_name, timeout_s=timeout_s, interval_s=interval_s
             )
-            logger.info(f"33333333333 {label=} {status=}")  # noqa: G004
+
             if start_dt >= archive_border_dt:
                 archive_border_dt = start_dt
 
@@ -1538,20 +1537,6 @@ class LokiLogsService(BaseLogsService):
 
             if status.is_terminated and status.finished_at:
                 archive_border_dt = status.finished_at
-
-            # else:
-            #     if (
-            #         status.is_running
-            #         and status.started_at
-            #         and status.started_at > archive_border_dt
-            #     ):
-            #         should_get_archive_logs = False
-            #
-            #     if status.is_pod_terminated and status.finished_at:
-            #         if status.finished_at < archive_border_dt:
-            #             should_get_live_logs = False
-            #         else:
-            #             should_get_archive_logs = False
         except JobNotFoundException:
             should_get_live_logs = False
             archive_border_dt = now_dt
@@ -1560,8 +1545,6 @@ class LokiLogsService(BaseLogsService):
 
         if start_dt >= archive_border_dt:
             should_get_archive_logs = False
-
-        logger.info(f"444444444 {label=} {start_dt=} {archive_border_dt=}")  # noqa: G004
 
         if should_get_archive_logs:
             start = int(start_dt.timestamp() * 1_000_000_000)
@@ -1573,19 +1556,12 @@ class LokiLogsService(BaseLogsService):
                     has_archive = True
                     yield chunk
 
-                # last_status_created_at = status.created_at
-                # status = await self.get_container_status(pod_name)
-                # if status.is_running:
-                #     break
-
         if not has_archive:
             separator = None
 
         if should_get_live_logs:
             since = archive_border_dt
             try:
-                status = await self._kube_client.get_container_status(pod_name)
-                logger.info(f"5555555555 {label=} {status=}")  # noqa: G004
                 while True:
                     async with self.get_pod_live_log_reader(
                         pod_name,

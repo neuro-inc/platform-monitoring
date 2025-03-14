@@ -1372,7 +1372,7 @@ class TestLogReader:
             return False
 
         def run_log_reader(
-            name: str, delay: float = 0, timeout_s: float = 60.0, label: str = ""
+            name: str, delay: float = 0, timeout_s: float = 60.0
         ) -> None:
             async def coro() -> bytes | Exception:
                 await asyncio.sleep(delay)
@@ -1383,7 +1383,6 @@ class TestLogReader:
                             separator=b"===",
                             archive_delay_s=600.0,
                             stop_func=stop_func,
-                            label=label,
                         )
                         return await self._consume_log_reader(log_reader)
                 except Exception as e:
@@ -1413,16 +1412,15 @@ class TestLogReader:
         finally:
             done = True
             await kube_client.delete_pod(job_pod.name)
-        run_log_reader("deleting", label='deleting111')
+        run_log_reader("deleting")
         await kube_client.wait_pod_is_deleted(job_pod.name)
-        run_log_reader("deleted", label='deleting222')
+        run_log_reader("deleted")
 
         payloads: list[bytes] = await asyncio.gather(*tasks)  # type: ignore
 
         # Output for debugging
         for i, (name, payload) in enumerate(zip(names, payloads, strict=False)):
             print(f"{i}. {name}: {payload!r}")  # noqa: T201
-            logger.info("44444444 %d %s %r", i, name, payload)
 
         expected_payload = "".join(f"{i}\n" for i in range(1, 6)).encode()
         payload0 = payloads[0]
@@ -1488,14 +1486,13 @@ class TestLogReader:
         starts = []
         tasks = []
 
-        def run_log_reader(since: datetime, label) -> None:
+        def run_log_reader(since: datetime) -> None:
             async def coro() -> bytes:
                 log_reader = factory.get_pod_log_reader(
                     job_pod.name,
                     since=since,
                     separator=b"===",
                     archive_delay_s=20.0,
-                    label=label,
                 )
                 return await self._consume_log_reader(log_reader)
 
@@ -1518,8 +1515,8 @@ class TestLogReader:
             logger.info(f"status 2: {status}")  # noqa: G004
             started2 = status.started_at
             assert started2
-            run_log_reader(since=started2, label="label1")
-            run_log_reader(since=started2 + timedelta(seconds=2), label="label2")
+            run_log_reader(since=started2)
+            run_log_reader(since=started2 + timedelta(seconds=2))
 
             await kube_client.wait_pod_is_terminated(job_pod.name)
             status = await kube_client.get_container_status(job_pod.name)
@@ -1530,26 +1527,26 @@ class TestLogReader:
 
             await kube_client.wait_container_is_restarted(job_pod.name, 2)
             await kube_client.wait_pod_is_running(job_pod.name)
-            run_log_reader(since=finished1 - timedelta(seconds=4), label="label3")
-            run_log_reader(since=started2, label="label4")
-            run_log_reader(since=finished2 - timedelta(seconds=4), label="label5")
-            run_log_reader(since=finished2 + timedelta(seconds=2), label="label6")
+            run_log_reader(since=finished1 - timedelta(seconds=4))
+            run_log_reader(since=started2)
+            run_log_reader(since=finished2 - timedelta(seconds=4))
+            run_log_reader(since=finished2 + timedelta(seconds=2))
             await kube_client.wait_pod_is_terminated(job_pod.name)
             await asyncio.sleep(10)
         finally:
             await kube_client.delete_pod(job_pod.name)
         await kube_client.wait_pod_is_deleted(job_pod.name)
-        run_log_reader(since=finished1 - timedelta(seconds=4), label="label7")
-        run_log_reader(since=started2, label="label8")
-        run_log_reader(since=finished2 - timedelta(seconds=4), label="label9")
-        run_log_reader(since=finished2 + timedelta(seconds=2), label="label10")
+        run_log_reader(since=finished1 - timedelta(seconds=4))
+        run_log_reader(since=started2)
+        run_log_reader(since=finished2 - timedelta(seconds=4))
+        run_log_reader(since=finished2 + timedelta(seconds=2))
 
         payloads = await asyncio.gather(*tasks)
 
         # Output for debugging
         for i, (since, payload) in enumerate(zip(starts, payloads, strict=False)):
             print(f"{i}. [{since:%T}] {payload!r}")  # noqa: T201
-            logger.info("333333333333 %d [%s] %r", i, since, payload)
+
         assert payloads == [
             b"begin\nend\nbegin\nend\n",
             b"end\nbegin\nend\n",
