@@ -1536,7 +1536,7 @@ class LokiLogsService(BaseLogsService):
             ):
                 archive_border_dt = status.started_at
 
-            if status.is_pod_terminated and status.finished_at:
+            if status.is_terminated and status.finished_at:
                 archive_border_dt = status.finished_at
 
             # else:
