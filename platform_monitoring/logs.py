@@ -1558,6 +1558,9 @@ class LokiLogsService(BaseLogsService):
 
         has_archive = False
 
+        if start_dt >= archive_border_dt:
+            should_get_archive_logs = False
+
         if should_get_archive_logs:
             # while True:
             start = int(start_dt.timestamp() * 1_000_000_000)
