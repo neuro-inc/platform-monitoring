@@ -1413,9 +1413,9 @@ class TestLogReader:
         finally:
             done = True
             await kube_client.delete_pod(job_pod.name)
-        run_log_reader("deleting", label='deleting')
+        run_log_reader("deleting", label='deleting111')
         await kube_client.wait_pod_is_deleted(job_pod.name)
-        run_log_reader("deleted", label='deleting')
+        run_log_reader("deleted", label='deleting222')
 
         payloads: list[bytes] = await asyncio.gather(*tasks)  # type: ignore
 
