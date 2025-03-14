@@ -1559,19 +1559,19 @@ class LokiLogsService(BaseLogsService):
         has_archive = False
 
         if should_get_archive_logs:
-            while True:
-                start = int(start_dt.timestamp() * 1_000_000_000)
-                end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
-                async with self.get_pod_archive_log_reader(
-                    pod_name, start=start, end=end, timestamps=timestamps
-                ) as it:
-                    async for chunk in it:
-                        has_archive = True
-                        logger.info(
-                            f"123 Live log  {label=} {chunk=} "  # noqa: G004
-                            f"{start_dt=} {archive_border_dt=}"
-                        )  # noqa: G004
-                        yield chunk
+            # while True:
+            start = int(start_dt.timestamp() * 1_000_000_000)
+            end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
+            async with self.get_pod_archive_log_reader(
+                pod_name, start=start, end=end, timestamps=timestamps
+            ) as it:
+                async for chunk in it:
+                    has_archive = True
+                    logger.info(
+                        f"123 Live log  {label=} {chunk=} "  # noqa: G004
+                        f"{start_dt=} {archive_border_dt=}"
+                    )  # noqa: G004
+                    yield chunk
 
                 # last_status_created_at = status.created_at
                 # status = await self.get_container_status(pod_name)
