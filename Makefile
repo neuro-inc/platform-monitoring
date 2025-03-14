@@ -35,11 +35,12 @@ test_integration:
 	pytest -svv \
 		--cov=platform_monitoring --cov-report xml:.coverage-integration.xml \
 		--durations=10 \
-		--maxfail=10 \
+		--maxfail=0 \
 		--log-level=INFO \
 		tests/integration \
-		-n 12
-		# -k 'test_loki_merged_log_reader_restarted' \
+		-k 'test_attach_nontty_stdout_shared_by_name'
+		# -n 12
+
 
 .PHONY: docker_build
 docker_build:

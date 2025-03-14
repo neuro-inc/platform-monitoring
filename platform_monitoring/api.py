@@ -170,7 +170,7 @@ class MonitoringApiHandler:
     def get_archive_delay(self) -> float:
         if self._config.logs.storage_type == LogsStorageType.LOKI:
             assert self._config.loki
-            return self._config.loki.archive_delay_sec
+            return self._config.loki.archive_delay_s
         return DEFAULT_ARCHIVE_DELAY
 
     async def stream_log(self, request: Request) -> StreamResponse:
