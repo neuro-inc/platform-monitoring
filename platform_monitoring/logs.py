@@ -1561,8 +1561,9 @@ class LokiLogsService(BaseLogsService):
         if start_dt >= archive_border_dt:
             should_get_archive_logs = False
 
+        logger.info(f"444444444 {label=} {start_dt=} {archive_border_dt=}")  # noqa: G004
+
         if should_get_archive_logs:
-            # while True:
             start = int(start_dt.timestamp() * 1_000_000_000)
             end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
             async with self.get_pod_archive_log_reader(
@@ -1570,10 +1571,6 @@ class LokiLogsService(BaseLogsService):
             ) as it:
                 async for chunk in it:
                     has_archive = True
-                    logger.info(
-                        f"123 Live log  {label=} {chunk=} "  # noqa: G004
-                        f"{start_dt=} {archive_border_dt=}"
-                    )  # noqa: G004
                     yield chunk
 
                 # last_status_created_at = status.created_at
@@ -1603,11 +1600,6 @@ class LokiLogsService(BaseLogsService):
                             if separator:
                                 yield separator + b"\n"
                                 separator = None
-                                logger.info(
-                                    f"123 Live log  {label=} {chunk=} "  # noqa: G004
-                                    f"{label=} "  # noqa: G004
-                                    f"{archive_border_dt=}"
-                                )  # noqa: G004
                             yield chunk
 
                     if not status.can_restart:
@@ -1620,7 +1612,6 @@ class LokiLogsService(BaseLogsService):
                         interval_s=interval_s,
                     )
                     since = status.started_at
-                    logger.info(f"123 Live log {label=}  {since=} {status=}")  # noqa: G004
             except JobNotFoundException:
                 pass
 

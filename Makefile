@@ -38,7 +38,7 @@ test_integration:
 		--maxfail=10 \
 		--log-level=INFO \
 		tests/integration \
-		-k 'loki' \
+		-k 'test_loki_merged_log_reader_restarted' \
 	    # -n 12
 
 

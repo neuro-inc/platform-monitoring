@@ -1372,7 +1372,7 @@ class TestLogReader:
             return False
 
         def run_log_reader(
-            name: str, delay: float = 0, timeout_s: float = 60.0
+            name: str, delay: float = 0, timeout_s: float = 60.0, label: str = ""
         ) -> None:
             async def coro() -> bytes | Exception:
                 await asyncio.sleep(delay)
@@ -1383,6 +1383,7 @@ class TestLogReader:
                             separator=b"===",
                             archive_delay_s=600.0,
                             stop_func=stop_func,
+                            label=label,
                         )
                         return await self._consume_log_reader(log_reader)
                 except Exception as e:
@@ -1412,9 +1413,9 @@ class TestLogReader:
         finally:
             done = True
             await kube_client.delete_pod(job_pod.name)
-        run_log_reader("deleting")
+        run_log_reader("deleting", label='deleting')
         await kube_client.wait_pod_is_deleted(job_pod.name)
-        run_log_reader("deleted")
+        run_log_reader("deleted", label='deleting')
 
         payloads: list[bytes] = await asyncio.gather(*tasks)  # type: ignore
 
