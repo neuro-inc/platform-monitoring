@@ -39,7 +39,7 @@ test_integration:
 		--log-level=INFO \
 		tests/integration \
 		-n 12
-		# -k 'test_attach_nontty_stdout_shared_by_name'
+		# -k 'test_save_ok'
 		# -n 12
 
 

@@ -95,7 +95,6 @@ class JobsService:
         runtime_client = await self._container_runtime_client_registry.get(
             pod.status.host_ip
         )
-        # print(555555, runtime_client, pod.status.host_ip)
 
         try:
             async with runtime_client.commit(
@@ -105,7 +104,6 @@ class JobsService:
                 password=user.token,
             ) as commit:
                 async for chunk in commit:
-                    # print(66666, chunk)
                     yield chunk
         except ContainerNotFoundError:
             raise
@@ -198,7 +196,6 @@ class JobsService:
     ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         pod_name = self._kube_helper.get_job_pod_name(job)
         pod = await self._get_running_jobs_pod(pod_name)
-        # print(44444444, pod.status.pod_ip, port)
         reader, writer = await asyncio.open_connection(pod.status.pod_ip, port)
         return reader, writer
 

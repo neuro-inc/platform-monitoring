@@ -364,7 +364,6 @@ class MonitoringApiHandler:
         response.content_type = "application/x-ndjson"
         response.charset = encoding
         await response.prepare(request)
-
         try:
             async with self._jobs_service.save(job, user, image) as it:
                 async for chunk in it:

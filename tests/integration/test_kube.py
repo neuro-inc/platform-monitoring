@@ -543,7 +543,6 @@ class TestKubeClient:
             ):
                 pass
 
-    @pytest.mark.xfail()
     async def test_create_log_stream_creating(
         self, kube_client: MyKubeClient, job_pod: MyPodDescriptor
     ) -> None:
@@ -557,7 +556,7 @@ class TestKubeClient:
                 with pytest.raises(JobNotFoundException) as cm:
                     async with stream_cm:
                         pass
-                if "has not created" in str(cm.value):
+                if "has not been created" in str(cm.value):
                     break
                 await asyncio.sleep(0.1)
 

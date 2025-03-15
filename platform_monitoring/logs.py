@@ -1502,7 +1502,7 @@ class LokiLogsService(BaseLogsService):
         interval_s: float = 1.0,
         archive_delay_s: float = 5,
         debug: bool = False,
-        stop_func: Callable[[], Awaitable[bool]] | None = None
+        stop_func: Callable[[], Awaitable[bool]] | None = None,
     ) -> AsyncGenerator[bytes, None]:
         # what if job exist in API db but no starts in k8s?
 
