@@ -246,12 +246,12 @@ async def registry_config(request: FixtureRequest, in_minikube: bool) -> Registr
     if in_minikube:
         external_url = URL("http://registry.kube-system")
     else:
-        external_url = URL("http://registry.com:5000")
-    # await wait_for_service(
-    #     "registry",
-    #     URL(get_service_url("registry", namespace="kube-system")) / "v2/",
-    #     timeout_s=120,
-    # )
+        external_url = URL("http://localhost:5000")
+    await wait_for_service(
+        "registry",
+        URL(get_service_url("registry-lb", namespace="kube-system")) / "v2/",
+        timeout_s=120,
+    )
     return RegistryConfig(external_url)
 
 
