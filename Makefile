@@ -38,8 +38,7 @@ test_integration:
 		--maxfail=0 \
 		--log-level=INFO \
 		tests/integration \
-		-k "test_create_log_stream_creating"
-		# -n 12
+		-n 12
 
 
 .PHONY: docker_build
