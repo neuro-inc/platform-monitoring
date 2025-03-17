@@ -39,7 +39,7 @@ test_integration:
 		--log-level=INFO \
 		tests/integration \
 		-n 12
-		# -k 'test_save_ok'
+		# -k 'test_save_no_tag'
 		# -n 12
 
 

@@ -883,7 +883,6 @@ class TestSaveApi:
                 assert "Unexpected error: Cannot connect to host" in error, debug
                 assert "Connect call failed" in error, debug
 
-    # @pytest.mark.xfail()
     async def test_save_ok(
         self,
         monitoring_api: MonitoringApiEndpoints,

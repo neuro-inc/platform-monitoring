@@ -179,7 +179,6 @@ class TestJobsService:
 
         await self.wait_for_job(job, apolo_client, _condition, *args, **kwargs)
 
-    @pytest.mark.xfail()
     async def test_save_ok(
         self,
         job_factory: JobFactory,
@@ -199,7 +198,7 @@ class TestJobsService:
             tpu_software_version=None,
         )
         job = await job_factory(
-            "alpine:latest", "sh -c 'echo -n 123 > /test; sleep 300'", resources
+            "alpine:latest", "sh -c 'echo -n 123 > /test; sleep 15'", resources
         )
         await self.wait_for_job_running(job, apolo_client)
 
@@ -216,7 +215,6 @@ class TestJobsService:
         )
         await self.wait_for_job_succeeded(new_job, apolo_client, timeout_s=60.0)
 
-    @pytest.mark.xfail()
     async def test_save_no_tag(
         self,
         job_factory: JobFactory,
@@ -236,8 +234,7 @@ class TestJobsService:
             tpu_software_version=None,
         )
         job = await job_factory(
-            "alpine:latest",
-            f"sh -c 'echo -n {image_tag} > /test; sleep 300'",
+            "alpine:latest", f"sh -c 'echo -n {image_tag} > /test; sleep 15'",
             resources,
         )
         await self.wait_for_job_running(job, apolo_client)
@@ -284,7 +281,6 @@ class TestJobsService:
                 async for _ in it:
                     pass
 
-    @pytest.mark.xfail()
     async def test_save_push_failure(
         self,
         job_factory: JobFactory,

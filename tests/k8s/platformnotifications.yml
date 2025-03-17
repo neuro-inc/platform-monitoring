@@ -115,16 +115,67 @@ spec:
     targetPort: 8080
   selector:
     service: platformnotifications
+#---
+#apiVersion: v1
+#kind: Service
+#metadata:
+#  name: registry3
+#  namespace: kube-system
+#spec:
+#  type: LoadBalancer
+#  ports:
+#  - port: 5000
+#    targetPort: 5000
+#  selector:
+#    actual-registry: "true"
+#    kubernetes.io/minikube-addons: registry
+#---
+#apiVersion: v1
+#kind: Service
+#metadata:
+#  name: registry2
+#  namespace: kube-system
+#spec:
+#  type: ClusterIP
+#  ports:
+#  - port: 5000
+#    targetPort: 5000
+#  selector:
+#    actual-registry: "true"
+#    kubernetes.io/minikube-addons: registry
 ---
 apiVersion: v1
-kind: Service
+kind: ConfigMap
 metadata:
-  name: registry
+  name: coredns
   namespace: kube-system
-spec:
-  type: LoadBalancer
-  ports:
-  - port: 5000
-    targetPort: 5000
-  selector:
-    kubernetes.io/minikube-addons: registry
+data:
+  Corefile: |-
+    .:53 {
+        log
+        errors
+
+        rewrite name localhost:5000  registry.kube-system.svc.cluster.local
+
+        health {
+           lameduck 5s
+        }
+        ready
+        kubernetes cluster.local in-addr.arpa ip6.arpa {
+           pods insecure
+           fallthrough in-addr.arpa ip6.arpa
+           ttl 30
+        }
+        prometheus :9153
+        hosts {
+           192.168.49.1 host.minikube.internal
+           fallthrough
+        }
+        forward . /etc/resolv.conf {
+           max_concurrent 1000
+        }
+        cache 30
+        loop
+        reload
+        loadbalance
+    }

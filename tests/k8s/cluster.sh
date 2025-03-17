@@ -20,12 +20,10 @@ function k8s::start {
     minikube start \
         --vm-driver=docker \
         --container-runtime=containerd \
-        --install-addons=true \
-        --addons=registry \
         --wait=all \
         --wait-timeout=5m \
-        --disk-size=30g \
-        --nodes=1
+        --addons=registry \
+        --install-addons=true
     kubectl config use-context minikube
     kubectl get nodes -o name | xargs -I {} kubectl label {} --overwrite \
         platform.neuromation.io/nodepool=minikube
