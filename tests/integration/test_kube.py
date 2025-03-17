@@ -558,7 +558,7 @@ class TestKubeClient:
                     async with stream_cm:
                         pass
                 except Exception as cm:
-                    logger.info(111111111, cm)
+                    logger.info("111111111 %s", str(cm))
                 # if "has not been created" in str(cm.value):
                 #     break
                 await asyncio.sleep(0.1)
