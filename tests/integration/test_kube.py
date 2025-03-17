@@ -553,14 +553,12 @@ class TestKubeClient:
                 stream_cm = kube_client.create_pod_container_logs_stream(
                     pod_name=job_pod.name, container_name=job_pod.name
                 )
-                # with pytest.raises(JobNotFoundException) as cm:
                 try:
                     async with stream_cm:
                         pass
-                except Exception as cm:
-                    logger.info("111111111 %s", str(cm))
-                # if "has not been created" in str(cm.value):
-                #     break
+                except JobNotFoundException as exc:
+                    if "has not been created" in str(exc):
+                        break
                 await asyncio.sleep(0.1)
 
     async def test_create_log_stream(
