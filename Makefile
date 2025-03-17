@@ -35,12 +35,10 @@ test_integration:
 	pytest -svv \
 		--cov=platform_monitoring --cov-report xml:.coverage-integration.xml \
 		--durations=10 \
-		--maxfail=2 \
+		--maxfail=0 \
 		--log-level=INFO \
 		tests/integration \
 		-n 12
-		# -k 'test_save111_ok'
-		# -n 12
 
 
 .PHONY: docker_build
