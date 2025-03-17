@@ -883,7 +883,7 @@ class TestSaveApi:
                 assert "Unexpected error: Cannot connect to host" in error, debug
                 assert "Connect call failed" in error, debug
 
-    async def test_save111_ok(
+    async def test_save_ok(
         self,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,

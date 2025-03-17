@@ -41,6 +41,7 @@ function k8s::apply_all_configurations {
     kubectl apply -f tests/k8s/platformnotifications.yml
     kubectl apply -f tests/k8s/platformcontainerruntime.yml
     kubectl apply -f tests/k8s/platformmonitoring.yml
+    kubectl apply -f tests/k8s/extra-entities.yml
 
     # for local development you need to run also
     # kubectl create secret docker-registry ghcr-secret --docker-server=ghcr.io
@@ -48,28 +49,10 @@ function k8s::apply_all_configurations {
 }
 
 
-function k8s::wait_for_all_pods_running {
-
-    kubectl wait --for=condition=Ready deployment/loki-read  --timeout=200s
-    return 0
-
-#    local timeout=180
-#    local interval=5
-#    local end=$((SECONDS + timeout))
-#
-#    while [ $SECONDS -lt $end ]; do
-#        if [ "$(kubectl get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded -o jsonpath='{.items}')" == "[]" ]; then
-#            echo "All pods are Running or Succeeded."
-#            return 0
-#        fi
-#
-#        echo "Waiting for pods to be Running or Succeeded..."
-#        sleep $interval
-#    done
-#
-#    echo "Timeout waiting for pods to be Running or Succeeded."
-#    kubectl get pods -A
-#    return 1
+function k8s::wait_for_all_pods_ready {
+    ./tests/k8s/wait-pods-ready.sh 300 5
+#    kubectl wait --for=condition=Ready deployment/loki-read  --timeout=200s
+#    return 0
 }
 
 
@@ -115,6 +98,6 @@ case "${1:-}" in
         k8s::test
         ;;
     wait)
-        k8s::wait_for_all_pods_running
+        k8s::wait_for_all_pods_ready
         ;;
 esac

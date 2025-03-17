@@ -85,20 +85,11 @@ jobs:
         helm repo add grafana https://grafana.github.io/helm-charts
         make install_helm_loki
         make install_helm_alloy
-        make wait_k8s_running
+        make wait_k8s_pods_ready
         kubectl get pods -A
         make test_k8s
     - name: Run integration tests
-      run: |
-        make test_integration
-        echo "======== Loki alloy ========"
-        kubectl get pods --no-headers | grep '^alloy' | awk '{print $1}' | xargs -I {} kubectl logs {}
-        # echo "======== Loki write ========"
-        # kubectl get pods --no-headers | grep '^loki-write' | awk '{print $1}' | xargs -I {} kubectl logs {}
-        # echo "======== Loki backend ========"
-        # kubectl get pods --no-headers | grep '^loki-backend' | awk '{print $1}' | xargs -I {} kubectl logs {}
-        # echo "======== Loki read ========"
-        # kubectl get pods --no-headers | grep '^loki-read' | awk '{print $1}' | xargs -I {} kubectl logs {}
+      run: make test_integration
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5
       with:

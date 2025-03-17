@@ -123,7 +123,6 @@ class MyPodDescriptor:
                         "volumeMounts": [],
                         "terminationMessagePolicy": "FallbackToLogsOnError",
                         "args": ["true"],
-                        # "args": ["ls", "-la"],
                         "resources": {"limits": {"cpu": "100m", "memory": "128Mi"}},
                     }
                 ],

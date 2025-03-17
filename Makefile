@@ -65,7 +65,7 @@ apply_configuration_k8s:
 	./tests/k8s/cluster.sh apply
 
 
-wait_k8s_running:
+wait_k8s_pods_ready:
 	./tests/k8s/cluster.sh wait
 
 

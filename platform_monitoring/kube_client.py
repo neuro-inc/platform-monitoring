@@ -765,7 +765,6 @@ class KubeClient:
         async with self._client.get(
             url, headers=self._create_headers(), timeout=client_timeout
         ) as response:
-            # logger.info(f"{time.time()} _client.get requested")
             await self._check_response_status(response, job_id=pod_name)
             yield response.content
 

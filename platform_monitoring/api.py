@@ -181,7 +181,6 @@ class MonitoringApiHandler:
             request.query.get("archive_delay", self.get_archive_delay())
         )
         job = await self._resolve_job(request, "read")
-        # logger.info(f"1111 job: {job}")
         since = parse_date(since_str) if since_str else parse_date(job.created_at)
 
         pod_name = self._kube_helper.get_job_pod_name(job)
@@ -223,7 +222,6 @@ class MonitoringApiHandler:
             request.query.get("archive_delay", self.get_archive_delay())
         )
         job = await self._resolve_job(request, "read")
-        # logger.info(f"1111 job: {job}")
         since = parse_date(since_str) if since_str else parse_date(job.created_at)
 
         pod_name = self._kube_helper.get_job_pod_name(job)

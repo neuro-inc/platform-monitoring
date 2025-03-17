@@ -98,16 +98,9 @@ class EnvironConfigFactory:
         return LokiConfig(
             endpoint_url=URL(self._environ["NP_MONITORING_LOKI_ENDPOINT_URL"]),
         )
-        # return LokiConfig(
-        #     endpoint_url=URL(
-        #         "http://observability-loki-gateway.platform.svc.cluster.local"
-        #         # "http://localhost:3100"
-        #     ),
-        # )
 
     def _create_logs(self) -> LogsConfig:
         return LogsConfig(
-            # storage_type=LogsStorageType.LOKI,
             storage_type=LogsStorageType(
                 self._environ.get(
                     "NP_MONITORING_LOGS_STORAGE_TYPE",
