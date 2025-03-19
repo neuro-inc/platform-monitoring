@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import re
 import signal
 import textwrap
@@ -31,6 +32,9 @@ from platform_monitoring.config import Config, ContainerRuntimeConfig, PlatformA
 from .conftest import ApiAddress, create_local_app_server, random_str
 from .conftest_admin import ProjectUser
 from .conftest_kube import MyKubeClient
+
+
+logger = logging.getLogger(__name__)
 
 
 async def expect_prompt(ws: aiohttp.ClientWebSocketResponse) -> bytes:
@@ -1033,6 +1037,9 @@ class TestAttachApi:
             b"".join(f"\x01{i}\n".encode("ascii") for i in range(10))
             + b'\x03{"exit_code": 0}'
         )
+
+        logger.info("content: %s", content)
+
         assert b"".join(content) in expected
 
         await jobs_client.delete_job(job_id)
