@@ -70,7 +70,7 @@ spec:
           value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZGVudGl0eSI6ImNvbXB1dGUifQ.IJDlKCfbiuNGZH9Sh6p-CdUL5KxEK5JStqzfDk4-RAA
       - name: platformapi-migrations
         image: ghcr.io/neuro-inc/platformapi:latest
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         command: ["alembic", "upgrade", "head"]
         env:
         - name: NP_DB_POSTGRES_DSN
@@ -81,7 +81,7 @@ spec:
       containers:
       - name: platformapi
         image: ghcr.io/neuro-inc/platformapi:latest
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         env:
         - name: NP_LOG_LEVEL
           value: INFO
@@ -165,7 +165,7 @@ spec:
       containers:
       - name: platformapi
         image: ghcr.io/neuro-inc/platformapi:latest
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         command: [platform-api-poller]
         env:
         - name: NP_LOG_LEVEL

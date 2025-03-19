@@ -17,7 +17,7 @@ spec:
       containers:
       - name: platformauthapi
         image: ghcr.io/neuro-inc/platformauthapi:latest
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         env:
         - name: NP_LOG_LEVEL
           value: INFO

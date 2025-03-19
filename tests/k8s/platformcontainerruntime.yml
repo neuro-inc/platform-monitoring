@@ -16,7 +16,7 @@ spec:
       containers:
       - name: platform-container-runtime
         image: ghcr.io/neuro-inc/platformcontainerruntime:latest
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         ports:
         - containerPort: 9000
           hostPort: 9000
