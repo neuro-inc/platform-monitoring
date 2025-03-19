@@ -31,10 +31,12 @@ spec:
       labels:
         service: platformconfig
     spec:
+      imagePullSecrets:
+        - name: ghcr-secret
       initContainers:
       - name: platformconfig-migrations
-        image: platformconfig:latest
-        imagePullPolicy: Never
+        image: ghcr.io/neuro-inc/platformconfig:latest
+        imagePullPolicy: Always
         command: ["alembic", "upgrade", "head"]
         env:
         - name: NP_POSTGRES_HOST
@@ -49,8 +51,8 @@ spec:
           value: postgres
       containers:
       - name: platformconfig
-        image: platformconfig:latest
-        imagePullPolicy: Never
+        image: ghcr.io/neuro-inc/platformconfig:latest
+        imagePullPolicy: Always
         env:
         - name: NP_LOG_LEVEL
           value: INFO
@@ -102,6 +104,8 @@ spec:
           value: postgres
         - name: NP_CLOUD_PROVIDERS_PATH
           value: /etc/platform-config/config.yaml
+        - name: NP_CLUSTER_DNS_ZONE
+          value: https://kubernetes.default.svc
         volumeMounts:
         - name: cloud-providers
           mountPath: /etc/platform-config

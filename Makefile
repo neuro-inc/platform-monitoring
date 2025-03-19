@@ -32,21 +32,13 @@ test_unit:
 .PHONY: test_integration
 test_integration:
 	. venv/bin/activate; \
-	pytest -vv \
-		--maxfail=3 \
+	pytest -svv \
 		--cov=platform_monitoring --cov-report xml:.coverage-integration.xml \
 		--durations=10 \
+		--maxfail=0 \
+		--log-level=INFO \
 		tests/integration \
-		-m "not minikube"
-
-.PHONY: test_integration_minikube
-test_integration_minikube:
-	. venv/bin/activate; \
-	pytest -vv \
-		--log-cli-level=debug \
-		--durations=10 \
-		tests/integration \
-		-m minikube
+		-n 12
 
 
 .PHONY: docker_build
@@ -60,33 +52,34 @@ docker_build:
 		--build-arg PY_VERSION=$$(cat .python-version) \
 		-t platformmonitoringapi:latest .
 
-PLATFORMAPI_IMAGE = $(shell cat PLATFORMAPI_IMAGE)
-PLATFORMADMIN_IMAGE = $(shell cat PLATFORMADMIN_IMAGE)
-PLATFORMAUTHAPI_IMAGE = $(shell cat PLATFORMAUTHAPI_IMAGE)
-PLATFORMCONFIG_IMAGE = $(shell cat PLATFORMCONFIG_IMAGE)
-PLATFORMNOTIFICATIONS_IMAGE = $(shell cat PLATFORMNOTIFICATIONS_IMAGE)
-PLATFORMCONTAINERRUNTIME_IMAGE = $(shell cat PLATFORMCONTAINERRUNTIME_IMAGE)
 
-.PHONY: docker_pull_test_images
-docker_pull_test_images:
-	@eval $$(minikube docker-env); \
-		docker pull postgres:12.11; \
-		docker pull redis:4; \
-		docker pull curlimages/curl:8.4.0; \
-		docker pull fluent/fluent-bit:2.1.10; \
-		docker pull minio/minio:RELEASE.2023-10-14T05-17-22Z; \
-		docker pull lachlanevenson/k8s-kubectl:v1.10.3; \
-		docker pull $(PLATFORMAPI_IMAGE); \
-		docker pull $(PLATFORMADMIN_IMAGE); \
-		docker pull $(PLATFORMAUTHAPI_IMAGE); \
-		docker pull $(PLATFORMCONFIG_IMAGE); \
-		docker pull $(PLATFORMNOTIFICATIONS_IMAGE); \
-		docker pull $(PLATFORMCONTAINERRUNTIME_IMAGE); \
-		docker tag $(PLATFORMAPI_IMAGE) platformapi:latest; \
-		docker tag $(PLATFORMADMIN_IMAGE) platformadmin:latest; \
-		docker tag $(PLATFORMAUTHAPI_IMAGE) platformauthapi:latest; \
-		docker tag $(PLATFORMCONFIG_IMAGE) platformconfig:latest; \
-		docker tag $(PLATFORMNOTIFICATIONS_IMAGE) platformnotifications:latest; \
-		docker tag $(PLATFORMCONTAINERRUNTIME_IMAGE) platformcontainerruntime:latest
+install_k8s:
+	./tests/k8s/cluster.sh install
 
-include k8s.mk
+
+start_k8s:
+	./tests/k8s/cluster.sh start
+
+
+apply_configuration_k8s:
+	./tests/k8s/cluster.sh apply
+
+
+wait_k8s_pods_ready:
+	./tests/k8s/cluster.sh wait
+
+
+test_k8s:
+	./tests/k8s/cluster.sh test
+
+
+clean_k8s:
+	./tests/k8s/cluster.sh stop
+	docker stop $$(docker ps -a -q)
+	docker rm $$(docker ps -a -q)
+
+install_helm_loki:
+	helm upgrade loki grafana/loki -f tests/k8s/loki-values.yml --version 6.28.0 --install
+
+install_helm_alloy:
+	helm upgrade alloy grafana/alloy  -f tests/k8s/alloy-values.yml --version 0.12.3 --install

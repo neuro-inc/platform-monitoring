@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import subprocess
 import time
 from collections.abc import AsyncIterator, Callable, Iterator
@@ -17,7 +18,11 @@ from aiobotocore.client import AioBaseClient
 from elasticsearch import AsyncElasticsearch
 from yarl import URL
 
-from platform_monitoring.api import create_elasticsearch_client, create_s3_client
+from platform_monitoring.api import (
+    create_elasticsearch_client,
+    create_loki_client,
+    create_s3_client,
+)
 from platform_monitoring.config import (
     Config,
     ContainerRuntimeConfig,
@@ -25,6 +30,7 @@ from platform_monitoring.config import (
     KubeConfig,
     LogsConfig,
     LogsStorageType,
+    LokiConfig,
     PlatformApiConfig,
     PlatformAuthConfig,
     PlatformConfig,
@@ -34,6 +40,7 @@ from platform_monitoring.config import (
 )
 from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
 from platform_monitoring.logs import s3_client_error
+from platform_monitoring.loki_client import LokiClient
 
 
 logger = logging.getLogger(__name__)
@@ -105,7 +112,7 @@ async def wait_for_service(
             await asyncio.sleep(interval_s)
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 # TODO (A Yushkovskiy, 05-May-2019) This fixture should have scope="session" in order
 #  to be faster, but it causes mysterious errors `RuntimeError: Event loop is closed`
 async def platform_api_config(
@@ -126,7 +133,7 @@ async def platform_api_config(
     )
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 async def container_runtime_config(in_minikube: bool) -> ContainerRuntimeConfig:  # noqa: FBT001
     if in_minikube:
         url = URL("http://platform-container-runtime:9000")
@@ -150,7 +157,7 @@ async def container_runtime_client_registry(
         yield registry
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 # TODO (A Yushkovskiy, 05-May-2019) This fixture should have scope="session" in order
 #  to be faster, but it causes mysterious errors `RuntimeError: Event loop is closed`
 async def es_config(
@@ -184,7 +191,17 @@ async def es_client(
         yield es_client
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
+async def platform_monitoring_api_address(in_minikube: bool) -> "ApiAddress":  # noqa: FBT001
+    if in_minikube:
+        return ApiAddress("platform-monitoring", 8080)
+    url = URL(get_service_url("platform-monitoring"))
+    assert url.host
+    assert url.port
+    return ApiAddress(url.host, url.port)
+
+
+@pytest.fixture(scope="session")
 def s3_config() -> S3Config:
     s3_url = get_service_url(service_name="minio")
     return S3Config(
@@ -197,8 +214,20 @@ def s3_config() -> S3Config:
 
 
 @pytest.fixture()
+def loki_config() -> LokiConfig:
+    # return LokiConfig(endpoint_url=URL("http://loki-gateway.default.svc.cluster.local"))
+    return LokiConfig(endpoint_url=URL(get_service_url("loki-gt", namespace="default")))
+
+
+@pytest.fixture()
 async def s3_client(s3_config: S3Config) -> AsyncIterator[AioBaseClient]:
     async with create_s3_client(s3_config) as client:
+        yield client
+
+
+@pytest.fixture()
+async def loki_client(loki_config: LokiConfig) -> AsyncIterator[LokiClient]:
+    async with create_loki_client(loki_config) as client:
         yield client
 
 
@@ -212,16 +241,18 @@ async def s3_logs_bucket(s3_config: S3Config, s3_client: AioBaseClient) -> str:
     return s3_config.job_logs_bucket_name
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 async def registry_config(request: FixtureRequest, in_minikube: bool) -> RegistryConfig:  # noqa: FBT001
     if in_minikube:
         external_url = URL("http://registry.kube-system")
     else:
-        minikube_ip = request.getfixturevalue("minikube_ip")
-        external_url = URL(f"http://{minikube_ip}:5000")
-    await wait_for_service("docker registry", external_url / "v2/", timeout_s=120)
-    # localhost will be insecure by default, so use that
-    return RegistryConfig(URL("http://localhost:5000"))
+        external_url = URL("http://localhost:5000")
+    await wait_for_service(
+        "registry",
+        URL(get_service_url("registry-lb", namespace="kube-system")) / "v2/",
+        timeout_s=120,
+    )
+    return RegistryConfig(external_url)
 
 
 @pytest.fixture()
@@ -282,9 +313,10 @@ async def create_local_app_server(
     app: aiohttp.web.Application, port: int = 8080
 ) -> AsyncIterator[ApiAddress]:
     runner = aiohttp.web.AppRunner(app)
+    worker_id = int(os.getenv("PYTEST_XDIST_WORKER", "0").replace("gw", ""))
     try:
         await runner.setup()
-        api_address = ApiAddress("0.0.0.0", port)
+        api_address = ApiAddress("0.0.0.0", port + worker_id)
         site = aiohttp.web.TCPSite(runner, api_address.host, api_address.port)
         await site.start()
         yield api_address
@@ -297,7 +329,7 @@ def get_service_url(service_name: str, namespace: str = "default") -> str:
     # ignore type because the linter does not know that `pytest.fail` throws an
     # exception, so it requires to `return None` explicitly, so that the method
     # will return `Optional[List[str]]` which is incorrect
-    timeout_s = 60
+    timeout_s = 120
     interval_s = 10
 
     while timeout_s:

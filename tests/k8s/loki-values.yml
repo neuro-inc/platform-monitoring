@@ -1,0 +1,98 @@
+deploymentMode: SimpleScalable
+
+loki:
+  auth_enabled: false
+
+  commonConfig:
+    replication_factor: 1
+
+  rulerConfig:
+    storage:
+      type: s3
+      s3:
+        bucketnames: logs
+        insecure: false
+        region: minio
+        access_key_id: access_key
+        endpoint: http://minio:9000
+        s3forcepathstyle: true
+        secret_access_key: secret_key
+
+  schemaConfig:
+    configs:
+      - from: 2025-01-01
+        object_store: s3
+        store: tsdb
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+
+  storage:
+    bucketNames:
+      chunks: logs
+      ruler: logs
+      admin: logs
+    type: s3
+
+  storage_config:
+    aws:
+      bucketnames: logs
+      endpoint: http://minio:9000
+      region: minio
+      access_key_id: access_key
+      secret_access_key: secret_key
+      insecure: false
+      s3forcepathstyle: true
+
+test:
+  enabled: false
+lokiCanary:
+  enabled: false
+
+resultsCache:
+  allocatedMemory: 128
+chunksCache:
+  allocatedMemory: 512
+
+minio:
+  enabled: false
+
+gateway:
+  replicas: 1
+  resources:
+    requests:
+      memory: 50Mi
+      cpu: 10m
+    limits:
+      memory: 100Mi
+
+write:
+  replicas: 1
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 100m
+    limits:
+      memory: 1024Mi
+
+read:
+  replicas: 1
+  resources:
+    requests:
+      memory: 100Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+
+backend:
+  replicas: 1
+  resources:
+    requests:
+      memory: 100Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 100m
+
+# helm upgrade loki grafana/loki -f tests/k8s/loki-values.yml --install

@@ -13,6 +13,7 @@ from .config import (
     LogsCompactConfig,
     LogsConfig,
     LogsStorageType,
+    LokiConfig,
     PlatformApiConfig,
     PlatformAuthConfig,
     PlatformConfig,
@@ -44,6 +45,7 @@ class EnvironConfigFactory:
             platform_config=self._create_platform_config(),
             elasticsearch=self._create_elasticsearch(),
             s3=self._create_s3(),
+            loki=self._create_loki(),
             logs=self._create_logs(),
             kube=self._create_kube(),
             registry=self._create_registry(),
@@ -86,6 +88,25 @@ class EnvironConfigFactory:
             secret_access_key=self._environ.get("NP_MONITORING_S3_SECRET_ACCESS_KEY"),
             endpoint_url=URL(endpoint_url) if endpoint_url else None,
             job_logs_bucket_name=self._environ["NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME"],
+        )
+
+    def _create_loki(self) -> LokiConfig | None:
+        if not any(
+            key.startswith("NP_MONITORING_LOKI") for key in self._environ.keys()
+        ):
+            return None
+        archive_delay_s = int(
+            self._environ.get("NP_MONITORING_LOKI_ARCHIVE_DELAY_S", 5)
+        )
+        retention_period_s = int(
+            self._environ.get(
+                "NP_MONITORING_LOKI_RETENTION_PERIOD_S", 60 * 60 * 24 * 30
+            )
+        )
+        return LokiConfig(
+            endpoint_url=URL(self._environ["NP_MONITORING_LOKI_ENDPOINT_URL"]),
+            archive_delay_s=archive_delay_s,
+            retention_period_s=retention_period_s,
         )
 
     def _create_logs(self) -> LogsConfig:

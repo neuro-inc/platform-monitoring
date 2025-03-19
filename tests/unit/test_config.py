@@ -202,6 +202,21 @@ def test_create_with_s3_logs(environ: dict[str, Any]) -> None:
     assert config.logs == LogsConfig(storage_type=LogsStorageType.S3)
 
 
+def test_create_with_loki_logs(environ: dict[str, Any]) -> None:
+    environ["NP_MONITORING_LOGS_STORAGE_TYPE"] = "loki"
+    config = EnvironConfigFactory(environ).create()
+
+    assert config.logs == LogsConfig(storage_type=LogsStorageType.LOKI)
+    assert config.loki is None
+
+    environ["NP_MONITORING_LOKI_ENDPOINT_URL"] = "http://localhost:3100"
+    config = EnvironConfigFactory(environ).create()
+
+    assert config.loki
+    assert config.loki.endpoint_url == URL("http://localhost:3100")
+    assert config.loki.retention_period_s
+
+
 def test_create_with_logs_interval_custom(environ: dict[str, Any]) -> None:
     environ["NP_MONITORING_LOGS_CLEANUP_INTERVAL_SEC"] = "10"
 

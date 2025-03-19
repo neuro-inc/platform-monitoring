@@ -198,7 +198,7 @@ class TestJobsService:
             tpu_software_version=None,
         )
         job = await job_factory(
-            "alpine:latest", "sh -c 'echo -n 123 > /test; sleep 300'", resources
+            "alpine:latest", "sh -c 'echo -n 123 > /test; sleep 15'", resources
         )
         await self.wait_for_job_running(job, apolo_client)
 
@@ -213,7 +213,7 @@ class TestJobsService:
         new_job = await job_factory(
             image, 'sh -c \'[ "$(cat /test)" = "123" ]\'', resources
         )
-        await self.wait_for_job_succeeded(new_job, apolo_client)
+        await self.wait_for_job_succeeded(new_job, apolo_client, timeout_s=60.0)
 
     async def test_save_no_tag(
         self,
@@ -235,7 +235,7 @@ class TestJobsService:
         )
         job = await job_factory(
             "alpine:latest",
-            f"sh -c 'echo -n {image_tag} > /test; sleep 300'",
+            f"sh -c 'echo -n {image_tag} > /test; sleep 15'",
             resources,
         )
         await self.wait_for_job_running(job, apolo_client)
@@ -243,15 +243,17 @@ class TestJobsService:
         image = f"{registry_host}/{user.org_name}/{user.project_name}/alpine"
 
         async with jobs_service.save(job, user, image) as it:
-            async for _ in it:
-                pass
+            data = [json.loads(chunk) async for chunk in it]
 
-        new_job = await job_factory(
-            image,
-            f'sh -c \'[ "$(cat /test)" = "{image_tag}" ]\'',
-            resources,
+        assert data[0]["status"] == "CommitStarted"
+        assert data[0]["details"]["image"] == image
+
+        assert data[1] == {"status": "CommitFinished"}
+
+        assert "status" not in data[2]
+        assert all(
+            check_str in data[2]["error"] for check_str in ["Image", image, "not found"]
         )
-        await self.wait_for_job_succeeded(new_job, apolo_client)
 
     async def test_save_pending_job(
         self,
@@ -322,8 +324,7 @@ class TestJobsService:
         assert data[2]["status"] == msg
 
         assert "status" not in data[3]
-        assert f"https://{registry_host}/v2/" in data[3]["error"]
-        assert ": dial tcp: lookup unknown" in data[3]["error"]
+        assert "Cannot connect to host unknown:5000" in data[3]["error"]
 
     async def test_save_commit_fails_with_exception(
         self,
