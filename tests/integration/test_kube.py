@@ -555,10 +555,13 @@ class TestKubeClient:
                 )
                 try:
                     async with stream_cm:
-                        pass
+                        async with stream_cm as stream:
+                            payload = await stream.read()
+                            logger.info(payload)
                 except JobNotFoundException as exc:
                     if "has not been created" in str(exc):
                         break
+                    logger.info(str(exc))
                 await asyncio.sleep(0.1)
 
     async def test_create_log_stream(
