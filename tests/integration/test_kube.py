@@ -555,9 +555,7 @@ class TestKubeClient:
                 )
                 try:
                     async with stream_cm:
-                        async with stream_cm as stream:
-                            payload = await stream.read()
-                            logger.info(payload)
+                        pass
                 except JobNotFoundException as exc:
                     if "has not been created" in str(exc):
                         break
