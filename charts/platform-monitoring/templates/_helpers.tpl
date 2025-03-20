@@ -142,7 +142,6 @@ release: {{ .Release.Name | quote }}
 {{- end }}
 {{- end -}}
 
-
 {{- define "platformMonitoring.volumes.common" -}}
 - name: kube-api-data
   projected:
