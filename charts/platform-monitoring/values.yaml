@@ -87,7 +87,7 @@ logs:
         memory: "512Mi"
 
   persistence:
-    type: es # Possible values: es, s3
+    type: loki # Possible values: es, s3, loki
 
     keySecret: ""
 
@@ -101,5 +101,10 @@ logs:
     #   secretAccessKey: {} # optional
     #   bucket: logs
     #   endpoint: ""
+
+    # loki:
+    #   endpoint: http://loki-gateway
+    #   archiveDelay: "5" # 5 seconds
+    #   retentionPeriodS: "7776000" # 90 days
 
 priorityClassName: ""
