@@ -128,6 +128,20 @@ release: {{ .Release.Name | quote }}
 {{- end }}
 {{- end -}}
 
+{{- define "platformMonitoring.env.loki" -}}
+{{- $logsPersistence := .Values.logs.persistence -}}
+{{- if eq $logsPersistence.type "loki" }}
+- name: NP_MONITORING_LOGS_STORAGE_TYPE
+  value: loki
+- name: NP_MONITORING_LOKI_ENDPOINT_URL
+  value: {{ $logsPersistence.loki.endpoint | quote }}
+- name: NP_MONITORING_LOKI_ARCHIVE_DELAY_S
+  value: {{ $logsPersistence.loki.archiveDelay | quote }}
+- name: NP_MONITORING_LOKI_RETENTION_PERIOD_S
+  value: {{ $logsPersistence.loki.retentionPeriodS | quote }}
+{{- end }}
+{{- end -}}
+
 {{- define "platformMonitoring.volumes.common" -}}
 - name: kube-api-data
   projected:
