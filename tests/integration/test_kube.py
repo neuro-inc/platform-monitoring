@@ -1200,14 +1200,16 @@ class TestLogReader:
         await kube_client.wait_pod_is_terminated(
             kube_client.namespace, pod_name, timeout_s=120)
 
-        log_reader = factory.get_pod_log_reader(pod_name, archive_delay_s=10.0)
+        log_reader = factory.get_pod_log_reader(
+            kube_client.namespace, pod_name, archive_delay_s=10.0)
         payload = await self._consume_log_reader(log_reader)
         assert payload == b"hello\n"
 
         await asyncio.sleep(10)
         await kube_client.delete_pod(job_pod.name)
 
-        log_reader = factory.get_pod_log_reader(pod_name, archive_delay_s=10.0)
+        log_reader = factory.get_pod_log_reader(
+            kube_client.namespace, pod_name, archive_delay_s=10.0)
         payload = await self._consume_log_reader(log_reader)
         assert payload == b"hello\n"
 
@@ -1266,6 +1268,7 @@ class TestLogReader:
                 try:
                     async with asyncio.timeout(timeout_s):
                         log_reader = factory.get_pod_log_reader(
+                            kube_client.namespace,
                             job_pod.name,
                             separator=b"===",
                             archive_delay_s=600.0,
@@ -1359,6 +1362,7 @@ class TestLogReader:
                 try:
                     async with asyncio.timeout(timeout_s):
                         log_reader = factory.get_pod_log_reader(
+                            kube_client.namespace,
                             job_pod.name,
                             separator=b"===",
                             archive_delay_s=600.0,
@@ -1457,6 +1461,7 @@ class TestLogReader:
                 try:
                     async with asyncio.timeout(timeout_s):
                         log_reader = factory.get_pod_log_reader(
+                            kube_client.namespace,
                             job_pod.name,
                             separator=b"===",
                             archive_delay_s=600.0,
@@ -1574,6 +1579,7 @@ class TestLogReader:
         def run_log_reader(since: datetime) -> None:
             async def coro() -> bytes:
                 log_reader = factory.get_pod_log_reader(
+                    kube_client.namespace,
                     job_pod.name,
                     since=since,
                     separator=b"===",
@@ -1704,7 +1710,10 @@ class TestLogReader:
             await kube_client.wait_pod_is_terminated(
                 kube_client.namespace, job_pod.name)
             log_reader = factory.get_pod_log_reader(
-                job_pod.name, separator=b"===", archive_delay_s=30.0
+                kube_client.namespace,
+                job_pod.name,
+                separator=b"===",
+                archive_delay_s=30.0,
             )
             payload = (await self._consume_log_reader(log_reader, delay=0.001)).decode()
         finally:
