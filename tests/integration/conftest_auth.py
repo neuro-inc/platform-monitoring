@@ -6,8 +6,7 @@ from neuro_auth_client import AuthClient
 from yarl import URL
 
 from platform_monitoring.config import PlatformAuthConfig
-
-from .conftest import get_service_url
+from tests.integration.conftest import get_service_url
 
 
 @pytest.fixture(scope="session")

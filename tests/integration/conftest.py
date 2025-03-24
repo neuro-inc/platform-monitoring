@@ -113,8 +113,6 @@ async def wait_for_service(
 
 
 @pytest.fixture(scope="session")
-# TODO (A Yushkovskiy, 05-May-2019) This fixture should have scope="session" in order
-#  to be faster, but it causes mysterious errors `RuntimeError: Event loop is closed`
 async def platform_api_config(
     request: FixtureRequest,
     in_minikube: bool,  # noqa: FBT001
@@ -158,8 +156,6 @@ async def container_runtime_client_registry(
 
 
 @pytest.fixture(scope="session")
-# TODO (A Yushkovskiy, 05-May-2019) This fixture should have scope="session" in order
-#  to be faster, but it causes mysterious errors `RuntimeError: Event loop is closed`
 async def es_config(
     request: FixtureRequest,
     in_minikube: bool,  # noqa: FBT001
