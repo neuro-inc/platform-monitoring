@@ -595,12 +595,13 @@ class KubeClient:
     def _pods_url(self) -> str:
         return f"{self._api_v1_url}/pods"
 
-    @property
-    def _namespaced_pods_url(self) -> str:
-        return f"{self._namespace_url}/pods"
+    def _generate_pods_url(self, namespace: str) -> str:
+        url = self._generate_namespace_url(namespace)
+        return f"{url}/pods"
 
-    def _generate_pod_url(self, pod_name: str) -> str:
-        return f"{self._namespaced_pods_url}/{pod_name}"
+    def _generate_pod_url(self, namespace: str, pod_name: str) -> str:
+        url = self._generate_pods_url(namespace)
+        return f"{url}/{pod_name}"
 
     def _generate_node_proxy_url(self, name: str, port: int) -> str:
         return f"{self._api_v1_url}/nodes/{name}:{port}/proxy"
@@ -615,9 +616,14 @@ class KubeClient:
         proxy_url = self._generate_node_proxy_url(name, self._nvidia_dcgm_port)
         return f"{proxy_url}/metrics"
 
-    def _generate_pod_log_url(self, pod_name: str, container_name: str) -> str:
-        url = self._generate_pod_url(pod_name)
-        return f"{url}/log?container={pod_name}&follow=true"
+    def _generate_pod_log_url(
+        self,
+        namespace: str,
+        pod_name: str,
+        container_name: str
+    ) -> str:
+        url = self._generate_pod_url(namespace, pod_name)
+        return f"{url}/log?container={container_name}&follow=true"
 
     def _create_headers(
         self, headers: dict[str, t.Any] | None = None
@@ -636,29 +642,42 @@ class KubeClient:
             logger.debug("k8s response payload: %s", payload)
             return payload
 
-    async def get_raw_pod(self, pod_name: str) -> dict[str, t.Any]:
-        url = self._generate_pod_url(pod_name)
+    async def get_raw_pod(self, namespace: str, pod_name: str) -> dict[str, t.Any]:
+        url = self._generate_pod_url(namespace, pod_name)
         payload = await self._request(method="GET", url=url)
         self._assert_resource_kind(
             expected_kind="Pod", payload=payload, job_id=pod_name
         )
         return payload
 
-    async def get_pod(self, pod_name: str) -> Pod:
-        payload = await self.get_raw_pod(pod_name)
+    async def get_pod(self, namespace: str, pod_name: str) -> Pod:
+        payload = await self.get_raw_pod(namespace, pod_name)
         return Pod.from_primitive(payload)
 
-    async def _get_raw_container_state(self, pod_name: str) -> dict[str, t.Any]:
-        pod = await self.get_pod(pod_name)
+    async def _get_raw_container_state(
+        self,
+        namespace: str,
+        pod_name: str
+    ) -> dict[str, t.Any]:
+        pod = await self.get_pod(namespace, pod_name)
         container_status = pod.get_container_status(pod_name)
         return {**container_status.state}
 
-    async def get_container_status(self, name: str) -> ContainerStatus:
-        pod = await self.get_pod(name)
-        return pod.get_container_status(name)
+    async def get_container_status(
+        self,
+        namespace: str,
+        pod_name: str
+    ) -> ContainerStatus:
+        pod = await self.get_pod(namespace, pod_name)
+        return pod.get_container_status(pod_name)
 
     async def wait_pod_is_running(
-        self, pod_name: str, *, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
+        self,
+        namespace: str,
+        pod_name: str,
+        *,
+        timeout_s: float = 10.0 * 60,
+        interval_s: float = 1.0
     ) -> ContainerStatus:
         """Wait until the pod transitions to the running state.
 
@@ -667,7 +686,7 @@ class KubeClient:
         """
         async with asyncio.timeout(timeout_s):
             while True:
-                status = await self.get_container_status(pod_name)
+                status = await self.get_container_status(namespace, pod_name)
                 if status.is_running:
                     return status
                 if status.is_terminated and not status.can_restart:
@@ -675,7 +694,12 @@ class KubeClient:
                 await asyncio.sleep(interval_s)
 
     async def wait_pod_is_not_waiting(
-        self, pod_name: str, *, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
+        self,
+        namespace: str,
+        pod_name: str,
+        *,
+        timeout_s: float = 10.0 * 60,
+        interval_s: float = 1.0
     ) -> ContainerStatus:
         """Wait until the pod transitions from the waiting state.
 
@@ -684,13 +708,17 @@ class KubeClient:
         """
         async with asyncio.timeout(timeout_s):
             while True:
-                status = await self.get_container_status(pod_name)
+                status = await self.get_container_status(namespace, pod_name)
                 if not status.is_waiting:
                     return status
                 await asyncio.sleep(interval_s)
 
     async def get_pod_container_stats(
-        self, node_name: str, pod_name: str, container_name: str
+        self,
+        node_name: str,
+        namespace: str,
+        pod_name: str,
+        container_name: str,
     ) -> PodContainerStats | None:
         """
         https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/apis/stats/v1alpha1/types.go
@@ -700,7 +728,7 @@ class KubeClient:
             payload = await self._request(method="GET", url=url)
             summary = StatsSummary(payload)
             return summary.get_pod_container_stats(
-                self._namespace, pod_name, container_name
+                namespace, pod_name, container_name
             )
         except JobNotFoundException:
             return None
@@ -711,6 +739,7 @@ class KubeClient:
     async def get_pod_container_gpu_stats(
         self,
         node_name: str,
+        namespace: str,
         pod_name: str,
         container_name: str,
     ) -> PodContainerGPUStats | None:
@@ -725,15 +754,15 @@ class KubeClient:
                 text = await resp.text()
                 gpu_counters = GPUCounters.parse(text)
             return gpu_counters.get_pod_container_stats(
-                self._namespace, pod_name, container_name
+                namespace, pod_name, container_name
             )
         except aiohttp.ClientError as e:
             logger.exception(e)
         return None
 
-    async def check_pod_exists(self, pod_name: str) -> bool:
+    async def check_pod_exists(self, namespace: str, pod_name: str) -> bool:
         try:
-            await self.get_raw_pod(pod_name)
+            await self.get_raw_pod(namespace, pod_name)
             return True
         except JobNotFoundException:
             return False
@@ -741,6 +770,7 @@ class KubeClient:
     @asynccontextmanager
     async def create_pod_container_logs_stream(
         self,
+        namespace: str,
         pod_name: str,
         container_name: str,
         *,
@@ -750,7 +780,7 @@ class KubeClient:
         since: datetime | None = None,
         timestamps: bool = False,
     ) -> AsyncIterator[aiohttp.StreamReader]:
-        url = self._generate_pod_log_url(pod_name, container_name)
+        url = self._generate_pod_log_url(namespace, pod_name, container_name)
         if previous:
             url = f"{url}&previous=true"
         if since is not None:
@@ -771,11 +801,16 @@ class KubeClient:
     async def get_pods(
         self,
         *,
+        namespace: str | None = None,
         all_namespaces: bool = False,
         label_selector: str | None = None,
         field_selector: str | None = None,
     ) -> list[Pod]:
-        url = self._pods_url if all_namespaces else self._namespaced_pods_url
+        if all_namespaces:
+            url = self._pods_url
+        else:
+            assert namespace
+            url = self._generate_pods_url(namespace)
         params = {}
         if label_selector:
             params["labelSelector"] = label_selector
@@ -996,7 +1031,7 @@ class KubeTelemetry(Telemetry):
         self._container_name = container_name
 
     async def get_latest_stats(self) -> JobStats | None:
-        pod = await self._kube_client.get_pod(self._pod_name)
+        pod = await self._kube_client.get_pod(self._namespace_name, self._pod_name)
         if not pod.spec.node_name:
             return None
         if pod.resource_requests.has_gpu:
@@ -1005,7 +1040,7 @@ class KubeTelemetry(Telemetry):
 
     async def _get_latest_cpu_pod_stats(self, node_name: str) -> JobStats | None:
         pod_stats = await self._kube_client.get_pod_container_stats(
-            node_name, self._pod_name, self._container_name
+            node_name, self._namespace_name, self._pod_name, self._container_name
         )
         if not pod_stats:
             return None
@@ -1014,12 +1049,12 @@ class KubeTelemetry(Telemetry):
     async def _get_latest_gpu_pod_stats(self, node_name: str) -> JobStats | None:
         pod_stats_task = asyncio.create_task(
             self._kube_client.get_pod_container_stats(
-                node_name, self._pod_name, self._container_name
+                node_name, self._namespace_name, self._pod_name, self._container_name
             )
         )
         pod_gpu_stats_task = asyncio.create_task(
             self._kube_client.get_pod_container_gpu_stats(
-                node_name, self._pod_name, self._container_name
+                node_name, self._namespace_name, self._pod_name, self._container_name
             )
         )
         await asyncio.wait(

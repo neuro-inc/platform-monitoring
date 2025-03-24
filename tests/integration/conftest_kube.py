@@ -22,14 +22,15 @@ class MyKubeClient(KubeClient):
     # TODO (A Yushkovskiy, 30-May-2019) delete pods automatically
 
     async def create_pod(self, job_pod_descriptor: dict[str, Any]) -> str:
+        url = self._generate_pods_url(namespace=self._namespace)
         payload = await self._request(
-            method="POST", url=self._namespaced_pods_url, json=job_pod_descriptor
+            method="POST", url=url, json=job_pod_descriptor
         )
         self._assert_resource_kind(expected_kind="Pod", payload=payload)
         return self._parse_pod_status(payload)
 
     async def delete_pod(self, pod_name: str, *, force: bool = False) -> str:
-        url = self._generate_pod_url(pod_name)
+        url = self._generate_pod_url(self._namespace, pod_name)
         request_payload = None
         if force:
             request_payload = {
@@ -49,6 +50,7 @@ class MyKubeClient(KubeClient):
 
     async def wait_pod_is_terminated(
         self,
+        namespace: str,
         pod_name: str,
         timeout_s: float = 10.0 * 60,
         interval_s: float = 1.0,
@@ -59,7 +61,7 @@ class MyKubeClient(KubeClient):
             async with asyncio.timeout(timeout_s):
                 while True:
                     try:
-                        state = await self._get_raw_container_state(pod_name)
+                        state = await self._get_raw_container_state(namespace, pod_name)
                     except JobNotFoundException:
                         # job's pod does not exist: maybe it's already garbage-collected
                         if allow_pod_not_exists:
@@ -74,13 +76,14 @@ class MyKubeClient(KubeClient):
 
     async def wait_pod_is_deleted(
         self,
+        namespace: str,
         pod_name: str,
         timeout_s: float = 10.0 * 60,
         interval_s: float = 1.0,
     ) -> None:
         try:
             async with asyncio.timeout(timeout_s):
-                while await self.check_pod_exists(pod_name):
+                while await self.check_pod_exists(namespace, pod_name):
                     await asyncio.sleep(interval_s)
         except TimeoutError:
             pytest.fail(f"Pod {pod_name} has not deleted yet")
@@ -91,6 +94,7 @@ class MyKubeClient(KubeClient):
 
     async def wait_container_is_restarted(
         self,
+        namespace: str,
         name: str,
         count: int = 1,
         *,
@@ -100,7 +104,7 @@ class MyKubeClient(KubeClient):
         try:
             async with asyncio.timeout(timeout_s):
                 while True:
-                    status = await self.get_container_status(name)
+                    status = await self.get_container_status(namespace, name)
                     if status.restart_count >= count:
                         break
                     await asyncio.sleep(interval_s)
