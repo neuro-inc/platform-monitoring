@@ -70,28 +70,62 @@ class LokiClient:
     def _query_range_url(self) -> URL:
         return self._api_v1_url / "query_range"
 
+    @property
+    def _labels_url(self) -> URL:
+        return self._api_v1_url / "labels"
+
+    def _label_values_url(self, label: str) -> URL:
+        return self._api_v1_url / "label" / label / "values"
+
     async def _request(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         assert self._session
+        self._validate_range(kwargs.get("params", {}))
         async with self._session.request(*args, **kwargs) as response:
             payload = await response.json()
             logger.debug("Loki response payload: %s", payload)
             return payload
 
-    async def query_range(self, **params: Any) -> dict[str, Any]:
-        params = {k: v for k, v in params.items() if v is not None}  # TODO
-        start, end = params.get("start"), params.get("end")
+    @staticmethod
+    def _validate_range(params: dict[str, Any]) -> None | NoReturn:
+        start = params.get("start")
+        end = params.get("end")
         if start and end and int(start) > int(end):
             exc_text = f"Invalid range: {start=} > {end=}"
             raise ValueError(exc_text)
+        return None
+
+    @staticmethod
+    def _build_params(**kwargs: Any) -> dict[str, Any]:
+        return {k: v for k, v in kwargs.items() if v is not None}
+
+    async def query_range(
+        self,
+        *,
+        query: str,
+        start: str | int,
+        end: str | int | None = None,
+        direction: str = "forward",
+        prefix: bool = False,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        params = self._build_params(
+            query=query, start=start, end=end, direction=direction, limit=limit
+        )
+
         url = str(self._query_range_url)
         result = await self._request(method="GET", url=url, params=params)
-        # comment
+
+        if prefix:
+            for log_data in result["data"]["result"]:
+                for log in log_data["values"]:
+                    log[1] = f"[{log_data['stream']['service_name']}] {log[1]}"
+
         data_result = sorted(
             chain.from_iterable(
                 log_data["values"] for log_data in result["data"]["result"]
             ),
             key=itemgetter(0),
-            reverse=params.get("direction") == "backward",
+            reverse=direction == "backward",
         )
 
         result["data"]["result"] = data_result
@@ -100,17 +134,23 @@ class LokiClient:
 
     async def query_range_page_iterate(
         self,
+        *,
         query: str,
-        start: str | int | None,
-        end: str | int | None,
+        start: str | int,
+        end: str | int | None = None,
         direction: str = "forward",
+        prefix: bool = False,
         limit: int = 100,
     ) -> AsyncIterator[dict[str, Any]]:
         while True:
             response = await self.query_range(
-                query=query, start=start, end=end, limit=limit, direction=direction
+                query=query,
+                start=start,
+                end=end,
+                limit=limit,
+                direction=direction,
+                prefix=prefix,
             )
-
             yield response
 
             if response["data"]["stats"]["summary"]["totalEntriesReturned"] < limit:
@@ -120,3 +160,25 @@ class LokiClient:
                 start = int(response["data"]["result"][-1][0]) + 1
             else:
                 end = int(response["data"]["result"][-1][0]) - 1
+
+    async def labels(
+        self, query: str, start: str | int, end: str | int | None
+    ) -> dict[str, Any]:
+        return await self._request(
+            method="GET",
+            url=str(self._labels_url),
+            params=self._build_params(query=query, start=start, end=end),
+        )
+
+    async def label_values(
+        self,
+        label: str,
+        query: str,
+        start: str | int,
+        end: str | int | None = None,
+    ) -> dict[str, Any]:
+        return await self._request(
+            method="GET",
+            url=str(self._label_values_url(label)),
+            params=self._build_params(query=query, start=start, end=end),
+        )

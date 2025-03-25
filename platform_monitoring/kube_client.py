@@ -201,6 +201,7 @@ class PodRestartPolicy(enum.StrEnum):
 
 @dataclass(frozen=True)
 class Container:
+    name: str
     resource_requests: ContainerResources
     stdin: bool | None
     stdin_once: bool | None
@@ -209,6 +210,7 @@ class Container:
     @classmethod
     def from_primitive(cls, payload: JSON) -> t.Self:
         return cls(
+            name=payload["name"],
             resource_requests=ContainerResources.from_primitive(
                 payload.get("resources", {}).get("requests", {})
             ),
@@ -480,7 +482,7 @@ class KubeClient:
         trace_configs: list[aiohttp.TraceConfig] | None = None,
     ) -> None:
         self._base_url = base_url
-        self._namespace = namespace
+        self._namespace = "platform"  # namespace
 
         self._cert_authority_data_pem = cert_authority_data_pem
         self._cert_authority_path = cert_authority_path
@@ -617,7 +619,7 @@ class KubeClient:
 
     def _generate_pod_log_url(self, pod_name: str, container_name: str) -> str:
         url = self._generate_pod_url(pod_name)
-        return f"{url}/log?container={pod_name}&follow=true"
+        return f"{url}/log?container={container_name}&follow=true"
 
     def _create_headers(
         self, headers: dict[str, t.Any] | None = None
@@ -653,21 +655,32 @@ class KubeClient:
         container_status = pod.get_container_status(pod_name)
         return {**container_status.state}
 
-    async def get_container_status(self, name: str) -> ContainerStatus:
+    async def get_container_status(
+        self, name: str, container_name: str | None = None
+    ) -> ContainerStatus:
         pod = await self.get_pod(name)
-        return pod.get_container_status(name)
+        if not container_name:
+            container_name = name
+        return pod.get_container_status(container_name)
 
     async def wait_pod_is_running(
-        self, pod_name: str, *, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
+        self,
+        pod_name: str,
+        *,
+        container_name: str | None = None,
+        timeout_s: float = 10.0 * 60,
+        interval_s: float = 1.0,
     ) -> ContainerStatus:
         """Wait until the pod transitions to the running state.
 
         Raise JobNotFoundException if there is no such pod.
         Raise asyncio.TimeoutError if it takes too long for the pod.
         """
+        if not container_name:
+            container_name = pod_name
         async with asyncio.timeout(timeout_s):
             while True:
-                status = await self.get_container_status(pod_name)
+                status = await self.get_container_status(pod_name, container_name)
                 if status.is_running:
                     return status
                 if status.is_terminated and not status.can_restart:
@@ -675,16 +688,23 @@ class KubeClient:
                 await asyncio.sleep(interval_s)
 
     async def wait_pod_is_not_waiting(
-        self, pod_name: str, *, timeout_s: float = 10.0 * 60, interval_s: float = 1.0
+        self,
+        pod_name: str,
+        *,
+        container_name: str | None = None,
+        timeout_s: float = 10.0 * 60,
+        interval_s: float = 1.0,
     ) -> ContainerStatus:
         """Wait until the pod transitions from the waiting state.
 
         Raise JobNotFoundException if there is no such pod.
         Raise asyncio.TimeoutError if it takes too long for the pod.
         """
+        if not container_name:
+            container_name = pod_name
         async with asyncio.timeout(timeout_s):
             while True:
-                status = await self.get_container_status(pod_name)
+                status = await self.get_container_status(pod_name, container_name)
                 if not status.is_waiting:
                     return status
                 await asyncio.sleep(interval_s)

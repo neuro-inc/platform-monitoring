@@ -36,5 +36,19 @@ spec:
           serviceName: {{ include "platformMonitoring.fullname" $ }}
           servicePort: http
           {{- end }}
+      - path: /api/v1/apps
+        {{- if $ingressApiIsStable }}
+        pathType: Prefix
+        {{- end }}
+        backend:
+          {{- if $ingressApiIsStable }}
+          service:
+            name: {{ include "platformMonitoring.fullname" $ }}
+            port:
+              name: http
+          {{- else }}
+          serviceName: {{ include "platformMonitoring.fullname" $ }}
+          servicePort: http
+          {{- end }}
   {{- end }}
 {{- end }}
