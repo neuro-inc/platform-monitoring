@@ -4,6 +4,7 @@ import logging
 import random
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
+from datetime import UTC, datetime, timedelta
 from importlib.metadata import version
 from typing import Any
 
@@ -83,8 +84,12 @@ KUBE_CLIENT_KEY = aiohttp.web.AppKey("kube_client", KubeClient)
 LOKI_CLIENT_KEY = aiohttp.web.AppKey("loki_client", LokiClient)
 JOBS_SERVICE_KEY = aiohttp.web.AppKey("jobs_service", JobsService)
 LOGS_SERVICE_KEY = aiohttp.web.AppKey("logs_service", LogsService)
+LOGS_STORAGE_TYPE_KEY = aiohttp.web.AppKey("logs_storage_type", LogsStorageType)
 CONFIG_CLIENT_KEY = aiohttp.web.AppKey("config_client", ConfigClient)
 MONITORING_APP_KEY = aiohttp.web.AppKey("monitoring_app", aiohttp.web.Application)
+APPS_MONITORING_APP_KEY = aiohttp.web.AppKey(
+    "apps_monitoring_app", aiohttp.web.Application
+)
 
 logger = logging.getLogger(__name__)
 
@@ -497,6 +502,109 @@ class MonitoringApiHandler:
             await writer.wait_closed()
 
 
+class AppsMonitoringApiHandler:
+    def __init__(self, app: aiohttp.web.Application, config: Config) -> None:
+        self._app = app
+        self._config = config
+
+    def register(self, app: aiohttp.web.Application) -> None:
+        app.add_routes(
+            [
+                aiohttp.web.get("/log", self.stream_log),
+            ]
+        )
+
+    @property
+    def _logs_service(self) -> LogsService:
+        return self._app[LOGS_SERVICE_KEY]
+
+    @property
+    def _logs_storage_type(self) -> LogsStorageType:
+        return self._app[LOGS_STORAGE_TYPE_KEY]
+
+    def get_archive_delay(self) -> float:
+        if self._config.logs.storage_type == LogsStorageType.LOKI:
+            assert self._config.loki
+            return self._config.loki.archive_delay_s
+        return DEFAULT_ARCHIVE_DELAY
+
+    # async def apps_containers(self, request: Request) -> Response:
+    #     if self._logs_storage_type != LogsStorageType.LOKI:
+    #         raise NotImplementedError()
+    #     # job = await self._resolve_job(request, "write")
+    #     since_str = request.query.get("since")
+    #
+    #     query = {"org": "neuro", "project": "platform"}
+    #     result = await self._logs_service._loki_client.label_values(
+    #         label="container", query=query, start=since_str
+    #     )
+    #
+    #     return Response(status=aiohttp.web.HTTPNoContent.status_code)
+
+    async def stream_log(self, request: Request) -> StreamResponse:
+        if self._logs_storage_type != LogsStorageType.LOKI or not isinstance(
+            self._logs_service, LokiLogsService
+        ):
+            exc_txt = "Loki as logs backend required"
+            raise Exception(exc_txt)
+
+        # job = await self._resolve_job(request, "write")
+        timestamps = _get_bool_param(request, "timestamps", default=False)
+        debug = _get_bool_param(request, "debug", default=False)
+        prefix = _get_bool_param(request, "prefix", default=False)
+        since_str = request.query.get("since")
+        archive_delay_s = float(
+            request.query.get("archive_delay", self.get_archive_delay())
+        )
+        since = (
+            parse_date(since_str)
+            if since_str
+            else datetime.now(UTC) - timedelta(minutes=15)
+        )
+        separator = request.query.get("separator")
+        if separator is None:
+            separator = "=== Live logs ===" + _getrandbytes(30).hex()
+
+        response = StreamResponse(status=200)
+        response.enable_chunked_encoding()
+        response.enable_compression(aiohttp.web.ContentCoding.identity)
+        response.content_type = "text/plain"
+        response.charset = "utf-8"
+        response.headers["X-Separator"] = separator
+        await response.prepare(request)
+
+        # query = {"org": "neuro", "project": "platform"}
+        # result = await self._logs_service._loki_client.label_values(
+        #     label="container", query=query, start=since_str
+        # )
+
+        assert isinstance(self._logs_service, LokiLogsService)
+
+        async with self._logs_service.get_pod_log_reader_by_containers(
+            None,
+            separator=separator.encode(),
+            since=since,
+            timestamps=timestamps,
+            debug=debug,
+            archive_delay_s=archive_delay_s,
+            prefix=prefix,
+        ) as it:
+            # response = WebSocketResponse(
+            #     protocols=[WS_LOGS_PROTOCOL],
+            #     heartbeat=HEARTBEAT,
+            # )
+            # await response.prepare(request)
+            # await _run_concurrently(
+            #     _listen(response),
+            #     _forward_bytes_iterating(response, it),
+            # )
+            # return response
+            async for chunk in it:
+                await response.write(chunk)
+            await response.write_eof()
+            return response
+
+
 async def _listen(ws: WebSocketResponse) -> None:
     # Maintain the WebSocket connection.
     # Process ping-pong game and perform closing handshake.
@@ -646,6 +754,13 @@ async def create_monitoring_app(config: Config) -> aiohttp.web.Application:
     monitoring_handler = MonitoringApiHandler(monitoring_app, config)
     monitoring_handler.register(monitoring_app)
     return monitoring_app
+
+
+async def create_apps_monitoring_app(config: Config) -> aiohttp.web.Application:
+    apps_monitoring_app = aiohttp.web.Application()
+    apps_monitoring_handler = AppsMonitoringApiHandler(apps_monitoring_app, config)
+    apps_monitoring_handler.register(apps_monitoring_app)
+    return apps_monitoring_app
 
 
 @asynccontextmanager
@@ -846,6 +961,10 @@ async def create_app(config: Config) -> aiohttp.web.Application:
                 config, kube_client, es_client, s3_client, loki_client
             )
             app[MONITORING_APP_KEY][LOGS_SERVICE_KEY] = logs_service
+            app[APPS_MONITORING_APP_KEY][LOGS_SERVICE_KEY] = logs_service
+            app[APPS_MONITORING_APP_KEY][LOGS_STORAGE_TYPE_KEY] = (
+                config.logs.storage_type
+            )
 
             container_runtime_client_registry = await exit_stack.enter_async_context(
                 ContainerRuntimeClientRegistry(
@@ -881,6 +1000,10 @@ async def create_app(config: Config) -> aiohttp.web.Application:
     monitoring_app = await create_monitoring_app(config)
     app[MONITORING_APP_KEY] = monitoring_app
     api_v1_app.add_subapp("/jobs", monitoring_app)
+
+    apps_monitoring_app = await create_apps_monitoring_app(config)
+    app[APPS_MONITORING_APP_KEY] = apps_monitoring_app
+    api_v1_app.add_subapp("/apps", apps_monitoring_app)
 
     app.add_subapp("/api/v1", api_v1_app)
 

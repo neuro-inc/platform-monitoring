@@ -27,6 +27,7 @@ import botocore.exceptions
 import orjson
 from aiobotocore.client import AioBaseClient
 from aiobotocore.response import StreamingBody
+from aioitertools.asyncio import as_generated
 from cachetools import LRUCache
 from elasticsearch import AsyncElasticsearch, RequestError
 from elasticsearch.helpers import async_scan
@@ -167,7 +168,9 @@ class PodContainerLogReader(LogReader):
         self._iterator: AsyncIterator[bytes] | None = None
 
     async def __aenter__(self) -> AsyncIterator[bytes]:
-        await self._client.wait_pod_is_not_waiting(self._pod_name)
+        await self._client.wait_pod_is_not_waiting(
+            self._pod_name, container_name=self._container_name
+        )
         kwargs: dict[str, Any] = {}
         if self._client_conn_timeout_s is not None:
             kwargs["conn_timeout_s"] = self._client_conn_timeout_s
@@ -1134,14 +1137,17 @@ class BaseLogsService(LogsService):
         self,
         pod_name: str,
         *,
+        container_name: str | None = None,
         since: datetime | None = None,
         timestamps: bool = False,
         debug: bool = False,
     ) -> LogReader:
+        if not container_name:
+            container_name = pod_name
         return PodContainerLogReader(
             client=self._kube_client,
             pod_name=pod_name,
-            container_name=pod_name,
+            container_name=container_name,
             since=since,
             timestamps=timestamps,
             debug=debug,
@@ -1424,20 +1430,22 @@ class LokiLogReader(LogReader):
     def __init__(
         self,
         loki_client: LokiClient,
-        pod_name: str,
+        query: str,
         *,
         start: str | int | None = None,
         end: str | int | None = None,
         direction: str = "forward",
         timestamps: bool = False,
+        prefix: bool = False,
     ) -> None:
         super().__init__(timestamps=timestamps)
 
         self._loki_client = loki_client
-        self._pod_name = pod_name
+        self._query = query
         self._start = start
         self._end = end
         self._direction = direction
+        self._prefix = prefix
         self._iterator: AsyncIterator[bytes] | None = None
 
     async def __aenter__(self) -> AsyncIterator[bytes]:
@@ -1465,15 +1473,13 @@ class LokiLogReader(LogReader):
 
         return log.encode()
 
-    def build_query(self) -> str:
-        return f'{{container="{self._pod_name}"}}'
-
     async def _iterate(self) -> AsyncIterator[bytes]:
         async for res in self._loki_client.query_range_page_iterate(
-            query=self.build_query(),
+            query=self._query,
             start=self._start,
             end=self._end,
             direction=self._direction,
+            prefix=self._prefix,
         ):
             for log_data in res["data"]["result"]:
                 yield self.encode_and_handle_log(log_data)
@@ -1550,7 +1556,10 @@ class LokiLogsService(BaseLogsService):
             start = int(start_dt.timestamp() * 1_000_000_000)
             end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
             async with self.get_pod_archive_log_reader(
-                pod_name, start=start, end=end, timestamps=timestamps
+                f'{{app="{pod_name}"}}',
+                start=start,
+                end=end,
+                timestamps=timestamps,
             ) as it:
                 async for chunk in it:
                     has_archive = True
@@ -1570,10 +1579,7 @@ class LokiLogsService(BaseLogsService):
                         debug=debug,
                     ) as it:
                         if debug:
-                            yield (
-                                f"=== Live logs from {since=} "
-                                f"(started at {archive_border_dt=}) ===\n"
-                            ).encode()
+                            yield f"=== Live logs from {since=} ===\n".encode()
                         async for chunk in it:
                             if separator:
                                 yield separator + b"\n"
@@ -1593,23 +1599,161 @@ class LokiLogsService(BaseLogsService):
             except JobNotFoundException:
                 pass
 
+    async def live_pod_container_reader(
+        self,
+        *,
+        pod_name: str,
+        container_name: str,
+        since: datetime | None = None,
+        timestamps: bool = False,
+        debug: bool = False,
+        prefix: bool = True,
+    ) -> AsyncIterator[bytes]:
+        try:
+            while True:
+                status = await self._kube_client.get_container_status(
+                    name=pod_name, container_name=container_name
+                )
+                if status.is_pod_terminated:
+                    break
+
+                async with self.get_pod_live_log_reader(
+                    pod_name,
+                    container_name=container_name,
+                    since=since,
+                    timestamps=timestamps,
+                    debug=debug,
+                ) as it:
+                    if debug:
+                        yield (
+                            f"=== Live logs from "
+                            f"{since=} {pod_name=} {container_name=} ===\n"
+                        ).encode()
+                    async for chunk in it:
+                        if prefix:
+                            chunk = f"[{pod_name}/{container_name}] ".encode() + chunk
+                        yield chunk
+
+                if not status.can_restart:
+                    break
+
+                status = await self.wait_pod_is_running(
+                    pod_name,
+                    status.started_at,
+                )
+                since = status.started_at
+        except JobNotFoundException:
+            pass
+        except Exception as e:
+            exc_txt = (
+                f"Error while live_pod_container_reader "
+                f"{pod_name=} {container_name=}\nException: {e}"
+            )
+            raise Exception(exc_txt) from e
+
+    @asyncgeneratorcontextmanager
+    async def get_pod_log_reader_by_containers(  # noqa: C901
+        self,
+        pod_container_list_filter: list[str] | None,
+        *,
+        since: datetime | None = None,
+        separator: bytes | None = None,
+        timestamps: bool = False,
+        archive_delay_s: float = 5,
+        debug: bool = False,
+        prefix: bool = False,
+    ) -> AsyncGenerator[bytes, None]:
+        pod_container_list_filter = pod_container_list_filter or []
+        now_dt = datetime.now(UTC)
+        start_dt = (
+            now_dt - timedelta(seconds=self._retention_period_s) + timedelta(hours=1)
+        )  # +1 hour prevent max query length error
+        if since:
+            start_dt = max(start_dt, since)
+
+        archive_border_dt = (now_dt - timedelta(seconds=archive_delay_s)).replace(
+            microsecond=0
+        )  # kube api log can't work with microseconds
+
+        should_get_archive_logs = True
+        should_get_live_logs = True
+
+        has_archive = False
+
+        if start_dt >= archive_border_dt:
+            should_get_archive_logs = False
+
+        if should_get_archive_logs:
+            start = int(start_dt.timestamp() * 1_000_000_000)
+            end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
+            async with self.get_pod_archive_log_reader(
+                # f'{{service_name="alloy-logs"}}',
+                # '{pod="alloy-nwrbt"}',
+                '{service_name="my-pod"}',
+                start=start,
+                end=end,
+                timestamps=timestamps,
+                prefix=prefix,
+            ) as it:
+                async for chunk in it:
+                    has_archive = True
+                    yield chunk
+
+        if not has_archive:
+            separator = None
+
+        if should_get_live_logs:
+            since = archive_border_dt
+
+            pods = await self._kube_client.get_pods(
+                all_namespaces=True, label_selector="app.kubernetes.io/name=my-pod"
+            )
+
+            async for chunk in as_generated(
+                [
+                    self.live_pod_container_reader(
+                        pod_name=pod.metadata.name,
+                        container_name=container.name,
+                        since=since,
+                        timestamps=timestamps,
+                        debug=debug,
+                        prefix=prefix,
+                    )
+                    for pod in pods
+                    for container in pod.spec.containers
+                    if not pod_container_list_filter
+                    or f"{pod.metadata.name}/{container.name}"
+                    in pod_container_list_filter
+                ],
+                return_exceptions=True,
+            ):
+                if isinstance(chunk, Exception):
+                    logger.error(str(chunk))
+                    continue
+                if separator:
+                    yield separator + b"\n"
+                    separator = None
+                yield chunk
+
     def get_pod_archive_log_reader(  # type: ignore
         self,
-        pod_name: str,
+        query: str,
         *,
         start: str | int | None = None,
         end: str | int | None = None,
         direction: str = "forward",
         timestamps: bool = False,
+        prefix: bool = False,
     ) -> LogReader:
         # have another set of params unlike base method, need # type: ignore
         return LokiLogReader(
             loki_client=self._loki_client,
-            pod_name=pod_name,
+            query=query,
             start=start,
             end=end,
             direction=direction,
             timestamps=timestamps,
+            prefix=prefix,
         )
 
     async def drop_logs(self, pod_name: str) -> None:
