@@ -31,14 +31,14 @@ async def platform_config_url(
     return URL(get_service_url("platformconfig", namespace="default"))
 
 
-@pytest.fixture()
+@pytest.fixture
 def platform_config(
     platform_config_url: URL, token_factory: Callable[[str], str]
 ) -> PlatformConfig:
     return PlatformConfig(url=platform_config_url, token=token_factory("cluster"))
 
 
-@pytest.fixture()
+@pytest.fixture
 async def platform_config_client(
     platform_config_url: URL, cluster_token: str
 ) -> AsyncIterator[ConfigClient]:
