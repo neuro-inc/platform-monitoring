@@ -724,7 +724,7 @@ class TestLogApi:
         # Jobs is canceled so its pod removed immediately
         await jobs_client.long_polling_by_job_id(job_id, "running")
         await jobs_client.delete_job(job_id)
-        await kube_client.wait_pod_is_deleted(job_id)
+        await kube_client.wait_pod_is_deleted(kube_client.namespace, job_id)
 
         headers = jobs_client.headers
         url = monitoring_api_s3_storage.generate_log_url(job_id)
@@ -834,7 +834,9 @@ class TestSaveApi:
     ) -> None:
         await jobs_client.delete_job(infinite_job)
         await kube_client.wait_pod_is_terminated(
-            pod_name=infinite_job, allow_pod_not_exists=True
+            kube_client.namespace,
+            pod_name=infinite_job,
+            allow_pod_not_exists=True
         )
 
         url = monitoring_api.generate_save_url(job_id=infinite_job)

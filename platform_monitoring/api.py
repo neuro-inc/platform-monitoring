@@ -200,6 +200,7 @@ class MonitoringApiHandler:
             return self._jobs_helper.is_job_finished(await self._get_job(job.id))
 
         async with self._logs_service.get_pod_log_reader(
+            job.namespace,
             pod_name,
             separator=separator.encode(),
             since=since,
@@ -233,6 +234,7 @@ class MonitoringApiHandler:
             return self._jobs_helper.is_job_finished(await self._get_job(job.id))
 
         async with self._logs_service.get_pod_log_reader(
+            job.namespace,
             pod_name,
             separator=separator.encode(),
             since=since,

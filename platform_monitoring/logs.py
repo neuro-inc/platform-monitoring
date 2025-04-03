@@ -141,6 +141,7 @@ class PodContainerLogReader(LogReader):
     def __init__(
         self,
         client: KubeClient,
+        namespace: str,
         pod_name: str,
         container_name: str,
         client_conn_timeout_s: float | None = None,
@@ -152,6 +153,7 @@ class PodContainerLogReader(LogReader):
         debug: bool = False,
     ) -> None:
         self._client = client
+        self._namespace = namespace
         self._pod_name = pod_name
         self._container_name = container_name
         self._client_conn_timeout_s = client_conn_timeout_s
@@ -167,7 +169,7 @@ class PodContainerLogReader(LogReader):
         self._iterator: AsyncIterator[bytes] | None = None
 
     async def __aenter__(self) -> AsyncIterator[bytes]:
-        await self._client.wait_pod_is_not_waiting(self._pod_name)
+        await self._client.wait_pod_is_not_waiting(self._namespace, self._pod_name)
         kwargs: dict[str, Any] = {}
         if self._client_conn_timeout_s is not None:
             kwargs["conn_timeout_s"] = self._client_conn_timeout_s
@@ -180,7 +182,10 @@ class PodContainerLogReader(LogReader):
         if self._timestamps:
             kwargs["timestamps"] = True
         self._stream_cm = self._client.create_pod_container_logs_stream(
-            pod_name=self._pod_name, container_name=self._container_name, **kwargs
+            namespace=self._namespace,
+            pod_name=self._pod_name,
+            container_name=self._container_name,
+            **kwargs
         )
         assert self._stream_cm
         stream = await self._stream_cm.__aenter__()
@@ -902,6 +907,7 @@ class LogsService(abc.ABC):
     @asyncgeneratorcontextmanager
     async def get_pod_log_reader(  # noqa: C901
         self,
+        namespace: str,
         pod_name: str,
         *,
         since: datetime | None = None,
@@ -930,7 +936,7 @@ class LogsService(abc.ABC):
             return None
 
         try:
-            status = await self.get_container_status(pod_name)
+            status = await self.get_container_status(namespace, pod_name)
             start = get_last_start(status)
         except JobNotFoundException:
             start = None
@@ -954,7 +960,8 @@ class LogsService(abc.ABC):
                     assert log_reader.last_time
                     if log_reader.last_time >= until:
                         try:
-                            status = await self.get_container_status(pod_name)
+                            status = await self.get_container_status(
+                                namespace, pod_name)
                             start = get_last_start(status)
                         except JobNotFoundException:
                             start = None
@@ -963,7 +970,7 @@ class LogsService(abc.ABC):
                                 until = start
                             else:
                                 first = await self.get_first_log_entry_time(
-                                    pod_name, timeout_s=archive_delay_s
+                                    namespace, pod_name, timeout_s=archive_delay_s
                                 )
                                 if (
                                     first
@@ -993,7 +1000,7 @@ class LogsService(abc.ABC):
                         prev_finish = log_reader.last_time
                         since = log_reader.last_time + datetime.resolution
                     try:
-                        status = await self.get_container_status(pod_name)
+                        status = await self.get_container_status(namespace, pod_name)
                         start = get_last_start(status)
                         prev_finish = status.finished_at or prev_finish
                         is_pod_terminated = status.is_pod_terminated
@@ -1004,7 +1011,7 @@ class LogsService(abc.ABC):
                             until = start
                             continue
                         first = await self.get_first_log_entry_time(
-                            pod_name, timeout_s=archive_delay_s
+                            namespace, pod_name, timeout_s=archive_delay_s
                         )
                         if first is not None:
                             if first > until:
@@ -1034,7 +1041,11 @@ class LogsService(abc.ABC):
         try:
             if start is None:
                 status = await self.wait_pod_is_running(
-                    pod_name, start, timeout_s=timeout_s, interval_s=interval_s
+                    namespace,
+                    pod_name,
+                    start,
+                    timeout_s=timeout_s,
+                    interval_s=interval_s,
                 )
                 start = status.started_at
             if start is not None and (since is None or since < start):
@@ -1042,7 +1053,11 @@ class LogsService(abc.ABC):
 
             while True:
                 async with self.get_pod_live_log_reader(
-                    pod_name, since=since, timestamps=timestamps, debug=debug
+                    namespace,
+                    pod_name,
+                    since=since,
+                    timestamps=timestamps,
+                    debug=debug,
                 ) as it:
                     if debug:
                         if separator:
@@ -1060,7 +1075,11 @@ class LogsService(abc.ABC):
                 if not status.can_restart:
                     break
                 status = await self.wait_pod_is_running(
-                    pod_name, start, timeout_s=timeout_s, interval_s=interval_s
+                    namespace,
+                    pod_name,
+                    start,
+                    timeout_s=timeout_s,
+                    interval_s=interval_s,
                 )
                 since = start = status.started_at
         except JobNotFoundException:
@@ -1068,12 +1087,17 @@ class LogsService(abc.ABC):
 
     @abc.abstractmethod
     async def get_first_log_entry_time(
-        self, pod_name: str, *, timeout_s: float = 2.0 * 60
+        self,
+        namespace: str,
+        pod_name: str,
+        *,
+        timeout_s: float = 2.0 * 60,
     ) -> datetime | None:
         pass  # pragma: no cover
 
     async def wait_pod_is_running(
         self,
+        namespace: str,
         name: str,
         old_start: datetime | None,
         *,
@@ -1082,7 +1106,7 @@ class LogsService(abc.ABC):
     ) -> ContainerStatus:
         async with asyncio.timeout(timeout_s):
             while True:
-                status = await self.get_container_status(name)
+                status = await self.get_container_status(namespace, name)
                 if not status.is_waiting:
                     if status.started_at != old_start:
                         return status
@@ -1091,12 +1115,17 @@ class LogsService(abc.ABC):
                 await asyncio.sleep(interval_s)
 
     @abc.abstractmethod
-    async def get_container_status(self, name: str) -> ContainerStatus:
+    async def get_container_status(
+        self,
+        namespace: str,
+        pod_name: str
+    ) -> ContainerStatus:
         pass  # pragma: no cover
 
     @abc.abstractmethod
     def get_pod_live_log_reader(
         self,
+        namespace: str,
         pod_name: str,
         *,
         since: datetime | None = None,
@@ -1127,11 +1156,16 @@ class BaseLogsService(LogsService):
     def __init__(self, kube_client: KubeClient) -> None:
         self._kube_client = kube_client
 
-    async def get_container_status(self, name: str) -> ContainerStatus:
-        return await self._kube_client.get_container_status(name)
+    async def get_container_status(
+        self,
+        namespace: str,
+        pod_name: str
+    ) -> ContainerStatus:
+        return await self._kube_client.get_container_status(namespace, pod_name)
 
     def get_pod_live_log_reader(
         self,
+        namespace: str,
         pod_name: str,
         *,
         since: datetime | None = None,
@@ -1140,6 +1174,7 @@ class BaseLogsService(LogsService):
     ) -> LogReader:
         return PodContainerLogReader(
             client=self._kube_client,
+            namespace=namespace,
             pod_name=pod_name,
             container_name=pod_name,
             since=since,
@@ -1148,10 +1183,14 @@ class BaseLogsService(LogsService):
         )
 
     async def get_first_log_entry_time(
-        self, pod_name: str, *, timeout_s: float = 2.0 * 60
+        self,
+        namespace: str,
+        pod_name: str,
+        *,
+        timeout_s: float = 2.0 * 60,
     ) -> datetime | None:
         return await get_first_log_entry_time(
-            self._kube_client, pod_name, timeout_s=timeout_s
+            self._kube_client, namespace, pod_name, timeout_s=timeout_s
         )
 
 
@@ -1369,7 +1408,11 @@ class S3LogsService(BaseLogsService):
 
 
 async def get_first_log_entry_time(
-    kube_client: KubeClient, pod_name: str, *, timeout_s: float = 60 * 2.0
+    kube_client: KubeClient,
+    namespace: str,
+    pod_name: str,
+    *,
+    timeout_s: float = 60 * 2.0,
 ) -> datetime | None:
     """Return the timestamp of the first container log line from Kubernetes.
 
@@ -1379,6 +1422,7 @@ async def get_first_log_entry_time(
     time_str = b""
     try:
         async with kube_client.create_pod_container_logs_stream(
+            namespace=namespace,
             pod_name=pod_name,
             container_name=pod_name,
             timestamps=True,
@@ -1493,6 +1537,7 @@ class LokiLogsService(BaseLogsService):
     @asyncgeneratorcontextmanager
     async def get_pod_log_reader(  # noqa: C901
         self,
+        namespace: str,
         pod_name: str,
         *,
         since: datetime | None = None,
@@ -1522,7 +1567,7 @@ class LokiLogsService(BaseLogsService):
 
         try:
             status = await self._kube_client.wait_pod_is_not_waiting(
-                pod_name, timeout_s=timeout_s, interval_s=interval_s
+                namespace, pod_name, timeout_s=timeout_s, interval_s=interval_s
             )
 
             if start_dt >= archive_border_dt:
@@ -1564,6 +1609,7 @@ class LokiLogsService(BaseLogsService):
             try:
                 while True:
                     async with self.get_pod_live_log_reader(
+                        namespace,
                         pod_name,
                         since=since,
                         timestamps=timestamps,
@@ -1584,6 +1630,7 @@ class LokiLogsService(BaseLogsService):
                         break
 
                     status = await self.wait_pod_is_running(
+                        namespace,
                         pod_name,
                         status.started_at,
                         timeout_s=timeout_s,
