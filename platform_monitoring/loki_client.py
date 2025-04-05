@@ -20,6 +20,7 @@ class LokiClient:
         read_timeout_s: int,
         conn_pool_size: int,
         archive_delay_s: int,
+        trace_configs: list[aiohttp.TraceConfig] | None = None,
     ) -> None:
         self._base_url = base_url
 
@@ -29,6 +30,7 @@ class LokiClient:
         self._archive_delay_s = archive_delay_s
 
         self._session: aiohttp.ClientSession | None = None
+        self._trace_configs = trace_configs
 
     async def init(self) -> None:
         connector = aiohttp.TCPConnector(limit=self._conn_pool_size)
@@ -46,7 +48,7 @@ class LokiClient:
         self._session = aiohttp.ClientSession(
             connector=connector,
             timeout=timeout,
-            # trace_configs=self._trace_configs,
+            trace_configs=self._trace_configs,
             raise_for_status=custom_check,
         )
 
@@ -118,7 +120,10 @@ class LokiClient:
         if prefix:
             for log_data in result["data"]["result"]:
                 for log in log_data["values"]:
-                    log[1] = f"[{log_data['stream']['service_name']}] {log[1]}"
+                    log[1] = (
+                        f"[{log_data['stream']['pod']}/"
+                        f"{log_data['stream']['container']}] {log[1]}"
+                    )
 
         data_result = sorted(
             chain.from_iterable(

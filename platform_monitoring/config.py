@@ -30,6 +30,12 @@ class PlatformConfig:
 
 
 @dataclass(frozen=True)
+class PlatformAppsConfig:
+    url: URL
+    token: str = field(repr=False)
+
+
+@dataclass(frozen=True)
 class ElasticsearchConfig:
     hosts: Sequence[str]
 
@@ -123,6 +129,7 @@ class Config:
     platform_api: PlatformApiConfig
     platform_auth: PlatformAuthConfig
     platform_config: PlatformConfig
+    platform_apps: PlatformAppsConfig
     logs: LogsConfig
     kube: KubeConfig
     container_runtime: ContainerRuntimeConfig

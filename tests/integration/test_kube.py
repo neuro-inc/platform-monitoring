@@ -539,7 +539,7 @@ class TestKubeClient:
     async def test_create_log_stream_not_found(self, kube_client: KubeClient) -> None:
         with pytest.raises(JobNotFoundException):
             async with kube_client.create_pod_container_logs_stream(
-                pod_name="unknown", container_name="unknown"
+                pod_name="unknown", container_name="unknown", namespace="unknown"
             ):
                 pass
 
@@ -551,7 +551,9 @@ class TestKubeClient:
         async with asyncio.timeout(5.0):
             while True:
                 stream_cm = kube_client.create_pod_container_logs_stream(
-                    pod_name=job_pod.name, container_name=job_pod.name
+                    pod_name=job_pod.name,
+                    container_name=job_pod.name,
+                    namespace=kube_client.namespace,
                 )
                 try:
                     async with stream_cm:
@@ -571,7 +573,9 @@ class TestKubeClient:
         await kube_client.create_pod(job_pod.payload)
         await kube_client.wait_pod_is_not_waiting(pod_name=job_pod.name, timeout_s=60.0)
         stream_cm = kube_client.create_pod_container_logs_stream(
-            pod_name=job_pod.name, container_name=job_pod.name
+            pod_name=job_pod.name,
+            container_name=job_pod.name,
+            namespace=kube_client.namespace,
         )
         async with stream_cm as stream:
             payload = await stream.read()
@@ -686,7 +690,10 @@ class TestLogReader:
     ) -> None:
         await kube_client.create_pod(job_pod.payload)
         log_reader = PodContainerLogReader(
-            client=kube_client, pod_name=job_pod.name, container_name=job_pod.name
+            client=kube_client,
+            pod_name=job_pod.name,
+            container_name=job_pod.name,
+            namespace=kube_client.namespace,
         )
         payload = await self._consume_log_reader(log_reader)
         assert payload == b""
@@ -701,7 +708,10 @@ class TestLogReader:
         job_pod.set_command(command)
         await kube_client.create_pod(job_pod.payload)
         log_reader = PodContainerLogReader(
-            client=kube_client, pod_name=job_pod.name, container_name=job_pod.name
+            client=kube_client,
+            pod_name=job_pod.name,
+            container_name=job_pod.name,
+            namespace=kube_client.namespace,
         )
         payload = await self._consume_log_reader(log_reader)
         assert payload == b"Failure!"
@@ -719,6 +729,7 @@ class TestLogReader:
             client=kube_client,
             pod_name=job_pod.name,
             container_name=job_pod.name,
+            namespace=kube_client.namespace,
             client_read_timeout_s=1,
         )
         with pytest.raises(asyncio.TimeoutError):
@@ -734,7 +745,10 @@ class TestLogReader:
         job_pod.set_command(command)
         await kube_client.create_pod(job_pod.payload)
         log_reader = PodContainerLogReader(
-            client=kube_client, pod_name=job_pod.name, container_name=job_pod.name
+            client=kube_client,
+            pod_name=job_pod.name,
+            container_name=job_pod.name,
+            namespace=kube_config.namespace,
         )
         payload = await self._consume_log_reader(log_reader)
         expected_payload = "\n".join(str(i) for i in range(1, 6)) + "\n"
@@ -753,6 +767,7 @@ class TestLogReader:
             client=kube_client,
             pod_name=job_pod.name,
             container_name=job_pod.name,
+            namespace=kube_client.namespace,
             timestamps=True,
         )
         payload = await self._consume_log_reader(log_reader)
@@ -772,6 +787,7 @@ class TestLogReader:
             client=kube_client,
             pod_name=job_pod.name,
             container_name=job_pod.name,
+            namespace=kube_client.namespace,
             timestamps=True,
         )
         payload = await self._consume_log_reader(log_reader)
@@ -783,6 +799,7 @@ class TestLogReader:
             client=kube_client,
             pod_name=job_pod.name,
             container_name=job_pod.name,
+            namespace=kube_client.namespace,
             since=second_ts,
         )
         payload = await self._consume_log_reader(log_reader)
@@ -792,6 +809,7 @@ class TestLogReader:
             client=kube_client,
             pod_name=job_pod.name,
             container_name=job_pod.name,
+            namespace=kube_client.namespace,
             since=second_ts + timedelta(seconds=1),
         )
         payload = await self._consume_log_reader(log_reader)
@@ -808,7 +826,10 @@ class TestLogReader:
         await kube_client.create_pod(job_pod.payload)
         await kube_client.wait_pod_is_running(pod_name=job_pod.name, timeout_s=60.0)
         log_reader = PodContainerLogReader(
-            client=kube_client, pod_name=job_pod.name, container_name=job_pod.name
+            client=kube_client,
+            pod_name=job_pod.name,
+            container_name=job_pod.name,
+            namespace=kube_config.namespace,
         )
         task = asyncio.ensure_future(self._consume_log_reader(log_reader))
         await asyncio.sleep(10)
@@ -832,13 +853,17 @@ class TestLogReader:
                 client=kube_client,
                 pod_name=job_pod.name,
                 container_name=job_pod.name,
+                namespace=kube_config.namespace,
                 previous=True,
             )
             with pytest.raises(KubeClientException):
                 await self._consume_log_reader(log_reader)
 
             log_reader = PodContainerLogReader(
-                client=kube_client, pod_name=job_pod.name, container_name=job_pod.name
+                client=kube_client,
+                pod_name=job_pod.name,
+                container_name=job_pod.name,
+                namespace=kube_config.namespace,
             )
             payload = await self._consume_log_reader(log_reader)
             assert b" Restart\n" in payload
@@ -852,6 +877,7 @@ class TestLogReader:
                         client=kube_client,
                         pod_name=job_pod.name,
                         container_name=job_pod.name,
+                        namespace=kube_config.namespace,
                         previous=True,
                     )
                     payload = await self._consume_log_reader(log_reader)
@@ -1025,7 +1051,10 @@ class TestLogReader:
         expected_payload: Any,
     ) -> None:
         log_reader = PodContainerLogReader(
-            client=kube_client, pod_name=pod_name, container_name=container_name
+            client=kube_client,
+            pod_name=pod_name,
+            container_name=container_name,
+            namespace=namespace_name,
         )
         payload = await self._consume_log_reader(log_reader)
         assert payload == expected_payload, "Pod logs did not match."

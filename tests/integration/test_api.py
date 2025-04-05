@@ -2,11 +2,13 @@ import asyncio
 import json
 import logging
 import re
+import shlex
 import signal
 import textwrap
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 from unittest import mock
 from uuid import uuid4
@@ -27,7 +29,12 @@ from aiohttp.web_exceptions import (
 from yarl import URL
 
 from platform_monitoring.api import create_app
-from platform_monitoring.config import Config, ContainerRuntimeConfig, PlatformApiConfig
+from platform_monitoring.config import (
+    Config,
+    ContainerRuntimeConfig,
+    LokiConfig,
+    PlatformApiConfig,
+)
 
 from .conftest import ApiAddress, create_local_app_server, random_str
 from .conftest_admin import ProjectUser
@@ -153,6 +160,25 @@ class MonitoringApiEndpoints:
 
 
 @dataclass(frozen=True)
+class AppsMonitoringApiEndpoints:
+    address: ApiAddress
+
+    @property
+    def api_v1_endpoint(self) -> URL:
+        return URL(f"http://{self.address.host}:{self.address.port}/api/v1")
+
+    @property
+    def endpoint(self) -> URL:
+        return self.api_v1_endpoint / "apps"
+
+    def generate_log_url(self) -> URL:
+        return self.endpoint / "log"
+
+    def generate_log_ws_url(self) -> URL:
+        return self.endpoint / "log_ws"
+
+
+@dataclass(frozen=True)
 class PlatformApiEndpoints:
     url: URL
 
@@ -177,6 +203,15 @@ async def monitoring_api(config: Config) -> AsyncIterator[MonitoringApiEndpoints
     app = await create_app(config)
     async with create_local_app_server(app, port=8080) as address:
         yield MonitoringApiEndpoints(address=address)
+
+
+@pytest.fixture()
+async def apps_monitoring_api(
+    config_with_loki_logs_backend: Config,
+) -> AsyncIterator[AppsMonitoringApiEndpoints]:
+    app = await create_app(config_with_loki_logs_backend)
+    async with create_local_app_server(app, port=8080) as address:
+        yield AppsMonitoringApiEndpoints(address=address)
 
 
 @pytest.fixture(scope="session")
@@ -644,7 +679,7 @@ class TestLogApi:
         async with client.get(url) as resp:
             assert resp.status == HTTPUnauthorized.status_code
 
-    async def test_job_log(
+    async def test_job_log111(
         self,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
@@ -1435,3 +1470,147 @@ class TestPortForward:
             await ws.close()
 
         await jobs_client.delete_job(job_id)
+
+
+class MyAppsPodDescriptor:
+    def __init__(self, pod_name: str, **kwargs: dict[str, Any]) -> None:
+        self._payload: dict[str, Any] = {
+            "kind": "Pod",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": pod_name,
+                "labels": {"app.kubernetes.io/name": "apps-log"},
+                "namespace": "default",
+            },
+            "spec": {
+                "containers": [
+                    {
+                        "name": "container1",
+                        "image": "busybox",
+                        "command": [
+                            "/bin/sh",
+                            "-c",
+                            "for i in $(seq 1 5); do echo container1_$i; sleep 1; done",
+                        ],
+                    },
+                    {
+                        "name": "container2",
+                        "image": "busybox",
+                        "command": [
+                            "/bin/sh",
+                            "-c",
+                            "for i in $(seq 1 5); do echo container2_$i; sleep 1; done",
+                        ],
+                    },
+                ],
+                "restartPolicy": "Never",
+                "imagePullSecrets": [],
+                "tolerations": [],
+            },
+            **kwargs,
+        }
+
+    def set_command(self, command: str) -> None:
+        for container in self._payload["spec"]["containers"]:
+            container["command"] = shlex.split(command)
+
+    def set_restart_policy(self, policy: str) -> None:
+        self._payload["spec"]["restartPolicy"] = policy
+
+    @property
+    def payload(self) -> dict[str, Any]:
+        return self._payload
+
+    @property
+    def name(self) -> str:
+        return self._payload["metadata"]["name"]
+
+    @property
+    def containers(self) -> list[str]:
+        return [container["name"] for container in self._payload["spec"]["containers"]]
+
+
+@pytest.fixture()
+async def apps_basic_pod(
+    kube_client: MyKubeClient,
+) -> AsyncIterator[MyAppsPodDescriptor]:
+    pod_name = f"test-pod-{uuid4()}"
+    apps_pod_description = MyAppsPodDescriptor(pod_name)
+    await kube_client.create_pod(apps_pod_description.payload)
+    yield apps_pod_description
+    await kube_client.delete_pod(apps_pod_description.name)
+
+
+class TestAppsLogApi:
+    @staticmethod
+    def assert_archive_logs(
+        actual_payload: bytes,
+        container_count: int,
+        logs_count: int,
+        re_log_template: str,
+    ) -> None:
+        # actual_payload = actual_payload.replace(b"failed to create
+        # fsnotify watcher: too many open files\n", b"")
+        # print(actual_payload)
+        for c_number in range(1, container_count + 1):  # iterate over containers
+            for l_number in range(1, logs_count + 1):  # iterate over logs
+                log_pattern = re.compile(
+                    re_log_template.replace("[c_number]", str(c_number))
+                    .replace("[l_number]", str(l_number))
+                    .replace("[time]", r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{6}Z")
+                    .encode()
+                )
+                actual_payload, replace_count = log_pattern.subn(b"", actual_payload)
+                # print(actual_payload, replace_count)
+                assert replace_count == 1
+        assert actual_payload == b""
+
+    async def test_apps_only_loki_log(
+        self,
+        apps_monitoring_api: AppsMonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        apps_basic_pod: MyAppsPodDescriptor,
+        kube_client: MyKubeClient,
+        loki_config: LokiConfig,
+    ) -> None:
+        since = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        pod_name = apps_basic_pod.name
+        for container_name in apps_basic_pod.containers:
+            await kube_client.wait_pod_is_terminated(pod_name, container_name)
+
+        await asyncio.sleep(loki_config.archive_delay_s)
+
+        headers: dict[str, Any] = {}  # TODO add auth token
+        url = (
+            f"{apps_monitoring_api.generate_log_url()}?"
+            f"since={since}&instance_id=instance&cluster_name=cluster_name&org_name=org_name&project_name=project_name"
+        )
+        async with client.get(f"{url}", headers=headers) as response:
+            assert response.status == HTTPOk.status_code
+            assert response.content_type == "text/plain"
+            assert response.charset == "utf-8"
+            assert response.headers["Transfer-Encoding"] == "chunked"
+            assert "Content-Encoding" not in response.headers
+            actual_payload = await response.read()
+            self.assert_archive_logs(
+                actual_payload, 2, 5, r"container[c_number]_[l_number]\n"
+            )
+
+        async with client.get(f"{url}&prefix=true", headers=headers) as response:
+            actual_payload = await response.read()
+            self.assert_archive_logs(
+                actual_payload,
+                2,
+                5,
+                rf"\[{pod_name}/container[c_number]\] "
+                f"container[c_number]_[l_number]\n",
+            )
+
+        async with client.get(f"{url}&timestamps=true", headers=headers) as response:
+            actual_payload = await response.read()
+            self.assert_archive_logs(
+                actual_payload,
+                2,
+                5,
+                r"[time] container[c_number]_[l_number]\n",
+            )

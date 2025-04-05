@@ -32,6 +32,7 @@ from platform_monitoring.config import (
     LogsStorageType,
     LokiConfig,
     PlatformApiConfig,
+    PlatformAppsConfig,
     PlatformAuthConfig,
     PlatformConfig,
     RegistryConfig,
@@ -213,7 +214,7 @@ def s3_config() -> S3Config:
     )
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def loki_config() -> LokiConfig:
     # return LokiConfig(endpoint_url=URL("http://loki-gateway.default.svc.cluster.local"))
     return LokiConfig(endpoint_url=URL(get_service_url("loki-gt", namespace="default")))
@@ -241,6 +242,11 @@ async def s3_logs_bucket(s3_config: S3Config, s3_client: AioBaseClient) -> str:
     return s3_config.job_logs_bucket_name
 
 
+@pytest.fixture()
+async def logs_config() -> LogsConfig:
+    return LogsConfig(storage_type=LogsStorageType.S3, cleanup_interval_sec=0.5)
+
+
 @pytest.fixture(scope="session")
 async def registry_config(request: FixtureRequest, in_minikube: bool) -> RegistryConfig:  # noqa: FBT001
     if in_minikube:
@@ -260,7 +266,10 @@ def config_factory(
     auth_config: PlatformAuthConfig,
     platform_api_config: PlatformApiConfig,
     platform_config: PlatformConfig,
+    platform_apps: PlatformAppsConfig,
     s3_config: S3Config,
+    loki_config: LokiConfig,
+    logs_config: LogsConfig,
     kube_config: KubeConfig,
     registry_config: RegistryConfig,
     container_runtime_config: ContainerRuntimeConfig,
@@ -273,10 +282,10 @@ def config_factory(
             "platform_auth": auth_config,
             "platform_api": platform_api_config,
             "platform_config": platform_config,
+            "platform_apps": platform_config,
             "s3": s3_config,
-            "logs": LogsConfig(
-                storage_type=LogsStorageType.S3, cleanup_interval_sec=0.5
-            ),
+            "loki": loki_config,
+            "logs": logs_config,
             "kube": kube_config,
             "registry": registry_config,
             "container_runtime": container_runtime_config,
@@ -290,6 +299,11 @@ def config_factory(
 @pytest.fixture()
 def config(config_factory: Callable[..., Config]) -> Config:
     return config_factory()
+
+
+@pytest.fixture()
+def config_with_loki_logs_backend(config_factory: Callable[..., Config]) -> Config:
+    return config_factory(logs=LogsConfig(storage_type=LogsStorageType.LOKI))
 
 
 @pytest.fixture()

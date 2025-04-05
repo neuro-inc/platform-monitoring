@@ -34,6 +34,7 @@ from neuro_config_client import ConfigClient
 from neuro_logging import init_logging, setup_sentry
 from yarl import URL
 
+from .apps_service import AppInstance, AppsApiClient
 from .base import JobStats, Telemetry
 from .config import (
     Config,
@@ -90,6 +91,7 @@ MONITORING_APP_KEY = aiohttp.web.AppKey("monitoring_app", aiohttp.web.Applicatio
 APPS_MONITORING_APP_KEY = aiohttp.web.AppKey(
     "apps_monitoring_app", aiohttp.web.Application
 )
+APPS_API_CLIENT_KEY = aiohttp.web.AppKey("apps_api_client", AppsApiClient)
 
 logger = logging.getLogger(__name__)
 
@@ -206,6 +208,7 @@ class MonitoringApiHandler:
 
         async with self._logs_service.get_pod_log_reader(
             pod_name,
+            job.namespace,
             separator=separator.encode(),
             since=since,
             timestamps=timestamps,
@@ -239,6 +242,7 @@ class MonitoringApiHandler:
 
         async with self._logs_service.get_pod_log_reader(
             pod_name,
+            job.namespace,
             separator=separator.encode(),
             since=since,
             timestamps=timestamps,
@@ -324,6 +328,9 @@ class MonitoringApiHandler:
                 )
             )
         logger.info("Checking whether %r has %r", user, permissions)
+        # Checking whether User(name='petro111') has [Permission(uri=
+        # 'job://default/petro1/petro-proj/job-0f65b5cd-0ac0-4c7e-9cad-847c4e3736a6',
+        # action='read')]
         await check_permissions(request, [permissions])
         return job
 
@@ -519,6 +526,10 @@ class AppsMonitoringApiHandler:
         return self._app[LOGS_SERVICE_KEY]
 
     @property
+    def _apps_api_client(self) -> AppsApiClient:
+        return self._app[APPS_API_CLIENT_KEY]
+
+    @property
     def _logs_storage_type(self) -> LogsStorageType:
         return self._app[LOGS_STORAGE_TYPE_KEY]
 
@@ -528,19 +539,6 @@ class AppsMonitoringApiHandler:
             return self._config.loki.archive_delay_s
         return DEFAULT_ARCHIVE_DELAY
 
-    # async def apps_containers(self, request: Request) -> Response:
-    #     if self._logs_storage_type != LogsStorageType.LOKI:
-    #         raise NotImplementedError()
-    #     # job = await self._resolve_job(request, "write")
-    #     since_str = request.query.get("since")
-    #
-    #     query = {"org": "neuro", "project": "platform"}
-    #     result = await self._logs_service._loki_client.label_values(
-    #         label="container", query=query, start=since_str
-    #     )
-    #
-    #     return Response(status=aiohttp.web.HTTPNoContent.status_code)
-
     async def stream_log(self, request: Request) -> StreamResponse:
         if self._logs_storage_type != LogsStorageType.LOKI or not isinstance(
             self._logs_service, LokiLogsService
@@ -548,20 +546,35 @@ class AppsMonitoringApiHandler:
             exc_txt = "Loki as logs backend required"
             raise Exception(exc_txt)
 
-        # job = await self._resolve_job(request, "write")
+        instance_id = request.query.get("instance_id")
+        cluster_name = request.query.get("cluster_name")
+        org_name = request.query.get("org_name")
+        project_name = request.query.get("project_name")
+
+        if not all([instance_id, cluster_name, org_name, project_name]):
+            exc_txt = "Instance_id, cluster_name, org_name and project_name required"
+            raise Exception(exc_txt)
+
+        # app_instance = await self._resolve_app_instance(request,
+        # cluster_name, org_name, project_name, "read")
+
         timestamps = _get_bool_param(request, "timestamps", default=False)
         debug = _get_bool_param(request, "debug", default=False)
         prefix = _get_bool_param(request, "prefix", default=False)
         since_str = request.query.get("since")
+        containers = _get_list_param(request, "containers")
         archive_delay_s = float(
             request.query.get("archive_delay", self.get_archive_delay())
         )
+        # TODO add timedelta to config
         since = (
             parse_date(since_str)
             if since_str
             else datetime.now(UTC) - timedelta(minutes=15)
         )
         separator = request.query.get("separator")
+        label_selector_list = ["app.kubernetes.io/name=apps-log"]
+
         if separator is None:
             separator = "=== Live logs ===" + _getrandbytes(30).hex()
 
@@ -573,15 +586,11 @@ class AppsMonitoringApiHandler:
         response.headers["X-Separator"] = separator
         await response.prepare(request)
 
-        # query = {"org": "neuro", "project": "platform"}
-        # result = await self._logs_service._loki_client.label_values(
-        #     label="container", query=query, start=since_str
-        # )
-
         assert isinstance(self._logs_service, LokiLogsService)
-
         async with self._logs_service.get_pod_log_reader_by_containers(
-            None,
+            containers,
+            label_selector_list,
+            "default",  # app_instance.namespace,
             separator=separator.encode(),
             since=since,
             timestamps=timestamps,
@@ -603,6 +612,33 @@ class AppsMonitoringApiHandler:
                 await response.write(chunk)
             await response.write_eof()
             return response
+
+    async def _resolve_app_instance(
+        self,
+        request: Request,
+        cluster_name: str,
+        org_name: str,
+        project_name: str,
+        action: str,
+    ) -> AppInstance:
+        user = await untrusted_user(request)
+        app_instance_id = request.match_info["instance_id"]
+        app_instance = await self._apps_api_client.get_app(
+            app_instance_id=app_instance_id,
+            cluster_name=cluster_name,
+            org_name=org_name,
+            project_name=project_name,
+        )
+        permissions = [
+            Permission(
+                f"cluster://{cluster_name}/orgs/{org_name}/projects/{project_name}",
+                action,
+            )
+        ]
+
+        logger.info("Checking whether %r has %r", user, permissions)
+        await check_permissions(request, [permissions])
+        return app_instance
 
 
 async def _listen(ws: WebSocketResponse) -> None:
@@ -768,6 +804,16 @@ async def create_platform_api_client(
     url: URL, token: str, trace_configs: list[aiohttp.TraceConfig] | None = None
 ) -> AsyncIterator[ApiClient]:
     async with ApiClient(url=url, token=token, trace_configs=trace_configs) as client:
+        yield client
+
+
+@asynccontextmanager
+async def create_platform_apps_api_client(
+    url: URL, token: str, trace_configs: list[aiohttp.TraceConfig] | None = None
+) -> AsyncIterator[AppsApiClient]:
+    async with AppsApiClient(
+        url=url, token=token, trace_configs=trace_configs
+    ) as client:
         yield client
 
 
@@ -989,6 +1035,13 @@ async def create_app(config: Config) -> aiohttp.web.Application:
                 )
             )
 
+            platform_apps_api_client = await exit_stack.enter_async_context(
+                create_platform_apps_api_client(
+                    config.platform_apps.url, config.platform_apps.token
+                )
+            )
+            app[APPS_MONITORING_APP_KEY][APPS_API_CLIENT_KEY] = platform_apps_api_client
+
             yield
 
     app.cleanup_ctx.append(_init_app)
@@ -1044,6 +1097,11 @@ def _get_bool_param(request: Request, name: str, *, default: bool = False) -> bo
         return False
     msg = f'"{name}" request parameter can be "true"/"1" or "false"/"0"'
     raise ValueError(msg)
+
+
+def _get_list_param(request: Request, name: str) -> list[str] | None:
+    param = request.query.get(name)
+    return param.strip().split(",") if param else None
 
 
 def _getrandbytes(size: int) -> bytes:

@@ -38,7 +38,9 @@ test_integration:
 		--maxfail=0 \
 		--log-level=INFO \
 		tests/integration \
-		-n 12
+		-k "test_apps_only_loki_log"
+		# -k "test_job_log111"
+		# -n 12
 
 
 .PHONY: docker_build

@@ -39,6 +39,7 @@ class Job:
     uri: URL
     status: Status
     created_at: str
+    namespace: str
     name: str | None = None
 
 
@@ -49,6 +50,7 @@ def _create_job(payload: dict[str, Any]) -> Job:
         uri=URL(payload["uri"]),
         name=payload.get("name"),
         created_at=payload["history"].get("created_at"),
+        namespace=payload["namespace"],
     )
 
 

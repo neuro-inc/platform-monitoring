@@ -15,6 +15,7 @@ from .config import (
     LogsStorageType,
     LokiConfig,
     PlatformApiConfig,
+    PlatformAppsConfig,
     PlatformAuthConfig,
     PlatformConfig,
     RegistryConfig,
@@ -43,6 +44,7 @@ class EnvironConfigFactory:
             platform_api=self._create_platform_api(),
             platform_auth=self._create_platform_auth(),
             platform_config=self._create_platform_config(),
+            platform_apps=self._create_platform_apps_config(),
             elasticsearch=self._create_elasticsearch(),
             s3=self._create_s3(),
             loki=self._create_loki(),
@@ -66,6 +68,11 @@ class EnvironConfigFactory:
         url = self._get_url("NP_MONITORING_PLATFORM_AUTH_URL")
         token = self._environ["NP_MONITORING_PLATFORM_AUTH_TOKEN"]
         return PlatformAuthConfig(url=url, token=token)
+
+    def _create_platform_apps_config(self) -> PlatformAppsConfig:
+        url = URL(self._environ["NP_MONITORING_PLATFORM_APPS_URL"])
+        token = self._environ["NP_MONITORING_PLATFORM_APPS_TOKEN"]
+        return PlatformAppsConfig(url=url, token=token)
 
     def _create_platform_config(self) -> PlatformConfig:
         url = URL(self._environ["NP_MONITORING_PLATFORM_CONFIG_URL"])

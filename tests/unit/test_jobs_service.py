@@ -89,7 +89,11 @@ def create_pod(
             "name": job_id,
             "labels": {"job": job_id, "platform.neuromation.io/job": job_id},
         },
-        "spec": {"containers": [{"resources": {"requests": resources}}]},
+        "spec": {
+            "containers": [
+                {"name": "container_name", "resources": {"requests": resources}}
+            ]
+        },
         "status": {"phase": "Running"},
     }
     if node_name:

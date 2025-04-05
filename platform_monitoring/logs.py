@@ -144,6 +144,7 @@ class PodContainerLogReader(LogReader):
         client: KubeClient,
         pod_name: str,
         container_name: str,
+        namespace: str,
         client_conn_timeout_s: float | None = None,
         client_read_timeout_s: float | None = None,
         *,
@@ -155,6 +156,7 @@ class PodContainerLogReader(LogReader):
         self._client = client
         self._pod_name = pod_name
         self._container_name = container_name
+        self._namespace = namespace
         self._client_conn_timeout_s = client_conn_timeout_s
         self._client_read_timeout_s = client_read_timeout_s
         self._previous = previous
@@ -169,7 +171,9 @@ class PodContainerLogReader(LogReader):
 
     async def __aenter__(self) -> AsyncIterator[bytes]:
         await self._client.wait_pod_is_not_waiting(
-            self._pod_name, container_name=self._container_name
+            self._pod_name,
+            container_name=self._container_name,
+            namespace=self._namespace,
         )
         kwargs: dict[str, Any] = {}
         if self._client_conn_timeout_s is not None:
@@ -183,7 +187,10 @@ class PodContainerLogReader(LogReader):
         if self._timestamps:
             kwargs["timestamps"] = True
         self._stream_cm = self._client.create_pod_container_logs_stream(
-            pod_name=self._pod_name, container_name=self._container_name, **kwargs
+            pod_name=self._pod_name,
+            container_name=self._container_name,
+            namespace=self._namespace,
+            **kwargs,
         )
         assert self._stream_cm
         stream = await self._stream_cm.__aenter__()
@@ -906,6 +913,7 @@ class LogsService(abc.ABC):
     async def get_pod_log_reader(  # noqa: C901
         self,
         pod_name: str,
+        namespace: str,
         *,
         since: datetime | None = None,
         separator: bytes | None = None,
@@ -933,7 +941,7 @@ class LogsService(abc.ABC):
             return None
 
         try:
-            status = await self.get_container_status(pod_name)
+            status = await self.get_container_status(pod_name, namespace)
             start = get_last_start(status)
         except JobNotFoundException:
             start = None
@@ -946,7 +954,7 @@ class LogsService(abc.ABC):
             request_time = _utcnow()
             until = until or request_time
             log_reader = self.get_pod_archive_log_reader(
-                pod_name, since=since, timestamps=timestamps, debug=debug
+                pod_name, namespace, since=since, timestamps=timestamps, debug=debug
             )
             if debug:
                 yield (
@@ -957,7 +965,9 @@ class LogsService(abc.ABC):
                     assert log_reader.last_time
                     if log_reader.last_time >= until:
                         try:
-                            status = await self.get_container_status(pod_name)
+                            status = await self.get_container_status(
+                                pod_name, namespace
+                            )
                             start = get_last_start(status)
                         except JobNotFoundException:
                             start = None
@@ -996,7 +1006,7 @@ class LogsService(abc.ABC):
                         prev_finish = log_reader.last_time
                         since = log_reader.last_time + datetime.resolution
                     try:
-                        status = await self.get_container_status(pod_name)
+                        status = await self.get_container_status(pod_name, namespace)
                         start = get_last_start(status)
                         prev_finish = status.finished_at or prev_finish
                         is_pod_terminated = status.is_pod_terminated
@@ -1045,7 +1055,7 @@ class LogsService(abc.ABC):
 
             while True:
                 async with self.get_pod_live_log_reader(
-                    pod_name, since=since, timestamps=timestamps, debug=debug
+                    pod_name, namespace, since=since, timestamps=timestamps, debug=debug
                 ) as it:
                     if debug:
                         if separator:
@@ -1079,13 +1089,14 @@ class LogsService(abc.ABC):
         self,
         name: str,
         old_start: datetime | None,
+        namespace: str | None = None,
         *,
         timeout_s: float = 10.0 * 60,
         interval_s: float = 1.0,
     ) -> ContainerStatus:
         async with asyncio.timeout(timeout_s):
             while True:
-                status = await self.get_container_status(name)
+                status = await self.get_container_status(name, namespace)
                 if not status.is_waiting:
                     if status.started_at != old_start:
                         return status
@@ -1094,13 +1105,16 @@ class LogsService(abc.ABC):
                 await asyncio.sleep(interval_s)
 
     @abc.abstractmethod
-    async def get_container_status(self, name: str) -> ContainerStatus:
+    async def get_container_status(
+        self, name: str, namespace: str | None
+    ) -> ContainerStatus:
         pass  # pragma: no cover
 
     @abc.abstractmethod
     def get_pod_live_log_reader(
         self,
         pod_name: str,
+        namespace: str,
         *,
         since: datetime | None = None,
         timestamps: bool = False,
@@ -1112,6 +1126,7 @@ class LogsService(abc.ABC):
     def get_pod_archive_log_reader(
         self,
         pod_name: str,
+        namespace: str,
         *,
         since: datetime | None = None,
         timestamps: bool = False,
@@ -1130,12 +1145,15 @@ class BaseLogsService(LogsService):
     def __init__(self, kube_client: KubeClient) -> None:
         self._kube_client = kube_client
 
-    async def get_container_status(self, name: str) -> ContainerStatus:
-        return await self._kube_client.get_container_status(name)
+    async def get_container_status(
+        self, name: str, namespace: str | None
+    ) -> ContainerStatus:
+        return await self._kube_client.get_container_status(name, namespace=namespace)
 
     def get_pod_live_log_reader(
         self,
         pod_name: str,
+        namespace: str,
         *,
         container_name: str | None = None,
         since: datetime | None = None,
@@ -1147,6 +1165,7 @@ class BaseLogsService(LogsService):
         return PodContainerLogReader(
             client=self._kube_client,
             pod_name=pod_name,
+            namespace=namespace,
             container_name=container_name,
             since=since,
             timestamps=timestamps,
@@ -1173,6 +1192,7 @@ class ElasticsearchLogsService(BaseLogsService):
     def get_pod_archive_log_reader(
         self,
         pod_name: str,
+        namespace: str,
         *,
         since: datetime | None = None,
         timestamps: bool = False,
@@ -1180,7 +1200,7 @@ class ElasticsearchLogsService(BaseLogsService):
     ) -> LogReader:
         return ElasticsearchLogReader(
             es_client=self._es_client,
-            namespace_name=self._kube_client.namespace,
+            namespace_name=namespace,
             pod_name=pod_name,
             container_name=pod_name,
             since=since,
@@ -1213,6 +1233,7 @@ class S3LogsService(BaseLogsService):
     def get_pod_archive_log_reader(
         self,
         pod_name: str,
+        namespace: str,
         *,
         since: datetime | None = None,
         timestamps: bool = False,
@@ -1387,6 +1408,7 @@ async def get_first_log_entry_time(
         async with kube_client.create_pod_container_logs_stream(
             pod_name=pod_name,
             container_name=pod_name,
+            namespace=kube_client.namespace,
             timestamps=True,
             read_timeout_s=timeout_s,
         ) as stream:
@@ -1432,7 +1454,7 @@ class LokiLogReader(LogReader):
         loki_client: LokiClient,
         query: str,
         *,
-        start: str | int | None = None,
+        start: str | int,
         end: str | int | None = None,
         direction: str = "forward",
         timestamps: bool = False,
@@ -1457,14 +1479,15 @@ class LokiLogReader(LogReader):
         await self._iterator.aclose()  # type: ignore
 
     def encode_and_handle_log(self, log_data: list[Any]) -> bytes:
-        try:
-            log = orjson.loads(log_data[1])
-            if isinstance(log, dict):
-                log = log["_entry"]
-            else:
-                log = str(log)
-        except orjson.JSONDecodeError:
-            log = log_data[1]
+        # try:
+        #     log = orjson.loads(log_data[1])
+        #     if isinstance(log, dict):
+        #         log = log["_entry"]
+        #     else:
+        #         log = str(log)
+        # except orjson.JSONDecodeError:
+        #     log = log_data[1]
+        log = log_data[1]
         if log and log[-1] != "\n":
             log = f"{log}\n"
         if self._timestamps:
@@ -1500,6 +1523,7 @@ class LokiLogsService(BaseLogsService):
     async def get_pod_log_reader(  # noqa: C901
         self,
         pod_name: str,
+        namespace: str,
         *,
         since: datetime | None = None,
         separator: bytes | None = None,
@@ -1556,7 +1580,7 @@ class LokiLogsService(BaseLogsService):
             start = int(start_dt.timestamp() * 1_000_000_000)
             end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
             async with self.get_pod_archive_log_reader(
-                f'{{app="{pod_name}"}}',
+                f'{{namespace="{namespace}"}} | unpack | pod="{pod_name}"',
                 start=start,
                 end=end,
                 timestamps=timestamps,
@@ -1574,6 +1598,7 @@ class LokiLogsService(BaseLogsService):
                 while True:
                     async with self.get_pod_live_log_reader(
                         pod_name,
+                        namespace,
                         since=since,
                         timestamps=timestamps,
                         debug=debug,
@@ -1604,6 +1629,7 @@ class LokiLogsService(BaseLogsService):
         *,
         pod_name: str,
         container_name: str,
+        namespace: str,
         since: datetime | None = None,
         timestamps: bool = False,
         debug: bool = False,
@@ -1612,13 +1638,14 @@ class LokiLogsService(BaseLogsService):
         try:
             while True:
                 status = await self._kube_client.get_container_status(
-                    name=pod_name, container_name=container_name
+                    name=pod_name, container_name=container_name, namespace=namespace
                 )
                 if status.is_pod_terminated:
                     break
 
                 async with self.get_pod_live_log_reader(
                     pod_name,
+                    namespace,
                     container_name=container_name,
                     since=since,
                     timestamps=timestamps,
@@ -1654,7 +1681,9 @@ class LokiLogsService(BaseLogsService):
     @asyncgeneratorcontextmanager
     async def get_pod_log_reader_by_containers(  # noqa: C901
         self,
-        pod_container_list_filter: list[str] | None,
+        containers: list[str] | None,
+        label_selector_list: list[str] | None,
+        namespace: str,
         *,
         since: datetime | None = None,
         separator: bytes | None = None,
@@ -1663,7 +1692,7 @@ class LokiLogsService(BaseLogsService):
         debug: bool = False,
         prefix: bool = False,
     ) -> AsyncGenerator[bytes, None]:
-        pod_container_list_filter = pod_container_list_filter or []
+        containers = containers or []
         now_dt = datetime.now(UTC)
         start_dt = (
             now_dt - timedelta(seconds=self._retention_period_s) + timedelta(hours=1)
@@ -1686,10 +1715,18 @@ class LokiLogsService(BaseLogsService):
         if should_get_archive_logs:
             start = int(start_dt.timestamp() * 1_000_000_000)
             end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
+
+            if containers:
+                query = (
+                    f'{{namespace="{namespace}"}} | unpack | '
+                    f"container=~{'|'.join(containers)}"
+                )
+            else:
+                # TODO add labels
+                query = f'{{namespace="{namespace}"}} | unpack | pod=~"test-pod.*"'
+
             async with self.get_pod_archive_log_reader(
-                # f'{{service_name="alloy-logs"}}',
-                # '{pod="alloy-nwrbt"}',
-                '{service_name="my-pod"}',
+                query,
                 start=start,
                 end=end,
                 timestamps=timestamps,
@@ -1705,8 +1742,12 @@ class LokiLogsService(BaseLogsService):
         if should_get_live_logs:
             since = archive_border_dt
 
+            label_selector = (
+                ",".join(label_selector_list) if label_selector_list else None
+            )
+
             pods = await self._kube_client.get_pods(
-                all_namespaces=True, label_selector="app.kubernetes.io/name=my-pod"
+                namespace=namespace, label_selector=label_selector
             )
 
             async for chunk in as_generated(
@@ -1714,6 +1755,7 @@ class LokiLogsService(BaseLogsService):
                     self.live_pod_container_reader(
                         pod_name=pod.metadata.name,
                         container_name=container.name,
+                        namespace=namespace,
                         since=since,
                         timestamps=timestamps,
                         debug=debug,
@@ -1721,9 +1763,7 @@ class LokiLogsService(BaseLogsService):
                     )
                     for pod in pods
                     for container in pod.spec.containers
-                    if not pod_container_list_filter
-                    or f"{pod.metadata.name}/{container.name}"
-                    in pod_container_list_filter
+                    if not containers or container in containers
                 ],
                 return_exceptions=True,
             ):
@@ -1739,7 +1779,7 @@ class LokiLogsService(BaseLogsService):
         self,
         query: str,
         *,
-        start: str | int | None = None,
+        start: str | int,
         end: str | int | None = None,
         direction: str = "forward",
         timestamps: bool = False,

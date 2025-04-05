@@ -71,14 +71,14 @@ TResource = t.TypeVar("TResource", bound=Resource)
 
 @dataclass(frozen=True)
 class Metadata:
-    name: str | None = None
+    name: str
     resource_version: str | None = None
     labels: t.Mapping[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_primitive(cls, payload: JSON) -> Metadata:
         return cls(
-            name=payload.get("name"),
+            name=payload["name"],
             resource_version=payload.get("resourceVersion"),
             labels=payload.get("labels", {}),
         )
@@ -482,7 +482,7 @@ class KubeClient:
         trace_configs: list[aiohttp.TraceConfig] | None = None,
     ) -> None:
         self._base_url = base_url
-        self._namespace = "platform"  # namespace
+        self._namespace = namespace  # "default"  # "platform"  # namespace
 
         self._cert_authority_data_pem = cert_authority_data_pem
         self._cert_authority_path = cert_authority_path
@@ -589,20 +589,18 @@ class KubeClient:
     def _generate_namespace_url(self, namespace_name: str) -> str:
         return f"{self._api_v1_url}/namespaces/{namespace_name}"
 
-    @property
-    def _namespace_url(self) -> str:
-        return self._generate_namespace_url(self._namespace)
+    def _namespace_url(self, namespace: str | None) -> str:
+        return self._generate_namespace_url(namespace or self._namespace)
 
     @property
     def _pods_url(self) -> str:
         return f"{self._api_v1_url}/pods"
 
-    @property
-    def _namespaced_pods_url(self) -> str:
-        return f"{self._namespace_url}/pods"
+    def _namespaced_pods_url(self, namespace: str | None) -> str:
+        return f"{self._namespace_url(namespace)}/pods"
 
-    def _generate_pod_url(self, pod_name: str) -> str:
-        return f"{self._namespaced_pods_url}/{pod_name}"
+    def _generate_pod_url(self, pod_name: str, namespace: str | None) -> str:
+        return f"{self._namespaced_pods_url(namespace)}/{pod_name}"
 
     def _generate_node_proxy_url(self, name: str, port: int) -> str:
         return f"{self._api_v1_url}/nodes/{name}:{port}/proxy"
@@ -617,8 +615,10 @@ class KubeClient:
         proxy_url = self._generate_node_proxy_url(name, self._nvidia_dcgm_port)
         return f"{proxy_url}/metrics"
 
-    def _generate_pod_log_url(self, pod_name: str, container_name: str) -> str:
-        url = self._generate_pod_url(pod_name)
+    def _generate_pod_log_url(
+        self, pod_name: str, container_name: str, namespace: str | None
+    ) -> str:
+        url = self._generate_pod_url(pod_name, namespace)
         return f"{url}/log?container={container_name}&follow=true"
 
     def _create_headers(
@@ -638,35 +638,47 @@ class KubeClient:
             logger.debug("k8s response payload: %s", payload)
             return payload
 
-    async def get_raw_pod(self, pod_name: str) -> dict[str, t.Any]:
-        url = self._generate_pod_url(pod_name)
+    async def get_raw_pod(
+        self, pod_name: str, namespace: str | None = None
+    ) -> dict[str, t.Any]:
+        namespace = namespace or self._namespace
+        url = self._generate_pod_url(pod_name, namespace)
         payload = await self._request(method="GET", url=url)
         self._assert_resource_kind(
             expected_kind="Pod", payload=payload, job_id=pod_name
         )
         return payload
 
-    async def get_pod(self, pod_name: str) -> Pod:
-        payload = await self.get_raw_pod(pod_name)
+    async def get_pod(self, pod_name: str, namespace: str | None = None) -> Pod:
+        namespace = namespace or self._namespace
+        payload = await self.get_raw_pod(pod_name, namespace)
         return Pod.from_primitive(payload)
 
-    async def _get_raw_container_state(self, pod_name: str) -> dict[str, t.Any]:
-        pod = await self.get_pod(pod_name)
-        container_status = pod.get_container_status(pod_name)
+    async def _get_raw_container_state(
+        self,
+        pod_name: str,
+        container_name: str | None = None,
+        namespace: str | None = None,
+    ) -> dict[str, t.Any]:
+        namespace = namespace or self._namespace
+        pod = await self.get_pod(pod_name, namespace)
+        container_name = container_name or pod_name
+        container_status = pod.get_container_status(container_name)
         return {**container_status.state}
 
     async def get_container_status(
-        self, name: str, container_name: str | None = None
+        self, name: str, container_name: str | None = None, namespace: str | None = None
     ) -> ContainerStatus:
-        pod = await self.get_pod(name)
-        if not container_name:
-            container_name = name
+        namespace = namespace or self._namespace
+        pod = await self.get_pod(name, namespace)
+        container_name = container_name or name
         return pod.get_container_status(container_name)
 
     async def wait_pod_is_running(
         self,
         pod_name: str,
         *,
+        namespace: str | None = None,
         container_name: str | None = None,
         timeout_s: float = 10.0 * 60,
         interval_s: float = 1.0,
@@ -680,7 +692,9 @@ class KubeClient:
             container_name = pod_name
         async with asyncio.timeout(timeout_s):
             while True:
-                status = await self.get_container_status(pod_name, container_name)
+                status = await self.get_container_status(
+                    pod_name, container_name, namespace
+                )
                 if status.is_running:
                     return status
                 if status.is_terminated and not status.can_restart:
@@ -691,6 +705,7 @@ class KubeClient:
         self,
         pod_name: str,
         *,
+        namespace: str | None = None,
         container_name: str | None = None,
         timeout_s: float = 10.0 * 60,
         interval_s: float = 1.0,
@@ -704,24 +719,29 @@ class KubeClient:
             container_name = pod_name
         async with asyncio.timeout(timeout_s):
             while True:
-                status = await self.get_container_status(pod_name, container_name)
+                status = await self.get_container_status(
+                    pod_name, container_name, namespace
+                )
                 if not status.is_waiting:
                     return status
                 await asyncio.sleep(interval_s)
 
     async def get_pod_container_stats(
-        self, node_name: str, pod_name: str, container_name: str
+        self,
+        node_name: str,
+        pod_name: str,
+        container_name: str,
+        namespace: str | None = None,
     ) -> PodContainerStats | None:
         """
         https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/apis/stats/v1alpha1/types.go
         """
         try:
+            namespace = namespace or self._namespace
             url = self._generate_node_stats_summary_url(node_name)
             payload = await self._request(method="GET", url=url)
             summary = StatsSummary(payload)
-            return summary.get_pod_container_stats(
-                self._namespace, pod_name, container_name
-            )
+            return summary.get_pod_container_stats(namespace, pod_name, container_name)
         except JobNotFoundException:
             return None
         except ContentTypeError as exc:
@@ -733,7 +753,9 @@ class KubeClient:
         node_name: str,
         pod_name: str,
         container_name: str,
+        namespace: str | None = None,
     ) -> PodContainerGPUStats | None:
+        namespace = namespace or self._namespace
         url = self._generate_node_gpu_metrics_url(node_name)
         if not url:
             return None
@@ -745,7 +767,7 @@ class KubeClient:
                 text = await resp.text()
                 gpu_counters = GPUCounters.parse(text)
             return gpu_counters.get_pod_container_stats(
-                self._namespace, pod_name, container_name
+                namespace, pod_name, container_name
             )
         except aiohttp.ClientError as e:
             logger.exception(e)
@@ -763,6 +785,7 @@ class KubeClient:
         self,
         pod_name: str,
         container_name: str,
+        namespace: str,
         *,
         conn_timeout_s: float = 60 * 5,
         read_timeout_s: float = 60 * 30,
@@ -770,7 +793,7 @@ class KubeClient:
         since: datetime | None = None,
         timestamps: bool = False,
     ) -> AsyncIterator[aiohttp.StreamReader]:
-        url = self._generate_pod_log_url(pod_name, container_name)
+        url = self._generate_pod_log_url(pod_name, container_name, namespace)
         if previous:
             url = f"{url}&previous=true"
         if since is not None:
@@ -791,11 +814,15 @@ class KubeClient:
     async def get_pods(
         self,
         *,
+        namespace: str | None = None,
         all_namespaces: bool = False,
         label_selector: str | None = None,
         field_selector: str | None = None,
     ) -> list[Pod]:
-        url = self._pods_url if all_namespaces else self._namespaced_pods_url
+        if not namespace and not all_namespaces:
+            exc_txt = "Cannot get pods without namespace or all_namespaces"
+            raise Exception(exc_txt)
+        url = self._pods_url if all_namespaces else self._namespaced_pods_url(namespace)
         params = {}
         if label_selector:
             params["labelSelector"] = label_selector
