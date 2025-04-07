@@ -1775,13 +1775,12 @@ class TestAppsLogApi:
         monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
 
         since = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        # pod_name = apps_basic_pod.name
+        pod_name = apps_basic_pod.name
 
         headers = regular_apps_user.headers
         url = apps_monitoring_api.generate_log_url()
         url_ws = apps_monitoring_api.generate_log_ws_url()
         tasks = []
-        logger.info("111111111 since: %s", since)
 
         # test base params
         base_params = {
@@ -1844,31 +1843,6 @@ class TestAppsLogApi:
             )
         )
 
-        # for container_name in apps_basic_pod.containers:
-        #     await kube_client.wait_pod_is_running(
-        #         pod_name, container_name=container_name,
-        #         namespace=kube_client.namespace
-        #     )
-        await asyncio.sleep(2.5)
-
-        # tasks2 = []
-        # test with since and containers filter
-        params = base_params.copy()
-        params["since"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        params["timestamps"] = "true"
-        params["containers"] = "container1"
-        logger.info("222222222 params: %s", params)
-        tasks.append(
-            asyncio.create_task(
-                self.response_read_task(client, url, headers, params, "stream")
-            )
-        )
-        tasks.append(
-            asyncio.create_task(
-                self.response_read_task(client, url_ws, headers, params, "ws")
-            )
-        )
-
         log_results = await asyncio.gather(*tasks)
         (
             log_base_params_stream,
@@ -1879,8 +1853,6 @@ class TestAppsLogApi:
             log_ts_ws,
             log_container_filter_stream,
             log_container_filter_ws,
-            log_since_container_stream,
-            log_since_container_ws,
         ) = log_results
 
         logger.info("log_base_params_stream: %s", log_base_params_stream)
@@ -1892,75 +1864,47 @@ class TestAppsLogApi:
         logger.info("log_container_filter_stream: %s", log_container_filter_stream)
         logger.info("log_container_filter_ws: %s", log_container_filter_ws)
 
-        # log_results = await asyncio.gather(*tasks2)
-        # log_since_container_stream, log_since_container_ws = log_results
+        # test base params
+        assert log_base_params_stream == log_base_params_ws
+        self.assert_archive_logs(
+            actual_payload=log_base_params_stream,
+            container_count_start=1,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=r"container[c_number]_[l_number]\n",
+        )
 
-        logger.info("222222 log_since_container_stream: %s", log_since_container_stream)
-        logger.info("222222 log_since_container_ws: %s", log_since_container_ws)
+        # test with prefix
+        assert log_prefix_stream == log_prefix_ws
+        self.assert_archive_logs(
+            actual_payload=log_prefix_stream,
+            container_count_start=1,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=rf"\[{pod_name}/container[c_number]\] "
+            f"container[c_number]_[l_number]\n",
+        )
 
-        assert not base_params
+        # test with timestamps
+        assert log_ts_stream == log_ts_ws
+        self.assert_archive_logs(
+            actual_payload=log_ts_stream,
+            container_count_start=1,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=r"[time] container[c_number]_[l_number]\n",
+        )
 
-        # # test base params
-        # async with client.get(url, headers=headers, params=base_params) as response:
-        #     assert response.status == HTTPOk.status_code
-        #     assert response.content_type == "text/plain"
-        #     assert response.charset == "utf-8"
-        #     assert response.headers["Transfer-Encoding"] == "chunked"
-        #     assert "Content-Encoding" not in response.headers
-        #     actual_payload = await response.read()
-        #
-        # async with client.ws_connect(url_ws, headers=headers,
-        # params=base_params) as ws:
-        #     ws_actual_payload = await self.read_ws(ws)
-        # assert actual_payload == ws_actual_payload
-        # self.assert_archive_logs(
-        #     actual_payload=actual_payload,
-        #     container_count_start=1,
-        #     container_count_end=2,
-        #     logs_count_start=1,
-        #     logs_count_end=5,
-        #     re_log_template=r"container[c_number]_[l_number]\n",
-        # )
-        #
-        # async with client.get(url, headers=headers, params=params) as response:
-        #     actual_payload = await response.read()
-        # async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
-        #     ws_actual_payload = await self.read_ws(ws)
-        # assert actual_payload == ws_actual_payload
-        # self.assert_archive_logs(
-        #     actual_payload=actual_payload,
-        #     container_count_start=1,
-        #     container_count_end=2,
-        #     logs_count_start=1,
-        #     logs_count_end=5,
-        #     re_log_template=rf"\[{pod_name}/container[c_number]\] "
-        #     f"container[c_number]_[l_number]\n",
-        # )
-        #
-        # async with client.get(url, headers=headers, params=params) as response:
-        #     actual_payload = await response.read()
-        # async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
-        #     ws_actual_payload = await self.read_ws(ws)
-        # assert actual_payload == ws_actual_payload
-        # self.assert_archive_logs(
-        #     actual_payload=actual_payload,
-        #     container_count_start=1,
-        #     container_count_end=2,
-        #     logs_count_start=1,
-        #     logs_count_end=5,
-        #     re_log_template=r"[time] container[c_number]_[l_number]\n",
-        # )
-        #
-        # async with client.get(url, headers=headers, params=params) as response:
-        #     actual_payload = await response.read()
-        # async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
-        #     ws_actual_payload = await self.read_ws(ws)
-        # assert actual_payload == ws_actual_payload
-        # self.assert_archive_logs(
-        #     actual_payload=actual_payload,
-        #     container_count_start=2,
-        #     container_count_end=2,
-        #     logs_count_start=1,
-        #     logs_count_end=5,
-        #     re_log_template=r"container[c_number]_[l_number]\n",
-        # )
+        # test with containers filter
+        assert log_container_filter_stream == log_container_filter_ws
+        self.assert_archive_logs(
+            actual_payload=log_container_filter_stream,
+            container_count_start=2,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=r"container[c_number]_[l_number]\n",
+        )
