@@ -1741,10 +1741,10 @@ class TestAppsLogApi:
         self,
         client: aiohttp.ClientSession,
         url: URL,
-        headers: dict,
-        params: dict,
+        headers: dict[str, Any],
+        params: dict[str, Any],
         resp_type: str,
-    ):
+    ) -> bytes:
         if resp_type == "stream":
             async with client.get(url, headers=headers, params=params) as response:
                 actual_payload = await response.read()
@@ -1788,29 +1788,6 @@ class TestAppsLogApi:
             "org_name": regular_apps_user.org_name,
             "project_name": regular_apps_user.project_name,
         }
-
-        # test base params
-        # async with client.get(url, headers=headers, params=base_params) as response:
-        #     assert response.status == HTTPOk.status_code
-        #     assert response.content_type == "text/plain"
-        #     assert response.charset == "utf-8"
-        #     assert response.headers["Transfer-Encoding"] == "chunked"
-        #     assert "Content-Encoding" not in response.headers
-        #     actual_payload = await response.read()
-
-        # async with client.ws_connect(url_ws, headers=headers,
-        # params=base_params) as ws:
-        #     ws_actual_payload = await self.read_ws(ws)
-        # assert actual_payload == ws_actual_payload
-        # self.assert_archive_logs(
-        #     actual_payload=actual_payload,
-        #     container_count_start=1,
-        #     container_count_end=2,
-        #     logs_count_start=1,
-        #     logs_count_end=5,
-        #     re_log_template=r"container[c_number]_[l_number]\n",
-        # )
-
         tasks.append(
             asyncio.create_task(
                 self.response_read_task(client, url, headers, base_params, "stream")
@@ -1864,12 +1841,51 @@ class TestAppsLogApi:
             )
         )
 
-        payloads = await asyncio.gather(*tasks)
+        log_results = await asyncio.gather(*tasks)
+        (
+            log_base_params_stream,
+            log_base_params_ws,
+            log_prefix_stream,
+            log_prefix_ws,
+            log_ts_stream,
+            log_ts_ws,
+            log_container_filter_stream,
+            log_container_filter_ws,
+        ) = log_results
 
-        logger.info("payloads: %s", payloads)
+        logger.info("log_base_params_stream: %s", log_base_params_stream)
+        logger.info("log_base_params_ws: %s", log_base_params_ws)
+        logger.info("log_prefix_stream: %s", log_prefix_stream)
+        logger.info("log_prefix_ws: %s", log_prefix_ws)
+        logger.info("log_ts_stream: %s", log_ts_stream)
+        logger.info("log_ts_ws: %s", log_ts_ws)
+        logger.info("log_container_filter_stream: %s", log_container_filter_stream)
+        logger.info("log_container_filter_ws: %s", log_container_filter_ws)
 
         assert not base_params
 
+        # # test base params
+        # async with client.get(url, headers=headers, params=base_params) as response:
+        #     assert response.status == HTTPOk.status_code
+        #     assert response.content_type == "text/plain"
+        #     assert response.charset == "utf-8"
+        #     assert response.headers["Transfer-Encoding"] == "chunked"
+        #     assert "Content-Encoding" not in response.headers
+        #     actual_payload = await response.read()
+        #
+        # async with client.ws_connect(url_ws, headers=headers,
+        # params=base_params) as ws:
+        #     ws_actual_payload = await self.read_ws(ws)
+        # assert actual_payload == ws_actual_payload
+        # self.assert_archive_logs(
+        #     actual_payload=actual_payload,
+        #     container_count_start=1,
+        #     container_count_end=2,
+        #     logs_count_start=1,
+        #     logs_count_end=5,
+        #     re_log_template=r"container[c_number]_[l_number]\n",
+        # )
+        #
         # async with client.get(url, headers=headers, params=params) as response:
         #     actual_payload = await response.read()
         # async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
@@ -1885,7 +1901,6 @@ class TestAppsLogApi:
         #     f"container[c_number]_[l_number]\n",
         # )
         #
-        #
         # async with client.get(url, headers=headers, params=params) as response:
         #     actual_payload = await response.read()
         # async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
@@ -1899,7 +1914,6 @@ class TestAppsLogApi:
         #     logs_count_end=5,
         #     re_log_template=r"[time] container[c_number]_[l_number]\n",
         # )
-        #
         #
         # async with client.get(url, headers=headers, params=params) as response:
         #     actual_payload = await response.read()
