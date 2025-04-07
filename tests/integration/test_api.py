@@ -1827,12 +1827,12 @@ class TestAppsLogApi:
         params["prefix"] = "true"
         tasks.append(
             asyncio.create_task(
-                self.response_read_task(client, url, headers, base_params, "stream")
+                self.response_read_task(client, url, headers, params, "stream")
             )
         )
         tasks.append(
             asyncio.create_task(
-                self.response_read_task(client, url_ws, headers, base_params, "ws")
+                self.response_read_task(client, url_ws, headers, params, "ws")
             )
         )
 
@@ -1841,12 +1841,12 @@ class TestAppsLogApi:
         params["timestamps"] = "true"
         tasks.append(
             asyncio.create_task(
-                self.response_read_task(client, url, headers, base_params, "stream")
+                self.response_read_task(client, url, headers, params, "stream")
             )
         )
         tasks.append(
             asyncio.create_task(
-                self.response_read_task(client, url_ws, headers, base_params, "ws")
+                self.response_read_task(client, url_ws, headers, params, "ws")
             )
         )
 
@@ -1855,12 +1855,12 @@ class TestAppsLogApi:
         params["containers"] = "container2"
         tasks.append(
             asyncio.create_task(
-                self.response_read_task(client, url, headers, base_params, "stream")
+                self.response_read_task(client, url, headers, params, "stream")
             )
         )
         tasks.append(
             asyncio.create_task(
-                self.response_read_task(client, url_ws, headers, base_params, "ws")
+                self.response_read_task(client, url_ws, headers, params, "ws")
             )
         )
 
