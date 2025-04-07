@@ -601,7 +601,9 @@ class TestKubeClient:
             assert pods
             assert any(pod.metadata.name == job_pod.name for pod in pods)
 
-            pods = await kube_client.get_pods(label_selector=f"job={job_pod.name}")
+            pods = await kube_client.get_pods(
+                namespace=kube_client.namespace, label_selector=f"job={job_pod.name}"
+            )
             assert len(pods) == 1
             assert pods[0].metadata.name == job_pod.name
 

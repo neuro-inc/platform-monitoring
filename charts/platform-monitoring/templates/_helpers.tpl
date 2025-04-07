@@ -79,7 +79,7 @@ release: {{ .Release.Name | quote }}
 - name: NP_MONITORING_PLATFORM_CONFIG_URL
   value: {{ .Values.platform.configUrl | quote }}
 - name: NP_MONITORING_PLATFORM_APPS_URL
-  value: {{ .Values.platform.configUrl | quote }}
+  value: {{ .Values.platform.appsUrl | quote }}
 - name: NP_MONITORING_K8S_NS
   value: {{ .Values.jobsNamespace }}
 - name: NP_MONITORING_REGISTRY_URL
