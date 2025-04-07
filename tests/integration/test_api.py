@@ -1555,7 +1555,7 @@ class TestAppsLogApi:
         # actual_payload = actual_payload.replace(b"failed to create
         # fsnotify watcher: too many open files\n", b"")
         # print(actual_payload)
-        logger.info("actual_payload: %s", actual_payload)
+        logger.info("11111122222 actual_payload: %s", actual_payload)
         for c_number in range(
             container_count_start, container_count_end + 1
         ):  # iterate over containers
@@ -1741,7 +1741,7 @@ class TestAppsLogApi:
         since = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         pod_name = apps_basic_pod.name
 
-        headers: dict[str, Any] = {}  # TODO add auth token
+        headers = regular_apps_user.headers
         url = apps_monitoring_api.generate_log_url()
         base_params = {
             "since": since,
@@ -1810,9 +1810,3 @@ class TestAppsLogApi:
                 logs_count_end=5,
                 re_log_template=r"container[c_number]_[l_number]\n",
             )
-
-
-#         async with client.ws_connect(url, headers=regular_user2.headers) as ws:
-#             await ws.receive_bytes(timeout=5)
-#             data = await ws.receive_bytes()
-#             assert data == b"\x01abc\n"
