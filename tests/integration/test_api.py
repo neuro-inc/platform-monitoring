@@ -1849,34 +1849,19 @@ class TestAppsLogApi:
         #         pod_name, container_name=container_name,
         #         namespace=kube_client.namespace
         #     )
-        # await asyncio.sleep(2.5)
+        await asyncio.sleep(2.5)
 
-        tasks2 = []
-        # test with since
-        params = base_params.copy()
-        params["since"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        logger.info(datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"))
-        tasks2.append(
-            asyncio.create_task(
-                self.response_read_task(client, url, headers, params, "stream")
-            )
-        )
-        tasks2.append(
-            asyncio.create_task(
-                self.response_read_task(client, url_ws, headers, params, "ws")
-            )
-        )
-
+        # tasks2 = []
         # test with since and containers filter
         params = base_params.copy()
         params["since"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         params["containers"] = "container1"
-        tasks2.append(
+        tasks.append(
             asyncio.create_task(
                 self.response_read_task(client, url, headers, params, "stream")
             )
         )
-        tasks2.append(
+        tasks.append(
             asyncio.create_task(
                 self.response_read_task(client, url_ws, headers, params, "ws")
             )
@@ -1892,6 +1877,8 @@ class TestAppsLogApi:
             log_ts_ws,
             log_container_filter_stream,
             log_container_filter_ws,
+            log_since_container_stream,
+            log_since_container_ws,
         ) = log_results
 
         logger.info("log_base_params_stream: %s", log_base_params_stream)
@@ -1903,16 +1890,9 @@ class TestAppsLogApi:
         logger.info("log_container_filter_stream: %s", log_container_filter_stream)
         logger.info("log_container_filter_ws: %s", log_container_filter_ws)
 
-        log_results = await asyncio.gather(*tasks2)
-        (
-            log_since_stream,
-            log_since_ws,
-            log_since_container_stream,
-            log_since_container_ws,
-        ) = log_results
+        # log_results = await asyncio.gather(*tasks2)
+        # log_since_container_stream, log_since_container_ws = log_results
 
-        logger.info("log_since_stream: %s", log_since_stream)
-        logger.info("log_since_ws: %s", log_since_ws)
         logger.info("log_since_container_stream: %s", log_since_container_stream)
         logger.info("log_since_container_ws: %s", log_since_container_ws)
 
