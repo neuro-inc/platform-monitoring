@@ -1553,17 +1553,17 @@ class TestAppsLogApi:
 
     @staticmethod
     def assert_archive_logs(
-        actual_payload: bytes,
+        actual_log: bytes,
         container_count_start: int,
         container_count_end: int,
         logs_count_start: int,
         logs_count_end: int,
         re_log_template: str,
     ) -> None:
-        # actual_payload = actual_payload.replace(b"failed to create
+        # actual_log = actual_log.replace(b"failed to create
         # fsnotify watcher: too many open files\n", b"")
-        # print(actual_payload)
-        logger.info("11111122222 actual_payload: %s", actual_payload)
+        # print(actual_log)
+        logger.info("11111122222 actual_log: %s", actual_log)
         for c_number in range(
             container_count_start, container_count_end + 1
         ):  # iterate over containers
@@ -1576,10 +1576,15 @@ class TestAppsLogApi:
                     .replace("[time]", r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{6}Z")
                     .encode()
                 )
-                actual_payload, replace_count = log_pattern.subn(b"", actual_payload)
+                actual_log, replace_count = log_pattern.subn(b"", actual_log)
                 # print(actual_payload, replace_count)
+                logger.info(
+                    "actual_log log_pattern: %s %s",
+                    actual_log,
+                    str(log_pattern),
+                )
                 assert replace_count == 1
-        assert actual_payload == b""
+        assert actual_log == b""
 
     async def test_apps_only_loki_log(
         self,
