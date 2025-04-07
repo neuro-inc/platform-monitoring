@@ -70,8 +70,8 @@ class EnvironConfigFactory:
         return PlatformAuthConfig(url=url, token=token)
 
     def _create_platform_apps_config(self) -> PlatformAppsConfig:
-        url = URL(self._environ["NP_MONITORING_PLATFORM_APPS_URL"])
-        token = self._environ["NP_MONITORING_PLATFORM_APPS_TOKEN"]
+        url = URL(self._environ.get("NP_MONITORING_PLATFORM_APPS_URL"))
+        token = self._environ.get("NP_MONITORING_PLATFORM_APPS_TOKEN")
         return PlatformAppsConfig(url=url, token=token)
 
     def _create_platform_config(self) -> PlatformConfig:
