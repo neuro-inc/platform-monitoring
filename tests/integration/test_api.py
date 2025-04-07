@@ -1841,7 +1841,10 @@ class TestAppsLogApi:
             )
         )
 
-        await kube_client.wait_pod_is_running(pod_name)
+        for container_name in apps_basic_pod.containers:
+            await kube_client.wait_pod_is_running(
+                pod_name, container_name=container_name, namespace=kube_client.namespace
+            )
         await asyncio.sleep(2.5)
 
         tasks2 = []
