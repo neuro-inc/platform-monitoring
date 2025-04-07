@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: platform-monitoring
-        image: platformmonitoringapi:5  # ghcr.io/neuro-inc/platformmonitoringapi:latest
+        image: ghcr.io/neuro-inc/platformmonitoringapi:latest
         imagePullPolicy: IfNotPresent  # Always
         env:
         - name: NP_MONITORING_CLUSTER_NAME
