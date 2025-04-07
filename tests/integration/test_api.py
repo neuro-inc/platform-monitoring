@@ -1855,7 +1855,9 @@ class TestAppsLogApi:
         # test with since and containers filter
         params = base_params.copy()
         params["since"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        params["timestamps"] = "true"
         params["containers"] = "container1"
+        logger.info("222222222 params: %s", params)
         tasks.append(
             asyncio.create_task(
                 self.response_read_task(client, url, headers, params, "stream")
@@ -1893,8 +1895,8 @@ class TestAppsLogApi:
         # log_results = await asyncio.gather(*tasks2)
         # log_since_container_stream, log_since_container_ws = log_results
 
-        logger.info("log_since_container_stream: %s", log_since_container_stream)
-        logger.info("log_since_container_ws: %s", log_since_container_ws)
+        logger.info("222222 log_since_container_stream: %s", log_since_container_stream)
+        logger.info("222222 log_since_container_ws: %s", log_since_container_ws)
 
         assert not base_params
 
