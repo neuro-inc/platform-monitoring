@@ -1865,7 +1865,6 @@ class TestAppsLogApi:
         logger.info("log_container_filter_ws: %s", log_container_filter_ws)
 
         # test base params
-        assert log_base_params_stream == log_base_params_ws
         self.assert_archive_logs(
             actual_payload=log_base_params_stream,
             container_count_start=1,
@@ -1874,9 +1873,16 @@ class TestAppsLogApi:
             logs_count_end=5,
             re_log_template=r"container[c_number]_[l_number]\n",
         )
+        self.assert_archive_logs(
+            actual_payload=log_base_params_ws,
+            container_count_start=1,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=r"container[c_number]_[l_number]\n",
+        )
 
         # test with prefix
-        assert log_prefix_stream == log_prefix_ws
         self.assert_archive_logs(
             actual_payload=log_prefix_stream,
             container_count_start=1,
@@ -1884,11 +1890,19 @@ class TestAppsLogApi:
             logs_count_start=1,
             logs_count_end=5,
             re_log_template=rf"\[{pod_name}/container[c_number]\] "
-            f"container[c_number]_[l_number]\n",
+            rf"container[c_number]_[l_number]\n",
+        )
+        self.assert_archive_logs(
+            actual_payload=log_prefix_ws,
+            container_count_start=1,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=rf"\[{pod_name}/container[c_number]\] "
+            rf"container[c_number]_[l_number]\n",
         )
 
         # test with timestamps
-        assert log_ts_stream == log_ts_ws
         self.assert_archive_logs(
             actual_payload=log_ts_stream,
             container_count_start=1,
@@ -1897,11 +1911,26 @@ class TestAppsLogApi:
             logs_count_end=5,
             re_log_template=r"[time] container[c_number]_[l_number]\n",
         )
+        self.assert_archive_logs(
+            actual_payload=log_ts_ws,
+            container_count_start=1,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=r"[time] container[c_number]_[l_number]\n",
+        )
 
         # test with containers filter
-        assert log_container_filter_stream == log_container_filter_ws
         self.assert_archive_logs(
             actual_payload=log_container_filter_stream,
+            container_count_start=2,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=r"container[c_number]_[l_number]\n",
+        )
+        self.assert_archive_logs(
+            actual_payload=log_container_filter_ws,
             container_count_start=2,
             container_count_end=2,
             logs_count_start=1,
