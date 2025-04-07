@@ -1631,12 +1631,12 @@ class TestAppsLogApi:
             assert response.charset == "utf-8"
             assert response.headers["Transfer-Encoding"] == "chunked"
             assert "Content-Encoding" not in response.headers
-            actual_payload = await response.read()
+            actual_log = await response.read()
         async with client.ws_connect(url_ws, headers=headers, params=base_params) as ws:
-            ws_actual_payload = await self.read_ws(ws)
-        assert actual_payload == ws_actual_payload
+            ws_actual_log = await self.read_ws(ws)
+        assert actual_log == ws_actual_log
         self.assert_archive_logs(
-            actual_payload=actual_payload,
+            actual_log=actual_log,
             container_count_start=1,
             container_count_end=2,
             logs_count_start=1,
@@ -1648,12 +1648,12 @@ class TestAppsLogApi:
         params = base_params.copy()
         params["prefix"] = "true"
         async with client.get(url, headers=headers, params=params) as response:
-            actual_payload = await response.read()
+            actual_log = await response.read()
         async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
-            ws_actual_payload = await self.read_ws(ws)
-        assert actual_payload == ws_actual_payload
+            ws_actual_log = await self.read_ws(ws)
+        assert actual_log == ws_actual_log
         self.assert_archive_logs(
-            actual_payload=actual_payload,
+            actual_log=actual_log,
             container_count_start=1,
             container_count_end=2,
             logs_count_start=1,
@@ -1666,12 +1666,12 @@ class TestAppsLogApi:
         params = base_params.copy()
         params["timestamps"] = "true"
         async with client.get(url, headers=headers, params=params) as response:
-            actual_payload = await response.read()
+            actual_log = await response.read()
         async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
-            ws_actual_payload = await self.read_ws(ws)
-        assert actual_payload == ws_actual_payload
+            ws_actual_log = await self.read_ws(ws)
+        assert actual_log == ws_actual_log
         self.assert_archive_logs(
-            actual_payload=actual_payload,
+            actual_log=actual_log,
             container_count_start=1,
             container_count_end=2,
             logs_count_start=1,
@@ -1683,12 +1683,12 @@ class TestAppsLogApi:
         params = base_params.copy()
         params["containers"] = "container2"
         async with client.get(url, headers=headers, params=params) as response:
-            actual_payload = await response.read()
+            actual_log = await response.read()
         async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
-            ws_actual_payload = await self.read_ws(ws)
-        assert actual_payload == ws_actual_payload
+            ws_actual_log = await self.read_ws(ws)
+        assert actual_log == ws_actual_log
         self.assert_archive_logs(
-            actual_payload=actual_payload,
+            actual_log=actual_log,
             container_count_start=2,
             container_count_end=2,
             logs_count_start=1,
@@ -1707,12 +1707,12 @@ class TestAppsLogApi:
         )
         params["containers"] = "container1"
         async with client.get(url, headers=headers, params=params) as response:
-            actual_payload = await response.read()
+            actual_log = await response.read()
         async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
-            ws_actual_payload = await self.read_ws(ws)
-        assert actual_payload == ws_actual_payload
+            ws_actual_log = await self.read_ws(ws)
+        assert actual_log == ws_actual_log
         self.assert_archive_logs(
-            actual_payload=actual_payload,
+            actual_log=actual_log,
             container_count_start=1,
             container_count_end=1,
             logs_count_start=4,
@@ -1729,12 +1729,12 @@ class TestAppsLogApi:
         )
         params["containers"] = "container2"
         async with client.get(url, headers=headers, params=params) as response:
-            actual_payload = await response.read()
+            actual_log = await response.read()
         async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
-            ws_actual_payload = await self.read_ws(ws)
-        assert actual_payload == ws_actual_payload
+            ws_actual_log = await self.read_ws(ws)
+        assert actual_log == ws_actual_log
         self.assert_archive_logs(
-            actual_payload=actual_payload,
+            actual_log=actual_log,
             container_count_start=2,
             container_count_end=2,
             logs_count_start=4,
@@ -1752,11 +1752,11 @@ class TestAppsLogApi:
     ) -> bytes:
         if resp_type == "stream":
             async with client.get(url, headers=headers, params=params) as response:
-                actual_payload = await response.read()
+                actual_log = await response.read()
         elif resp_type == "ws":
             async with client.ws_connect(url, headers=headers, params=params) as ws:
-                actual_payload = await self.read_ws(ws)
-        return actual_payload
+                actual_log = await self.read_ws(ws)
+        return actual_log
 
     async def test_apps_only_live_log(
         self,
@@ -1871,7 +1871,7 @@ class TestAppsLogApi:
 
         # test base params
         self.assert_archive_logs(
-            actual_payload=log_base_params_stream,
+            actual_log=log_base_params_stream,
             container_count_start=1,
             container_count_end=2,
             logs_count_start=1,
@@ -1879,7 +1879,7 @@ class TestAppsLogApi:
             re_log_template=r"container[c_number]_[l_number]\n",
         )
         self.assert_archive_logs(
-            actual_payload=log_base_params_ws,
+            actual_log=log_base_params_ws,
             container_count_start=1,
             container_count_end=2,
             logs_count_start=1,
@@ -1889,7 +1889,7 @@ class TestAppsLogApi:
 
         # test with prefix
         self.assert_archive_logs(
-            actual_payload=log_prefix_stream,
+            actual_log=log_prefix_stream,
             container_count_start=1,
             container_count_end=2,
             logs_count_start=1,
@@ -1898,7 +1898,7 @@ class TestAppsLogApi:
             rf"container[c_number]_[l_number]\n",
         )
         self.assert_archive_logs(
-            actual_payload=log_prefix_ws,
+            actual_log=log_prefix_ws,
             container_count_start=1,
             container_count_end=2,
             logs_count_start=1,
@@ -1909,7 +1909,7 @@ class TestAppsLogApi:
 
         # test with timestamps
         self.assert_archive_logs(
-            actual_payload=log_ts_stream,
+            actual_log=log_ts_stream,
             container_count_start=1,
             container_count_end=2,
             logs_count_start=1,
@@ -1917,7 +1917,7 @@ class TestAppsLogApi:
             re_log_template=r"[time] container[c_number]_[l_number]\n",
         )
         self.assert_archive_logs(
-            actual_payload=log_ts_ws,
+            actual_log=log_ts_ws,
             container_count_start=1,
             container_count_end=2,
             logs_count_start=1,
@@ -1927,7 +1927,7 @@ class TestAppsLogApi:
 
         # test with containers filter
         self.assert_archive_logs(
-            actual_payload=log_container_filter_stream,
+            actual_log=log_container_filter_stream,
             container_count_start=2,
             container_count_end=2,
             logs_count_start=1,
@@ -1935,7 +1935,7 @@ class TestAppsLogApi:
             re_log_template=r"container[c_number]_[l_number]\n",
         )
         self.assert_archive_logs(
-            actual_payload=log_container_filter_ws,
+            actual_log=log_container_filter_ws,
             container_count_start=2,
             container_count_end=2,
             logs_count_start=1,
