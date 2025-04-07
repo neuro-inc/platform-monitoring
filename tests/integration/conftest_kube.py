@@ -65,6 +65,7 @@ class MyKubeClient(KubeClient):
                         state = await self._get_raw_container_state(
                             pod_name, container_name=container_name
                         )
+
                     except JobNotFoundException:
                         # job's pod does not exist: maybe it's already garbage-collected
                         if allow_pod_not_exists:

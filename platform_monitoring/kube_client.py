@@ -71,14 +71,14 @@ TResource = t.TypeVar("TResource", bound=Resource)
 
 @dataclass(frozen=True)
 class Metadata:
-    name: str
+    name: str | None
     resource_version: str | None = None
     labels: t.Mapping[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_primitive(cls, payload: JSON) -> Metadata:
         return cls(
-            name=payload["name"],
+            name=payload.get("name"),
             resource_version=payload.get("resourceVersion"),
             labels=payload.get("labels", {}),
         )

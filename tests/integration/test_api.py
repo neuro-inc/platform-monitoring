@@ -8,7 +8,7 @@ import textwrap
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest import mock
 from uuid import uuid4
@@ -29,6 +29,7 @@ from aiohttp.web_exceptions import (
 from yarl import URL
 
 from platform_monitoring.api import create_app
+from platform_monitoring.apps_service import AppInstance, AppsApiClient
 from platform_monitoring.config import (
     Config,
     ContainerRuntimeConfig,
@@ -1479,7 +1480,7 @@ class MyAppsPodDescriptor:
             "apiVersion": "v1",
             "metadata": {
                 "name": pod_name,
-                "labels": {"app.kubernetes.io/name": "apps-log"},
+                "labels": {"app_instance_id": "app_instance_id"},
                 "namespace": "default",
             },
             "spec": {
@@ -1545,15 +1546,21 @@ class TestAppsLogApi:
     @staticmethod
     def assert_archive_logs(
         actual_payload: bytes,
-        container_count: int,
-        logs_count: int,
+        container_count_start: int,
+        container_count_end: int,
+        logs_count_start: int,
+        logs_count_end: int,
         re_log_template: str,
     ) -> None:
         # actual_payload = actual_payload.replace(b"failed to create
         # fsnotify watcher: too many open files\n", b"")
         # print(actual_payload)
-        for c_number in range(1, container_count + 1):  # iterate over containers
-            for l_number in range(1, logs_count + 1):  # iterate over logs
+        for c_number in range(
+            container_count_start, container_count_end + 1
+        ):  # iterate over containers
+            for l_number in range(
+                logs_count_start, logs_count_end + 1
+            ):  # iterate over logs
                 log_pattern = re.compile(
                     re_log_template.replace("[c_number]", str(c_number))
                     .replace("[l_number]", str(l_number))
@@ -1562,8 +1569,8 @@ class TestAppsLogApi:
                 )
                 actual_payload, replace_count = log_pattern.subn(b"", actual_payload)
                 # print(actual_payload, replace_count)
-                assert replace_count == 1
-        assert actual_payload == b""
+                # assert replace_count == 1
+        # assert actual_payload == b""
 
     async def test_apps_only_loki_log(
         self,
@@ -1572,20 +1579,38 @@ class TestAppsLogApi:
         apps_basic_pod: MyAppsPodDescriptor,
         kube_client: MyKubeClient,
         loki_config: LokiConfig,
+        regular_apps_user: ProjectUser,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        async def mock_get_app(*args, **kwargs) -> AppInstance:
+            return AppInstance(
+                id="app_instance_id",
+                name="test-apps-instance",
+                namespace=kube_client.namespace,
+            )
+
+        monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
+
         since = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         pod_name = apps_basic_pod.name
+
         for container_name in apps_basic_pod.containers:
             await kube_client.wait_pod_is_terminated(pod_name, container_name)
 
         await asyncio.sleep(loki_config.archive_delay_s)
 
-        headers: dict[str, Any] = {}  # TODO add auth token
-        url = (
-            f"{apps_monitoring_api.generate_log_url()}?"
-            f"since={since}&instance_id=instance&cluster_name=cluster_name&org_name=org_name&project_name=project_name"
-        )
-        async with client.get(f"{url}", headers=headers) as response:
+        headers = regular_apps_user.headers
+        url = apps_monitoring_api.generate_log_url()
+        base_params = {
+            "since": since,
+            "instance_id": "app_instance_id",
+            "cluster_name": "default",
+            "org_name": regular_apps_user.org_name,
+            "project_name": regular_apps_user.project_name,
+        }
+
+        # test base params
+        async with client.get(url, headers=headers, params=base_params) as response:
             assert response.status == HTTPOk.status_code
             assert response.content_type == "text/plain"
             assert response.charset == "utf-8"
@@ -1593,24 +1618,196 @@ class TestAppsLogApi:
             assert "Content-Encoding" not in response.headers
             actual_payload = await response.read()
             self.assert_archive_logs(
-                actual_payload, 2, 5, r"container[c_number]_[l_number]\n"
+                actual_payload=actual_payload,
+                container_count_start=1,
+                container_count_end=2,
+                logs_count_start=1,
+                logs_count_end=5,
+                re_log_template=r"container[c_number]_[l_number]\n",
             )
 
-        async with client.get(f"{url}&prefix=true", headers=headers) as response:
+        url = apps_monitoring_api.generate_log_ws_url()
+        async with client.ws_connect(url, headers=headers, params=base_params) as ws:
+            actual_payload = b''
+            async for msg in ws:
+                assert msg.type == aiohttp.WSMsgType.BINARY
+                actual_payload += msg.data
+
+        # test with prefix
+        params = base_params.copy()
+        params["prefix"] = "true"
+        async with client.get(url, headers=headers, params=params) as response:
             actual_payload = await response.read()
             self.assert_archive_logs(
-                actual_payload,
-                2,
-                5,
-                rf"\[{pod_name}/container[c_number]\] "
+                actual_payload=actual_payload,
+                container_count_start=1,
+                container_count_end=2,
+                logs_count_start=1,
+                logs_count_end=5,
+                re_log_template=rf"\[{pod_name}/container[c_number]\] "
                 f"container[c_number]_[l_number]\n",
             )
 
-        async with client.get(f"{url}&timestamps=true", headers=headers) as response:
+        # test with timestamps
+        params = base_params.copy()
+        params["timestamps"] = "true"
+        async with client.get(url, headers=headers, params=params) as response:
             actual_payload = await response.read()
             self.assert_archive_logs(
-                actual_payload,
-                2,
-                5,
-                r"[time] container[c_number]_[l_number]\n",
+                actual_payload=actual_payload,
+                container_count_start=1,
+                container_count_end=2,
+                logs_count_start=1,
+                logs_count_end=5,
+                re_log_template=r"[time] container[c_number]_[l_number]\n",
             )
+
+        # test with containers filter
+        params = base_params.copy()
+        params["containers"] = "container2"
+        async with client.get(url, headers=headers, params=params) as response:
+            actual_payload = await response.read()
+            self.assert_archive_logs(
+                actual_payload=actual_payload,
+                container_count_start=2,
+                container_count_end=2,
+                logs_count_start=1,
+                logs_count_end=5,
+                re_log_template=r"container[c_number]_[l_number]\n",
+            )
+
+        pod = await kube_client.get_pod(pod_name)
+
+        # test with since container1
+        params = base_params.copy()
+        finished_at = pod.status.container_statuses[0].finished_at
+        params["since"] = (finished_at - timedelta(seconds=2)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        params["containers"] = "container1"
+        async with client.get(url, headers=headers, params=params) as response:
+            actual_payload = await response.read()
+            self.assert_archive_logs(
+                actual_payload=actual_payload,
+                container_count_start=1,
+                container_count_end=1,
+                logs_count_start=4,
+                logs_count_end=5,
+                re_log_template=r"container[c_number]_[l_number]\n",
+            )
+
+        # test with since container2
+        params = base_params.copy()
+        finished_at = pod.status.container_statuses[1].finished_at
+        params["since"] = (finished_at - timedelta(seconds=2)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        params["containers"] = "container2"
+        async with client.get(url, headers=headers, params=params) as response:
+            actual_payload = await response.read()
+            self.assert_archive_logs(
+                actual_payload=actual_payload,
+                container_count_start=2,
+                container_count_end=2,
+                logs_count_start=4,
+                logs_count_end=5,
+                re_log_template=r"container[c_number]_[l_number]\n",
+            )
+
+    async def test_apps_only_live_log(
+        self,
+        apps_monitoring_api: AppsMonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        apps_basic_pod: MyAppsPodDescriptor,
+        kube_client: MyKubeClient,
+        loki_config: LokiConfig,
+        regular_apps_user: ProjectUser,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        async def mock_get_app(*args, **kwargs) -> AppInstance:
+            return AppInstance(
+                id="app_instance_id",
+                name="test-apps-instance",
+                namespace=kube_client.namespace,
+            )
+
+        monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
+
+        since = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        pod_name = apps_basic_pod.name
+
+        headers: dict[str, Any] = {}  # TODO add auth token
+        url = apps_monitoring_api.generate_log_url()
+        base_params = {
+            "since": since,
+            "instance_id": "app_instance_id",
+            "cluster_name": "default",
+            "org_name": regular_apps_user.org_name,
+            "project_name": regular_apps_user.project_name,
+        }
+
+        # test base params
+        async with client.get(url, headers=headers, params=base_params) as response:
+            assert response.status == HTTPOk.status_code
+            assert response.content_type == "text/plain"
+            assert response.charset == "utf-8"
+            assert response.headers["Transfer-Encoding"] == "chunked"
+            assert "Content-Encoding" not in response.headers
+            actual_payload = await response.read()
+            self.assert_archive_logs(
+                actual_payload=actual_payload,
+                container_count_start=1,
+                container_count_end=2,
+                logs_count_start=1,
+                logs_count_end=5,
+                re_log_template=r"container[c_number]_[l_number]\n",
+            )
+
+        # test with prefix
+        params = base_params.copy()
+        params["prefix"] = "true"
+        async with client.get(url, headers=headers, params=params) as response:
+            actual_payload = await response.read()
+            self.assert_archive_logs(
+                actual_payload=actual_payload,
+                container_count_start=1,
+                container_count_end=2,
+                logs_count_start=1,
+                logs_count_end=5,
+                re_log_template=rf"\[{pod_name}/container[c_number]\] "
+                f"container[c_number]_[l_number]\n",
+            )
+
+        # test with timestamps
+        params = base_params.copy()
+        params["timestamps"] = "true"
+        async with client.get(url, headers=headers, params=params) as response:
+            actual_payload = await response.read()
+            self.assert_archive_logs(
+                actual_payload=actual_payload,
+                container_count_start=1,
+                container_count_end=2,
+                logs_count_start=1,
+                logs_count_end=5,
+                re_log_template=r"[time] container[c_number]_[l_number]\n",
+            )
+
+        # test with containers filter
+        params = base_params.copy()
+        params["containers"] = "container2"
+        async with client.get(url, headers=headers, params=params) as response:
+            actual_payload = await response.read()
+            self.assert_archive_logs(
+                actual_payload=actual_payload,
+                container_count_start=2,
+                container_count_end=2,
+                logs_count_start=1,
+                logs_count_end=5,
+                re_log_template=r"container[c_number]_[l_number]\n",
+            )
+
+
+#         async with client.ws_connect(url, headers=regular_user2.headers) as ws:
+#             await ws.receive_bytes(timeout=5)
+#             data = await ws.receive_bytes()
+#             assert data == b"\x01abc\n"

@@ -37,8 +37,9 @@ test_integration:
 		--durations=10 \
 		--maxfail=0 \
 		--log-level=INFO \
-		tests/integration \
-		-k "test_apps_only_loki_log"
+		tests/integration
+		# -k "test_apps_only_loki_log"
+		# test_apps_only_live_log
 		# -k "test_job_log111"
 		# -n 12
 

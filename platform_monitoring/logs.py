@@ -1719,7 +1719,7 @@ class LokiLogsService(BaseLogsService):
             if containers:
                 query = (
                     f'{{namespace="{namespace}"}} | unpack | '
-                    f"container=~{'|'.join(containers)}"
+                    f'container=~"{"|".join(containers)}"'
                 )
             else:
                 # TODO add labels

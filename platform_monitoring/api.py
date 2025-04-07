@@ -518,6 +518,7 @@ class AppsMonitoringApiHandler:
         app.add_routes(
             [
                 aiohttp.web.get("/log", self.stream_log),
+                aiohttp.web.get("/log_ws", self.ws_log),
             ]
         )
 
@@ -539,6 +540,8 @@ class AppsMonitoringApiHandler:
             return self._config.loki.archive_delay_s
         return DEFAULT_ARCHIVE_DELAY
 
+    # TODO add label endpoint
+
     async def stream_log(self, request: Request) -> StreamResponse:
         if self._logs_storage_type != LogsStorageType.LOKI or not isinstance(
             self._logs_service, LokiLogsService
@@ -555,8 +558,14 @@ class AppsMonitoringApiHandler:
             exc_txt = "Instance_id, cluster_name, org_name and project_name required"
             raise Exception(exc_txt)
 
-        # app_instance = await self._resolve_app_instance(request,
-        # cluster_name, org_name, project_name, "read")
+        app_instance = await self._resolve_app_instance(
+            request=request,
+            app_instance_id=instance_id,
+            cluster_name=cluster_name,
+            org_name=org_name,
+            project_name=project_name,
+            action="read",
+        )
 
         timestamps = _get_bool_param(request, "timestamps", default=False)
         debug = _get_bool_param(request, "debug", default=False)
@@ -573,7 +582,7 @@ class AppsMonitoringApiHandler:
             else datetime.now(UTC) - timedelta(minutes=15)
         )
         separator = request.query.get("separator")
-        label_selector_list = ["app.kubernetes.io/name=apps-log"]
+        label_selector_list = [f"app_instance_id={instance_id}"]  # TODO correct label
 
         if separator is None:
             separator = "=== Live logs ===" + _getrandbytes(30).hex()
@@ -590,7 +599,7 @@ class AppsMonitoringApiHandler:
         async with self._logs_service.get_pod_log_reader_by_containers(
             containers,
             label_selector_list,
-            "default",  # app_instance.namespace,
+            app_instance.namespace,
             separator=separator.encode(),
             since=since,
             timestamps=timestamps,
@@ -598,31 +607,89 @@ class AppsMonitoringApiHandler:
             archive_delay_s=archive_delay_s,
             prefix=prefix,
         ) as it:
-            # response = WebSocketResponse(
-            #     protocols=[WS_LOGS_PROTOCOL],
-            #     heartbeat=HEARTBEAT,
-            # )
-            # await response.prepare(request)
-            # await _run_concurrently(
-            #     _listen(response),
-            #     _forward_bytes_iterating(response, it),
-            # )
-            # return response
             async for chunk in it:
                 await response.write(chunk)
             await response.write_eof()
             return response
 
+    async def ws_log(self, request: Request) -> StreamResponse:
+        if self._logs_storage_type != LogsStorageType.LOKI or not isinstance(
+            self._logs_service, LokiLogsService
+        ):
+            exc_txt = "Loki as logs backend required"
+            raise Exception(exc_txt)
+
+        instance_id = request.query.get("instance_id")
+        cluster_name = request.query.get("cluster_name")
+        org_name = request.query.get("org_name")
+        project_name = request.query.get("project_name")
+
+        if not all([instance_id, cluster_name, org_name, project_name]):
+            exc_txt = "Instance_id, cluster_name, org_name and project_name required"
+            raise Exception(exc_txt)
+
+        app_instance = await self._resolve_app_instance(
+            request=request,
+            app_instance_id=instance_id,
+            cluster_name=cluster_name,
+            org_name=org_name,
+            project_name=project_name,
+            action="read",
+        )
+
+        timestamps = _get_bool_param(request, "timestamps", default=False)
+        debug = _get_bool_param(request, "debug", default=False)
+        prefix = _get_bool_param(request, "prefix", default=False)
+        since_str = request.query.get("since")
+        containers = _get_list_param(request, "containers")
+        archive_delay_s = float(
+            request.query.get("archive_delay", self.get_archive_delay())
+        )
+        # TODO add timedelta to config
+        since = (
+            parse_date(since_str)
+            if since_str
+            else datetime.now(UTC) - timedelta(minutes=15)
+        )
+        separator = request.query.get("separator")
+        label_selector_list = [f"app_instance_id={instance_id}"]  # TODO correct label
+
+        if separator is None:
+            separator = "=== Live logs ===" + _getrandbytes(30).hex()
+
+        assert isinstance(self._logs_service, LokiLogsService)
+        async with self._logs_service.get_pod_log_reader_by_containers(
+            containers,
+            label_selector_list,
+            app_instance.namespace,
+            separator=separator.encode(),
+            since=since,
+            timestamps=timestamps,
+            debug=debug,
+            archive_delay_s=archive_delay_s,
+            prefix=prefix,
+        ) as it:
+            response = WebSocketResponse(
+                protocols=[WS_LOGS_PROTOCOL],
+                heartbeat=HEARTBEAT,
+            )
+            await response.prepare(request)
+            await _run_concurrently(
+                _listen(response),
+                _forward_bytes_iterating(response, it),
+            )
+            return response
+
     async def _resolve_app_instance(
         self,
         request: Request,
+        app_instance_id: str,
         cluster_name: str,
         org_name: str,
         project_name: str,
         action: str,
     ) -> AppInstance:
         user = await untrusted_user(request)
-        app_instance_id = request.match_info["instance_id"]
         app_instance = await self._apps_api_client.get_app(
             app_instance_id=app_instance_id,
             cluster_name=cluster_name,
