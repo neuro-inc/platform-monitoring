@@ -1555,6 +1555,7 @@ class TestAppsLogApi:
         # actual_payload = actual_payload.replace(b"failed to create
         # fsnotify watcher: too many open files\n", b"")
         # print(actual_payload)
+        logger.info("actual_payload: %s", actual_payload)
         for c_number in range(
             container_count_start, container_count_end + 1
         ):  # iterate over containers
@@ -1626,12 +1627,16 @@ class TestAppsLogApi:
                 re_log_template=r"container[c_number]_[l_number]\n",
             )
 
+        logger.info("1111111 actual_payload: %s", actual_payload)
         url = apps_monitoring_api.generate_log_ws_url()
         async with client.ws_connect(url, headers=headers, params=base_params) as ws:
-            actual_payload = b''
+            ws_actual_payload = b""
             async for msg in ws:
                 assert msg.type == aiohttp.WSMsgType.BINARY
-                actual_payload += msg.data
+                ws_actual_payload += msg.data
+        logger.info("222222 ws_actual_payload: %s", ws_actual_payload)
+
+        assert actual_payload == ws_actual_payload
 
         # test with prefix
         params = base_params.copy()

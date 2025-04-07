@@ -119,7 +119,11 @@ class MyPodDescriptor:
         self._payload: dict[str, Any] = {
             "kind": "Pod",
             "apiVersion": "v1",
-            "metadata": {"name": job_id, "labels": {"job": job_id}},
+            "metadata": {
+                "name": job_id,
+                "labels": {"job": job_id},
+                "namespace": "default",
+            },
             "spec": {
                 "containers": [
                     {
