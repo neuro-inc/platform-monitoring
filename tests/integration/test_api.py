@@ -1864,6 +1864,7 @@ class TestAppsLogApi:
 
         await asyncio.sleep(2.5)
 
+        tasks = []
         # test with since
         params = base_params.copy()
         params["since"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
