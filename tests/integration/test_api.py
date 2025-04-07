@@ -1573,7 +1573,7 @@ class TestAppsLogApi:
                 log_pattern = re.compile(
                     re_log_template.replace("[c_number]", str(c_number))
                     .replace("[l_number]", str(l_number))
-                    .replace("[time]", r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{6}Z")
+                    .replace("[time]", r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{,9}Z")
                     .encode()
                 )
                 actual_log, replace_count = log_pattern.subn(b"", actual_log)
