@@ -1560,10 +1560,6 @@ class TestAppsLogApi:
         logs_count_end: int,
         re_log_template: str,
     ) -> None:
-        # actual_log = actual_log.replace(b"failed to create
-        # fsnotify watcher: too many open files\n", b"")
-        # print(actual_log)
-        logger.info("11111122222 actual_log: %s", actual_log)
         for c_number in range(
             container_count_start, container_count_end + 1
         ):  # iterate over containers
@@ -1577,12 +1573,6 @@ class TestAppsLogApi:
                     .encode()
                 )
                 actual_log, replace_count = log_pattern.subn(b"", actual_log)
-                # print(actual_payload, replace_count)
-                logger.info(
-                    "actual_log log_pattern: %s %s",
-                    actual_log,
-                    str(log_pattern),
-                )
                 assert replace_count == 1
         assert actual_log == b""
 
@@ -1768,8 +1758,6 @@ class TestAppsLogApi:
         regular_apps_user: ProjectUser,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        logger.info(datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"))
-
         async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:
             return AppInstance(
                 id="app_instance_id",
@@ -1859,15 +1847,6 @@ class TestAppsLogApi:
             log_container_filter_stream,
             log_container_filter_ws,
         ) = log_results
-
-        logger.info("log_base_params_stream: %s", log_base_params_stream)
-        logger.info("log_base_params_ws: %s", log_base_params_ws)
-        logger.info("log_prefix_stream: %s", log_prefix_stream)
-        logger.info("log_prefix_ws: %s", log_prefix_ws)
-        logger.info("log_ts_stream: %s", log_ts_stream)
-        logger.info("log_ts_ws: %s", log_ts_ws)
-        logger.info("log_container_filter_stream: %s", log_container_filter_stream)
-        logger.info("log_container_filter_ws: %s", log_container_filter_ws)
 
         # test base params
         self.assert_archive_logs(
