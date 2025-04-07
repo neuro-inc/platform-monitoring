@@ -482,7 +482,7 @@ class KubeClient:
         trace_configs: list[aiohttp.TraceConfig] | None = None,
     ) -> None:
         self._base_url = base_url
-        self._namespace = namespace  # "default"  # "platform"  # namespace
+        self._namespace = namespace
 
         self._cert_authority_data_pem = cert_authority_data_pem
         self._cert_authority_path = cert_authority_path

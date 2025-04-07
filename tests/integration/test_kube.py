@@ -597,7 +597,7 @@ class TestKubeClient:
         try:
             await kube_client.create_pod(job_pod.payload)
 
-            pods = await kube_client.get_pods()
+            pods = await kube_client.get_pods(namespace=kube_client.namespace)
             assert pods
             assert any(pod.metadata.name == job_pod.name for pod in pods)
 
@@ -606,6 +606,7 @@ class TestKubeClient:
             assert pods[0].metadata.name == job_pod.name
 
             pods = await kube_client.get_pods(
+                namespace=kube_client.namespace,
                 field_selector=",".join(
                     (
                         "status.phase!=Failed",

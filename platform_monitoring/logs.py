@@ -1479,14 +1479,6 @@ class LokiLogReader(LogReader):
         await self._iterator.aclose()  # type: ignore
 
     def encode_and_handle_log(self, log_data: list[Any]) -> bytes:
-        # try:
-        #     log = orjson.loads(log_data[1])
-        #     if isinstance(log, dict):
-        #         log = log["_entry"]
-        #     else:
-        #         log = str(log)
-        # except orjson.JSONDecodeError:
-        #     log = log_data[1]
         log = log_data[1]
         if log and log[-1] != "\n":
             log = f"{log}\n"

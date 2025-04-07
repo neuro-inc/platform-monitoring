@@ -33,6 +33,7 @@ class PlatformConfig:
 class PlatformAppsConfig:
     url: URL
     token: str = field(repr=False)
+    default_since_timedelta_minutes: int = 15
 
 
 @dataclass(frozen=True)

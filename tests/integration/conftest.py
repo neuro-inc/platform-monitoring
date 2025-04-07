@@ -216,7 +216,6 @@ def s3_config() -> S3Config:
 
 @pytest.fixture(scope="session")
 def loki_config() -> LokiConfig:
-    # return LokiConfig(endpoint_url=URL("http://loki-gateway.default.svc.cluster.local"))
     return LokiConfig(endpoint_url=URL(get_service_url("loki-gt", namespace="default")))
 
 

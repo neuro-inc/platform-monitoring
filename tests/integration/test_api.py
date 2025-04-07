@@ -680,7 +680,7 @@ class TestLogApi:
         async with client.get(url) as resp:
             assert resp.status == HTTPUnauthorized.status_code
 
-    async def test_job_log111(
+    async def test_job_log(
         self,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,

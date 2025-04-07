@@ -328,9 +328,6 @@ class MonitoringApiHandler:
                 )
             )
         logger.info("Checking whether %r has %r", user, permissions)
-        # Checking whether User(name='petro111') has [Permission(uri=
-        # 'job://default/petro1/petro-proj/job-0f65b5cd-0ac0-4c7e-9cad-847c4e3736a6',
-        # action='read')]
         await check_permissions(request, [permissions])
         return job
 
@@ -575,11 +572,14 @@ class AppsMonitoringApiHandler:
         archive_delay_s = float(
             request.query.get("archive_delay", self.get_archive_delay())
         )
-        # TODO add timedelta to config
+
         since = (
             parse_date(since_str)
             if since_str
-            else datetime.now(UTC) - timedelta(minutes=15)
+            else datetime.now(UTC)
+            - timedelta(
+                minutes=self._config.platform_apps.default_since_timedelta_minutes
+            )
         )
         separator = request.query.get("separator")
         label_selector_list = [f"app_instance_id={instance_id}"]  # TODO correct label
@@ -645,11 +645,14 @@ class AppsMonitoringApiHandler:
         archive_delay_s = float(
             request.query.get("archive_delay", self.get_archive_delay())
         )
-        # TODO add timedelta to config
+
         since = (
             parse_date(since_str)
             if since_str
-            else datetime.now(UTC) - timedelta(minutes=15)
+            else datetime.now(UTC)
+            - timedelta(
+                minutes=self._config.platform_apps.default_since_timedelta_minutes
+            )
         )
         separator = request.query.get("separator")
         label_selector_list = [f"app_instance_id={instance_id}"]  # TODO correct label
