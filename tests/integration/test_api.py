@@ -1773,7 +1773,7 @@ class TestAppsLogApi:
         monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
 
         since = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        # pod_name = apps_basic_pod.name
+        pod_name = apps_basic_pod.name
 
         headers = regular_apps_user.headers
         url = apps_monitoring_api.generate_log_url()
@@ -1841,12 +1841,14 @@ class TestAppsLogApi:
             )
         )
 
+        await kube_client.wait_pod_is_running(pod_name)
         await asyncio.sleep(2.5)
 
         tasks2 = []
         # test with since
         params = base_params.copy()
         params["since"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        logger.info(datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"))
         tasks2.append(
             asyncio.create_task(
                 self.response_read_task(client, url, headers, params, "stream")
