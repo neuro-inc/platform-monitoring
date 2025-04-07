@@ -1763,6 +1763,8 @@ class TestAppsLogApi:
         regular_apps_user: ProjectUser,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        logger.info(datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"))
+
         async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:
             return AppInstance(
                 id="app_instance_id",
@@ -1773,12 +1775,13 @@ class TestAppsLogApi:
         monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
 
         since = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        pod_name = apps_basic_pod.name
+        # pod_name = apps_basic_pod.name
 
         headers = regular_apps_user.headers
         url = apps_monitoring_api.generate_log_url()
         url_ws = apps_monitoring_api.generate_log_ws_url()
         tasks = []
+        logger.info("111111111 since: %s", since)
 
         # test base params
         base_params = {
@@ -1841,11 +1844,12 @@ class TestAppsLogApi:
             )
         )
 
-        for container_name in apps_basic_pod.containers:
-            await kube_client.wait_pod_is_running(
-                pod_name, container_name=container_name, namespace=kube_client.namespace
-            )
-        await asyncio.sleep(2.5)
+        # for container_name in apps_basic_pod.containers:
+        #     await kube_client.wait_pod_is_running(
+        #         pod_name, container_name=container_name,
+        #         namespace=kube_client.namespace
+        #     )
+        # await asyncio.sleep(2.5)
 
         tasks2 = []
         # test with since
