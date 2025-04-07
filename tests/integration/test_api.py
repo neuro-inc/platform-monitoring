@@ -1583,7 +1583,7 @@ class TestAppsLogApi:
         regular_apps_user: ProjectUser,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        async def mock_get_app(*args, **kwargs) -> AppInstance:
+        async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:
             return AppInstance(
                 id="app_instance_id",
                 name="test-apps-instance",
@@ -1686,6 +1686,7 @@ class TestAppsLogApi:
         # test with since container1
         params = base_params.copy()
         finished_at = pod.status.container_statuses[0].finished_at
+        assert finished_at
         params["since"] = (finished_at - timedelta(seconds=2)).strftime(
             "%Y-%m-%dT%H:%M:%SZ"
         )
@@ -1704,6 +1705,7 @@ class TestAppsLogApi:
         # test with since container2
         params = base_params.copy()
         finished_at = pod.status.container_statuses[1].finished_at
+        assert finished_at
         params["since"] = (finished_at - timedelta(seconds=2)).strftime(
             "%Y-%m-%dT%H:%M:%SZ"
         )
@@ -1719,6 +1721,8 @@ class TestAppsLogApi:
                 re_log_template=r"container[c_number]_[l_number]\n",
             )
 
+        assert not params
+
     async def test_apps_only_live_log(
         self,
         apps_monitoring_api: AppsMonitoringApiEndpoints,
@@ -1729,7 +1733,7 @@ class TestAppsLogApi:
         regular_apps_user: ProjectUser,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        async def mock_get_app(*args, **kwargs) -> AppInstance:
+        async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:
             return AppInstance(
                 id="app_instance_id",
                 name="test-apps-instance",
@@ -1810,3 +1814,5 @@ class TestAppsLogApi:
                 logs_count_end=5,
                 re_log_template=r"container[c_number]_[l_number]\n",
             )
+
+        assert not params

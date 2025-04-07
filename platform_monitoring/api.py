@@ -560,10 +560,10 @@ class AppsMonitoringApiHandler:
 
         app_instance = await self._resolve_app_instance(
             request=request,
-            app_instance_id=instance_id,
-            cluster_name=cluster_name,
-            org_name=org_name,
-            project_name=project_name,
+            app_instance_id=instance_id,  # type: ignore
+            cluster_name=cluster_name,  # type: ignore
+            org_name=org_name,  # type: ignore
+            project_name=project_name,  # type: ignore
             action="read",
         )
 
@@ -630,10 +630,10 @@ class AppsMonitoringApiHandler:
 
         app_instance = await self._resolve_app_instance(
             request=request,
-            app_instance_id=instance_id,
-            cluster_name=cluster_name,
-            org_name=org_name,
-            project_name=project_name,
+            app_instance_id=instance_id,  # type: ignore
+            cluster_name=cluster_name,  # type: ignore
+            org_name=org_name,  # type: ignore
+            project_name=project_name,  # type: ignore
             action="read",
         )
 
