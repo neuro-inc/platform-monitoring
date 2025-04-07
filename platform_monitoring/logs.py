@@ -1764,7 +1764,7 @@ class LokiLogsService(BaseLogsService):
                     for pod in pods
                     if pod.metadata.name
                     for container in pod.spec.containers
-                    if not containers or container in containers
+                    if not containers or container.name in containers
                 ],
                 return_exceptions=True,
             ):

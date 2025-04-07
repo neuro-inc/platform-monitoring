@@ -1862,6 +1862,28 @@ class TestAppsLogApi:
         logger.info("log_container_filter_stream: %s", log_container_filter_stream)
         logger.info("log_container_filter_ws: %s", log_container_filter_ws)
 
+        await asyncio.sleep(2.5)
+
+        # test with since
+        params = base_params.copy()
+        params["since"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        tasks.append(
+            asyncio.create_task(
+                self.response_read_task(client, url, headers, params, "stream")
+            )
+        )
+        tasks.append(
+            asyncio.create_task(
+                self.response_read_task(client, url_ws, headers, params, "ws")
+            )
+        )
+
+        log_results = await asyncio.gather(*tasks)
+        log_since_stream, log_since_ws = log_results
+
+        logger.info("log_since_stream: %s", log_since_stream)
+        logger.info("log_since_ws: %s", log_since_ws)
+
         assert not base_params
 
         # # test base params
