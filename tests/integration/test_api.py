@@ -1548,8 +1548,8 @@ async def apps_basic_pod(
         }
     )
     await kube_client.create_pod(apps_pod_description.payload)
-    return apps_pod_description
-    # await kube_client.delete_pod(apps_pod_description.name)
+    yield apps_pod_description
+    await kube_client.delete_pod(apps_pod_description.name)
 
 
 class TestAppsLogApi:
