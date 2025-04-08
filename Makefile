@@ -37,7 +37,7 @@ test_integration:
 		--durations=10 \
 		--maxfail=0 \
 		--log-level=INFO \
-		tests/integration \
+		tests/integration
 
 
 .PHONY: docker_build

@@ -39,6 +39,7 @@ def config_factory() -> Callable[[LogsStorageType], Config]:
             platform_api=None,  # type: ignore
             platform_auth=None,  # type: ignore
             platform_config=None,  # type: ignore
+            platform_apps=None,  # type: ignore
             kube=KubeConfig(""),
             container_runtime=ContainerRuntimeConfig(),
             registry=None,  # type: ignore

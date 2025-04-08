@@ -20,7 +20,7 @@ spec:
       containers:
       - name: platform-monitoring
         image: ghcr.io/neuro-inc/platformmonitoringapi:latest
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent  # Always
         env:
         - name: NP_MONITORING_CLUSTER_NAME
           value: default
@@ -43,7 +43,9 @@ spec:
         - name: NP_MONITORING_LOGS_CLEANUP_INTERVAL_SEC
           value: "1000"
         - name: NP_MONITORING_LOGS_STORAGE_TYPE
-          value: s3
+          value: loki
+        - name: NP_MONITORING_LOKI_ENDPOINT_URL
+          value: http://loki-gateway.default.svc.cluster.local
         - name: NP_MONITORING_S3_ACCESS_KEY_ID
           value: access_key
         - name: NP_MONITORING_S3_SECRET_ACCESS_KEY

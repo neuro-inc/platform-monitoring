@@ -25,6 +25,30 @@ alloy:
         targets = discovery.kubernetes.kubernetes_pods.targets
 
         rule {
+          source_labels = ["__meta_kubernetes_pod_controller_name"]
+          regex         = "([0-9a-z-.]+?)(-[0-9a-f]{8,10})?"
+          target_label  = "__tmp_controller_name"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_label_app", "__tmp_controller_name", "__meta_kubernetes_pod_name"]
+          regex         = "^;*([^;]+)(;.*)?$"
+          target_label  = "app"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_instance", "__meta_kubernetes_pod_label_instance"]
+          regex         = "^;*([^;]+)(;.*)?$"
+          target_label  = "instance"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_component", "__meta_kubernetes_pod_label_component"]
+          regex         = "^;*([^;]+)(;.*)?$"
+          target_label  = "component"
+        }
+
+        rule {
           source_labels = ["__meta_kubernetes_pod_node_name"]
           target_label  = "node_name"
         }
@@ -32,6 +56,12 @@ alloy:
         rule {
           source_labels = ["__meta_kubernetes_namespace"]
           target_label  = "namespace"
+        }
+
+        rule {
+          source_labels = ["namespace", "app"]
+          separator     = "/"
+          target_label  = "job"
         }
 
         rule {
@@ -45,6 +75,21 @@ alloy:
         }
 
         rule {
+          source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+          separator     = "/"
+          target_label  = "__path__"
+          replacement   = "/var/log/pods/*$1/*.log"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_annotationpresent_kubernetes_io_config_hash", "__meta_kubernetes_pod_annotation_kubernetes_io_config_hash", "__meta_kubernetes_pod_container_name"]
+          separator     = "/"
+          regex         = "true/(.*)"
+          target_label  = "__path__"
+          replacement   = "/var/log/pods/*$1/*.log"
+        }
+
+        rule {
           source_labels = ["__meta_kubernetes_pod_label_platform_apolo_us_org"]
           target_label  = "org"
         }
@@ -55,17 +100,65 @@ alloy:
         }
 
         rule {
-          source_labels = ["__meta_kubernetes_namespace"]
-          regex = "([a-z]+)-([a-z]+)"
-          target_label  = "apolo_org"
-          replacement = "$1"
+          source_labels = ["__meta_kubernetes_pod_label_platform_apolo_us_app"]
+          target_label  = "app_instance_id"
+        }
+      }
+
+      loki.process "kubernetes_pods" {
+        forward_to = [loki.write.default.receiver]
+
+        stage.cri { }
+
+        stage.replace {
+          expression = "(\\n)"
         }
 
-        rule {
-          source_labels = ["__meta_kubernetes_namespace"]
-          target_label  = "apolo_project"
-          regex = "([a-z]+)-([a-z]+)"
-          replacement = "$2"
+        stage.decolorize {}
+
+        stage.multiline {
+          firstline = "^\\S+.*"
+          max_lines = 0
+        }
+
+        stage.match {
+          selector = "{pod=~\".+\"} |~ \"^\\\\d{4}-\\\\d{2}-\\\\d{2}T\\\\d{2}:\\\\d{2}:\\\\d{2}(?:\\\\.\\\\d+)?Z?\\\\s+\\\\S+\\\\s+\\\\S+\\\\s+(?:\\\\[[^\\\\]]*\\\\])?\\\\s+.*\""
+
+          stage.regex {
+            expression = "(?s)(?P<timestamp>\\S+)\\s+(?P<level>\\S+)\\s+(?P<logger>\\S+)\\s+(?:\\[(?P<context>[^\\]]*)\\])?\\s+(?P<message>.*)"
+          }
+
+          stage.timestamp {
+            source = "timestamp"
+            format = "RFC3339"
+          }
+
+          stage.labels {
+            values = {
+              context = "",
+              level   = "",
+              logger  = "",
+            }
+          }
+
+          stage.structured_metadata {
+            values = {
+              level   = "",
+            }
+          }
+
+          stage.output {
+            source = "message"
+          }
+        }
+
+        stage.pack {
+          labels           = ["stream", "node_name", "level", "logger", "context", "pod", "container", "org", "project", "app_instance_id"]
+          ingest_timestamp = false
+        }
+
+        stage.label_keep {
+          values = ["app", "instance", "namespace"]
         }
       }
 
@@ -73,9 +166,3 @@ alloy:
         targets    = discovery.relabel.kubernetes_pods.output
         forward_to = [loki.process.kubernetes_pods.receiver]
       }
-
-      loki.process "kubernetes_pods" {
-        forward_to = [loki.write.default.receiver]
-      }
-
-# helm upgrade alloy grafana/alloy  -f tests/k8s/alloy-values.yml --install
