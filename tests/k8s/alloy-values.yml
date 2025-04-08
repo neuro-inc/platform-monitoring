@@ -100,8 +100,8 @@ alloy:
         }
 
         rule {
-          source_labels = ["__meta_kubernetes_pod_label_platform_apolo_us_project"]
-          target_label  = "project"
+          source_labels = ["__meta_kubernetes_pod_label_platform_apolo_us_app"]
+          target_label  = "app_instance_id"
         }
       }
 
@@ -153,7 +153,7 @@ alloy:
         }
 
         stage.pack {
-          labels           = ["stream", "node_name", "level", "logger", "context", "pod", "container"]
+          labels           = ["stream", "node_name", "level", "logger", "context", "pod", "container", "org", "project", "app_instance_id"]
           ingest_timestamp = false
         }
 

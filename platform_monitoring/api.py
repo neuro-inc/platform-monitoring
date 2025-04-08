@@ -582,7 +582,6 @@ class AppsMonitoringApiHandler:
             )
         )
         separator = request.query.get("separator")
-        label_selector_list = [f"app_instance_id={instance_id}"]  # TODO correct label
 
         if separator is None:
             separator = "=== Live logs ===" + _getrandbytes(30).hex()
@@ -595,10 +594,22 @@ class AppsMonitoringApiHandler:
         response.headers["X-Separator"] = separator
         await response.prepare(request)
 
+        loki_label_selector = {
+            "org": org_name,
+            "project": project_name,
+            "app_instance_id": instance_id,
+        }
+        k8s_label_selector = {
+            "platform.apolo.us/org": org_name,
+            "platform.apolo.us/project": project_name,
+            "platform.apolo.us/app": instance_id,
+        }
+
         assert isinstance(self._logs_service, LokiLogsService)
         async with self._logs_service.get_pod_log_reader_by_containers(
             containers,
-            label_selector_list,
+            loki_label_selector,
+            k8s_label_selector,
             app_instance.namespace,
             separator=separator.encode(),
             since=since,
@@ -655,15 +666,25 @@ class AppsMonitoringApiHandler:
             )
         )
         separator = request.query.get("separator")
-        label_selector_list = [f"app_instance_id={instance_id}"]  # TODO correct label
-
         if separator is None:
             separator = "=== Live logs ===" + _getrandbytes(30).hex()
+
+        loki_label_selector = {
+            "org": org_name,
+            "project": project_name,
+            "app_instance_id": instance_id,
+        }
+        k8s_label_selector = {
+            "platform.apolo.us/org": org_name,
+            "platform.apolo.us/project": project_name,
+            "platform.apolo.us/app": instance_id,
+        }
 
         assert isinstance(self._logs_service, LokiLogsService)
         async with self._logs_service.get_pod_log_reader_by_containers(
             containers,
-            label_selector_list,
+            loki_label_selector,
+            k8s_label_selector,
             app_instance.namespace,
             separator=separator.encode(),
             since=since,

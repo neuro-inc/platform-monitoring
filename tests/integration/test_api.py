@@ -1480,7 +1480,7 @@ class MyAppsPodDescriptor:
             "apiVersion": "v1",
             "metadata": {
                 "name": pod_name,
-                "labels": {"app_instance_id": "app_instance_id"},
+                "labels": {"platform.apolo.us/app": "app_instance_id"},
                 "namespace": "default",
             },
             "spec": {
@@ -1518,6 +1518,9 @@ class MyAppsPodDescriptor:
     def set_restart_policy(self, policy: str) -> None:
         self._payload["spec"]["restartPolicy"] = policy
 
+    def add_labels(self, labels: dict[str, str]) -> None:
+        self._payload["metadata"]["labels"].update(labels)
+
     @property
     def payload(self) -> dict[str, Any]:
         return self._payload
@@ -1534,12 +1537,19 @@ class MyAppsPodDescriptor:
 @pytest.fixture()
 async def apps_basic_pod(
     kube_client: MyKubeClient,
+    regular_apps_user: ProjectUser,
 ) -> AsyncIterator[MyAppsPodDescriptor]:
     pod_name = f"test-pod-{uuid4()}"
     apps_pod_description = MyAppsPodDescriptor(pod_name)
+    apps_pod_description.add_labels(
+        {
+            "platform.apolo.us/org": regular_apps_user.org_name,
+            "platform.apolo.us/project": regular_apps_user.project_name,
+        }
+    )
     await kube_client.create_pod(apps_pod_description.payload)
-    yield apps_pod_description
-    await kube_client.delete_pod(apps_pod_description.name)
+    return apps_pod_description
+    # await kube_client.delete_pod(apps_pod_description.name)
 
 
 class TestAppsLogApi:
@@ -1580,10 +1590,10 @@ class TestAppsLogApi:
         self,
         apps_monitoring_api: AppsMonitoringApiEndpoints,
         client: aiohttp.ClientSession,
+        regular_apps_user: ProjectUser,
         apps_basic_pod: MyAppsPodDescriptor,
         kube_client: MyKubeClient,
         loki_config: LokiConfig,
-        regular_apps_user: ProjectUser,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:
@@ -1752,10 +1762,10 @@ class TestAppsLogApi:
         self,
         apps_monitoring_api: AppsMonitoringApiEndpoints,
         client: aiohttp.ClientSession,
+        regular_apps_user: ProjectUser,
         apps_basic_pod: MyAppsPodDescriptor,
         kube_client: MyKubeClient,
         loki_config: LokiConfig,
-        regular_apps_user: ProjectUser,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:

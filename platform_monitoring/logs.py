@@ -1674,7 +1674,8 @@ class LokiLogsService(BaseLogsService):
     async def get_pod_log_reader_by_containers(  # noqa: C901
         self,
         containers: list[str] | None,
-        label_selector_list: list[str] | None,
+        loki_label_selector: dict[str, str] | None,
+        k8s_label_selector: dict[str, str] | None,
         namespace: str,
         *,
         since: datetime | None = None,
@@ -1685,6 +1686,8 @@ class LokiLogsService(BaseLogsService):
         prefix: bool = False,
     ) -> AsyncGenerator[bytes, None]:
         containers = containers or []
+        loki_label_selector = loki_label_selector or {}
+        k8s_label_selector = k8s_label_selector or {}
         now_dt = datetime.now(UTC)
         start_dt = (
             now_dt - timedelta(seconds=self._retention_period_s) + timedelta(hours=1)
@@ -1708,14 +1711,15 @@ class LokiLogsService(BaseLogsService):
             start = int(start_dt.timestamp() * 1_000_000_000)
             end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
 
-            if containers:
-                query = (
-                    f'{{namespace="{namespace}"}} | unpack | '
-                    f'container=~"{"|".join(containers)}"'
-                )
-            else:
-                # TODO add labels
-                query = f'{{namespace="{namespace}"}} | unpack | pod=~"test-pod.*"'
+            query = f'{{namespace="{namespace}"}}'
+            if loki_label_selector or containers:
+                query += " | unpack | "
+                if loki_label_selector:
+                    query += " ".join(
+                        f'{key}="{value}"' for key, value in loki_label_selector.items()
+                    )
+                if containers:
+                    query += f' container=~"{"|".join(containers)}"'
 
             async with self.get_pod_archive_log_reader(
                 query,
@@ -1734,8 +1738,8 @@ class LokiLogsService(BaseLogsService):
         if should_get_live_logs:
             since = archive_border_dt
 
-            label_selector = (
-                ",".join(label_selector_list) if label_selector_list else None
+            label_selector = ",".join(
+                f"{key}={value}" for key, value in k8s_label_selector.items()
             )
 
             pods = await self._kube_client.get_pods(
