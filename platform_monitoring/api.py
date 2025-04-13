@@ -514,6 +514,7 @@ class AppsMonitoringApiHandler:
     def register(self, app: aiohttp.web.Application) -> None:
         app.add_routes(
             [
+                aiohttp.web.get("/{app_id}/containers", self.containers),
                 aiohttp.web.get("/{app_id}/log", self.stream_log),
                 aiohttp.web.get("/{app_id}/log_ws", self.ws_log),
             ]
@@ -528,6 +529,10 @@ class AppsMonitoringApiHandler:
         return self._app[APPS_API_CLIENT_KEY]
 
     @property
+    def _kube_client(self) -> KubeClient:
+        return self._app[KUBE_CLIENT_KEY]
+
+    @property
     def _logs_storage_type(self) -> LogsStorageType:
         return self._app[LOGS_STORAGE_TYPE_KEY]
 
@@ -537,72 +542,41 @@ class AppsMonitoringApiHandler:
             return self._config.loki.archive_delay_s
         return DEFAULT_ARCHIVE_DELAY
 
-    # TODO add label endpoint
-    # async def apps_containers(self, request: Request) -> Response:
-    #     if self._logs_storage_type != LogsStorageType.LOKI or not isinstance(
-    #         self._logs_service, LokiLogsService
-    #     ):
-    #         exc_txt = "Loki as logs backend required"
-    #         raise Exception(exc_txt)
-    #
-    #     instance_id = request.match_info["app_id"]
-    #     cluster_name = request.query.get("cluster_name")
-    #     org_name = request.query.get("org_name")
-    #     project_name = request.query.get("project_name")
-    #
-    #     if not all([instance_id, cluster_name, org_name, project_name]):
-    #         exc_txt = "Instance_id, cluster_name, org_name and project_name required"
-    #         raise Exception(exc_txt)
-    #
-    #     app_instance = await self._resolve_app_instance(
-    #         request=request,
-    #         app_instance_id=instance_id,  # type: ignore
-    #         cluster_name=cluster_name,  # type: ignore
-    #         org_name=org_name,  # type: ignore
-    #         project_name=project_name,  # type: ignore
-    #     )
-    #
-    #     since = (
-    #         parse_date(since_str)
-    #         if since_str
-    #         else datetime.now(UTC)
-    #              - timedelta(
-    #             minutes=self._config.platform_apps.default_since_timedelta_minutes
-    #         )
-    #     )
-    #
-    #     start = int(since.timestamp() * 1_000_000_000)
-    #
-    #     query = {"org": "neuro", "project": "platform"}
-    #     result = await self._logs_service._loki_client.label_values(
-    #         label="container", query=query, start=start
-    #     )
-    #
-    #     return Response(status=aiohttp.web.HTTPNoContent.status_code)
-
-    async def stream_log(self, request: Request) -> StreamResponse:
+    def _check_logs_backend(self) -> None:
         if self._logs_storage_type != LogsStorageType.LOKI or not isinstance(
             self._logs_service, LokiLogsService
         ):
             exc_txt = "Loki as logs backend required"
             raise Exception(exc_txt)
 
-        instance_id = request.match_info["app_id"]
-        cluster_name = request.query.get("cluster_name")
-        org_name = request.query.get("org_name")
-        project_name = request.query.get("project_name")
+    async def containers(self, request: Request) -> Response:
+        app_instance = await self._resolve_app_instance(request=request)
 
-        if not all([instance_id, cluster_name, org_name, project_name]):
-            exc_txt = "Instance_id, cluster_name, org_name and project_name required"
-            raise Exception(exc_txt)
+        k8s_label_selector = {
+            "platform.apolo.us/org": app_instance.org_name,
+            "platform.apolo.us/project": app_instance.project_name,
+            "platform.apolo.us/app": app_instance.id,
+        }
 
-        app_instance = await self._resolve_app_instance(
-            request=request,
-            app_instance_id=instance_id,
-            cluster_name=cluster_name,  # type: ignore
-            org_name=org_name,  # type: ignore
-            project_name=project_name,  # type: ignore
+        label_selector = ",".join(
+            f"{key}={value}" for key, value in k8s_label_selector.items()
         )
+
+        pods = await self._kube_client.get_pods(
+            namespace=app_instance.namespace, label_selector=label_selector
+        )
+
+        containers = [
+            container.name
+            for pod in pods
+            if pod.metadata.name
+            for container in pod.spec.containers
+        ]
+
+        return json_response(containers)
+
+    async def stream_log(self, request: Request) -> StreamResponse:
+        app_instance = await self._resolve_app_instance(request=request)
 
         timestamps = _get_bool_param(request, "timestamps", default=False)
         debug = _get_bool_param(request, "debug", default=False)
@@ -638,14 +612,14 @@ class AppsMonitoringApiHandler:
         await response.prepare(request)
 
         loki_label_selector = {
-            "org": org_name,
-            "project": project_name,
-            "app_instance_id": instance_id,
+            "org": app_instance.org_name,
+            "project": app_instance.project_name,
+            "app_instance_id": app_instance.id,
         }
         k8s_label_selector = {
-            "platform.apolo.us/org": org_name,
-            "platform.apolo.us/project": project_name,
-            "platform.apolo.us/app": instance_id,
+            "platform.apolo.us/org": app_instance.org_name,
+            "platform.apolo.us/project": app_instance.project_name,
+            "platform.apolo.us/app": app_instance.id,
         }
 
         assert isinstance(self._logs_service, LokiLogsService)
@@ -667,28 +641,7 @@ class AppsMonitoringApiHandler:
             return response
 
     async def ws_log(self, request: Request) -> StreamResponse:
-        if self._logs_storage_type != LogsStorageType.LOKI or not isinstance(
-            self._logs_service, LokiLogsService
-        ):
-            exc_txt = "Loki as logs backend required"
-            raise Exception(exc_txt)
-
-        instance_id = request.match_info["app_id"]
-        cluster_name = request.query.get("cluster_name")
-        org_name = request.query.get("org_name")
-        project_name = request.query.get("project_name")
-
-        if not all([instance_id, cluster_name, org_name, project_name]):
-            exc_txt = "Instance_id, cluster_name, org_name and project_name required"
-            raise Exception(exc_txt)
-
-        app_instance = await self._resolve_app_instance(
-            request=request,
-            app_instance_id=instance_id,
-            cluster_name=cluster_name,  # type: ignore
-            org_name=org_name,  # type: ignore
-            project_name=project_name,  # type: ignore
-        )
+        app_instance = await self._resolve_app_instance(request=request)
 
         timestamps = _get_bool_param(request, "timestamps", default=False)
         debug = _get_bool_param(request, "debug", default=False)
@@ -715,14 +668,14 @@ class AppsMonitoringApiHandler:
             separator = "=== Live logs ===" + _getrandbytes(30).hex()
 
         loki_label_selector = {
-            "org": org_name,
-            "project": project_name,
-            "app_instance_id": instance_id,
+            "org": app_instance.org_name,
+            "project": app_instance.project_name,
+            "app_instance_id": app_instance.id,
         }
         k8s_label_selector = {
-            "platform.apolo.us/org": org_name,
-            "platform.apolo.us/project": project_name,
-            "platform.apolo.us/app": instance_id,
+            "platform.apolo.us/org": app_instance.org_name,
+            "platform.apolo.us/project": app_instance.project_name,
+            "platform.apolo.us/app": app_instance.id,
         }
 
         assert isinstance(self._logs_service, LokiLogsService)
@@ -749,20 +702,25 @@ class AppsMonitoringApiHandler:
             )
             return response
 
-    async def _resolve_app_instance(
-        self,
-        request: Request,
-        app_instance_id: str,
-        cluster_name: str,
-        org_name: str,
-        project_name: str,
-    ) -> AppInstance:
+    async def _resolve_app_instance(self, request: Request) -> AppInstance:
+        self._check_logs_backend()
+
         user = await untrusted_user(request)
+
+        instance_id = request.match_info["app_id"]
+        cluster_name = request.query.get("cluster_name")
+        org_name = request.query.get("org_name")
+        project_name = request.query.get("project_name")
+
+        if not all([instance_id, cluster_name, org_name, project_name]):
+            exc_txt = "Instance_id, cluster_name, org_name and project_name required"
+            raise Exception(exc_txt)
+
         return await self._apps_api_client.get_app(
-            app_instance_id=app_instance_id,
-            cluster_name=cluster_name,
-            org_name=org_name,
-            project_name=project_name,
+            app_instance_id=instance_id,
+            cluster_name=cluster_name,  # type: ignore
+            org_name=org_name,  # type: ignore
+            project_name=project_name,  # type: ignore
             token=user.token,
         )
 
@@ -1134,6 +1092,7 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             )
             app[MONITORING_APP_KEY][LOGS_SERVICE_KEY] = logs_service
             app[APPS_MONITORING_APP_KEY][LOGS_SERVICE_KEY] = logs_service
+            app[APPS_MONITORING_APP_KEY][KUBE_CLIENT_KEY] = kube_client
             app[APPS_MONITORING_APP_KEY][LOGS_STORAGE_TYPE_KEY] = (
                 config.logs.storage_type
             )

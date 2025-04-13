@@ -10,6 +10,8 @@ from yarl import URL
 class AppInstance:
     id: str
     name: str
+    org_name: str
+    project_name: str
     namespace: str
 
 
@@ -17,6 +19,8 @@ def _create_app_instance(payload: dict[str, Any]) -> AppInstance:
     return AppInstance(
         id=payload["id"],
         name=payload["name"],
+        org_name=payload["org_name"],
+        project_name=payload["project_name"],
         namespace=payload["namespace"],
     )
 

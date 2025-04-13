@@ -178,6 +178,9 @@ class AppsMonitoringApiEndpoints:
     def generate_log_ws_url(self, app_id: str) -> URL:
         return self.endpoint / app_id / "log_ws"
 
+    def generate_containers_url(self, app_id: str) -> URL:
+        return self.endpoint / app_id / "containers"
+
 
 @dataclass(frozen=True)
 class PlatformApiEndpoints:
@@ -1552,6 +1555,23 @@ async def apps_basic_pod(
     await kube_client.delete_pod(apps_pod_description.name)
 
 
+@pytest.fixture()
+def _get_app_mock(
+    monkeypatch: pytest.MonkeyPatch,
+    regular_user1: ProjectUser,
+    kube_client: MyKubeClient,
+) -> None:
+    async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:
+        return AppInstance(
+            id="app_instance_id",
+            name="test-apps-instance",
+            org_name=regular_user1.org_name,
+            project_name=regular_user1.project_name,
+            namespace=kube_client.namespace,
+        )
+    monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
+
+
 class TestAppsLogApi:
     @staticmethod
     async def read_ws(ws: aiohttp.ClientWebSocketResponse) -> bytes:
@@ -1560,6 +1580,22 @@ class TestAppsLogApi:
             assert msg.type == aiohttp.WSMsgType.BINARY
             ws_actual_payload += msg.data
         return ws_actual_payload
+
+    async def response_read_task(
+        self,
+        client: aiohttp.ClientSession,
+        url: URL,
+        headers: dict[str, Any],
+        params: dict[str, Any],
+        resp_type: str,
+    ) -> bytes:
+        if resp_type == "stream":
+            async with client.get(url, headers=headers, params=params) as response:
+                actual_log = await response.read()
+        elif resp_type == "ws":
+            async with client.ws_connect(url, headers=headers, params=params) as ws:
+                actual_log = await self.read_ws(ws)
+        return actual_log
 
     @staticmethod
     def assert_archive_logs(
@@ -1586,6 +1622,7 @@ class TestAppsLogApi:
                 # assert replace_count == 1
         # assert actual_log == b""
 
+    @pytest.mark.usefixtures("_get_app_mock")
     async def test_apps_only_loki_log(
         self,
         apps_monitoring_api: AppsMonitoringApiEndpoints,
@@ -1594,17 +1631,7 @@ class TestAppsLogApi:
         apps_basic_pod: MyAppsPodDescriptor,
         kube_client: MyKubeClient,
         loki_config: LokiConfig,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:
-            return AppInstance(
-                id="app_instance_id",
-                name="test-apps-instance",
-                namespace=kube_client.namespace,
-            )
-
-        monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
-
         since = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         pod_name = apps_basic_pod.name
 
@@ -1741,22 +1768,7 @@ class TestAppsLogApi:
             re_log_template=r"container[c_number]_[l_number]\n",
         )
 
-    async def response_read_task(
-        self,
-        client: aiohttp.ClientSession,
-        url: URL,
-        headers: dict[str, Any],
-        params: dict[str, Any],
-        resp_type: str,
-    ) -> bytes:
-        if resp_type == "stream":
-            async with client.get(url, headers=headers, params=params) as response:
-                actual_log = await response.read()
-        elif resp_type == "ws":
-            async with client.ws_connect(url, headers=headers, params=params) as ws:
-                actual_log = await self.read_ws(ws)
-        return actual_log
-
+    @pytest.mark.usefixtures("_get_app_mock")
     async def test_apps_only_live_log(
         self,
         apps_monitoring_api: AppsMonitoringApiEndpoints,
@@ -1765,17 +1777,7 @@ class TestAppsLogApi:
         apps_basic_pod: MyAppsPodDescriptor,
         kube_client: MyKubeClient,
         loki_config: LokiConfig,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:
-            return AppInstance(
-                id="app_instance_id",
-                name="test-apps-instance",
-                namespace=kube_client.namespace,
-            )
-
-        monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
-
         since = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         pod_name = apps_basic_pod.name
 
@@ -1929,3 +1931,32 @@ class TestAppsLogApi:
             logs_count_end=5,
             re_log_template=r"container[c_number]_[l_number]\n",
         )
+
+    @pytest.mark.usefixtures("_get_app_mock")
+    async def test_apps_containers(
+        self,
+        apps_monitoring_api: AppsMonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        regular_user1: ProjectUser,
+        apps_basic_pod: MyAppsPodDescriptor,
+        kube_client: MyKubeClient,
+    ) -> None:
+        pod_name = apps_basic_pod.name
+
+        for container_name in apps_basic_pod.containers:
+            await kube_client.wait_pod_is_running(
+                pod_name, namespace=kube_client.namespace, container_name=container_name
+            )
+
+        headers = regular_user1.headers
+        url = apps_monitoring_api.generate_containers_url(app_id="app_instance_id")
+        params = {
+            "cluster_name": "default",
+            "org_name": regular_user1.org_name,
+            "project_name": regular_user1.project_name,
+        }
+
+        async with client.get(url, headers=headers, params=params) as response:
+            assert response.status == HTTPOk.status_code
+            containers = await response.json()
+            assert containers == apps_basic_pod.containers
