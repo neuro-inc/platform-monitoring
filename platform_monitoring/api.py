@@ -34,7 +34,6 @@ from neuro_config_client import ConfigClient
 from neuro_logging import init_logging, setup_sentry
 from yarl import URL
 
-from .apps_service import AppInstance, AppsApiClient
 from .base import JobStats, Telemetry
 from .config import (
     Config,
@@ -65,6 +64,7 @@ from .logs import (
 )
 from .loki_client import LokiClient
 from .platform_api_client import ApiClient, Job
+from .platform_apps_client import AppInstance, AppsApiClient
 from .user import untrusted_user
 from .utils import JobsHelper, KubeHelper, parse_date
 from .validators import (
@@ -208,7 +208,7 @@ class MonitoringApiHandler:
 
         async with self._logs_service.get_pod_log_reader(
             pod_name,
-            job.namespace,
+            job.namespace or self._config.kube.namespace,
             separator=separator.encode(),
             since=since,
             timestamps=timestamps,
@@ -242,7 +242,7 @@ class MonitoringApiHandler:
 
         async with self._logs_service.get_pod_log_reader(
             pod_name,
-            job.namespace,
+            job.namespace or self._config.kube.namespace,
             separator=separator.encode(),
             since=since,
             timestamps=timestamps,
@@ -514,8 +514,8 @@ class AppsMonitoringApiHandler:
     def register(self, app: aiohttp.web.Application) -> None:
         app.add_routes(
             [
-                aiohttp.web.get("/log", self.stream_log),
-                aiohttp.web.get("/log_ws", self.ws_log),
+                aiohttp.web.get("/{app_id}/log", self.stream_log),
+                aiohttp.web.get("/{app_id}/log_ws", self.ws_log),
             ]
         )
 
@@ -538,6 +538,47 @@ class AppsMonitoringApiHandler:
         return DEFAULT_ARCHIVE_DELAY
 
     # TODO add label endpoint
+    # async def apps_containers(self, request: Request) -> Response:
+    #     if self._logs_storage_type != LogsStorageType.LOKI or not isinstance(
+    #         self._logs_service, LokiLogsService
+    #     ):
+    #         exc_txt = "Loki as logs backend required"
+    #         raise Exception(exc_txt)
+    #
+    #     instance_id = request.match_info["app_id"]
+    #     cluster_name = request.query.get("cluster_name")
+    #     org_name = request.query.get("org_name")
+    #     project_name = request.query.get("project_name")
+    #
+    #     if not all([instance_id, cluster_name, org_name, project_name]):
+    #         exc_txt = "Instance_id, cluster_name, org_name and project_name required"
+    #         raise Exception(exc_txt)
+    #
+    #     app_instance = await self._resolve_app_instance(
+    #         request=request,
+    #         app_instance_id=instance_id,  # type: ignore
+    #         cluster_name=cluster_name,  # type: ignore
+    #         org_name=org_name,  # type: ignore
+    #         project_name=project_name,  # type: ignore
+    #     )
+    #
+    #     since = (
+    #         parse_date(since_str)
+    #         if since_str
+    #         else datetime.now(UTC)
+    #              - timedelta(
+    #             minutes=self._config.platform_apps.default_since_timedelta_minutes
+    #         )
+    #     )
+    #
+    #     start = int(since.timestamp() * 1_000_000_000)
+    #
+    #     query = {"org": "neuro", "project": "platform"}
+    #     result = await self._logs_service._loki_client.label_values(
+    #         label="container", query=query, start=start
+    #     )
+    #
+    #     return Response(status=aiohttp.web.HTTPNoContent.status_code)
 
     async def stream_log(self, request: Request) -> StreamResponse:
         if self._logs_storage_type != LogsStorageType.LOKI or not isinstance(
@@ -546,7 +587,7 @@ class AppsMonitoringApiHandler:
             exc_txt = "Loki as logs backend required"
             raise Exception(exc_txt)
 
-        instance_id = request.query.get("instance_id")
+        instance_id = request.match_info["app_id"]
         cluster_name = request.query.get("cluster_name")
         org_name = request.query.get("org_name")
         project_name = request.query.get("project_name")
@@ -557,18 +598,20 @@ class AppsMonitoringApiHandler:
 
         app_instance = await self._resolve_app_instance(
             request=request,
-            app_instance_id=instance_id,  # type: ignore
+            app_instance_id=instance_id,
             cluster_name=cluster_name,  # type: ignore
             org_name=org_name,  # type: ignore
             project_name=project_name,  # type: ignore
-            action="read",
         )
 
         timestamps = _get_bool_param(request, "timestamps", default=False)
         debug = _get_bool_param(request, "debug", default=False)
         prefix = _get_bool_param(request, "prefix", default=False)
         since_str = request.query.get("since")
-        containers = _get_list_param(request, "containers")
+        try:
+            containers = request.query.getall("container")
+        except KeyError:
+            containers = []
         archive_delay_s = float(
             request.query.get("archive_delay", self.get_archive_delay())
         )
@@ -630,7 +673,7 @@ class AppsMonitoringApiHandler:
             exc_txt = "Loki as logs backend required"
             raise Exception(exc_txt)
 
-        instance_id = request.query.get("instance_id")
+        instance_id = request.match_info["app_id"]
         cluster_name = request.query.get("cluster_name")
         org_name = request.query.get("org_name")
         project_name = request.query.get("project_name")
@@ -641,18 +684,20 @@ class AppsMonitoringApiHandler:
 
         app_instance = await self._resolve_app_instance(
             request=request,
-            app_instance_id=instance_id,  # type: ignore
+            app_instance_id=instance_id,
             cluster_name=cluster_name,  # type: ignore
             org_name=org_name,  # type: ignore
             project_name=project_name,  # type: ignore
-            action="read",
         )
 
         timestamps = _get_bool_param(request, "timestamps", default=False)
         debug = _get_bool_param(request, "debug", default=False)
         prefix = _get_bool_param(request, "prefix", default=False)
         since_str = request.query.get("since")
-        containers = _get_list_param(request, "containers")
+        try:
+            containers = request.query.getall("container")
+        except KeyError:
+            containers = []
         archive_delay_s = float(
             request.query.get("archive_delay", self.get_archive_delay())
         )
@@ -711,25 +756,15 @@ class AppsMonitoringApiHandler:
         cluster_name: str,
         org_name: str,
         project_name: str,
-        action: str,
     ) -> AppInstance:
         user = await untrusted_user(request)
-        app_instance = await self._apps_api_client.get_app(
+        return await self._apps_api_client.get_app(
             app_instance_id=app_instance_id,
             cluster_name=cluster_name,
             org_name=org_name,
             project_name=project_name,
+            token=user.token,
         )
-        permissions = [
-            Permission(
-                f"cluster://{cluster_name}/orgs/{org_name}/projects/{project_name}",
-                action,
-            )
-        ]
-
-        logger.info("Checking whether %r has %r", user, permissions)
-        await check_permissions(request, [permissions])
-        return app_instance
 
 
 async def _listen(ws: WebSocketResponse) -> None:
@@ -1188,11 +1223,6 @@ def _get_bool_param(request: Request, name: str, *, default: bool = False) -> bo
         return False
     msg = f'"{name}" request parameter can be "true"/"1" or "false"/"0"'
     raise ValueError(msg)
-
-
-def _get_list_param(request: Request, name: str) -> list[str] | None:
-    param = request.query.get(name)
-    return param.strip().split(",") if param else None
 
 
 def _getrandbytes(size: int) -> bytes:

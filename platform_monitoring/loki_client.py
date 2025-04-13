@@ -107,8 +107,8 @@ class LokiClient:
         start: str | int,
         end: str | int | None = None,
         direction: str = "forward",
-        prefix: bool = False,
         limit: int = 100,
+        add_stream_to_log_entries: bool = True,
     ) -> dict[str, Any]:
         params = self._build_params(
             query=query, start=start, end=end, direction=direction, limit=limit
@@ -117,13 +117,11 @@ class LokiClient:
         url = str(self._query_range_url)
         result = await self._request(method="GET", url=url, params=params)
 
-        if prefix:
-            for log_data in result["data"]["result"]:
-                for log in log_data["values"]:
-                    log[1] = (
-                        f"[{log_data['stream']['pod']}/"
-                        f"{log_data['stream']['container']}] {log[1]}"
-                    )
+        # add stream data to each log entry
+        if add_stream_to_log_entries:
+            for stream_result in result["data"]["result"]:
+                for log in stream_result["values"]:
+                    log.append(stream_result["stream"])
 
         data_result = sorted(
             chain.from_iterable(
@@ -144,7 +142,6 @@ class LokiClient:
         start: str | int,
         end: str | int | None = None,
         direction: str = "forward",
-        prefix: bool = False,
         limit: int = 100,
     ) -> AsyncIterator[dict[str, Any]]:
         while True:
@@ -154,7 +151,6 @@ class LokiClient:
                 end=end,
                 limit=limit,
                 direction=direction,
-                prefix=prefix,
             )
             yield response
 

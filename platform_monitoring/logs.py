@@ -1485,6 +1485,9 @@ class LokiLogReader(LogReader):
         if self._timestamps:
             log_dt = datetime.fromtimestamp(int(log_data[0]) / 1_000_000_000, tz=UTC)
             log = f"{log_dt.strftime('%Y-%m-%dT%H:%M:%S.%f')}Z {log}"
+        if self._prefix:
+            stream = log_data[2]
+            log = f"{stream['pod']}/{stream['container']} {log}"
 
         return log.encode()
 
@@ -1494,7 +1497,6 @@ class LokiLogReader(LogReader):
             start=self._start,
             end=self._end,
             direction=self._direction,
-            prefix=self._prefix,
         ):
             for log_data in res["data"]["result"]:
                 yield self.encode_and_handle_log(log_data)
@@ -1526,8 +1528,6 @@ class LokiLogsService(BaseLogsService):
         debug: bool = False,
         stop_func: Callable[[], Awaitable[bool]] | None = None,
     ) -> AsyncGenerator[bytes, None]:
-        # what if job exist in API db but no starts in k8s?
-
         now_dt = datetime.now(UTC)
         start_dt = (
             now_dt - timedelta(seconds=self._retention_period_s) + timedelta(hours=1)
@@ -1541,7 +1541,6 @@ class LokiLogsService(BaseLogsService):
 
         should_get_archive_logs = True
         should_get_live_logs = True
-
         try:
             status = await self._kube_client.wait_pod_is_not_waiting(
                 pod_name, timeout_s=timeout_s, interval_s=interval_s
@@ -1559,6 +1558,10 @@ class LokiLogsService(BaseLogsService):
 
             if status.is_terminated and status.finished_at:
                 archive_border_dt = status.finished_at
+
+            # There is a case f.e. when pod terminated at 12:00:00.666 and last log was
+            # at 12:00:00.555 but finished_at truncated to 12:00:00.000 by api,
+            # so this logs appeared as live logs and not appeared in archive.
         except JobNotFoundException:
             should_get_live_logs = False
             archive_border_dt = now_dt
@@ -1616,7 +1619,7 @@ class LokiLogsService(BaseLogsService):
             except JobNotFoundException:
                 pass
 
-    async def live_pod_container_reader(
+    async def get_pod_container_live_log_reader(
         self,
         *,
         pod_name: str,
@@ -1665,10 +1668,71 @@ class LokiLogsService(BaseLogsService):
             pass
         except Exception as e:
             exc_txt = (
-                f"Error while live_pod_container_reader "
+                f"Error while get_pod_container_live_log_reader "
                 f"{pod_name=} {container_name=}\nException: {e}"
             )
             raise Exception(exc_txt) from e
+
+    async def get_pod_containers_live_log_reader(
+        self,
+        *,
+        containers: list[str],
+        k8s_label_selector: dict[str, str],
+        namespace: str,
+        since: datetime | None = None,
+        separator: bytes | None = None,
+        timestamps: bool = False,
+        debug: bool = False,
+        prefix: bool = True,
+    ) -> AsyncIterator[bytes]:
+        label_selector = ",".join(
+            f"{key}={value}" for key, value in k8s_label_selector.items()
+        )
+
+        pods = await self._kube_client.get_pods(
+            namespace=namespace, label_selector=label_selector
+        )
+
+        async for chunk in as_generated(
+            [
+                self.get_pod_container_live_log_reader(
+                    pod_name=pod.metadata.name,
+                    container_name=container.name,
+                    namespace=namespace,
+                    since=since,
+                    timestamps=timestamps,
+                    debug=debug,
+                    prefix=prefix,
+                )
+                for pod in pods
+                if pod.metadata.name
+                for container in pod.spec.containers
+                if not containers or container.name in containers
+            ],
+            return_exceptions=True,
+        ):
+            if isinstance(chunk, Exception):
+                logger.error(str(chunk))
+                continue
+            if separator:
+                yield separator + b"\n"
+                separator = None
+            yield chunk
+
+    @staticmethod
+    def _build_archive_loki_query(
+        namespace: str, loki_label_selector: dict[str, str], containers: list[str]
+    ) -> str:
+        query = f'{{namespace="{namespace}"}}'
+        if loki_label_selector or containers:
+            query += " | unpack | "
+            if loki_label_selector:
+                query += " ".join(
+                    f'{key}="{value}"' for key, value in loki_label_selector.items()
+                )
+            if containers:
+                query += f' container=~"{"|".join(containers)}"'
+        return query
 
     @asyncgeneratorcontextmanager
     async def get_pod_log_reader_by_containers(  # noqa: C901
@@ -1711,15 +1775,9 @@ class LokiLogsService(BaseLogsService):
             start = int(start_dt.timestamp() * 1_000_000_000)
             end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
 
-            query = f'{{namespace="{namespace}"}}'
-            if loki_label_selector or containers:
-                query += " | unpack | "
-                if loki_label_selector:
-                    query += " ".join(
-                        f'{key}="{value}"' for key, value in loki_label_selector.items()
-                    )
-                if containers:
-                    query += f' container=~"{"|".join(containers)}"'
+            query = self._build_archive_loki_query(
+                namespace, loki_label_selector, containers
+            )
 
             async with self.get_pod_archive_log_reader(
                 query,
@@ -1729,47 +1787,24 @@ class LokiLogsService(BaseLogsService):
                 prefix=prefix,
             ) as it:
                 async for chunk in it:
-                    has_archive = True
+                    if not has_archive:
+                        has_archive = True
                     yield chunk
 
         if not has_archive:
             separator = None
 
         if should_get_live_logs:
-            since = archive_border_dt
-
-            label_selector = ",".join(
-                f"{key}={value}" for key, value in k8s_label_selector.items()
-            )
-
-            pods = await self._kube_client.get_pods(
-                namespace=namespace, label_selector=label_selector
-            )
-
-            async for chunk in as_generated(
-                [
-                    self.live_pod_container_reader(
-                        pod_name=pod.metadata.name,
-                        container_name=container.name,
-                        namespace=namespace,
-                        since=since,
-                        timestamps=timestamps,
-                        debug=debug,
-                        prefix=prefix,
-                    )
-                    for pod in pods
-                    if pod.metadata.name
-                    for container in pod.spec.containers
-                    if not containers or container.name in containers
-                ],
-                return_exceptions=True,
+            async for chunk in self.get_pod_containers_live_log_reader(
+                containers=containers,
+                k8s_label_selector=k8s_label_selector,
+                namespace=namespace,
+                since=archive_border_dt,
+                separator=separator,
+                timestamps=timestamps,
+                debug=debug,
+                prefix=prefix,
             ):
-                if isinstance(chunk, Exception):
-                    logger.error(str(chunk))
-                    continue
-                if separator:
-                    yield separator + b"\n"
-                    separator = None
                 yield chunk
 
     def get_pod_archive_log_reader(  # type: ignore

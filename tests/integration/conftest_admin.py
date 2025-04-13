@@ -153,13 +153,6 @@ async def regular_user2(
     return await regular_user_factory()
 
 
-@pytest.fixture(scope="session")
-async def regular_apps_user(
-    regular_user_factory: Callable[..., Awaitable[ProjectUser]],
-) -> ProjectUser:
-    return await regular_user_factory()
-
-
 @pytest.fixture()
 async def share_job(
     auth_client: AuthClient, cluster_name: str

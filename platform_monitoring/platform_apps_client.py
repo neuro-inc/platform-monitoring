@@ -50,7 +50,6 @@ class AppsApiClient:
 
     def _create_http_client(self) -> aiohttp.ClientSession:
         return aiohttp.ClientSession(
-            headers=self._create_default_headers(),
             timeout=self._timeout,
             trace_configs=self._trace_configs,
             raise_for_status=self._raise_for_status,
@@ -58,24 +57,43 @@ class AppsApiClient:
 
     @staticmethod
     async def _raise_for_status(response: aiohttp.ClientResponse) -> None:
-        if not 200 <= response.status < 300:
-            text = await response.text()
-            exc_text = f"Platform-apps response status is not 2xx. Response: {text}"
-            raise Exception(exc_text)
+        exc_text = None
+        match response.status:
+            case 401:
+                exc_text = "Unauthorized"
+            case 402:
+                exc_text = "Payment Required"
+            case 403:
+                exc_text = "Forbidden"
+            case _ if not 200 <= response.status < 300:
+                text = await response.text()
+                exc_text = f"Platform-apps response status is not 2xx. Response: {text}"
+        if exc_text:
+            raise aiohttp.ClientResponseError(
+                request_info=response.request_info,
+                history=response.history,
+                status=response.status,
+                message=exc_text,
+            )
         return
 
     async def aclose(self) -> None:
         assert self._client
         await self._client.close()
 
-    def _create_default_headers(self) -> dict[str, str]:
+    def _create_default_headers(self, token: str | None) -> dict[str, str]:
         result = {}
         if self._token:
-            result["Authorization"] = f"Bearer {self._token}"
+            result["Authorization"] = f"Bearer {token or self._token}"
         return result
 
     async def get_app(
-        self, app_instance_id: str, cluster_name: str, org_name: str, project_name: str
+        self,
+        app_instance_id: str,
+        cluster_name: str,
+        org_name: str,
+        project_name: str,
+        token: str | None = None,
     ) -> AppInstance:
         async with self._client.get(
             self._base_url
@@ -86,7 +104,8 @@ class AppsApiClient:
             / "project"
             / project_name
             / "instances"
-            / app_instance_id
+            / app_instance_id,
+            headers=self._create_default_headers(token),
         ) as response:
             response_json = await response.json()
             return _create_app_instance(response_json)

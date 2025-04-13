@@ -281,7 +281,7 @@ def config_factory(
             "platform_auth": auth_config,
             "platform_api": platform_api_config,
             "platform_config": platform_config,
-            "platform_apps": platform_config,
+            "platform_apps": platform_apps,
             "s3": s3_config,
             "loki": loki_config,
             "logs": logs_config,
