@@ -220,7 +220,7 @@ def test_create_with_loki_logs(environ: dict[str, Any]) -> None:
 
     assert config.loki
     assert config.loki.endpoint_url == URL("http://localhost:3100")
-    assert config.loki.retention_period_s
+    assert config.loki.max_query_lookback_s
 
 
 def test_create_with_logs_interval_custom(environ: dict[str, Any]) -> None:

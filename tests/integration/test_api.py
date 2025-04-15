@@ -1631,6 +1631,7 @@ class TestAppsLogApi:
         apps_basic_pod: MyAppsPodDescriptor,
         kube_client: MyKubeClient,
         loki_config: LokiConfig,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         since = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         pod_name = apps_basic_pod.name
@@ -1768,6 +1769,28 @@ class TestAppsLogApi:
             re_log_template=r"container[c_number]_[l_number]\n",
         )
 
+        # test with not Authorized
+        async with client.get(url, headers={}, params=params) as response:
+            assert response.status == HTTPUnauthorized.status_code
+        with pytest.raises(aiohttp.WSServerHandshakeError):
+            async with client.ws_connect(url_ws, headers={}, params=params) as ws:
+                pass
+
+        # test with Exception from apps_api
+        async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:
+            exc_text = "Something went wrong"
+            raise Exception(exc_text)
+        monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
+
+        async with client.get(url, headers=headers, params=params) as response:
+            error_json = await response.json()
+            assert response.status == aiohttp.web.HTTPInternalServerError.status_code
+            assert "Unexpected exception: Something went wrong" in error_json["error"]
+        with pytest.raises(aiohttp.WSServerHandshakeError):
+            async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
+                pass
+
+
     @pytest.mark.usefixtures("_get_app_mock")
     async def test_apps_only_live_log(
         self,
@@ -1777,6 +1800,7 @@ class TestAppsLogApi:
         apps_basic_pod: MyAppsPodDescriptor,
         kube_client: MyKubeClient,
         loki_config: LokiConfig,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         since = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         pod_name = apps_basic_pod.name
@@ -1931,6 +1955,27 @@ class TestAppsLogApi:
             logs_count_end=5,
             re_log_template=r"container[c_number]_[l_number]\n",
         )
+
+        # test with not Authorized
+        async with client.get(url, headers={}, params=params) as response:
+            assert response.status == HTTPUnauthorized.status_code
+        with pytest.raises(aiohttp.WSServerHandshakeError):
+            async with client.ws_connect(url_ws, headers={}, params=params):
+                pass
+
+        # test with Exception from apps_api
+        async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:
+            exc_text = "Something went wrong"
+            raise Exception(exc_text)
+        monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
+
+        async with client.get(url, headers=headers, params=params) as response:
+            error_json = await response.json()
+            assert response.status == aiohttp.web.HTTPInternalServerError.status_code
+            assert "Unexpected exception: Something went wrong" in error_json["error"]
+        with pytest.raises(aiohttp.WSServerHandshakeError):
+            async with client.ws_connect(url_ws, headers=headers, params=params):
+                pass
 
     @pytest.mark.usefixtures("_get_app_mock")
     async def test_apps_containers(

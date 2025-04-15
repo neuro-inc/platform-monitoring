@@ -80,6 +80,12 @@ WS_TOP_PROTOCOL = "top.apolo.us"
 HEARTBEAT = 30
 
 
+# k8s labels
+K8S_LABEL_APOLO_ORG = "platform.apolo.us/org"
+K8S_LABEL_APOLO_PROJECT = "platform.apolo.us/project"
+K8S_LABEL_APOLO_APP_ID = "platform.apolo.us/app"
+
+
 CONFIG_KEY = aiohttp.web.AppKey("config", Config)
 KUBE_CLIENT_KEY = aiohttp.web.AppKey("kube_client", KubeClient)
 LOKI_CLIENT_KEY = aiohttp.web.AppKey("loki_client", LokiClient)
@@ -553,9 +559,9 @@ class AppsMonitoringApiHandler:
         app_instance = await self._resolve_app_instance(request=request)
 
         k8s_label_selector = {
-            "platform.apolo.us/org": app_instance.org_name,
-            "platform.apolo.us/project": app_instance.project_name,
-            "platform.apolo.us/app": app_instance.id,
+            K8S_LABEL_APOLO_ORG: app_instance.org_name,
+            K8S_LABEL_APOLO_PROJECT: app_instance.project_name,
+            K8S_LABEL_APOLO_APP_ID: app_instance.id,
         }
 
         label_selector = ",".join(
@@ -617,9 +623,9 @@ class AppsMonitoringApiHandler:
             "app_instance_id": app_instance.id,
         }
         k8s_label_selector = {
-            "platform.apolo.us/org": app_instance.org_name,
-            "platform.apolo.us/project": app_instance.project_name,
-            "platform.apolo.us/app": app_instance.id,
+            K8S_LABEL_APOLO_ORG: app_instance.org_name,
+            K8S_LABEL_APOLO_PROJECT: app_instance.project_name,
+            K8S_LABEL_APOLO_APP_ID: app_instance.id,
         }
 
         assert isinstance(self._logs_service, LokiLogsService)
@@ -673,9 +679,9 @@ class AppsMonitoringApiHandler:
             "app_instance_id": app_instance.id,
         }
         k8s_label_selector = {
-            "platform.apolo.us/org": app_instance.org_name,
-            "platform.apolo.us/project": app_instance.project_name,
-            "platform.apolo.us/app": app_instance.id,
+            K8S_LABEL_APOLO_ORG: app_instance.org_name,
+            K8S_LABEL_APOLO_PROJECT: app_instance.project_name,
+            K8S_LABEL_APOLO_APP_ID: app_instance.id,
         }
 
         assert isinstance(self._logs_service, LokiLogsService)
@@ -999,7 +1005,9 @@ def create_logs_service(
     if config.logs.storage_type == LogsStorageType.LOKI:
         assert loki_client
         assert config.loki
-        return LokiLogsService(kube_client, loki_client, config.loki.retention_period_s)
+        return LokiLogsService(
+            kube_client, loki_client, config.loki.max_query_lookback_s
+        )
 
     msg = f"{config.logs.storage_type} storage is not supported"
     raise ValueError(msg)  # pragma: nocover

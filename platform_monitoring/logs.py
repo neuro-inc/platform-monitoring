@@ -1504,14 +1504,17 @@ class LokiLogReader(LogReader):
 
 class LokiLogsService(BaseLogsService):
     def __init__(
-        self, kube_client: KubeClient, loki_client: LokiClient, retention_period_s: int
+        self,
+        kube_client: KubeClient,
+        loki_client: LokiClient,
+        max_query_lookback_s: int,
     ) -> None:
         super().__init__(kube_client)
         self._loki_client = loki_client
-        if retention_period_s < 60 * 60 * 24:
+        if max_query_lookback_s < 60 * 60 * 24:
             exc_txt = "Retention period should be at least 1 day"
             raise ValueError(exc_txt)
-        self._retention_period_s = retention_period_s
+        self._max_query_lookback_s = max_query_lookback_s
 
     @asyncgeneratorcontextmanager
     async def get_pod_log_reader(  # noqa: C901
@@ -1530,7 +1533,7 @@ class LokiLogsService(BaseLogsService):
     ) -> AsyncGenerator[bytes, None]:
         now_dt = datetime.now(UTC)
         start_dt = (
-            now_dt - timedelta(seconds=self._retention_period_s) + timedelta(hours=1)
+            now_dt - timedelta(seconds=self._max_query_lookback_s) + timedelta(hours=1)
         )  # +1 hour prevent max query length error
         if since:
             start_dt = max(start_dt, since)
@@ -1754,7 +1757,7 @@ class LokiLogsService(BaseLogsService):
         k8s_label_selector = k8s_label_selector or {}
         now_dt = datetime.now(UTC)
         start_dt = (
-            now_dt - timedelta(seconds=self._retention_period_s) + timedelta(hours=1)
+            now_dt - timedelta(seconds=self._max_query_lookback_s) + timedelta(hours=1)
         )  # +1 hour prevent max query length error
         if since:
             start_dt = max(start_dt, since)

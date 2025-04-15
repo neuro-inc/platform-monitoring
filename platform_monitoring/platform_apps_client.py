@@ -71,7 +71,8 @@ class AppsApiClient:
                 exc_text = "Forbidden"
             case _ if not 200 <= response.status < 300:
                 text = await response.text()
-                exc_text = f"Platform-apps response status is not 2xx. Response: {text}"
+                exc_text = (f"Platform-apps response status is not 2xx. "
+                            f"Status: {response.status} Response: {text}")
         if exc_text:
             raise aiohttp.ClientResponseError(
                 request_info=response.request_info,

@@ -105,7 +105,7 @@ class EnvironConfigFactory:
         archive_delay_s = int(
             self._environ.get("NP_MONITORING_LOKI_ARCHIVE_DELAY_S", 5)
         )
-        retention_period_s = int(
+        max_query_lookback_s = int(
             self._environ.get(
                 "NP_MONITORING_LOKI_RETENTION_PERIOD_S", 60 * 60 * 24 * 30
             )
@@ -113,7 +113,7 @@ class EnvironConfigFactory:
         return LokiConfig(
             endpoint_url=URL(self._environ["NP_MONITORING_LOKI_ENDPOINT_URL"]),
             archive_delay_s=archive_delay_s,
-            retention_period_s=retention_period_s,
+            max_query_lookback_s=max_query_lookback_s,
         )
 
     def _create_logs(self) -> LogsConfig:

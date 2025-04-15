@@ -104,7 +104,7 @@ class LokiConfig:
     client_read_timeout_s: int = 300
     client_conn_pool_size: int = 100
     archive_delay_s: int = 5
-    retention_period_s: int = 60 * 60 * 24 * 30  # 30 days
+    max_query_lookback_s: int = 60 * 60 * 24 * 30  # 30 days
 
 
 @dataclass(frozen=True)
