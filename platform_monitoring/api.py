@@ -64,7 +64,7 @@ from .logs import (
 )
 from .loki_client import LokiClient
 from .platform_api_client import ApiClient, Job
-from .platform_apps_client import AppInstance, AppsApiClient
+from .platform_apps_client import AppInstance, AppsApiClient, AppsApiException
 from .user import untrusted_user
 from .utils import JobsHelper, KubeHelper, parse_date
 from .validators import (
@@ -854,6 +854,13 @@ async def handle_exceptions(
             headers={"X-Error": json.dumps(payload)} if ws_request else None,
         )
     except JobException as e:
+        payload = {"error": str(e)}
+        return json_response(
+            payload,
+            status=HTTPBadRequest.status_code,
+            headers={"X-Error": json.dumps(payload)} if ws_request else None,
+        )
+    except AppsApiException as e:
         payload = {"error": str(e)}
         return json_response(
             payload,

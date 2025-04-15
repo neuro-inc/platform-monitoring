@@ -35,7 +35,11 @@ from platform_monitoring.config import (
     LokiConfig,
     PlatformApiConfig,
 )
-from platform_monitoring.platform_apps_client import AppInstance, AppsApiClient
+from platform_monitoring.platform_apps_client import (
+    AppInstance,
+    AppsApiClient,
+    AppsApiException,
+)
 
 from .conftest import ApiAddress, create_local_app_server, random_str
 from .conftest_admin import ProjectUser
@@ -1776,18 +1780,20 @@ class TestAppsLogApi:
             async with client.ws_connect(url_ws, headers={}, params=params) as ws:
                 pass
 
+
         # test with Exception from apps_api
         async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:
             exc_text = "Something went wrong"
-            raise Exception(exc_text)
+            raise AppsApiException(exc_text)
         monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
 
         async with client.get(url, headers=headers, params=params) as response:
             error_json = await response.json()
-            assert response.status == aiohttp.web.HTTPInternalServerError.status_code
-            assert "Unexpected exception: Something went wrong" in error_json["error"]
+            assert response.status == aiohttp.web.HTTPBadRequest.status_code
+            assert error_json["error"] == "Something went wrong"
         with pytest.raises(aiohttp.WSServerHandshakeError):
-            async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
+            async with client.ws_connect(url_ws, headers=headers,
+                                         params=params):
                 pass
 
 
@@ -1966,13 +1972,13 @@ class TestAppsLogApi:
         # test with Exception from apps_api
         async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:
             exc_text = "Something went wrong"
-            raise Exception(exc_text)
+            raise AppsApiException(exc_text)
         monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
 
         async with client.get(url, headers=headers, params=params) as response:
             error_json = await response.json()
-            assert response.status == aiohttp.web.HTTPInternalServerError.status_code
-            assert "Unexpected exception: Something went wrong" in error_json["error"]
+            assert response.status == aiohttp.web.HTTPBadRequest.status_code
+            assert error_json["error"] == "Something went wrong"
         with pytest.raises(aiohttp.WSServerHandshakeError):
             async with client.ws_connect(url_ws, headers=headers, params=params):
                 pass

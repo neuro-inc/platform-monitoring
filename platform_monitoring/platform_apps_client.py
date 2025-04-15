@@ -15,6 +15,10 @@ class AppInstance:
     namespace: str
 
 
+class AppsApiException(Exception):
+    pass
+
+
 def _create_app_instance(payload: dict[str, Any]) -> AppInstance:
     return AppInstance(
         id=payload["id"],
@@ -64,22 +68,17 @@ class AppsApiClient:
         exc_text = None
         match response.status:
             case 401:
-                exc_text = "Unauthorized"
+                exc_text = "Platform-apps api response: Unauthorized"
             case 402:
-                exc_text = "Payment Required"
+                exc_text = "Platform-apps api response: Payment Required"
             case 403:
-                exc_text = "Forbidden"
+                exc_text = "Platform-apps api response: Forbidden"
             case _ if not 200 <= response.status < 300:
                 text = await response.text()
-                exc_text = (f"Platform-apps response status is not 2xx. "
+                exc_text = (f"Platform-apps api response status is not 2xx. "
                             f"Status: {response.status} Response: {text}")
         if exc_text:
-            raise aiohttp.ClientResponseError(
-                request_info=response.request_info,
-                history=response.history,
-                status=response.status,
-                message=exc_text,
-            )
+            raise AppsApiException(exc_text)
         return
 
     async def aclose(self) -> None:
