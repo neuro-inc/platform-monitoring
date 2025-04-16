@@ -861,10 +861,10 @@ async def handle_exceptions(
             headers={"X-Error": json.dumps(payload)} if ws_request else None,
         )
     except AppsApiException as e:
-        payload = {"error": str(e)}
+        payload = {"error": e.message}
         return json_response(
             payload,
-            status=HTTPBadRequest.status_code,
+            status=e.code if e.code in (401, 403) else HTTPBadRequest.status_code,
             headers={"X-Error": json.dumps(payload)} if ws_request else None,
         )
     except aiohttp.web.HTTPException as e:

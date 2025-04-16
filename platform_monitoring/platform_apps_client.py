@@ -16,7 +16,10 @@ class AppInstance:
 
 
 class AppsApiException(Exception):
-    pass
+    def __init__(self, *, code: int, message: str):
+        super().__init__(message)
+        self.code = code
+        self.message = message
 
 
 def _create_app_instance(payload: dict[str, Any]) -> AppInstance:
@@ -75,10 +78,12 @@ class AppsApiClient:
                 exc_text = "Platform-apps api response: Forbidden"
             case _ if not 200 <= response.status < 300:
                 text = await response.text()
-                exc_text = (f"Platform-apps api response status is not 2xx. "
-                            f"Status: {response.status} Response: {text}")
+                exc_text = (
+                    f"Platform-apps api response status is not 2xx. "
+                    f"Status: {response.status} Response: {text}"
+                )
         if exc_text:
-            raise AppsApiException(exc_text)
+            raise AppsApiException(code=response.status, message=exc_text)
         return
 
     async def aclose(self) -> None:

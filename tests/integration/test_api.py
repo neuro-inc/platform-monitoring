@@ -1573,6 +1573,7 @@ def _get_app_mock(
             project_name=regular_user1.project_name,
             namespace=kube_client.namespace,
         )
+
     monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
 
 
@@ -1773,30 +1774,6 @@ class TestAppsLogApi:
             re_log_template=r"container[c_number]_[l_number]\n",
         )
 
-        # test with not Authorized
-        async with client.get(url, headers={}, params=params) as response:
-            assert response.status == HTTPUnauthorized.status_code
-        with pytest.raises(aiohttp.WSServerHandshakeError):
-            async with client.ws_connect(url_ws, headers={}, params=params) as ws:
-                pass
-
-
-        # test with Exception from apps_api
-        async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:
-            exc_text = "Something went wrong"
-            raise AppsApiException(exc_text)
-        monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
-
-        async with client.get(url, headers=headers, params=params) as response:
-            error_json = await response.json()
-            assert response.status == aiohttp.web.HTTPBadRequest.status_code
-            assert error_json["error"] == "Something went wrong"
-        with pytest.raises(aiohttp.WSServerHandshakeError):
-            async with client.ws_connect(url_ws, headers=headers,
-                                         params=params):
-                pass
-
-
     @pytest.mark.usefixtures("_get_app_mock")
     async def test_apps_only_live_log(
         self,
@@ -1962,27 +1939,6 @@ class TestAppsLogApi:
             re_log_template=r"container[c_number]_[l_number]\n",
         )
 
-        # test with not Authorized
-        async with client.get(url, headers={}, params=params) as response:
-            assert response.status == HTTPUnauthorized.status_code
-        with pytest.raises(aiohttp.WSServerHandshakeError):
-            async with client.ws_connect(url_ws, headers={}, params=params):
-                pass
-
-        # test with Exception from apps_api
-        async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:
-            exc_text = "Something went wrong"
-            raise AppsApiException(exc_text)
-        monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
-
-        async with client.get(url, headers=headers, params=params) as response:
-            error_json = await response.json()
-            assert response.status == aiohttp.web.HTTPBadRequest.status_code
-            assert error_json["error"] == "Something went wrong"
-        with pytest.raises(aiohttp.WSServerHandshakeError):
-            async with client.ws_connect(url_ws, headers=headers, params=params):
-                pass
-
     @pytest.mark.usefixtures("_get_app_mock")
     async def test_apps_containers(
         self,
@@ -2011,3 +1967,73 @@ class TestAppsLogApi:
             assert response.status == HTTPOk.status_code
             containers = await response.json()
             assert containers == apps_basic_pod.containers
+
+    async def test_apps_logs_exceptions(
+        self,
+        apps_monitoring_api: AppsMonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        regular_user1: ProjectUser,
+        apps_basic_pod: MyAppsPodDescriptor,
+        kube_client: MyKubeClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        headers = regular_user1.headers
+        url = apps_monitoring_api.generate_log_url(app_id="app_instance_id")
+        url_ws = apps_monitoring_api.generate_log_ws_url(app_id="app_instance_id")
+        base_params = {
+            "cluster_name": "default",
+            "org_name": regular_user1.org_name,
+            "project_name": regular_user1.project_name,
+        }
+
+        # test with not Authorized
+        async with client.get(url, headers={}, params=base_params) as response:
+            assert response.status == HTTPUnauthorized.status_code
+        with pytest.raises(aiohttp.WSServerHandshakeError):
+            async with client.ws_connect(url_ws, headers={}, params=base_params):
+                pass
+
+        # test with 401 Exception from apps_api
+        async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:
+            exc_text = "Unauthorized"
+            raise AppsApiException(code=401, message=exc_text)
+
+        monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
+
+        async with client.get(url, headers=headers, params=base_params) as response:
+            error_json = await response.json()
+            assert response.status == aiohttp.web.HTTPUnauthorized.status_code
+            assert error_json["error"] == "Unauthorized"
+        with pytest.raises(aiohttp.WSServerHandshakeError):
+            async with client.ws_connect(url_ws, headers=headers, params=base_params):
+                pass
+
+        # test with 403 Exception from apps_api
+        async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:  # type: ignore
+            exc_text = "Forbidden"
+            raise AppsApiException(code=403, message=exc_text)
+
+        monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
+
+        async with client.get(url, headers=headers, params=base_params) as response:
+            error_json = await response.json()
+            assert response.status == aiohttp.web.HTTPForbidden.status_code
+            assert error_json["error"] == "Forbidden"
+        with pytest.raises(aiohttp.WSServerHandshakeError):
+            async with client.ws_connect(url_ws, headers=headers, params=base_params):
+                pass
+
+        # test with another Exception from apps_api
+        async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:  # type: ignore
+            exc_text = "Something went wrong"
+            raise AppsApiException(code=500, message=exc_text)
+
+        monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
+
+        async with client.get(url, headers=headers, params=base_params) as response:
+            error_json = await response.json()
+            assert response.status == aiohttp.web.HTTPBadRequest.status_code
+            assert error_json["error"] == "Something went wrong"
+        with pytest.raises(aiohttp.WSServerHandshakeError):
+            async with client.ws_connect(url_ws, headers=headers, params=base_params):
+                pass
