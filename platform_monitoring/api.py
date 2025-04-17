@@ -4,7 +4,6 @@ import logging
 import random
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
-from datetime import UTC, datetime, timedelta
 from importlib.metadata import version
 from typing import Any
 
@@ -596,14 +595,7 @@ class AppsMonitoringApiHandler:
             request.query.get("archive_delay", self.get_archive_delay())
         )
 
-        since = (
-            parse_date(since_str)
-            if since_str
-            else datetime.now(UTC)
-            - timedelta(
-                minutes=self._config.platform_apps.default_since_timedelta_minutes
-            )
-        )
+        since = parse_date(since_str) if since_str else None
         separator = request.query.get("separator")
 
         if separator is None:
@@ -661,14 +653,7 @@ class AppsMonitoringApiHandler:
             request.query.get("archive_delay", self.get_archive_delay())
         )
 
-        since = (
-            parse_date(since_str)
-            if since_str
-            else datetime.now(UTC)
-            - timedelta(
-                minutes=self._config.platform_apps.default_since_timedelta_minutes
-            )
-        )
+        since = parse_date(since_str) if since_str else None
         separator = request.query.get("separator")
         if separator is None:
             separator = "=== Live logs ===" + _getrandbytes(30).hex()
