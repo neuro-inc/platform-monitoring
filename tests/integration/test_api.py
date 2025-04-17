@@ -1977,6 +1977,13 @@ class TestAppsLogApi:
         kube_client: MyKubeClient,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        pod_name = apps_basic_pod.name
+
+        for container_name in apps_basic_pod.containers:
+            await kube_client.wait_pod_is_running(
+                pod_name, namespace=kube_client.namespace, container_name=container_name
+            )
+
         headers = regular_user1.headers
         url = apps_monitoring_api.generate_log_url(app_id="app_instance_id")
         url_ws = apps_monitoring_api.generate_log_ws_url(app_id="app_instance_id")

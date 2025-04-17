@@ -864,7 +864,7 @@ async def handle_exceptions(
         payload = {"error": e.message}
         return json_response(
             payload,
-            status=e.code if e.code in (401, 403) else HTTPBadRequest.status_code,
+            status=e.code if e.code in (401, 403, 404) else HTTPBadRequest.status_code,
             headers={"X-Error": json.dumps(payload)} if ws_request else None,
         )
     except aiohttp.web.HTTPException as e:

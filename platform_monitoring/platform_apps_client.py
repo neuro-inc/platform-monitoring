@@ -71,11 +71,13 @@ class AppsApiClient:
         exc_text = None
         match response.status:
             case 401:
-                exc_text = "Platform-apps api response: Unauthorized"
+                exc_text = "Platform-apps: Unauthorized"
             case 402:
-                exc_text = "Platform-apps api response: Payment Required"
+                exc_text = "Platform-apps: Payment Required"
             case 403:
-                exc_text = "Platform-apps api response: Forbidden"
+                exc_text = "Platform-apps: Forbidden"
+            case 404:
+                exc_text = "Platform-apps: Not Found"
             case _ if not 200 <= response.status < 300:
                 text = await response.text()
                 exc_text = (
