@@ -14,6 +14,7 @@ from platform_monitoring.config import (
     LogsConfig,
     LogsStorageType,
     PlatformApiConfig,
+    PlatformAppsConfig,
     PlatformAuthConfig,
     PlatformConfig,
     RegistryConfig,
@@ -54,6 +55,8 @@ def environ(cert_authority_path: str, token_path: str) -> dict[str, Any]:
         "NP_MONITORING_PLATFORM_AUTH_TOKEN": "platform-auth-token",
         "NP_MONITORING_PLATFORM_CONFIG_URL": "http://platformconfig",
         "NP_MONITORING_PLATFORM_CONFIG_TOKEN": "platform-config-token",
+        "NP_MONITORING_PLATFORM_APPS_URL": "http://platform-apps",
+        "NP_MONITORING_PLATFORM_APPS_TOKEN": "platform-apps-token",
         "NP_MONITORING_ES_HOSTS": "http://es1,http://es2",
         "NP_MONITORING_K8S_API_URL": "https://localhost:8443",
         "NP_MONITORING_K8S_AUTH_TYPE": "token",
@@ -84,6 +87,9 @@ def test_create(environ: dict[str, Any], token_path: str) -> None:
         ),
         platform_config=PlatformConfig(
             url=URL("http://platformconfig"), token="platform-config-token"
+        ),
+        platform_apps=PlatformAppsConfig(
+            url=URL("http://platform-apps"), token="platform-apps-token"
         ),
         elasticsearch=ElasticsearchConfig(hosts=["http://es1", "http://es2"]),
         logs=LogsConfig(storage_type=LogsStorageType.ELASTICSEARCH),
@@ -214,7 +220,7 @@ def test_create_with_loki_logs(environ: dict[str, Any]) -> None:
 
     assert config.loki
     assert config.loki.endpoint_url == URL("http://localhost:3100")
-    assert config.loki.retention_period_s
+    assert config.loki.max_query_lookback_s
 
 
 def test_create_with_logs_interval_custom(environ: dict[str, Any]) -> None:

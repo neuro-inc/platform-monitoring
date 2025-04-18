@@ -60,6 +60,10 @@ release: {{ .Release.Name | quote }}
 {{- if .Values.platform.token }}
 {{ toYaml .Values.platform.token | indent 2 }}
 {{- end }}
+- name: NP_MONITORING_PLATFORM_APPS_TOKEN
+{{- if .Values.platform.token }}
+{{ toYaml .Values.platform.token | indent 2 }}
+{{- end }}
 - name: NP_MONITORING_K8S_API_URL
   value: https://kubernetes.default:443
 - name: NP_MONITORING_K8S_AUTH_TYPE
@@ -74,6 +78,8 @@ release: {{ .Release.Name | quote }}
   value: {{ .Values.platform.authUrl | quote }}
 - name: NP_MONITORING_PLATFORM_CONFIG_URL
   value: {{ .Values.platform.configUrl | quote }}
+- name: NP_MONITORING_PLATFORM_APPS_URL
+  value: {{ .Values.platform.appsUrl | quote }}
 - name: NP_MONITORING_K8S_NS
   value: {{ .Values.jobsNamespace }}
 - name: NP_MONITORING_REGISTRY_URL
