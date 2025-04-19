@@ -28,21 +28,21 @@ CA_DATA_PEM = "this-is-certificate-authority-public-key"
 TOKEN = "this-is-token"
 
 
-@pytest.fixture()
+@pytest.fixture
 def cert_authority_path(tmp_path: Path) -> str:
     ca_path = tmp_path / "ca.crt"
     ca_path.write_text(CA_DATA_PEM)
     return str(ca_path)
 
 
-@pytest.fixture()
+@pytest.fixture
 def token_path(tmp_path: Path) -> str:
     token_path = tmp_path / "token"
     token_path.write_text(TOKEN)
     return str(token_path)
 
 
-@pytest.fixture()
+@pytest.fixture
 def environ(cert_authority_path: str, token_path: str) -> dict[str, Any]:
     return {
         "NP_MONITORING_CLUSTER_NAME": "default",
