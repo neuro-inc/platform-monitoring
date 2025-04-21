@@ -54,7 +54,7 @@ async def create_apolo_client(
             await client.close()
 
 
-@pytest.fixture()
+@pytest.fixture
 async def job_factory(
     apolo_client: JobsClient,
 ) -> AsyncIterator[JobFactory]:
@@ -82,19 +82,19 @@ async def job_factory(
 
 @pytest.mark.usefixtures("cluster_name")
 class TestJobsService:
-    @pytest.fixture()
+    @pytest.fixture
     async def user(self, regular_user1: ProjectUser) -> ProjectUser:
         return regular_user1
 
-    @pytest.fixture()
+    @pytest.fixture
     def registry_host(self) -> str:
         return "localhost:5000"
 
-    @pytest.fixture()
+    @pytest.fixture
     def image_tag(self) -> str:
         return str(uuid.uuid4())[:8]
 
-    @pytest.fixture()
+    @pytest.fixture
     async def apolo_client(
         self, platform_api_config: PlatformApiConfig, regular_user1: ProjectUser
     ) -> AsyncIterator[JobsClient]:
@@ -103,7 +103,7 @@ class TestJobsService:
         ) as client:
             yield client
 
-    @pytest.fixture()
+    @pytest.fixture
     async def platform_api_client(
         self, platform_api_config: PlatformApiConfig, user: ProjectUser
     ) -> AsyncIterator[ApiClient]:
@@ -112,7 +112,7 @@ class TestJobsService:
         ) as client:
             yield client
 
-    @pytest.fixture()
+    @pytest.fixture
     async def jobs_service(
         self,
         platform_config_client: ConfigClient,

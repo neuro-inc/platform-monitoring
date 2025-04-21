@@ -83,7 +83,7 @@ def minikube_ip() -> str:
     return subprocess.check_output(("minikube", "ip"), text=True).strip()
 
 
-@pytest.fixture()
+@pytest.fixture
 async def client() -> AsyncIterator[aiohttp.ClientSession]:
     async with aiohttp.ClientSession() as session:
         yield session
@@ -148,7 +148,7 @@ async def container_runtime_config(in_minikube: bool) -> ContainerRuntimeConfig:
     return ContainerRuntimeConfig(port=url.port)
 
 
-@pytest.fixture()
+@pytest.fixture
 async def container_runtime_client_registry(
     container_runtime_config: ContainerRuntimeConfig,
 ) -> AsyncIterator[ContainerRuntimeClientRegistry]:
@@ -181,7 +181,7 @@ async def es_config(
     return ElasticsearchConfig(hosts=[es_host])
 
 
-@pytest.fixture()
+@pytest.fixture
 async def es_client(
     es_config: ElasticsearchConfig,
 ) -> AsyncIterator[AsyncElasticsearch]:
@@ -219,19 +219,19 @@ def loki_config() -> LokiConfig:
     return LokiConfig(endpoint_url=URL(get_service_url("loki-gt", namespace="default")))
 
 
-@pytest.fixture()
+@pytest.fixture
 async def s3_client(s3_config: S3Config) -> AsyncIterator[AioBaseClient]:
     async with create_s3_client(s3_config) as client:
         yield client
 
 
-@pytest.fixture()
+@pytest.fixture
 async def loki_client(loki_config: LokiConfig) -> AsyncIterator[LokiClient]:
     async with create_loki_client(loki_config) as client:
         yield client
 
 
-@pytest.fixture()
+@pytest.fixture
 async def s3_logs_bucket(s3_config: S3Config, s3_client: AioBaseClient) -> str:
     try:
         await s3_client.create_bucket(Bucket=s3_config.job_logs_bucket_name)
@@ -241,7 +241,7 @@ async def s3_logs_bucket(s3_config: S3Config, s3_client: AioBaseClient) -> str:
     return s3_config.job_logs_bucket_name
 
 
-@pytest.fixture()
+@pytest.fixture
 async def logs_config() -> LogsConfig:
     return LogsConfig(storage_type=LogsStorageType.S3, cleanup_interval_sec=0.5)
 
@@ -260,7 +260,7 @@ async def registry_config(request: FixtureRequest, in_minikube: bool) -> Registr
     return RegistryConfig(external_url)
 
 
-@pytest.fixture()
+@pytest.fixture
 def config_factory(
     auth_config: PlatformAuthConfig,
     platform_api_config: PlatformApiConfig,
@@ -295,17 +295,17 @@ def config_factory(
     return _f
 
 
-@pytest.fixture()
+@pytest.fixture
 def config(config_factory: Callable[..., Config]) -> Config:
     return config_factory()
 
 
-@pytest.fixture()
+@pytest.fixture
 def config_with_loki_logs_backend(config_factory: Callable[..., Config]) -> Config:
     return config_factory(logs=LogsConfig(storage_type=LogsStorageType.LOKI))
 
 
-@pytest.fixture()
+@pytest.fixture
 def config_s3_storage(
     config_factory: Callable[..., Config], s3_config: S3Config
 ) -> Config:
