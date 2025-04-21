@@ -53,6 +53,7 @@ function __wait-until-pods-ready() {
   done
 
   echo "Waited for $period seconds, but all pods are not ready yet."
+  kubectl get pods -A
   return 1
 }
 
