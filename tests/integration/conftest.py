@@ -3,7 +3,7 @@ import logging
 import os
 import subprocess
 import time
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -55,23 +55,6 @@ def in_docker() -> bool:
 @pytest.fixture(scope="session")
 def in_minikube(in_docker: bool) -> bool:  # noqa: FBT001
     return in_docker
-
-
-@pytest.fixture(scope="session")
-def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
-    """This fixture fixes scope mismatch error with implicitly added "event_loop".
-    see https://github.com/pytest-dev/pytest-asyncio/issues/68
-    """
-    asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    loop.set_debug(True)
-
-    watcher = asyncio.SafeChildWatcher()
-    watcher.attach_loop(loop)
-    asyncio.get_event_loop_policy().set_child_watcher(watcher)
-
-    yield loop
-    loop.close()
 
 
 def random_str(length: int = 8) -> str:
