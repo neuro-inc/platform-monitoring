@@ -70,6 +70,10 @@ spec:
           value: http://localhost:5000
         - name: NP_MONITORING_K8S_KUBELET_PORT
           value: "10250"
+        - name: NP_MONITORING_PLATFORM_APPS_URL
+          value: http://platform-apps:8080
+        - name: NP_MONITORING_PLATFORM_APPS_TOKEN
+          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImFkbWluIiwiaHR0cHM6Ly9wbGF0Zm9ybS5uZXVyb21hdGlvbi5pby91c2VyIjoiYWRtaW4ifQ._F3y_fr2W0yiJ_-r46NPszsv3H1LzWAvGNXjl0eXwVI
 ---
 apiVersion: v1
 kind: Service
