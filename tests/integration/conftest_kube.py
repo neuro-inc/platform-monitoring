@@ -86,7 +86,7 @@ class MyKubeClient(KubeClient):
     ) -> None:
         try:
             async with asyncio.timeout(timeout_s):
-                while await self.check_pod_exists(pod_name):
+                while await self.check_pod_exists(pod_name):  # noqa: ASYNC110
                     await asyncio.sleep(interval_s)
         except TimeoutError:
             pytest.fail(f"Pod {pod_name} has not deleted yet")
