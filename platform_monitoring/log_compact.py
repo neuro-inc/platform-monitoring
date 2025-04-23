@@ -106,7 +106,7 @@ async def run_app(config: Config) -> None:  # pragma: no cover
     try:
         async with App().init(config) as app:
             async with run_task(app.run()):
-                while True:
+                while True:  # noqa: ASYNC110
                     await asyncio.sleep(3600)
     finally:
         _cleanup()
