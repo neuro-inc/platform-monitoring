@@ -30,7 +30,7 @@ class MyS3LogService(S3LogsService):
             raise Exception(msg)
 
 
-@pytest.fixture()
+@pytest.fixture
 def config(config: Config) -> Config:
     return replace(
         config,

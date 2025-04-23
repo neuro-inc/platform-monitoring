@@ -202,7 +202,7 @@ def cert_authority_data_pem(kube_config_cluster_payload: dict[str, Any]) -> str 
     return None
 
 
-@pytest.fixture()
+@pytest.fixture
 async def kube_config(request: FixtureRequest, in_minikube: bool) -> KubeConfig:  # noqa: FBT001
     if in_minikube:
         return KubeConfig(
@@ -228,7 +228,7 @@ async def kube_config(request: FixtureRequest, in_minikube: bool) -> KubeConfig:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 async def kube_client(kube_config: KubeConfig) -> AsyncIterator[MyKubeClient]:
     # TODO (A Danshyn 06/06/18): create a factory method
     client = MyKubeClient(
@@ -249,20 +249,20 @@ async def kube_client(kube_config: KubeConfig) -> AsyncIterator[MyKubeClient]:
         yield client
 
 
-@pytest.fixture()
+@pytest.fixture
 async def _kube_node(kube_client: KubeClient) -> Node:
     nodes = await kube_client.get_nodes()
     assert len(nodes) == 1, "Should be exactly one minikube node"
     return nodes[0]
 
 
-@pytest.fixture()
+@pytest.fixture
 async def kube_node_name(_kube_node: Node) -> str:
     assert _kube_node.metadata.name
     return _kube_node.metadata.name
 
 
-@pytest.fixture()
+@pytest.fixture
 async def kube_container_runtime(_kube_node: Node) -> str:
     version = _kube_node.status.node_info.container_runtime_version
     end = version.find("://")
