@@ -40,12 +40,16 @@ class AppsApiClient:
         timeout: aiohttp.ClientTimeout = aiohttp.client.DEFAULT_TIMEOUT,
         trace_configs: list[aiohttp.TraceConfig] | None = None,
     ):
-        super().__init__()
-
-        self._base_url = url / "apis/apps/v1"
+        self._url = url
         self._token = token
         self._timeout = timeout
         self._trace_configs = trace_configs
+
+    def _base_version_url(self, version: str) -> URL:
+        return self._url  / "apis" / "apps" / version
+
+    def _get_app_url(self, instance_id: str, version: str) -> URL:
+        return self._base_version_url(version) / "instances" / instance_id
 
     async def __aenter__(self) -> "AppsApiClient":
         self._client = self._create_http_client()
@@ -101,21 +105,10 @@ class AppsApiClient:
     async def get_app(
         self,
         app_instance_id: str,
-        cluster_name: str,
-        org_name: str,
-        project_name: str,
         token: str | None = None,
     ) -> AppInstance:
         async with self._client.get(
-            self._base_url
-            / "cluster"
-            / cluster_name
-            / "org"
-            / org_name
-            / "project"
-            / project_name
-            / "instances"
-            / app_instance_id,
+            self._get_app_url(instance_id=app_instance_id, version="v2"),
             headers=self._create_default_headers(token),
         ) as response:
             response_json = await response.json()
