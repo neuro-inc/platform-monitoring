@@ -98,7 +98,7 @@ class AppsApiClient:
 
     def _create_default_headers(self, token: str | None) -> dict[str, str]:
         result = {}
-        if self._token:
+        if token or self._token:
             result["Authorization"] = f"Bearer {token or self._token}"
         return result
 
