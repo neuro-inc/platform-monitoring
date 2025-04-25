@@ -1831,5 +1831,36 @@ class LokiLogsService(BaseLogsService):
             prefix=prefix,
         )
 
+    @staticmethod
+    def _build_loki_labels_filter_query(loki_label_selector: dict[str, str]) -> str:
+        # print(333333333, loki_label_selector)
+        """
+        Example: {app="myapp", environment="dev"}
+        """
+        labels_filter = ",".join(
+            f'{key}="{value}"' for key, value in loki_label_selector.items()
+        )
+        return f"{{{labels_filter}}}"
+
+    async def get_label_values(
+        self,
+        label: str,
+        loki_label_selector: dict[str, str],
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> list[str]:
+        query = self._build_loki_labels_filter_query(loki_label_selector)
+        since = since or datetime.now(UTC) - timedelta(
+            seconds=self._max_query_lookback_s
+        ) + timedelta(hours=1)
+        start = int(since.timestamp() * 1_000_000_000)
+        end = until and int(until.timestamp() * 1_000_000_000)
+        result = await self._loki_client.label_values(
+            label=label, query=query, start=start, end=end
+        )
+        # print(555555555, result)
+        return result.get("data", [])
+
+
     async def drop_logs(self, pod_name: str) -> None:
         pass

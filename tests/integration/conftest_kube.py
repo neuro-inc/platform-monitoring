@@ -53,17 +53,19 @@ class MyKubeClient(KubeClient):
         self,
         pod_name: str,
         container_name: str | None = None,
+        namespace: str | None = None,
         timeout_s: float = 10.0 * 60,
         interval_s: float = 1.0,
         *,
         allow_pod_not_exists: bool = False,
     ) -> None:
+        namespace = namespace or self.namespace
         try:
             async with asyncio.timeout(timeout_s):
                 while True:
                     try:
                         state = await self._get_raw_container_state(
-                            pod_name, container_name=container_name
+                            pod_name, container_name=container_name, namespace=namespace
                         )
 
                     except JobNotFoundException:
