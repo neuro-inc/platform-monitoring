@@ -1964,21 +1964,18 @@ class TestAppsLogApi:
         async with client.get(url, headers=headers, params=params) as response:
             assert response.status == HTTPOk.status_code
             containers = await response.json()
-            # print(222222222222, containers)
             assert containers == apps_basic_pod.containers
 
         # test containers list from loki
         async with client.get(url, headers=headers) as response:
             assert response.status == HTTPOk.status_code
             containers = await response.json()
-            # print(111111111111, containers)
             assert containers == apps_basic_pod.containers
 
         params = {"since": since}
         async with client.get(url, headers=headers, params=params) as response:
             assert response.status == HTTPOk.status_code
             containers = await response.json()
-            # print(111111111111, containers)
             assert containers == apps_basic_pod.containers
 
     async def test_apps_logs_exceptions(

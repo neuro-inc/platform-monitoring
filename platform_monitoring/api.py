@@ -555,7 +555,7 @@ class AppsMonitoringApiHandler:
             raise Exception(exc_txt)
 
     @staticmethod
-    def _get_k8s_label_selector(app_instance):
+    def _get_k8s_label_selector(app_instance: AppInstance) -> dict[str, str]:
         return {
             K8S_LABEL_APOLO_ORG: app_instance.org_name,
             K8S_LABEL_APOLO_PROJECT: app_instance.project_name,
@@ -563,14 +563,14 @@ class AppsMonitoringApiHandler:
         }
 
     @staticmethod
-    def _get_loki_label_selector(app_instance):
+    def _get_loki_label_selector(app_instance: AppInstance) -> dict[str, str]:
         return {
             "apolo_org_name": app_instance.org_name,
             "apolo_project_name": app_instance.project_name,
             "apolo_app_id": app_instance.id,
         }
 
-    async def _get_labels_from_k8s(self, app_instance):
+    async def _get_labels_from_k8s(self, app_instance: AppInstance) -> list[str]:
         k8s_label_selector = self._get_k8s_label_selector(app_instance)
 
         label_selector = ",".join(
@@ -599,11 +599,12 @@ class AppsMonitoringApiHandler:
             exc_txt = "Invalid source. Expected 'loki' or 'k8s'."
             raise Exception(exc_txt)
 
-        start_dt = start_str and parse_date(start_str)
-        end_dt = end_str and parse_date(end_str)
+        start_dt = parse_date(start_str) if start_str else None
+        end_dt = parse_date(end_str) if end_str else None
 
         loki_label_selector = self._get_loki_label_selector(app_instance)
-        # print(444444444, loki_label_selector)
+
+        assert isinstance(self._logs_service, LokiLogsService)
         containers = (
             await self._logs_service.get_label_values(
                 label="container",

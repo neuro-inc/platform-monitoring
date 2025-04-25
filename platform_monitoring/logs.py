@@ -1833,7 +1833,6 @@ class LokiLogsService(BaseLogsService):
 
     @staticmethod
     def _build_loki_labels_filter_query(loki_label_selector: dict[str, str]) -> str:
-        # print(333333333, loki_label_selector)
         """
         Example: {app="myapp", environment="dev"}
         """
@@ -1854,11 +1853,10 @@ class LokiLogsService(BaseLogsService):
             seconds=self._max_query_lookback_s
         ) + timedelta(hours=1)
         start = int(since.timestamp() * 1_000_000_000)
-        end = until and int(until.timestamp() * 1_000_000_000)
+        end=int(until.timestamp() * 1_000_000_000) if until else None
         result = await self._loki_client.label_values(
             label=label, query=query, start=start, end=end
         )
-        # print(555555555, result)
         return result.get("data", [])
 
 
