@@ -699,19 +699,12 @@ class AppsMonitoringApiHandler:
         user = await untrusted_user(request)
 
         instance_id = request.match_info["app_id"]
-        cluster_name = request.query.get("cluster_name")
-        org_name = request.query.get("org_name")
-        project_name = request.query.get("project_name")
-
-        if not all([instance_id, cluster_name, org_name, project_name]):
-            exc_txt = "Instance_id, cluster_name, org_name and project_name required"
+        if not instance_id:
+            exc_txt = "App instance_id required"
             raise Exception(exc_txt)
 
         return await self._apps_api_client.get_app(
             app_instance_id=instance_id,
-            cluster_name=cluster_name,  # type: ignore
-            org_name=org_name,  # type: ignore
-            project_name=project_name,  # type: ignore
             token=user.token,
         )
 
