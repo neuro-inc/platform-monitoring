@@ -1723,13 +1723,21 @@ class LokiLogsService(BaseLogsService):
             yield chunk
 
     @staticmethod
-    def _build_loki_labels_filter_query(loki_label_selector: dict[str, str]) -> str:
+    def _build_loki_labels_filter_query(
+        exactly_equal_labels: dict[str, Any],
+        regex_matches_labels: dict[str, Any] | None = None,
+    ) -> str:
         """
-        Example: {app="myapp", environment="dev"}
+        Example: {app="myapp", environment="dev", container=~"myapp-.*|myapp-2.*"}
         """
-        labels_filter = ",".join(
-            f'{key}="{value}"' for key, value in loki_label_selector.items()
-        )
+        exactly_equal_labels_list = [
+            f'{key}="{value}"' for key, value in exactly_equal_labels.items()
+        ]
+        regex_matches_labels = regex_matches_labels or {}
+        regex_matches_labels_list = [
+            f'{key}=~"{value}"' for key, value in regex_matches_labels.items()
+        ]
+        labels_filter = ",".join(exactly_equal_labels_list + regex_matches_labels_list)
         return f"{{{labels_filter}}}"
 
     @asyncgeneratorcontextmanager
@@ -1773,7 +1781,13 @@ class LokiLogsService(BaseLogsService):
             start = int(start_dt.timestamp() * 1_000_000_000)
             end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
 
-            query = self._build_loki_labels_filter_query(loki_label_selector)
+            loki_regex_matches_labels = (
+                {"container": "|".join(containers)} if containers else {}
+            )
+            query = self._build_loki_labels_filter_query(
+                exactly_equal_labels=loki_label_selector,
+                regex_matches_labels=loki_regex_matches_labels,
+            )
 
             async with self.get_pod_archive_log_reader(
                 query,
@@ -1831,20 +1845,21 @@ class LokiLogsService(BaseLogsService):
         since: datetime | None = None,
         until: datetime | None = None,
     ) -> list[str]:
-        query = self._build_loki_labels_filter_query(loki_label_selector)
+        query = self._build_loki_labels_filter_query(
+            exactly_equal_labels=loki_label_selector
+        )
 
         since = since or datetime.now(UTC) - timedelta(
             seconds=self._max_query_lookback_s
         ) + timedelta(hours=1)  # +1 hour prevent max query length error
         start = int(since.timestamp() * 1_000_000_000)
-        end=int(until.timestamp() * 1_000_000_000) if until else None
+        end = int(until.timestamp() * 1_000_000_000) if until else None
 
         result = await self._loki_client.label_values(
             label=label, query=query, start=start, end=end
         )
 
         return result.get("data", [])
-
 
     async def drop_logs(self, pod_name: str) -> None:
         pass
