@@ -1479,8 +1479,9 @@ class LokiLogReader(LogReader):
         await self._iterator.aclose()  # type: ignore
 
     def encode_and_handle_log(self, log_data: list[Any]) -> bytes:
-        log = log_data[1]
-        if log and log[-1] != "\n":
+        log = orjson.loads(log_data[1])["_entry"]
+
+        if log[-1] != "\n":
             log = f"{log}\n"
         if self._timestamps:
             log_dt = datetime.fromtimestamp(int(log_data[0]) / 1_000_000_000, tz=UTC)
@@ -1578,7 +1579,7 @@ class LokiLogsService(BaseLogsService):
             start = int(start_dt.timestamp() * 1_000_000_000)
             end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
             async with self.get_pod_archive_log_reader(
-                f'{{namespace="{namespace}"}} | unpack | pod="{pod_name}"',
+                f'{{namespace="{namespace}", pod="{pod_name}"}}',
                 start=start,
                 end=end,
                 timestamps=timestamps,
