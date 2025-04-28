@@ -568,6 +568,7 @@ class AppsMonitoringApiHandler:
             "apolo_org_name": app_instance.org_name,
             "apolo_project_name": app_instance.project_name,
             "apolo_app_id": app_instance.id,
+            "namespace": app_instance.namespace,
         }
 
     async def _get_labels_from_k8s(self, app_instance: AppInstance) -> list[str]:

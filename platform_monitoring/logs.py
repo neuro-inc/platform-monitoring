@@ -1723,19 +1723,14 @@ class LokiLogsService(BaseLogsService):
             yield chunk
 
     @staticmethod
-    def _build_archive_loki_query(
-        namespace: str, loki_label_selector: dict[str, str], containers: list[str]
-    ) -> str:
-        query = f'{{namespace="{namespace}"}}'
-        if loki_label_selector or containers:
-            query += " | unpack | "
-            if loki_label_selector:
-                query += " ".join(
-                    f'{key}="{value}"' for key, value in loki_label_selector.items()
-                )
-            if containers:
-                query += f' container=~"{"|".join(containers)}"'
-        return query
+    def _build_loki_labels_filter_query(loki_label_selector: dict[str, str]) -> str:
+        """
+        Example: {app="myapp", environment="dev"}
+        """
+        labels_filter = ",".join(
+            f'{key}="{value}"' for key, value in loki_label_selector.items()
+        )
+        return f"{{{labels_filter}}}"
 
     @asyncgeneratorcontextmanager
     async def get_pod_log_reader_by_containers(  # noqa: C901
@@ -1778,9 +1773,7 @@ class LokiLogsService(BaseLogsService):
             start = int(start_dt.timestamp() * 1_000_000_000)
             end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
 
-            query = self._build_archive_loki_query(
-                namespace, loki_label_selector, containers
-            )
+            query = self._build_loki_labels_filter_query(loki_label_selector)
 
             async with self.get_pod_archive_log_reader(
                 query,
@@ -1830,16 +1823,6 @@ class LokiLogsService(BaseLogsService):
             timestamps=timestamps,
             prefix=prefix,
         )
-
-    @staticmethod
-    def _build_loki_labels_filter_query(loki_label_selector: dict[str, str]) -> str:
-        """
-        Example: {app="myapp", environment="dev"}
-        """
-        labels_filter = ",".join(
-            f'{key}="{value}"' for key, value in loki_label_selector.items()
-        )
-        return f"{{{labels_filter}}}"
 
     async def get_label_values(
         self,
