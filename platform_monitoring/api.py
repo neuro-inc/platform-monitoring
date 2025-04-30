@@ -592,13 +592,8 @@ class AppsMonitoringApiHandler:
     async def containers(self, request: Request) -> Response:
         app_instance = await self._resolve_app_instance(request=request)
 
-        source = request.query.get("source", "loki")  # loki or k8s
         start_str = request.query.get("since")
         end_str = request.query.get("until")
-
-        if source not in ("loki", "k8s"):
-            exc_txt = "Invalid source. Expected 'loki' or 'k8s'."
-            raise Exception(exc_txt)
 
         start_dt = parse_date(start_str) if start_str else None
         end_dt = parse_date(end_str) if end_str else None
@@ -606,18 +601,15 @@ class AppsMonitoringApiHandler:
         loki_label_selector = self._get_loki_label_selector(app_instance)
 
         assert isinstance(self._logs_service, LokiLogsService)
-        containers = (
-            await self._logs_service.get_label_values(
-                label="container",
-                loki_label_selector=loki_label_selector,
-                since=start_dt,
-                until=end_dt,
-            )
-            if source == "loki"
-            else await self._get_labels_from_k8s(app_instance)
+        loki_containers = await self._logs_service.get_label_values(
+            label="container",
+            loki_label_selector=loki_label_selector,
+            since=start_dt,
+            until=end_dt,
         )
+        k8s_containers = await self._get_labels_from_k8s(app_instance)
 
-        return json_response(containers)
+        return json_response(list(set(loki_containers + k8s_containers)))
 
     async def stream_log(self, request: Request) -> StreamResponse:
         app_instance = await self._resolve_app_instance(request=request)

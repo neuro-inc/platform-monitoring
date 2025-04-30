@@ -1959,14 +1959,6 @@ class TestAppsLogApi:
         headers = regular_user1.headers
         url = apps_monitoring_api.generate_containers_url(app_id="app_instance_id")
 
-        # test containers list from k8s
-        params = {"source": "k8s"}
-        async with client.get(url, headers=headers, params=params) as response:
-            assert response.status == HTTPOk.status_code
-            containers = await response.json()
-            assert containers == apps_basic_pod.containers
-
-        # test containers list from loki
         async with client.get(url, headers=headers) as response:
             assert response.status == HTTPOk.status_code
             containers = await response.json()
