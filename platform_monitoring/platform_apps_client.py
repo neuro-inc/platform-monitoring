@@ -46,7 +46,7 @@ class AppsApiClient:
         self._trace_configs = trace_configs
 
     def _base_version_url(self, version: str) -> URL:
-        return self._url  / "apis" / "apps" / version
+        return self._url / "apis" / "apps" / version
 
     def _get_app_url(self, instance_id: str, version: str) -> URL:
         return self._base_version_url(version) / "instances" / instance_id

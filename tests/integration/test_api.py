@@ -1949,24 +1949,26 @@ class TestAppsLogApi:
         kube_client: MyKubeClient,
     ) -> None:
         pod_name = apps_basic_pod.name
+        since = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         for container_name in apps_basic_pod.containers:
-            await kube_client.wait_pod_is_running(
-                pod_name, namespace=kube_client.namespace, container_name=container_name
+            await kube_client.wait_pod_is_terminated(
+                pod_name, container_name=container_name, namespace=kube_client.namespace
             )
 
         headers = regular_user1.headers
         url = apps_monitoring_api.generate_containers_url(app_id="app_instance_id")
-        params = {
-            "cluster_name": "default",
-            "org_name": regular_user1.org_name,
-            "project_name": regular_user1.project_name,
-        }
 
+        async with client.get(url, headers=headers) as response:
+            assert response.status == HTTPOk.status_code
+            containers = await response.json()
+            assert set(containers) == set(apps_basic_pod.containers)
+
+        params = {"since": since}
         async with client.get(url, headers=headers, params=params) as response:
             assert response.status == HTTPOk.status_code
             containers = await response.json()
-            assert containers == apps_basic_pod.containers
+            assert set(containers) == set(apps_basic_pod.containers)
 
     async def test_apps_logs_exceptions(
         self,

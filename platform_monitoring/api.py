@@ -554,14 +554,25 @@ class AppsMonitoringApiHandler:
             exc_txt = "Loki as logs backend required"
             raise Exception(exc_txt)
 
-    async def containers(self, request: Request) -> Response:
-        app_instance = await self._resolve_app_instance(request=request)
-
-        k8s_label_selector = {
+    @staticmethod
+    def _get_k8s_label_selector(app_instance: AppInstance) -> dict[str, str]:
+        return {
             K8S_LABEL_APOLO_ORG: app_instance.org_name,
             K8S_LABEL_APOLO_PROJECT: app_instance.project_name,
             K8S_LABEL_APOLO_APP_ID: app_instance.id,
         }
+
+    @staticmethod
+    def _get_loki_label_selector(app_instance: AppInstance) -> dict[str, str]:
+        return {
+            "apolo_org_name": app_instance.org_name,
+            "apolo_project_name": app_instance.project_name,
+            "apolo_app_id": app_instance.id,
+            "namespace": app_instance.namespace,
+        }
+
+    async def _get_labels_from_k8s(self, app_instance: AppInstance) -> list[str]:
+        k8s_label_selector = self._get_k8s_label_selector(app_instance)
 
         label_selector = ",".join(
             f"{key}={value}" for key, value in k8s_label_selector.items()
@@ -571,14 +582,41 @@ class AppsMonitoringApiHandler:
             namespace=app_instance.namespace, label_selector=label_selector
         )
 
-        containers = [
+        return [
             container.name
             for pod in pods
             if pod.metadata.name
             for container in pod.spec.containers
         ]
 
-        return json_response(containers)
+    async def containers(self, request: Request) -> Response:
+        app_instance = await self._resolve_app_instance(request=request)
+
+        start_str = request.query.get("since")
+        end_str = request.query.get("until")
+
+        start_dt = parse_date(start_str) if start_str else None
+        end_dt = parse_date(end_str) if end_str else None
+
+        loki_label_selector = self._get_loki_label_selector(app_instance)
+
+        assert isinstance(self._logs_service, LokiLogsService)
+        async with asyncio.TaskGroup() as tg:
+            loki_containers_task = tg.create_task(
+                self._logs_service.get_label_values(
+                    label="container",
+                    loki_label_selector=loki_label_selector,
+                    since=start_dt,
+                    until=end_dt,
+                )
+            )
+            k8s_containers_task = tg.create_task(
+                self._get_labels_from_k8s(app_instance)
+            )
+
+        return json_response(
+            list(set(loki_containers_task.result() + k8s_containers_task.result()))
+        )
 
     async def stream_log(self, request: Request) -> StreamResponse:
         app_instance = await self._resolve_app_instance(request=request)
@@ -609,16 +647,8 @@ class AppsMonitoringApiHandler:
         response.headers["X-Separator"] = separator
         await response.prepare(request)
 
-        loki_label_selector = {
-            "org": app_instance.org_name,
-            "project": app_instance.project_name,
-            "app_instance_id": app_instance.id,
-        }
-        k8s_label_selector = {
-            K8S_LABEL_APOLO_ORG: app_instance.org_name,
-            K8S_LABEL_APOLO_PROJECT: app_instance.project_name,
-            K8S_LABEL_APOLO_APP_ID: app_instance.id,
-        }
+        loki_label_selector = self._get_loki_label_selector(app_instance)
+        k8s_label_selector = self._get_k8s_label_selector(app_instance)
 
         assert isinstance(self._logs_service, LokiLogsService)
         async with self._logs_service.get_pod_log_reader_by_containers(
@@ -658,16 +688,8 @@ class AppsMonitoringApiHandler:
         if separator is None:
             separator = "=== Live logs ===" + _getrandbytes(30).hex()
 
-        loki_label_selector = {
-            "org": app_instance.org_name,
-            "project": app_instance.project_name,
-            "app_instance_id": app_instance.id,
-        }
-        k8s_label_selector = {
-            K8S_LABEL_APOLO_ORG: app_instance.org_name,
-            K8S_LABEL_APOLO_PROJECT: app_instance.project_name,
-            K8S_LABEL_APOLO_APP_ID: app_instance.id,
-        }
+        loki_label_selector = self._get_loki_label_selector(app_instance)
+        k8s_label_selector = self._get_k8s_label_selector(app_instance)
 
         assert isinstance(self._logs_service, LokiLogsService)
         async with self._logs_service.get_pod_log_reader_by_containers(

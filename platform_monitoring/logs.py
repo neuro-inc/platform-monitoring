@@ -1479,8 +1479,9 @@ class LokiLogReader(LogReader):
         await self._iterator.aclose()  # type: ignore
 
     def encode_and_handle_log(self, log_data: list[Any]) -> bytes:
-        log = log_data[1]
-        if log and log[-1] != "\n":
+        log = orjson.loads(log_data[1])["_entry"]
+
+        if log[-1] != "\n":
             log = f"{log}\n"
         if self._timestamps:
             log_dt = datetime.fromtimestamp(int(log_data[0]) / 1_000_000_000, tz=UTC)
@@ -1578,7 +1579,7 @@ class LokiLogsService(BaseLogsService):
             start = int(start_dt.timestamp() * 1_000_000_000)
             end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
             async with self.get_pod_archive_log_reader(
-                f'{{namespace="{namespace}"}} | unpack | pod="{pod_name}"',
+                f'{{namespace="{namespace}", pod="{pod_name}"}}',
                 start=start,
                 end=end,
                 timestamps=timestamps,
@@ -1723,19 +1724,22 @@ class LokiLogsService(BaseLogsService):
             yield chunk
 
     @staticmethod
-    def _build_archive_loki_query(
-        namespace: str, loki_label_selector: dict[str, str], containers: list[str]
+    def _build_loki_labels_filter_query(
+        exactly_equal_labels: dict[str, Any],
+        regex_matches_labels: dict[str, Any] | None = None,
     ) -> str:
-        query = f'{{namespace="{namespace}"}}'
-        if loki_label_selector or containers:
-            query += " | unpack | "
-            if loki_label_selector:
-                query += " ".join(
-                    f'{key}="{value}"' for key, value in loki_label_selector.items()
-                )
-            if containers:
-                query += f' container=~"{"|".join(containers)}"'
-        return query
+        """
+        Example: {app="myapp", environment="dev", container=~"myapp-.*|myapp-2.*"}
+        """
+        exactly_equal_labels_list = [
+            f'{key}="{value}"' for key, value in exactly_equal_labels.items()
+        ]
+        regex_matches_labels = regex_matches_labels or {}
+        regex_matches_labels_list = [
+            f'{key}=~"{value}"' for key, value in regex_matches_labels.items()
+        ]
+        labels_filter = ",".join(exactly_equal_labels_list + regex_matches_labels_list)
+        return f"{{{labels_filter}}}"
 
     @asyncgeneratorcontextmanager
     async def get_pod_log_reader_by_containers(  # noqa: C901
@@ -1778,8 +1782,12 @@ class LokiLogsService(BaseLogsService):
             start = int(start_dt.timestamp() * 1_000_000_000)
             end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
 
-            query = self._build_archive_loki_query(
-                namespace, loki_label_selector, containers
+            loki_regex_matches_labels = (
+                {"container": "|".join(containers)} if containers else {}
+            )
+            query = self._build_loki_labels_filter_query(
+                exactly_equal_labels=loki_label_selector,
+                regex_matches_labels=loki_regex_matches_labels,
             )
 
             async with self.get_pod_archive_log_reader(
@@ -1830,6 +1838,29 @@ class LokiLogsService(BaseLogsService):
             timestamps=timestamps,
             prefix=prefix,
         )
+
+    async def get_label_values(
+        self,
+        label: str,
+        loki_label_selector: dict[str, str],
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> list[str]:
+        query = self._build_loki_labels_filter_query(
+            exactly_equal_labels=loki_label_selector
+        )
+
+        since = since or datetime.now(UTC) - timedelta(
+            seconds=self._max_query_lookback_s
+        ) + timedelta(hours=1)  # +1 hour prevent max query length error
+        start = int(since.timestamp() * 1_000_000_000)
+        end = int(until.timestamp() * 1_000_000_000) if until else None
+
+        result = await self._loki_client.label_values(
+            label=label, query=query, start=start, end=end
+        )
+
+        return result.get("data", [])
 
     async def drop_logs(self, pod_name: str) -> None:
         pass
