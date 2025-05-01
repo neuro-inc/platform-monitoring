@@ -601,15 +601,22 @@ class AppsMonitoringApiHandler:
         loki_label_selector = self._get_loki_label_selector(app_instance)
 
         assert isinstance(self._logs_service, LokiLogsService)
-        loki_containers = await self._logs_service.get_label_values(
-            label="container",
-            loki_label_selector=loki_label_selector,
-            since=start_dt,
-            until=end_dt,
-        )
-        k8s_containers = await self._get_labels_from_k8s(app_instance)
+        async with asyncio.TaskGroup() as tg:
+            loki_containers_task = tg.create_task(
+                self._logs_service.get_label_values(
+                    label="container",
+                    loki_label_selector=loki_label_selector,
+                    since=start_dt,
+                    until=end_dt,
+                )
+            )
+            k8s_containers_task = tg.create_task(
+                self._get_labels_from_k8s(app_instance)
+            )
 
-        return json_response(list(set(loki_containers + k8s_containers)))
+        return json_response(
+            list(set(loki_containers_task.result() + k8s_containers_task.result()))
+        )
 
     async def stream_log(self, request: Request) -> StreamResponse:
         app_instance = await self._resolve_app_instance(request=request)
