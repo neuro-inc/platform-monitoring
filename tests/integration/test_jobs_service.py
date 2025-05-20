@@ -1,7 +1,6 @@
 import asyncio
 import contextlib
 import json
-import os
 import re
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -89,7 +88,7 @@ class TestJobsService:
 
     @pytest.fixture
     def registry_host(self) -> str:
-        return os.environ.get("REGISTRY_HOST", "localhost:5000")
+        return "localhost:5000"
 
     @pytest.fixture
     def image_tag(self) -> str:
@@ -203,7 +202,6 @@ class TestJobsService:
         )
         await self.wait_for_job_running(job, apolo_client)
 
-        print("### REGISTRY HOST IN TEST:", registry_host)
         image = (
             f"{registry_host}/{user.org_name}/{user.project_name}/alpine:{image_tag}"
         )

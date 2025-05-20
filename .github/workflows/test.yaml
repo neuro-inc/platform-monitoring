@@ -90,7 +90,7 @@ jobs:
         make test_k8s
     - name: Run integration tests
       env:
-        REGISTRY_HOST: registry.kube-system.svc.cluster.local:5000
+        IN_MINIKUBE: "1"
       run: make test_integration
     - name: Dump pod logs for debugging
       if: failure()
