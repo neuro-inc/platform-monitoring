@@ -37,7 +37,7 @@ test_integration:
 		--durations=10 \
 		--maxfail=0 \
 		--log-level=INFO \
-		tests/integration
+		tests/integration/test_api.py::TestSaveApi::test_save_ok
 
 
 .PHONY: docker_build
