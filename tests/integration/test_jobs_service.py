@@ -203,6 +203,7 @@ class TestJobsService:
         )
         await self.wait_for_job_running(job, apolo_client)
 
+        print("### REGISTRY HOST IN TEST:", registry_host)
         image = (
             f"{registry_host}/{user.org_name}/{user.project_name}/alpine:{image_tag}"
         )
