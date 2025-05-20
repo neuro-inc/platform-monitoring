@@ -89,6 +89,8 @@ jobs:
         kubectl get pods -A
         make test_k8s
     - name: Run integration tests
+      env:
+        REGISTRY_HOST: registry.kube-system.svc.cluster.local:5000
       run: make test_integration
     - name: Dump pod logs for debugging
       if: failure()

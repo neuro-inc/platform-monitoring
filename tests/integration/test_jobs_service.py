@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import json
+import os
 import re
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -88,7 +89,7 @@ class TestJobsService:
 
     @pytest.fixture
     def registry_host(self) -> str:
-        return "localhost:5000"
+        return os.environ.get("REGISTRY_HOST", "localhost:5000")
 
     @pytest.fixture
     def image_tag(self) -> str:
