@@ -92,6 +92,15 @@ jobs:
       run: |
         make test_integration
         make test_integration_minikube
+    - name: Dump pod logs for debugging
+      if: failure()
+      run: |
+        echo "Collecting logs from all pods:"
+        kubectl --context minikube get pods -o name | while read -r pod; do
+          echo "=== Logs for $pod ==="
+          kubectl --context minikube logs "$pod" || true
+          echo
+        done
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5
       with:
