@@ -13,7 +13,9 @@ from .config import (
     LogsCompactConfig,
     LogsConfig,
     LogsStorageType,
+    LokiConfig,
     PlatformApiConfig,
+    PlatformAppsConfig,
     PlatformAuthConfig,
     PlatformConfig,
     RegistryConfig,
@@ -42,8 +44,10 @@ class EnvironConfigFactory:
             platform_api=self._create_platform_api(),
             platform_auth=self._create_platform_auth(),
             platform_config=self._create_platform_config(),
+            platform_apps=self._create_platform_apps_config(),
             elasticsearch=self._create_elasticsearch(),
             s3=self._create_s3(),
+            loki=self._create_loki(),
             logs=self._create_logs(),
             kube=self._create_kube(),
             registry=self._create_registry(),
@@ -64,6 +68,11 @@ class EnvironConfigFactory:
         url = self._get_url("NP_MONITORING_PLATFORM_AUTH_URL")
         token = self._environ["NP_MONITORING_PLATFORM_AUTH_TOKEN"]
         return PlatformAuthConfig(url=url, token=token)
+
+    def _create_platform_apps_config(self) -> PlatformAppsConfig:
+        url = URL(self._environ["NP_MONITORING_PLATFORM_APPS_URL"])
+        token = self._environ["NP_MONITORING_PLATFORM_APPS_TOKEN"]
+        return PlatformAppsConfig(url=url, token=token)
 
     def _create_platform_config(self) -> PlatformConfig:
         url = URL(self._environ["NP_MONITORING_PLATFORM_CONFIG_URL"])
@@ -86,6 +95,25 @@ class EnvironConfigFactory:
             secret_access_key=self._environ.get("NP_MONITORING_S3_SECRET_ACCESS_KEY"),
             endpoint_url=URL(endpoint_url) if endpoint_url else None,
             job_logs_bucket_name=self._environ["NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME"],
+        )
+
+    def _create_loki(self) -> LokiConfig | None:
+        if not any(
+            key.startswith("NP_MONITORING_LOKI") for key in self._environ.keys()
+        ):
+            return None
+        archive_delay_s = int(
+            self._environ.get("NP_MONITORING_LOKI_ARCHIVE_DELAY_S", 5)
+        )
+        max_query_lookback_s = int(
+            self._environ.get(
+                "NP_MONITORING_LOKI_RETENTION_PERIOD_S", 60 * 60 * 24 * 30
+            )
+        )
+        return LokiConfig(
+            endpoint_url=URL(self._environ["NP_MONITORING_LOKI_ENDPOINT_URL"]),
+            archive_delay_s=archive_delay_s,
+            max_query_lookback_s=max_query_lookback_s,
         )
 
     def _create_logs(self) -> LogsConfig:

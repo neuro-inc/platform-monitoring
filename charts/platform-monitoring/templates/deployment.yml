@@ -63,8 +63,10 @@ spec:
           {{- with .Values.logs.persistence.es }}
             value: "http://{{ .host }}:{{ .port }}"
           {{- end }}
-          {{- else }}
+          {{- else if eq .Values.logs.persistence.type "s3" }}
           {{- include "platformMonitoring.env.s3" . | indent 10 }}
+          {{- else if eq .Values.logs.persistence.type "loki" }}
+          {{- include "platformMonitoring.env.loki" . | indent 10 }}
           {{- end }}
         volumeMounts:
           {{- include "platformMonitoring.volumeMounts.common" . | nindent 10 }}

@@ -131,7 +131,7 @@ class TestPod:
         pod = Pod.from_primitive(
             {
                 "metadata": {"name": "pod"},
-                "spec": {"containers": [{"resources": {}}]},
+                "spec": {"containers": [{"name": "container_name", "resources": {}}]},
             }
         )
         assert pod.resource_requests == ContainerResources()
@@ -140,7 +140,14 @@ class TestPod:
         pod = Pod.from_primitive(
             {
                 "metadata": {"name": "pod"},
-                "spec": {"containers": [{"resources": {"requests": {"cpu": "100m"}}}]},
+                "spec": {
+                    "containers": [
+                        {
+                            "name": "container_name",
+                            "resources": {"requests": {"cpu": "100m"}},
+                        }
+                    ]
+                },
             }
         )
         assert pod.resource_requests == ContainerResources(cpu_m=100)
@@ -149,7 +156,14 @@ class TestPod:
         pod = Pod.from_primitive(
             {
                 "metadata": {"name": "pod"},
-                "spec": {"containers": [{"resources": {"requests": {"cpu": "1"}}}]},
+                "spec": {
+                    "containers": [
+                        {
+                            "name": "container_name",
+                            "resources": {"requests": {"cpu": "1"}},
+                        }
+                    ]
+                },
             }
         )
         assert pod.resource_requests == ContainerResources(cpu_m=1000)
@@ -159,7 +173,12 @@ class TestPod:
             {
                 "metadata": {"name": "pod"},
                 "spec": {
-                    "containers": [{"resources": {"requests": {"memory": "1000Mi"}}}]
+                    "containers": [
+                        {
+                            "name": "container_name",
+                            "resources": {"requests": {"memory": "1000Mi"}},
+                        }
+                    ]
                 },
             }
         )
@@ -170,7 +189,12 @@ class TestPod:
             {
                 "metadata": {"name": "pod"},
                 "spec": {
-                    "containers": [{"resources": {"requests": {"memory": "1Gi"}}}]
+                    "containers": [
+                        {
+                            "name": "container_name",
+                            "resources": {"requests": {"memory": "1Gi"}},
+                        }
+                    ]
                 },
             }
         )
@@ -180,7 +204,14 @@ class TestPod:
         pod = Pod.from_primitive(
             {
                 "metadata": {"name": "pod"},
-                "spec": {"containers": [{"resources": {"requests": {"memory": "4T"}}}]},
+                "spec": {
+                    "containers": [
+                        {
+                            "name": "container_name",
+                            "resources": {"requests": {"memory": "4T"}},
+                        }
+                    ]
+                },
             }
         )
         assert pod.resource_requests == ContainerResources(memory=4 * 10**12)
@@ -190,7 +221,12 @@ class TestPod:
             {
                 "metadata": {"name": "pod"},
                 "spec": {
-                    "containers": [{"resources": {"requests": {"memory": "4Ti"}}}]
+                    "containers": [
+                        {
+                            "name": "container_name",
+                            "resources": {"requests": {"memory": "4Ti"}},
+                        }
+                    ]
                 },
             }
         )
@@ -203,12 +239,13 @@ class TestPod:
                 "spec": {
                     "containers": [
                         {
+                            "name": "container_name",
                             "resources": {
                                 "requests": {
                                     "nvidia.com/gpu": "1",
                                     "amd.com/gpu": "2",
                                 }
-                            }
+                            },
                         }
                     ]
                 },
@@ -223,8 +260,14 @@ class TestPod:
                 "metadata": {"name": "pod"},
                 "spec": {
                     "containers": [
-                        {"resources": {"requests": {"cpu": "0.5", "memory": "512Mi"}}},
                         {
+                            "name": "container_name1",
+                            "resources": {
+                                "requests": {"cpu": "0.5", "memory": "512Mi"}
+                            },
+                        },
+                        {
+                            "name": "container_name2",
                             "resources": {
                                 "requests": {
                                     "cpu": "1",
@@ -232,7 +275,7 @@ class TestPod:
                                     "nvidia.com/gpu": "1",
                                     "amd.com/gpu": "2",
                                 }
-                            }
+                            },
                         },
                     ]
                 },

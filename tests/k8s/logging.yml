@@ -47,6 +47,15 @@ spec:
       labels:
         service: minio
     spec:
+      initContainers:
+        - name: create-buckets
+          image: minio/minio:RELEASE.2023-10-14T05-17-22Z
+          command: [ "/bin/sh", "-c" ]
+          args:
+            - |
+              mc alias set myminio http://minio:9000 access_key secret_key
+              mc mb myminio/logs
+              mc mb myminio/loki-logs
       containers:
         - image: minio/minio:RELEASE.2023-10-14T05-17-22Z
           name: minio
@@ -122,11 +131,18 @@ data:
     [INPUT]
         Name             tail
         Path             /var/log/containers/job-*.log
-        Parser           docker
+        Parser           cri
         Tag              kube.*
         Refresh_Interval 5
         Mem_Buf_Limit    5MB
         Skip_Long_Lines  On
+
+    [FILTER]
+        Name          record_modifier
+        Match         kube.*
+        Remove_Key    time
+        Remove_Key    stream
+        Remove_Key    logtag
 
     [FILTER]
         Name                kubernetes

@@ -14,6 +14,7 @@ from platform_monitoring.config import (
     LogsConfig,
     LogsStorageType,
     PlatformApiConfig,
+    PlatformAppsConfig,
     PlatformAuthConfig,
     PlatformConfig,
     RegistryConfig,
@@ -27,21 +28,21 @@ CA_DATA_PEM = "this-is-certificate-authority-public-key"
 TOKEN = "this-is-token"
 
 
-@pytest.fixture()
+@pytest.fixture
 def cert_authority_path(tmp_path: Path) -> str:
     ca_path = tmp_path / "ca.crt"
     ca_path.write_text(CA_DATA_PEM)
     return str(ca_path)
 
 
-@pytest.fixture()
+@pytest.fixture
 def token_path(tmp_path: Path) -> str:
     token_path = tmp_path / "token"
     token_path.write_text(TOKEN)
     return str(token_path)
 
 
-@pytest.fixture()
+@pytest.fixture
 def environ(cert_authority_path: str, token_path: str) -> dict[str, Any]:
     return {
         "NP_MONITORING_CLUSTER_NAME": "default",
@@ -54,6 +55,8 @@ def environ(cert_authority_path: str, token_path: str) -> dict[str, Any]:
         "NP_MONITORING_PLATFORM_AUTH_TOKEN": "platform-auth-token",
         "NP_MONITORING_PLATFORM_CONFIG_URL": "http://platformconfig",
         "NP_MONITORING_PLATFORM_CONFIG_TOKEN": "platform-config-token",
+        "NP_MONITORING_PLATFORM_APPS_URL": "http://platform-apps",
+        "NP_MONITORING_PLATFORM_APPS_TOKEN": "platform-apps-token",
         "NP_MONITORING_ES_HOSTS": "http://es1,http://es2",
         "NP_MONITORING_K8S_API_URL": "https://localhost:8443",
         "NP_MONITORING_K8S_AUTH_TYPE": "token",
@@ -84,6 +87,9 @@ def test_create(environ: dict[str, Any], token_path: str) -> None:
         ),
         platform_config=PlatformConfig(
             url=URL("http://platformconfig"), token="platform-config-token"
+        ),
+        platform_apps=PlatformAppsConfig(
+            url=URL("http://platform-apps"), token="platform-apps-token"
         ),
         elasticsearch=ElasticsearchConfig(hosts=["http://es1", "http://es2"]),
         logs=LogsConfig(storage_type=LogsStorageType.ELASTICSEARCH),
@@ -200,6 +206,21 @@ def test_create_with_s3_logs(environ: dict[str, Any]) -> None:
     config = EnvironConfigFactory(environ).create()
 
     assert config.logs == LogsConfig(storage_type=LogsStorageType.S3)
+
+
+def test_create_with_loki_logs(environ: dict[str, Any]) -> None:
+    environ["NP_MONITORING_LOGS_STORAGE_TYPE"] = "loki"
+    config = EnvironConfigFactory(environ).create()
+
+    assert config.logs == LogsConfig(storage_type=LogsStorageType.LOKI)
+    assert config.loki is None
+
+    environ["NP_MONITORING_LOKI_ENDPOINT_URL"] = "http://localhost:3100"
+    config = EnvironConfigFactory(environ).create()
+
+    assert config.loki
+    assert config.loki.endpoint_url == URL("http://localhost:3100")
+    assert config.loki.max_query_lookback_s
 
 
 def test_create_with_logs_interval_custom(environ: dict[str, Any]) -> None:

@@ -153,7 +153,7 @@ async def regular_user2(
     return await regular_user_factory()
 
 
-@pytest.fixture()
+@pytest.fixture
 async def share_job(
     auth_client: AuthClient, cluster_name: str
 ) -> Callable[[ProjectUser, ProjectUser, str, str], Awaitable[None]]:

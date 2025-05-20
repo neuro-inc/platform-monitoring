@@ -23,13 +23,15 @@ class MyKubeClient(KubeClient):
 
     async def create_pod(self, job_pod_descriptor: dict[str, Any]) -> str:
         payload = await self._request(
-            method="POST", url=self._namespaced_pods_url, json=job_pod_descriptor
+            method="POST",
+            url=self._namespaced_pods_url(self.namespace),
+            json=job_pod_descriptor,
         )
         self._assert_resource_kind(expected_kind="Pod", payload=payload)
         return self._parse_pod_status(payload)
 
     async def delete_pod(self, pod_name: str, *, force: bool = False) -> str:
-        url = self._generate_pod_url(pod_name)
+        url = self._generate_pod_url(pod_name, self.namespace)
         request_payload = None
         if force:
             request_payload = {
@@ -50,16 +52,22 @@ class MyKubeClient(KubeClient):
     async def wait_pod_is_terminated(
         self,
         pod_name: str,
+        container_name: str | None = None,
+        namespace: str | None = None,
         timeout_s: float = 10.0 * 60,
         interval_s: float = 1.0,
         *,
         allow_pod_not_exists: bool = False,
     ) -> None:
+        namespace = namespace or self.namespace
         try:
             async with asyncio.timeout(timeout_s):
                 while True:
                     try:
-                        state = await self._get_raw_container_state(pod_name)
+                        state = await self._get_raw_container_state(
+                            pod_name, container_name=container_name, namespace=namespace
+                        )
+
                     except JobNotFoundException:
                         # job's pod does not exist: maybe it's already garbage-collected
                         if allow_pod_not_exists:
@@ -80,7 +88,7 @@ class MyKubeClient(KubeClient):
     ) -> None:
         try:
             async with asyncio.timeout(timeout_s):
-                while await self.check_pod_exists(pod_name):
+                while await self.check_pod_exists(pod_name):  # noqa: ASYNC110
                     await asyncio.sleep(interval_s)
         except TimeoutError:
             pytest.fail(f"Pod {pod_name} has not deleted yet")
@@ -113,7 +121,11 @@ class MyPodDescriptor:
         self._payload: dict[str, Any] = {
             "kind": "Pod",
             "apiVersion": "v1",
-            "metadata": {"name": job_id, "labels": {"job": job_id}},
+            "metadata": {
+                "name": job_id,
+                "labels": {"job": job_id},
+                "namespace": "default",
+            },
             "spec": {
                 "containers": [
                     {
@@ -192,7 +204,7 @@ def cert_authority_data_pem(kube_config_cluster_payload: dict[str, Any]) -> str 
     return None
 
 
-@pytest.fixture()
+@pytest.fixture
 async def kube_config(request: FixtureRequest, in_minikube: bool) -> KubeConfig:  # noqa: FBT001
     if in_minikube:
         return KubeConfig(
@@ -218,7 +230,7 @@ async def kube_config(request: FixtureRequest, in_minikube: bool) -> KubeConfig:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 async def kube_client(kube_config: KubeConfig) -> AsyncIterator[MyKubeClient]:
     # TODO (A Danshyn 06/06/18): create a factory method
     client = MyKubeClient(
@@ -239,20 +251,20 @@ async def kube_client(kube_config: KubeConfig) -> AsyncIterator[MyKubeClient]:
         yield client
 
 
-@pytest.fixture()
+@pytest.fixture
 async def _kube_node(kube_client: KubeClient) -> Node:
     nodes = await kube_client.get_nodes()
     assert len(nodes) == 1, "Should be exactly one minikube node"
     return nodes[0]
 
 
-@pytest.fixture()
+@pytest.fixture
 async def kube_node_name(_kube_node: Node) -> str:
     assert _kube_node.metadata.name
     return _kube_node.metadata.name
 
 
-@pytest.fixture()
+@pytest.fixture
 async def kube_container_runtime(_kube_node: Node) -> str:
     version = _kube_node.status.node_info.container_runtime_version
     end = version.find("://")

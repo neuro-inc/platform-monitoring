@@ -89,7 +89,11 @@ def create_pod(
             "name": job_id,
             "labels": {"job": job_id, "platform.neuromation.io/job": job_id},
         },
-        "spec": {"containers": [{"resources": {"requests": resources}}]},
+        "spec": {
+            "containers": [
+                {"name": "container_name", "resources": {"requests": resources}}
+            ]
+        },
         "status": {"phase": "Running"},
     }
     if node_name:
@@ -97,7 +101,7 @@ def create_pod(
     return Pod.from_primitive(payload)
 
 
-@pytest.fixture()
+@pytest.fixture
 def cluster() -> Cluster:
     return Cluster(
         name="default",
@@ -164,19 +168,19 @@ def get_cluster_factory(cluster: Cluster) -> Callable[[str], Awaitable[Cluster]]
     return get_cluster
 
 
-@pytest.fixture()
+@pytest.fixture
 def config_client(cluster: Cluster) -> mock.Mock:
     client = mock.Mock(spec=ConfigClient)
     client.get_cluster.side_effect = get_cluster_factory(cluster)
     return client
 
 
-@pytest.fixture()
+@pytest.fixture
 def jobs_client() -> mock.Mock:
     return mock.Mock(spec=ApiClient)
 
 
-@pytest.fixture()
+@pytest.fixture
 def kube_client() -> mock.Mock:
     async def get_nodes(label_selector: str = "") -> Sequence[Node]:
         assert label_selector == "platform.neuromation.io/nodepool"
@@ -207,7 +211,7 @@ def kube_client() -> mock.Mock:
     return client
 
 
-@pytest.fixture()
+@pytest.fixture
 def service(
     config_client: ConfigClient, jobs_client: ApiClient, kube_client: KubeClient
 ) -> JobsService:

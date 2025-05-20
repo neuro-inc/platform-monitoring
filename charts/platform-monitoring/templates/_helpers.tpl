@@ -60,6 +60,10 @@ release: {{ .Release.Name | quote }}
 {{- if .Values.platform.token }}
 {{ toYaml .Values.platform.token | indent 2 }}
 {{- end }}
+- name: NP_MONITORING_PLATFORM_APPS_TOKEN
+{{- if .Values.platform.token }}
+{{ toYaml .Values.platform.token | indent 2 }}
+{{- end }}
 - name: NP_MONITORING_K8S_API_URL
   value: https://kubernetes.default:443
 - name: NP_MONITORING_K8S_AUTH_TYPE
@@ -74,6 +78,8 @@ release: {{ .Release.Name | quote }}
   value: {{ .Values.platform.authUrl | quote }}
 - name: NP_MONITORING_PLATFORM_CONFIG_URL
   value: {{ .Values.platform.configUrl | quote }}
+- name: NP_MONITORING_PLATFORM_APPS_URL
+  value: {{ .Values.platform.appsUrl | quote }}
 - name: NP_MONITORING_K8S_NS
   value: {{ .Values.jobsNamespace }}
 - name: NP_MONITORING_REGISTRY_URL
@@ -125,6 +131,20 @@ release: {{ .Release.Name | quote }}
 {{- end }}
 - name: NP_MONITORING_S3_JOB_LOGS_BUCKET_NAME
   value: {{ $logsPersistence.s3.bucket | quote }}
+{{- end }}
+{{- end -}}
+
+{{- define "platformMonitoring.env.loki" -}}
+{{- $logsPersistence := .Values.logs.persistence -}}
+{{- if eq $logsPersistence.type "loki" }}
+- name: NP_MONITORING_LOGS_STORAGE_TYPE
+  value: loki
+- name: NP_MONITORING_LOKI_ENDPOINT_URL
+  value: {{ $logsPersistence.loki.endpoint | quote }}
+- name: NP_MONITORING_LOKI_ARCHIVE_DELAY_S
+  value: {{ $logsPersistence.loki.archiveDelay | quote }}
+- name: NP_MONITORING_LOKI_RETENTION_PERIOD_S
+  value: {{ $logsPersistence.loki.retentionPeriodS | quote }}
 {{- end }}
 {{- end -}}
 

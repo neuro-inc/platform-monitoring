@@ -5,14 +5,12 @@ set -o errexit
 # https://github.com/kubernetes/minikube#linux-continuous-integration-without-vm-support
 
 function k8s::install_minikube {
-    local minikube_version="v1.25.2"
+    local minikube_version="v1.34.0"
     sudo apt-get update
     sudo apt-get install -y conntrack
     curl -Lo minikube https://storage.googleapis.com/minikube/releases/${minikube_version}/minikube-linux-amd64
     chmod +x minikube
     sudo mv minikube /usr/local/bin/
-    sudo -E minikube config set WantReportErrorPrompt false
-    sudo -E minikube config set WantNoneDriverWarning false
 }
 
 function k8s::start {
@@ -20,17 +18,13 @@ function k8s::start {
     mkdir -p $(dirname $KUBECONFIG)
     touch $KUBECONFIG
 
-    export MINIKUBE_WANTUPDATENOTIFICATION=false
-    export MINIKUBE_WANTREPORTERRORPROMPT=false
-    export MINIKUBE_HOME=$HOME
-    export CHANGE_MINIKUBE_NONE_USER=true
-
-    sudo -E minikube start \
-        --vm-driver=none \
-        --install-addons=true \
-        --addons=registry \
+    minikube start \
+        --vm-driver=docker \
+        --container-runtime=containerd \
         --wait=all \
-        --wait-timeout=5m
+        --wait-timeout=5m \
+        --addons=registry \
+        --install-addons=true
     kubectl config use-context minikube
     kubectl get nodes -o name | xargs -I {} kubectl label {} --overwrite \
         platform.neuromation.io/nodepool=minikube
@@ -47,6 +41,17 @@ function k8s::apply_all_configurations {
     kubectl apply -f tests/k8s/platformapi.yml
     kubectl apply -f tests/k8s/platformnotifications.yml
     kubectl apply -f tests/k8s/platformcontainerruntime.yml
+    kubectl apply -f tests/k8s/platformmonitoring.yml
+    kubectl apply -f tests/k8s/extra-entities.yml
+
+    # for local development you need to run also
+    # kubectl create secret docker-registry ghcr-secret --docker-server=ghcr.io
+    # --docker-username=<your_github_username> --docker-password=<your_github_token_with_ghcr_access>
+}
+
+
+function k8s::wait_for_all_pods_ready {
+    ./tests/k8s/wait-pods-ready.sh 300 5
 }
 
 
@@ -90,5 +95,8 @@ case "${1:-}" in
         ;;
     test)
         k8s::test
+        ;;
+    wait)
+        k8s::wait_for_all_pods_ready
         ;;
 esac

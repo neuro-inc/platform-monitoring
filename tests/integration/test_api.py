@@ -1,11 +1,14 @@
 import asyncio
 import json
+import logging
 import re
+import shlex
 import signal
 import textwrap
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest import mock
 from uuid import uuid4
@@ -26,11 +29,24 @@ from aiohttp.web_exceptions import (
 from yarl import URL
 
 from platform_monitoring.api import create_app
-from platform_monitoring.config import Config, ContainerRuntimeConfig, PlatformApiConfig
+from platform_monitoring.config import (
+    Config,
+    ContainerRuntimeConfig,
+    LokiConfig,
+    PlatformApiConfig,
+)
+from platform_monitoring.platform_apps_client import (
+    AppInstance,
+    AppsApiClient,
+    AppsApiException,
+)
 
 from .conftest import ApiAddress, create_local_app_server, random_str
 from .conftest_admin import ProjectUser
 from .conftest_kube import MyKubeClient
+
+
+logger = logging.getLogger(__name__)
 
 
 async def expect_prompt(ws: aiohttp.ClientWebSocketResponse) -> bytes:
@@ -149,6 +165,28 @@ class MonitoringApiEndpoints:
 
 
 @dataclass(frozen=True)
+class AppsMonitoringApiEndpoints:
+    address: ApiAddress
+
+    @property
+    def api_v1_endpoint(self) -> URL:
+        return URL(f"http://{self.address.host}:{self.address.port}/api/v1")
+
+    @property
+    def endpoint(self) -> URL:
+        return self.api_v1_endpoint / "apps"
+
+    def generate_log_url(self, app_id: str) -> URL:
+        return self.endpoint / app_id / "log"
+
+    def generate_log_ws_url(self, app_id: str) -> URL:
+        return self.endpoint / app_id / "log_ws"
+
+    def generate_containers_url(self, app_id: str) -> URL:
+        return self.endpoint / app_id / "containers"
+
+
+@dataclass(frozen=True)
 class PlatformApiEndpoints:
     url: URL
 
@@ -168,14 +206,30 @@ class PlatformApiEndpoints:
         return self.jobs_base_url / job_id
 
 
-@pytest.fixture()
+@pytest.fixture
 async def monitoring_api(config: Config) -> AsyncIterator[MonitoringApiEndpoints]:
     app = await create_app(config)
     async with create_local_app_server(app, port=8080) as address:
         yield MonitoringApiEndpoints(address=address)
 
 
-@pytest.fixture()
+@pytest.fixture
+async def apps_monitoring_api(
+    config_with_loki_logs_backend: Config,
+) -> AsyncIterator[AppsMonitoringApiEndpoints]:
+    app = await create_app(config_with_loki_logs_backend)
+    async with create_local_app_server(app, port=8080) as address:
+        yield AppsMonitoringApiEndpoints(address=address)
+
+
+@pytest.fixture(scope="session")
+async def monitoring_api_ep(
+    platform_monitoring_api_address: ApiAddress,
+) -> MonitoringApiEndpoints:
+    return MonitoringApiEndpoints(address=platform_monitoring_api_address)
+
+
+@pytest.fixture
 async def monitoring_api_s3_storage(
     config_s3_storage: Config,
 ) -> AsyncIterator[MonitoringApiEndpoints]:
@@ -184,7 +238,7 @@ async def monitoring_api_s3_storage(
         yield MonitoringApiEndpoints(address=address)
 
 
-@pytest.fixture()
+@pytest.fixture
 def platform_api(
     platform_api_config: PlatformApiConfig,
 ) -> PlatformApiEndpoints:
@@ -285,7 +339,7 @@ class JobsClient:
                 assert response.status == HTTPNoContent.status_code
 
 
-@pytest.fixture()
+@pytest.fixture
 def jobs_client_factory(
     platform_api: PlatformApiEndpoints, client: aiohttp.ClientSession
 ) -> Callable[[ProjectUser], JobsClient]:
@@ -295,7 +349,7 @@ def jobs_client_factory(
     return impl
 
 
-@pytest.fixture()
+@pytest.fixture
 async def jobs_client(
     regular_user1: ProjectUser,
     jobs_client_factory: Callable[[ProjectUser], JobsClient],
@@ -303,7 +357,7 @@ async def jobs_client(
     return jobs_client_factory(regular_user1)
 
 
-@pytest.fixture()
+@pytest.fixture
 def job_request_factory() -> Callable[[], dict[str, Any]]:
     def _factory() -> dict[str, Any]:
         return {
@@ -317,14 +371,14 @@ def job_request_factory() -> Callable[[], dict[str, Any]]:
     return _factory
 
 
-@pytest.fixture()
+@pytest.fixture
 async def job_submit(
     job_request_factory: Callable[[], dict[str, Any]],
 ) -> dict[str, Any]:
     return job_request_factory()
 
 
-@pytest.fixture()
+@pytest.fixture
 async def job_factory(
     jobs_client: JobsClient,
     job_request_factory: Callable[[], dict[str, Any]],
@@ -353,17 +407,17 @@ async def job_factory(
             await jobs_client.wait_job_dematerialized(job_id)
 
 
-@pytest.fixture()
+@pytest.fixture
 async def infinite_job(job_factory: Callable[[str], Awaitable[str]]) -> str:
     return await job_factory("tail -f /dev/null")
 
 
-@pytest.fixture()
+@pytest.fixture
 def job_name() -> str:
     return f"test-job-{random_str()}"
 
 
-@pytest.fixture()
+@pytest.fixture
 async def named_infinite_job(
     job_factory: Callable[[str, str], Awaitable[str]], job_name: str
 ) -> str:
@@ -372,7 +426,10 @@ async def named_infinite_job(
 
 class TestApi:
     async def test_ping(
-        self, monitoring_api: MonitoringApiEndpoints, client: aiohttp.ClientSession
+        self,
+        monitoring_api: MonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        config: Config,
     ) -> None:
         async with client.get(monitoring_api.ping_url) as resp:
             assert resp.status == HTTPOk.status_code
@@ -1023,6 +1080,9 @@ class TestAttachApi:
             b"".join(f"\x01{i}\n".encode("ascii") for i in range(10))
             + b'\x03{"exit_code": 0}'
         )
+
+        logger.info("content: %s", content)
+
         assert b"".join(content) in expected
 
         await jobs_client.delete_job(job_id)
@@ -1349,7 +1409,7 @@ class TestKillApi:
 class TestPortForward:
     async def test_port_forward_bad_port(
         self,
-        monitoring_api: MonitoringApiEndpoints,
+        monitoring_api_ep: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
         infinite_job: str,
@@ -1357,13 +1417,14 @@ class TestPortForward:
         headers = jobs_client.headers
 
         # String port is invalid
-        url = monitoring_api.generate_port_forward_url(infinite_job, "abc")
+        url = monitoring_api_ep.generate_port_forward_url(infinite_job, "abc")
+
         async with client.get(url, headers=headers) as response:
             assert response.status == HTTPBadRequest.status_code, await response.text()
 
     async def test_port_forward_cannot_connect(
         self,
-        monitoring_api: MonitoringApiEndpoints,
+        monitoring_api_ep: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
         infinite_job: str,
@@ -1371,14 +1432,14 @@ class TestPortForward:
         headers = jobs_client.headers
 
         # Port 60001 is not handled
-        url = monitoring_api.generate_port_forward_url(infinite_job, 60001)
+        url = monitoring_api_ep.generate_port_forward_url(infinite_job, 60001)
+
         async with client.get(url, headers=headers) as response:
             assert response.status == HTTPBadRequest.status_code, await response.text()
 
-    @pytest.mark.minikube()
     async def test_port_forward_ok(
         self,
-        monitoring_api: MonitoringApiEndpoints,
+        monitoring_api_ep: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         job_submit: dict[str, Any],
         jobs_client: JobsClient,
@@ -1405,7 +1466,8 @@ class TestPortForward:
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
 
         headers = jobs_client.headers
-        url = monitoring_api.generate_port_forward_url(job_id, 60002)
+
+        url = monitoring_api_ep.generate_port_forward_url(job_id, 60002)
 
         async with client.ws_connect(url, headers=headers) as ws:
             for i in range(3):
@@ -1416,3 +1478,571 @@ class TestPortForward:
             await ws.close()
 
         await jobs_client.delete_job(job_id)
+
+
+class MyAppsPodDescriptor:
+    def __init__(self, pod_name: str, **kwargs: dict[str, Any]) -> None:
+        self._payload: dict[str, Any] = {
+            "kind": "Pod",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": pod_name,
+                "labels": {"platform.apolo.us/app": "app_instance_id"},
+                "namespace": "default",
+            },
+            "spec": {
+                "containers": [
+                    {
+                        "name": "container1",
+                        "image": "busybox",
+                        "command": [
+                            "/bin/sh",
+                            "-c",
+                            "for i in $(seq 1 5); do echo container1_$i; sleep 1; done",
+                        ],
+                    },
+                    {
+                        "name": "container2",
+                        "image": "busybox",
+                        "command": [
+                            "/bin/sh",
+                            "-c",
+                            "for i in $(seq 1 5); do echo container2_$i; sleep 1; done",
+                        ],
+                    },
+                ],
+                "restartPolicy": "Never",
+                "imagePullSecrets": [],
+                "tolerations": [],
+            },
+            **kwargs,
+        }
+
+    def set_command(self, command: str) -> None:
+        for container in self._payload["spec"]["containers"]:
+            container["command"] = shlex.split(command)
+
+    def set_restart_policy(self, policy: str) -> None:
+        self._payload["spec"]["restartPolicy"] = policy
+
+    def add_labels(self, labels: dict[str, str]) -> None:
+        self._payload["metadata"]["labels"].update(labels)
+
+    @property
+    def payload(self) -> dict[str, Any]:
+        return self._payload
+
+    @property
+    def name(self) -> str:
+        return self._payload["metadata"]["name"]
+
+    @property
+    def containers(self) -> list[str]:
+        return [container["name"] for container in self._payload["spec"]["containers"]]
+
+
+@pytest.fixture
+async def apps_basic_pod(
+    kube_client: MyKubeClient,
+    regular_user1: ProjectUser,
+) -> AsyncIterator[MyAppsPodDescriptor]:
+    pod_name = f"test-pod-{uuid4()}"
+    apps_pod_description = MyAppsPodDescriptor(pod_name)
+    apps_pod_description.add_labels(
+        {
+            "platform.apolo.us/org": regular_user1.org_name,
+            "platform.apolo.us/project": regular_user1.project_name,
+        }
+    )
+    await kube_client.create_pod(apps_pod_description.payload)
+    yield apps_pod_description
+    await kube_client.delete_pod(apps_pod_description.name)
+
+
+@pytest.fixture
+def _get_app_mock(
+    monkeypatch: pytest.MonkeyPatch,
+    regular_user1: ProjectUser,
+    kube_client: MyKubeClient,
+) -> None:
+    async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:
+        return AppInstance(
+            id="app_instance_id",
+            name="test-apps-instance",
+            org_name=regular_user1.org_name,
+            project_name=regular_user1.project_name,
+            namespace=kube_client.namespace,
+        )
+
+    monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
+
+
+class TestAppsLogApi:
+    @staticmethod
+    async def read_ws(ws: aiohttp.ClientWebSocketResponse) -> bytes:
+        ws_actual_payload = b""
+        async for msg in ws:
+            assert msg.type == aiohttp.WSMsgType.BINARY
+            ws_actual_payload += msg.data
+        return ws_actual_payload
+
+    async def response_read_task(
+        self,
+        client: aiohttp.ClientSession,
+        url: URL,
+        headers: dict[str, Any],
+        params: dict[str, Any],
+        resp_type: str,
+    ) -> bytes:
+        if resp_type == "stream":
+            async with client.get(url, headers=headers, params=params) as response:
+                actual_log = await response.read()
+        elif resp_type == "ws":
+            async with client.ws_connect(url, headers=headers, params=params) as ws:
+                actual_log = await self.read_ws(ws)
+        return actual_log
+
+    @staticmethod
+    def assert_archive_logs(
+        actual_log: bytes,
+        container_count_start: int,
+        container_count_end: int,
+        logs_count_start: int,
+        logs_count_end: int,
+        re_log_template: str,
+    ) -> None:
+        for c_number in range(
+            container_count_start, container_count_end + 1
+        ):  # iterate over containers
+            for l_number in range(
+                logs_count_start, logs_count_end + 1
+            ):  # iterate over logs
+                log_pattern = re.compile(
+                    re_log_template.replace("[c_number]", str(c_number))
+                    .replace("[l_number]", str(l_number))
+                    .replace("[time]", r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{,9}Z")
+                    .encode()
+                )
+                actual_log, replace_count = log_pattern.subn(b"", actual_log)
+                # assert replace_count == 1
+        # assert actual_log == b""
+
+    @pytest.mark.usefixtures("_get_app_mock")
+    async def test_apps_only_loki_log(
+        self,
+        apps_monitoring_api: AppsMonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        regular_user1: ProjectUser,
+        apps_basic_pod: MyAppsPodDescriptor,
+        kube_client: MyKubeClient,
+        loki_config: LokiConfig,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        since = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        pod_name = apps_basic_pod.name
+
+        for container_name in apps_basic_pod.containers:
+            await kube_client.wait_pod_is_terminated(pod_name, container_name)
+
+        await asyncio.sleep(loki_config.archive_delay_s)
+
+        headers = regular_user1.headers
+        url = apps_monitoring_api.generate_log_url(app_id="app_instance_id")
+        url_ws = apps_monitoring_api.generate_log_ws_url(app_id="app_instance_id")
+        base_params = {
+            "since": since,
+            "cluster_name": "default",
+            "org_name": regular_user1.org_name,
+            "project_name": regular_user1.project_name,
+        }
+
+        # test base params
+        async with client.get(url, headers=headers, params=base_params) as response:
+            assert response.status == HTTPOk.status_code
+            assert response.content_type == "text/plain"
+            assert response.charset == "utf-8"
+            assert response.headers["Transfer-Encoding"] == "chunked"
+            assert "Content-Encoding" not in response.headers
+            actual_log = await response.read()
+        async with client.ws_connect(url_ws, headers=headers, params=base_params) as ws:
+            ws_actual_log = await self.read_ws(ws)
+        assert actual_log == ws_actual_log
+        self.assert_archive_logs(
+            actual_log=actual_log,
+            container_count_start=1,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=r"container[c_number]_[l_number]\n",
+        )
+
+        # test with prefix
+        params = base_params.copy()
+        params["prefix"] = "true"
+        async with client.get(url, headers=headers, params=params) as response:
+            actual_log = await response.read()
+        async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
+            ws_actual_log = await self.read_ws(ws)
+        assert actual_log == ws_actual_log
+        self.assert_archive_logs(
+            actual_log=actual_log,
+            container_count_start=1,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=rf"\[{pod_name}/container[c_number]\] "
+            f"container[c_number]_[l_number]\n",
+        )
+
+        # test with timestamps
+        params = base_params.copy()
+        params["timestamps"] = "true"
+        async with client.get(url, headers=headers, params=params) as response:
+            actual_log = await response.read()
+        async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
+            ws_actual_log = await self.read_ws(ws)
+        assert actual_log == ws_actual_log
+        self.assert_archive_logs(
+            actual_log=actual_log,
+            container_count_start=1,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=r"[time] container[c_number]_[l_number]\n",
+        )
+
+        # test with containers filter
+        params = base_params.copy()
+        params["container"] = "container2"
+        async with client.get(url, headers=headers, params=params) as response:
+            actual_log = await response.read()
+        async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
+            ws_actual_log = await self.read_ws(ws)
+        assert actual_log == ws_actual_log
+        self.assert_archive_logs(
+            actual_log=actual_log,
+            container_count_start=2,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=r"container[c_number]_[l_number]\n",
+        )
+
+        pod = await kube_client.get_pod(pod_name)
+
+        # test with since container1
+        params = base_params.copy()
+        finished_at = pod.status.container_statuses[0].finished_at
+        assert finished_at
+        params["since"] = (finished_at - timedelta(seconds=2)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        params["container"] = "container1"
+        async with client.get(url, headers=headers, params=params) as response:
+            actual_log = await response.read()
+        async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
+            ws_actual_log = await self.read_ws(ws)
+        assert actual_log == ws_actual_log
+        self.assert_archive_logs(
+            actual_log=actual_log,
+            container_count_start=1,
+            container_count_end=1,
+            logs_count_start=4,
+            logs_count_end=5,
+            re_log_template=r"container[c_number]_[l_number]\n",
+        )
+
+        # test with since container2
+        params = base_params.copy()
+        finished_at = pod.status.container_statuses[1].finished_at
+        assert finished_at
+        params["since"] = (finished_at - timedelta(seconds=2)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        params["containers"] = "container2"
+        async with client.get(url, headers=headers, params=params) as response:
+            actual_log = await response.read()
+        async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
+            ws_actual_log = await self.read_ws(ws)
+        assert actual_log == ws_actual_log
+        self.assert_archive_logs(
+            actual_log=actual_log,
+            container_count_start=2,
+            container_count_end=2,
+            logs_count_start=4,
+            logs_count_end=5,
+            re_log_template=r"container[c_number]_[l_number]\n",
+        )
+
+    @pytest.mark.usefixtures("_get_app_mock")
+    async def test_apps_only_live_log(
+        self,
+        apps_monitoring_api: AppsMonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        regular_user1: ProjectUser,
+        apps_basic_pod: MyAppsPodDescriptor,
+        kube_client: MyKubeClient,
+        loki_config: LokiConfig,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        since = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        pod_name = apps_basic_pod.name
+
+        headers = regular_user1.headers
+        url = apps_monitoring_api.generate_log_url(app_id="app_instance_id")
+        url_ws = apps_monitoring_api.generate_log_ws_url(app_id="app_instance_id")
+        tasks = []
+
+        # test base params
+        base_params = {
+            "since": since,
+            "cluster_name": "default",
+            "org_name": regular_user1.org_name,
+            "project_name": regular_user1.project_name,
+        }
+        tasks.append(
+            asyncio.create_task(
+                self.response_read_task(client, url, headers, base_params, "stream")
+            )
+        )
+        tasks.append(
+            asyncio.create_task(
+                self.response_read_task(client, url_ws, headers, base_params, "ws")
+            )
+        )
+
+        # test with prefix
+        params = base_params.copy()
+        params["prefix"] = "true"
+        tasks.append(
+            asyncio.create_task(
+                self.response_read_task(client, url, headers, params, "stream")
+            )
+        )
+        tasks.append(
+            asyncio.create_task(
+                self.response_read_task(client, url_ws, headers, params, "ws")
+            )
+        )
+
+        # test with timestamps
+        params = base_params.copy()
+        params["timestamps"] = "true"
+        tasks.append(
+            asyncio.create_task(
+                self.response_read_task(client, url, headers, params, "stream")
+            )
+        )
+        tasks.append(
+            asyncio.create_task(
+                self.response_read_task(client, url_ws, headers, params, "ws")
+            )
+        )
+
+        # test with containers filter
+        params = base_params.copy()
+        params["container"] = "container2"
+        tasks.append(
+            asyncio.create_task(
+                self.response_read_task(client, url, headers, params, "stream")
+            )
+        )
+        tasks.append(
+            asyncio.create_task(
+                self.response_read_task(client, url_ws, headers, params, "ws")
+            )
+        )
+
+        log_results = await asyncio.gather(*tasks)
+        (
+            log_base_params_stream,
+            log_base_params_ws,
+            log_prefix_stream,
+            log_prefix_ws,
+            log_ts_stream,
+            log_ts_ws,
+            log_container_filter_stream,
+            log_container_filter_ws,
+        ) = log_results
+
+        # test base params
+        self.assert_archive_logs(
+            actual_log=log_base_params_stream,
+            container_count_start=1,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=r"container[c_number]_[l_number]\n",
+        )
+        self.assert_archive_logs(
+            actual_log=log_base_params_ws,
+            container_count_start=1,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=r"container[c_number]_[l_number]\n",
+        )
+
+        # test with prefix
+        self.assert_archive_logs(
+            actual_log=log_prefix_stream,
+            container_count_start=1,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=rf"\[{pod_name}/container[c_number]\] "
+            rf"container[c_number]_[l_number]\n",
+        )
+        self.assert_archive_logs(
+            actual_log=log_prefix_ws,
+            container_count_start=1,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=rf"\[{pod_name}/container[c_number]\] "
+            rf"container[c_number]_[l_number]\n",
+        )
+
+        # test with timestamps
+        self.assert_archive_logs(
+            actual_log=log_ts_stream,
+            container_count_start=1,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=r"[time] container[c_number]_[l_number]\n",
+        )
+        self.assert_archive_logs(
+            actual_log=log_ts_ws,
+            container_count_start=1,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=r"[time] container[c_number]_[l_number]\n",
+        )
+
+        # test with containers filter
+        self.assert_archive_logs(
+            actual_log=log_container_filter_stream,
+            container_count_start=2,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=r"container[c_number]_[l_number]\n",
+        )
+        self.assert_archive_logs(
+            actual_log=log_container_filter_ws,
+            container_count_start=2,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=r"container[c_number]_[l_number]\n",
+        )
+
+    @pytest.mark.usefixtures("_get_app_mock")
+    async def test_apps_containers(
+        self,
+        apps_monitoring_api: AppsMonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        regular_user1: ProjectUser,
+        apps_basic_pod: MyAppsPodDescriptor,
+        kube_client: MyKubeClient,
+    ) -> None:
+        pod_name = apps_basic_pod.name
+        since = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        for container_name in apps_basic_pod.containers:
+            await kube_client.wait_pod_is_terminated(
+                pod_name, container_name=container_name, namespace=kube_client.namespace
+            )
+
+        headers = regular_user1.headers
+        url = apps_monitoring_api.generate_containers_url(app_id="app_instance_id")
+
+        async with client.get(url, headers=headers) as response:
+            assert response.status == HTTPOk.status_code
+            containers = await response.json()
+            assert set(containers) == set(apps_basic_pod.containers)
+
+        params = {"since": since}
+        async with client.get(url, headers=headers, params=params) as response:
+            assert response.status == HTTPOk.status_code
+            containers = await response.json()
+            assert set(containers) == set(apps_basic_pod.containers)
+
+    async def test_apps_logs_exceptions(
+        self,
+        apps_monitoring_api: AppsMonitoringApiEndpoints,
+        client: aiohttp.ClientSession,
+        regular_user1: ProjectUser,
+        apps_basic_pod: MyAppsPodDescriptor,
+        kube_client: MyKubeClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        pod_name = apps_basic_pod.name
+
+        for container_name in apps_basic_pod.containers:
+            await kube_client.wait_pod_is_running(
+                pod_name, namespace=kube_client.namespace, container_name=container_name
+            )
+
+        headers = regular_user1.headers
+        url = apps_monitoring_api.generate_log_url(app_id="app_instance_id")
+        url_ws = apps_monitoring_api.generate_log_ws_url(app_id="app_instance_id")
+        base_params = {
+            "cluster_name": "default",
+            "org_name": regular_user1.org_name,
+            "project_name": regular_user1.project_name,
+        }
+
+        # test with not Authorized
+        async with client.get(url, headers={}, params=base_params) as response:
+            assert response.status == HTTPUnauthorized.status_code
+        with pytest.raises(aiohttp.WSServerHandshakeError):
+            async with client.ws_connect(url_ws, headers={}, params=base_params):
+                pass
+
+        # test with 401 Exception from apps_api
+        async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:
+            exc_text = "Unauthorized"
+            raise AppsApiException(code=401, message=exc_text)
+
+        monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
+
+        async with client.get(url, headers=headers, params=base_params) as response:
+            error_json = await response.json()
+            assert response.status == aiohttp.web.HTTPUnauthorized.status_code
+            assert error_json["error"] == "Unauthorized"
+        with pytest.raises(aiohttp.WSServerHandshakeError):
+            async with client.ws_connect(url_ws, headers=headers, params=base_params):
+                pass
+
+        # test with 403 Exception from apps_api
+        async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:  # type: ignore
+            exc_text = "Forbidden"
+            raise AppsApiException(code=403, message=exc_text)
+
+        monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
+
+        async with client.get(url, headers=headers, params=base_params) as response:
+            error_json = await response.json()
+            assert response.status == aiohttp.web.HTTPForbidden.status_code
+            assert error_json["error"] == "Forbidden"
+        with pytest.raises(aiohttp.WSServerHandshakeError):
+            async with client.ws_connect(url_ws, headers=headers, params=base_params):
+                pass
+
+        # test with another Exception from apps_api
+        async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:  # type: ignore
+            exc_text = "Something went wrong"
+            raise AppsApiException(code=500, message=exc_text)
+
+        monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
+
+        async with client.get(url, headers=headers, params=base_params) as response:
+            error_json = await response.json()
+            assert response.status == aiohttp.web.HTTPBadRequest.status_code
+            assert error_json["error"] == "Something went wrong"
+        with pytest.raises(aiohttp.WSServerHandshakeError):
+            async with client.ws_connect(url_ws, headers=headers, params=base_params):
+                pass

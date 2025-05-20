@@ -34,7 +34,14 @@ from neuro_logging import init_logging, setup_sentry
 from yarl import URL
 
 from .base import JobStats, Telemetry
-from .config import Config, ElasticsearchConfig, KubeConfig, LogsStorageType, S3Config
+from .config import (
+    Config,
+    ElasticsearchConfig,
+    KubeConfig,
+    LogsStorageType,
+    LokiConfig,
+    S3Config,
+)
 from .config_factory import EnvironConfigFactory
 from .container_runtime_client import (
     ContainerNotFoundError,
@@ -48,12 +55,15 @@ from .logs import (
     DEFAULT_ARCHIVE_DELAY,
     ElasticsearchLogsService,
     LogsService,
+    LokiLogsService,
     S3LogsMetadataService,
     S3LogsMetadataStorage,
     S3LogsService,
     s3_client_error,
 )
+from .loki_client import LokiClient
 from .platform_api_client import ApiClient, Job
+from .platform_apps_client import AppInstance, AppsApiClient, AppsApiException
 from .user import untrusted_user
 from .utils import JobsHelper, KubeHelper, parse_date
 from .validators import (
@@ -69,12 +79,24 @@ WS_TOP_PROTOCOL = "top.apolo.us"
 HEARTBEAT = 30
 
 
+# k8s labels
+K8S_LABEL_APOLO_ORG = "platform.apolo.us/org"
+K8S_LABEL_APOLO_PROJECT = "platform.apolo.us/project"
+K8S_LABEL_APOLO_APP_ID = "platform.apolo.us/app"
+
+
 CONFIG_KEY = aiohttp.web.AppKey("config", Config)
 KUBE_CLIENT_KEY = aiohttp.web.AppKey("kube_client", KubeClient)
+LOKI_CLIENT_KEY = aiohttp.web.AppKey("loki_client", LokiClient)
 JOBS_SERVICE_KEY = aiohttp.web.AppKey("jobs_service", JobsService)
 LOGS_SERVICE_KEY = aiohttp.web.AppKey("logs_service", LogsService)
+LOGS_STORAGE_TYPE_KEY = aiohttp.web.AppKey("logs_storage_type", LogsStorageType)
 CONFIG_CLIENT_KEY = aiohttp.web.AppKey("config_client", ConfigClient)
 MONITORING_APP_KEY = aiohttp.web.AppKey("monitoring_app", aiohttp.web.Application)
+APPS_MONITORING_APP_KEY = aiohttp.web.AppKey(
+    "apps_monitoring_app", aiohttp.web.Application
+)
+APPS_API_CLIENT_KEY = aiohttp.web.AppKey("apps_api_client", AppsApiClient)
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +157,10 @@ class MonitoringApiHandler:
         return self._app[KUBE_CLIENT_KEY]
 
     @property
+    def _loki_client(self) -> LokiClient:
+        return self._app[LOKI_CLIENT_KEY]
+
+    @property
     def _logs_service(self) -> LogsService:
         return self._app[LOGS_SERVICE_KEY]
 
@@ -153,15 +179,21 @@ class MonitoringApiHandler:
         result = await self._jobs_service.get_available_jobs_counts()
         return json_response(result)
 
+    def get_archive_delay(self) -> float:
+        if self._config.logs.storage_type == LogsStorageType.LOKI:
+            assert self._config.loki
+            return self._config.loki.archive_delay_s
+        return DEFAULT_ARCHIVE_DELAY
+
     async def stream_log(self, request: Request) -> StreamResponse:
         timestamps = _get_bool_param(request, "timestamps", default=False)
         debug = _get_bool_param(request, "debug", default=False)
         since_str = request.query.get("since")
-        since = parse_date(since_str) if since_str else None
         archive_delay_s = float(
-            request.query.get("archive_delay", DEFAULT_ARCHIVE_DELAY)
+            request.query.get("archive_delay", self.get_archive_delay())
         )
         job = await self._resolve_job(request, "read")
+        since = parse_date(since_str) if since_str else parse_date(job.created_at)
 
         pod_name = self._kube_helper.get_job_pod_name(job)
         separator = request.query.get("separator")
@@ -181,6 +213,7 @@ class MonitoringApiHandler:
 
         async with self._logs_service.get_pod_log_reader(
             pod_name,
+            job.namespace or self._config.kube.namespace,
             separator=separator.encode(),
             since=since,
             timestamps=timestamps,
@@ -198,11 +231,11 @@ class MonitoringApiHandler:
         timestamps = _get_bool_param(request, "timestamps", default=False)
         debug = _get_bool_param(request, "debug", default=False)
         since_str = request.query.get("since")
-        since = parse_date(since_str) if since_str else None
         archive_delay_s = float(
-            request.query.get("archive_delay", DEFAULT_ARCHIVE_DELAY)
+            request.query.get("archive_delay", self.get_archive_delay())
         )
         job = await self._resolve_job(request, "read")
+        since = parse_date(since_str) if since_str else parse_date(job.created_at)
 
         pod_name = self._kube_helper.get_job_pod_name(job)
         separator = request.query.get("separator")
@@ -214,6 +247,7 @@ class MonitoringApiHandler:
 
         async with self._logs_service.get_pod_log_reader(
             pod_name,
+            job.namespace or self._config.kube.namespace,
             separator=separator.encode(),
             since=since,
             timestamps=timestamps,
@@ -342,7 +376,6 @@ class MonitoringApiHandler:
         response.content_type = "application/x-ndjson"
         response.charset = encoding
         await response.prepare(request)
-
         try:
             async with self._jobs_service.save(job, user, image) as it:
                 async for chunk in it:
@@ -478,6 +511,226 @@ class MonitoringApiHandler:
             await writer.wait_closed()
 
 
+class AppsMonitoringApiHandler:
+    def __init__(self, app: aiohttp.web.Application, config: Config) -> None:
+        self._app = app
+        self._config = config
+
+    def register(self, app: aiohttp.web.Application) -> None:
+        app.add_routes(
+            [
+                aiohttp.web.get("/{app_id}/containers", self.containers),
+                aiohttp.web.get("/{app_id}/log", self.stream_log),
+                aiohttp.web.get("/{app_id}/log_ws", self.ws_log),
+            ]
+        )
+
+    @property
+    def _logs_service(self) -> LogsService:
+        return self._app[LOGS_SERVICE_KEY]
+
+    @property
+    def _apps_api_client(self) -> AppsApiClient:
+        return self._app[APPS_API_CLIENT_KEY]
+
+    @property
+    def _kube_client(self) -> KubeClient:
+        return self._app[KUBE_CLIENT_KEY]
+
+    @property
+    def _logs_storage_type(self) -> LogsStorageType:
+        return self._app[LOGS_STORAGE_TYPE_KEY]
+
+    def get_archive_delay(self) -> float:
+        if self._config.logs.storage_type == LogsStorageType.LOKI:
+            assert self._config.loki
+            return self._config.loki.archive_delay_s
+        return DEFAULT_ARCHIVE_DELAY
+
+    def _check_logs_backend(self) -> None:
+        if self._logs_storage_type != LogsStorageType.LOKI or not isinstance(
+            self._logs_service, LokiLogsService
+        ):
+            exc_txt = "Loki as logs backend required"
+            raise Exception(exc_txt)
+
+    @staticmethod
+    def _get_k8s_label_selector(app_instance: AppInstance) -> dict[str, str]:
+        return {
+            K8S_LABEL_APOLO_ORG: app_instance.org_name,
+            K8S_LABEL_APOLO_PROJECT: app_instance.project_name,
+            K8S_LABEL_APOLO_APP_ID: app_instance.id,
+        }
+
+    @staticmethod
+    def _get_loki_label_selector(app_instance: AppInstance) -> dict[str, str]:
+        return {
+            "apolo_org_name": app_instance.org_name,
+            "apolo_project_name": app_instance.project_name,
+            "apolo_app_id": app_instance.id,
+            "namespace": app_instance.namespace,
+        }
+
+    async def _get_labels_from_k8s(self, app_instance: AppInstance) -> list[str]:
+        k8s_label_selector = self._get_k8s_label_selector(app_instance)
+
+        label_selector = ",".join(
+            f"{key}={value}" for key, value in k8s_label_selector.items()
+        )
+
+        pods = await self._kube_client.get_pods(
+            namespace=app_instance.namespace, label_selector=label_selector
+        )
+
+        return [
+            container.name
+            for pod in pods
+            if pod.metadata.name
+            for container in pod.spec.containers
+        ]
+
+    async def containers(self, request: Request) -> Response:
+        app_instance = await self._resolve_app_instance(request=request)
+
+        start_str = request.query.get("since")
+        end_str = request.query.get("until")
+
+        start_dt = parse_date(start_str) if start_str else None
+        end_dt = parse_date(end_str) if end_str else None
+
+        loki_label_selector = self._get_loki_label_selector(app_instance)
+
+        assert isinstance(self._logs_service, LokiLogsService)
+        async with asyncio.TaskGroup() as tg:
+            loki_containers_task = tg.create_task(
+                self._logs_service.get_label_values(
+                    label="container",
+                    loki_label_selector=loki_label_selector,
+                    since=start_dt,
+                    until=end_dt,
+                )
+            )
+            k8s_containers_task = tg.create_task(
+                self._get_labels_from_k8s(app_instance)
+            )
+
+        return json_response(
+            list(set(loki_containers_task.result() + k8s_containers_task.result()))
+        )
+
+    async def stream_log(self, request: Request) -> StreamResponse:
+        app_instance = await self._resolve_app_instance(request=request)
+
+        timestamps = _get_bool_param(request, "timestamps", default=False)
+        debug = _get_bool_param(request, "debug", default=False)
+        prefix = _get_bool_param(request, "prefix", default=False)
+        since_str = request.query.get("since")
+        try:
+            containers = request.query.getall("container")
+        except KeyError:
+            containers = []
+        archive_delay_s = float(
+            request.query.get("archive_delay", self.get_archive_delay())
+        )
+
+        since = parse_date(since_str) if since_str else None
+        separator = request.query.get("separator")
+
+        if separator is None:
+            separator = "=== Live logs ===" + _getrandbytes(30).hex()
+
+        response = StreamResponse(status=200)
+        response.enable_chunked_encoding()
+        response.enable_compression(aiohttp.web.ContentCoding.identity)
+        response.content_type = "text/plain"
+        response.charset = "utf-8"
+        response.headers["X-Separator"] = separator
+        await response.prepare(request)
+
+        loki_label_selector = self._get_loki_label_selector(app_instance)
+        k8s_label_selector = self._get_k8s_label_selector(app_instance)
+
+        assert isinstance(self._logs_service, LokiLogsService)
+        async with self._logs_service.get_pod_log_reader_by_containers(
+            containers,
+            loki_label_selector,
+            k8s_label_selector,
+            app_instance.namespace,
+            separator=separator.encode(),
+            since=since,
+            timestamps=timestamps,
+            debug=debug,
+            archive_delay_s=archive_delay_s,
+            prefix=prefix,
+        ) as it:
+            async for chunk in it:
+                await response.write(chunk)
+            await response.write_eof()
+            return response
+
+    async def ws_log(self, request: Request) -> StreamResponse:
+        app_instance = await self._resolve_app_instance(request=request)
+
+        timestamps = _get_bool_param(request, "timestamps", default=False)
+        debug = _get_bool_param(request, "debug", default=False)
+        prefix = _get_bool_param(request, "prefix", default=False)
+        since_str = request.query.get("since")
+        try:
+            containers = request.query.getall("container")
+        except KeyError:
+            containers = []
+        archive_delay_s = float(
+            request.query.get("archive_delay", self.get_archive_delay())
+        )
+
+        since = parse_date(since_str) if since_str else None
+        separator = request.query.get("separator")
+        if separator is None:
+            separator = "=== Live logs ===" + _getrandbytes(30).hex()
+
+        loki_label_selector = self._get_loki_label_selector(app_instance)
+        k8s_label_selector = self._get_k8s_label_selector(app_instance)
+
+        assert isinstance(self._logs_service, LokiLogsService)
+        async with self._logs_service.get_pod_log_reader_by_containers(
+            containers,
+            loki_label_selector,
+            k8s_label_selector,
+            app_instance.namespace,
+            separator=separator.encode(),
+            since=since,
+            timestamps=timestamps,
+            debug=debug,
+            archive_delay_s=archive_delay_s,
+            prefix=prefix,
+        ) as it:
+            response = WebSocketResponse(
+                protocols=[WS_LOGS_PROTOCOL],
+                heartbeat=HEARTBEAT,
+            )
+            await response.prepare(request)
+            await _run_concurrently(
+                _listen(response),
+                _forward_bytes_iterating(response, it),
+            )
+            return response
+
+    async def _resolve_app_instance(self, request: Request) -> AppInstance:
+        self._check_logs_backend()
+
+        user = await untrusted_user(request)
+
+        instance_id = request.match_info["app_id"]
+        if not instance_id:
+            exc_txt = "App instance_id required"
+            raise Exception(exc_txt)
+
+        return await self._apps_api_client.get_app(
+            app_instance_id=instance_id,
+            token=user.token,
+        )
+
+
 async def _listen(ws: WebSocketResponse) -> None:
     # Maintain the WebSocket connection.
     # Process ping-pong game and perform closing handshake.
@@ -607,6 +860,13 @@ async def handle_exceptions(
             status=HTTPBadRequest.status_code,
             headers={"X-Error": json.dumps(payload)} if ws_request else None,
         )
+    except AppsApiException as e:
+        payload = {"error": e.message}
+        return json_response(
+            payload,
+            status=e.code if e.code in (401, 403, 404) else HTTPBadRequest.status_code,
+            headers={"X-Error": json.dumps(payload)} if ws_request else None,
+        )
     except aiohttp.web.HTTPException as e:
         if ws_request and e.text:
             e.headers["X-Error"] = e.text
@@ -629,11 +889,28 @@ async def create_monitoring_app(config: Config) -> aiohttp.web.Application:
     return monitoring_app
 
 
+async def create_apps_monitoring_app(config: Config) -> aiohttp.web.Application:
+    apps_monitoring_app = aiohttp.web.Application()
+    apps_monitoring_handler = AppsMonitoringApiHandler(apps_monitoring_app, config)
+    apps_monitoring_handler.register(apps_monitoring_app)
+    return apps_monitoring_app
+
+
 @asynccontextmanager
 async def create_platform_api_client(
     url: URL, token: str, trace_configs: list[aiohttp.TraceConfig] | None = None
 ) -> AsyncIterator[ApiClient]:
     async with ApiClient(url=url, token=token, trace_configs=trace_configs) as client:
+        yield client
+
+
+@asynccontextmanager
+async def create_platform_apps_api_client(
+    url: URL, token: str, trace_configs: list[aiohttp.TraceConfig] | None = None
+) -> AsyncIterator[AppsApiClient]:
+    async with AppsApiClient(
+        url=url, token=token, trace_configs=trace_configs
+    ) as client:
         yield client
 
 
@@ -657,6 +934,22 @@ async def create_kube_client(
         kubelet_node_port=config.kubelet_node_port,
         nvidia_dcgm_node_port=config.nvidia_dcgm_node_port,
         trace_configs=trace_configs,
+    )
+    try:
+        await client.init()
+        yield client
+    finally:
+        await client.close()
+
+
+@asynccontextmanager
+async def create_loki_client(config: LokiConfig) -> AsyncIterator[LokiClient]:
+    client = LokiClient(
+        base_url=config.endpoint_url,
+        conn_timeout_s=config.client_conn_timeout_s,
+        read_timeout_s=config.client_read_timeout_s,
+        conn_pool_size=config.client_conn_pool_size,
+        archive_delay_s=config.archive_delay_s,
     )
     try:
         await client.init()
@@ -704,6 +997,7 @@ def create_logs_service(
     kube_client: KubeClient,
     es_client: AsyncElasticsearch | None = None,
     s3_client: AioBaseClient | None = None,
+    loki_client: LokiClient | None = None,
 ) -> LogsService:
     if config.logs.storage_type == LogsStorageType.ELASTICSEARCH:
         assert es_client
@@ -713,6 +1007,13 @@ def create_logs_service(
         assert s3_client
         return create_s3_logs_service(
             config, kube_client, s3_client, cache_log_metadata=False
+        )
+
+    if config.logs.storage_type == LogsStorageType.LOKI:
+        assert loki_client
+        assert config.loki
+        return LokiLogsService(
+            kube_client, loki_client, config.loki.max_query_lookback_s
         )
 
     msg = f"{config.logs.storage_type} storage is not supported"
@@ -782,6 +1083,13 @@ async def create_app(config: Config) -> aiohttp.web.Application:
                 )
                 await create_s3_logs_bucket(s3_client, config.s3)
 
+            loki_client: LokiClient | None = None
+            if config.loki:
+                logger.info("Initializing Loki client")
+                loki_client = await exit_stack.enter_async_context(
+                    create_loki_client(config.loki)
+                )
+
             logger.info("Initializing Kubernetes client")
             kube_client = await exit_stack.enter_async_context(
                 create_kube_client(config.kube)
@@ -795,9 +1103,14 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             app[MONITORING_APP_KEY][CONFIG_CLIENT_KEY] = config_client
 
             logs_service = create_logs_service(
-                config, kube_client, es_client, s3_client
+                config, kube_client, es_client, s3_client, loki_client
             )
             app[MONITORING_APP_KEY][LOGS_SERVICE_KEY] = logs_service
+            app[APPS_MONITORING_APP_KEY][LOGS_SERVICE_KEY] = logs_service
+            app[APPS_MONITORING_APP_KEY][KUBE_CLIENT_KEY] = kube_client
+            app[APPS_MONITORING_APP_KEY][LOGS_STORAGE_TYPE_KEY] = (
+                config.logs.storage_type
+            )
 
             container_runtime_client_registry = await exit_stack.enter_async_context(
                 ContainerRuntimeClientRegistry(
@@ -822,6 +1135,13 @@ async def create_app(config: Config) -> aiohttp.web.Application:
                 )
             )
 
+            platform_apps_api_client = await exit_stack.enter_async_context(
+                create_platform_apps_api_client(
+                    config.platform_apps.url, config.platform_apps.token
+                )
+            )
+            app[APPS_MONITORING_APP_KEY][APPS_API_CLIENT_KEY] = platform_apps_api_client
+
             yield
 
     app.cleanup_ctx.append(_init_app)
@@ -833,6 +1153,10 @@ async def create_app(config: Config) -> aiohttp.web.Application:
     monitoring_app = await create_monitoring_app(config)
     app[MONITORING_APP_KEY] = monitoring_app
     api_v1_app.add_subapp("/jobs", monitoring_app)
+
+    apps_monitoring_app = await create_apps_monitoring_app(config)
+    app[APPS_MONITORING_APP_KEY] = apps_monitoring_app
+    api_v1_app.add_subapp("/apps", apps_monitoring_app)
 
     app.add_subapp("/api/v1", api_v1_app)
 

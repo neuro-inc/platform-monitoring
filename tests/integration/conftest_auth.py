@@ -44,7 +44,7 @@ def auth_config(
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 async def auth_client(
     auth_config: PlatformAuthConfig,
 ) -> AsyncGenerator[AuthClient, None]:
