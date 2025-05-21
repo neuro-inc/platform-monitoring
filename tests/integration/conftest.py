@@ -231,8 +231,10 @@ async def logs_config() -> LogsConfig:
 
 @pytest.fixture(scope="session")
 async def registry_config(request: FixtureRequest, in_minikube: bool) -> RegistryConfig:  # noqa: FBT001
-    if in_minikube or os.environ.get("ON_CI") == "1":
+    if in_minikube:
         external_url = URL("http://registry.kube-system")
+    elif os.environ.get("ON_CI") == "1":
+        external_url = URL("registry.kube-system.svc.cluster.local")
     else:
         external_url = URL("http://localhost:5000")
     await wait_for_service(
