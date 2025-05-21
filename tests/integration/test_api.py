@@ -940,8 +940,8 @@ class TestSaveApi:
     ) -> None:
         url = monitoring_api.generate_save_url(job_id=infinite_job)
         headers = jobs_client.headers
-        repository = f"{config.registry.host}/alpine".lower()
-        image = f"{repository}:{infinite_job.lower()}"
+        repository = f"{config.registry.host}/alpine"
+        image = f"{repository}:{infinite_job}"
         payload = {"container": {"image": image}}
 
         async with client.post(url, headers=headers, json=payload) as resp:
