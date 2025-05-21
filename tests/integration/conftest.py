@@ -234,7 +234,7 @@ async def registry_config(request: FixtureRequest, in_minikube: bool) -> Registr
     if in_minikube:
         external_url = URL("http://registry.kube-system")
     elif os.environ.get("ON_CI") == "1":
-        external_url = URL("registry.kube-system.svc.cluster.local")
+        external_url = URL("http://registry.kube-system.svc.cluster.local")
     else:
         external_url = URL("http://localhost:5000")
     await wait_for_service(
