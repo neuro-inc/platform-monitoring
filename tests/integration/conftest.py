@@ -54,7 +54,7 @@ def in_docker() -> bool:
 
 @pytest.fixture(scope="session")
 def in_minikube(in_docker: bool) -> bool:  # noqa: FBT001
-    return os.environ.get("IN_MINIKUBE") == "1"
+    return in_docker or os.environ.get("IN_MINIKUBE") == "1"
 
 
 def random_str(length: int = 8) -> str:

@@ -88,6 +88,12 @@ jobs:
         make wait_k8s_pods_ready
         kubectl get pods -A
         make test_k8s
+    - name: Port-forward platformadmin
+      run: kubectl port-forward svc/platformadmin 8080:8080 &
+    - name: Port-forward platformapi
+      run: kubectl port-forward svc/platformapi 8081:8080 &
+    - name: Wait for port-forwards
+      run: sleep 5
     - name: Run integration tests
       env:
         IN_MINIKUBE: "1"
