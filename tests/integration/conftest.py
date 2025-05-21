@@ -54,7 +54,7 @@ def in_docker() -> bool:
 
 @pytest.fixture(scope="session")
 def in_minikube(in_docker: bool) -> bool:  # noqa: FBT001
-    return in_docker or os.environ.get("IN_MINIKUBE") == "1"
+    return in_docker
 
 
 def random_str(length: int = 8) -> str:
@@ -231,7 +231,7 @@ async def logs_config() -> LogsConfig:
 
 @pytest.fixture(scope="session")
 async def registry_config(request: FixtureRequest, in_minikube: bool) -> RegistryConfig:  # noqa: FBT001
-    if in_minikube:
+    if in_minikube or os.environ.get("ON_CI") == "1":
         external_url = URL("http://registry.kube-system")
     else:
         external_url = URL("http://localhost:5000")
