@@ -15,6 +15,4 @@ spec:
         - name: TEST_ENV_VAR
           value: test
       restartPolicy: Never
-      imagePullSecrets:
-      - name: np-docker-reg-secret
   backoffLimit: 1
