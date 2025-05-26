@@ -4,8 +4,9 @@ import logging
 import random
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
-from importlib.metadata import version
 from typing import Any
+
+from platform_monitoring import __version__
 
 import aiobotocore.session
 import aiohttp
@@ -1039,11 +1040,8 @@ def create_s3_logs_service(
     return S3LogsService(kube_client, s3_client, metadata_service)
 
 
-package_version = version(__package__)
-
-
 async def add_version_to_header(request: Request, response: StreamResponse) -> None:
-    response.headers["X-Service-Version"] = f"platform-monitoring/{package_version}"
+    response.headers["X-Service-Version"] = f"platform-monitoring/{__version__}"
 
 
 async def create_app(config: Config) -> aiohttp.web.Application:
