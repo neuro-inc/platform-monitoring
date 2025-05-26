@@ -6,8 +6,6 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from typing import Any
 
-from platform_monitoring import __version__
-
 import aiobotocore.session
 import aiohttp
 import aiohttp.hdrs
@@ -33,6 +31,8 @@ from neuro_auth_client.security import AuthScheme, setup_security
 from neuro_config_client import ConfigClient
 from neuro_logging import init_logging, setup_sentry
 from yarl import URL
+
+from platform_monitoring import __version__
 
 from .base import JobStats, Telemetry
 from .config import (
