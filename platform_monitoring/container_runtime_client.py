@@ -118,7 +118,7 @@ class ContainerRuntimeClient:
     @asyncgeneratorcontextmanager
     async def commit(
         self, container_id: str, image: str, username: str = "", password: str = ""
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[bytes]:
         payload = {"image": image, "push": True}
         if username and password:
             payload["auth"] = {"username": username, "password": password}

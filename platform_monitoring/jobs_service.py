@@ -72,7 +72,7 @@ class JobsService:
 
     def get_jobs_for_log_removal(
         self,
-    ) -> AbstractAsyncContextManager[AsyncGenerator[Job, None]]:
+    ) -> AbstractAsyncContextManager[AsyncGenerator[Job]]:
         return self._jobs_client.get_jobs(
             cluster_name=self._cluster_name,
             being_dropped=True,
@@ -83,9 +83,7 @@ class JobsService:
         await self._jobs_client.mark_job_logs_dropped(job_id)
 
     @asyncgeneratorcontextmanager
-    async def save(
-        self, job: Job, user: User, image: str
-    ) -> AsyncGenerator[bytes, None]:
+    async def save(self, job: Job, user: User, image: str) -> AsyncGenerator[bytes]:
         pod_name = self._kube_helper.get_job_pod_name(job)
         pod = await self._get_running_jobs_pod(pod_name)
         cont_id = pod.get_container_id(pod_name)

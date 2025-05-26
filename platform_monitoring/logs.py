@@ -236,9 +236,9 @@ class ElasticsearchLogReader(LogReader):
         self._container_name = container_name
         self._since = since
         self._scan_cm: (
-            AbstractAsyncContextManager[AsyncGenerator[dict[str, Any], None]] | None
+            AbstractAsyncContextManager[AsyncGenerator[dict[str, Any]]] | None
         ) = None
-        self._scan: AsyncGenerator[dict[str, Any], None] | None = None
+        self._scan: AsyncGenerator[dict[str, Any]] | None = None
         self._iterator: AsyncIterator[bytes] | None = None
 
     def _combine_search_query(self) -> dict[str, Any]:
@@ -252,7 +252,7 @@ class ElasticsearchLogReader(LogReader):
     async def __aenter__(self) -> AsyncIterator[bytes]:
         query = self._combine_search_query()
         scan = cast(
-            AsyncGenerator[Any, None],
+            AsyncGenerator[Any],
             async_scan(
                 self._es_client,
                 index=self._index,
@@ -670,7 +670,7 @@ class S3FileReader:
 
     async def _iter_decompressed_lines(
         self, body: StreamingBody
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[bytes]:
         decompress_obj = zlib.decompressobj(wbits=ZLIB_WBITS)
         pending = b""
         async for chunk in body.iter_chunks(chunk_size=self._chunk_size):
@@ -923,7 +923,7 @@ class LogsService(abc.ABC):
         archive_delay_s: float = DEFAULT_ARCHIVE_DELAY,
         debug: bool = False,
         stop_func: Callable[[], Awaitable[bool]] | None = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[bytes]:
         archive_delay = timedelta(seconds=archive_delay_s)
         if stop_func is None:
 
@@ -1531,7 +1531,7 @@ class LokiLogsService(BaseLogsService):
         archive_delay_s: float = 5,
         debug: bool = False,
         stop_func: Callable[[], Awaitable[bool]] | None = None,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[bytes]:
         now_dt = datetime.now(UTC)
         start_dt = (
             now_dt - timedelta(seconds=self._max_query_lookback_s) + timedelta(hours=1)
@@ -1755,7 +1755,7 @@ class LokiLogsService(BaseLogsService):
         archive_delay_s: float = 5,
         debug: bool = False,
         prefix: bool = False,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[bytes]:
         containers = containers or []
         loki_label_selector = loki_label_selector or {}
         k8s_label_selector = k8s_label_selector or {}

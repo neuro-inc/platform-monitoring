@@ -47,7 +47,7 @@ def auth_config(
 @pytest.fixture
 async def auth_client(
     auth_config: PlatformAuthConfig,
-) -> AsyncGenerator[AuthClient, None]:
+) -> AsyncGenerator[AuthClient]:
     async with AuthClient(auth_config.url, auth_config.token) as client:
         await client.ping()
         yield client
