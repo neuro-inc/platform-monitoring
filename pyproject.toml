@@ -84,6 +84,7 @@ asyncio_mode = "auto"
 filterwarnings = [
     "error",
     "ignore::DeprecationWarning:jose",
+    "ignore::DeprecationWarning:aiobotocore",
     "ignore:Inheritance class AuthorizedSession from ClientSession is discouraged:DeprecationWarning:",
     "ignore:ssl.PROTOCOL_TLS is deprecated:DeprecationWarning:",
     "ignore::pytest.PytestUnraisableExceptionWarning"
