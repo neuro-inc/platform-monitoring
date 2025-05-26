@@ -6,6 +6,9 @@ venv:
 	poetry lock
 	poetry install --with dev;
 
+.PHONY: build
+build: venv poetry-plugins
+
 .PHONY: poetry-plugins
 poetry-plugins:
 	poetry self add "poetry-dynamic-versioning[plugin]"; \
@@ -59,7 +62,7 @@ docker_build: dist
 	@echo "Error: .python-version file is missing!" && exit 1
 
 .PHONY: dist
-dist: docker_build
+dist: build
 	rm -rf build dist; \
 	poetry export -f requirements.txt --without-hashes -o requirements.txt; \
 	poetry build -f wheel;
