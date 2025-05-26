@@ -85,6 +85,7 @@ filterwarnings = [
     "error",
     "ignore::DeprecationWarning:jose",
     "ignore::DeprecationWarning:aiobotocore",
+    "ignore::DeprecationWarning:aiohttp.connector",
     "ignore::DeprecationWarning:botocore",
     "ignore:Inheritance class AuthorizedSession from ClientSession is discouraged:DeprecationWarning:",
     "ignore:ssl.PROTOCOL_TLS is deprecated:DeprecationWarning:",
