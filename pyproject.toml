@@ -1,12 +1,60 @@
 [build-system]
-requires = [
-    "setuptools>=45",
-    "wheel",
-    "setuptools_scm>=6.2",
-]
-build-backend = "setuptools.build_meta"
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+build-backend = "poetry_dynamic_versioning.backend"
 
-[tool.setuptools_scm]
+[project]
+name = "platform_monitoring"
+version = "0.0.0"
+description = "Apolo platform monitoring"
+readme = "README.md"
+license = "Proprietary"
+authors = [
+    { name = "Apolo.us", email = "support@apolo.us" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only"
+]
+dynamic = ["version"]
+requires-python = ">=3.11,<4.0"
+dependencies = [
+    "aiobotocore==2.22.0",
+    "aiohttp[speedups]==3.11.18",
+    "aioitertools==0.12.0",
+    "apolo-sdk==25.4.2",
+    "cachetools==5.5.2",
+    "docker-image-py==0.1.13",
+    "elasticsearch<8.0.0",
+    "iso8601==2.1.0",
+    "neuro-auth-client==24.8.0",
+    "neuro-config-client==25.2.0",
+    "neuro-logging==25.1.0",
+    "orjson==3.10.18",
+    "trafaret==2.1.1",
+    "uvloop==0.21.0"
+]
+
+[project.scripts]
+platform-monitoring-api = "platform_monitoring.api:main"
+platform-monitoring-logs-compact = "platform_monitoring.log_compact:main"
+
+[tool.poetry-dynamic-versioning]
+enable = true
+vcs = "git"
+
+[tool.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+mypy = "1.15.0"
+pre-commit = "4.2.0"
+pytest = "8.3.5"
+pytest-asyncio = "0.26.0"
+pytest-cov = "6.1.1"
+pytest-xdist = "3.6.1"
+python-jose = "3.4.0"
+ruff = "0.11.10"
+types-cachetools = "6.0.0.20250525"
 
 [tool.ruff]
 target-version = "py311"
@@ -29,5 +77,92 @@ known-first-party = ["platform_monitoring", "tests"]
 known-third-party = []
 
 [tool.ruff.lint.pyupgrade]
-# Preserve types, even if a file imports `from __future__ import annotations`.
 keep-runtime-typing = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:jose",
+    "ignore:Inheritance class AuthorizedSession from ClientSession is discouraged:DeprecationWarning:",
+    "ignore:ssl.PROTOCOL_TLS is deprecated:DeprecationWarning:",
+    "ignore::pytest.PytestUnraisableExceptionWarning"
+]
+
+[tool.coverage.run]
+branch = true
+source = ["platform_monitoring"]
+
+[tool.mypy]
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_untyped_defs = true
+follow_imports = "silent"
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = "aiohttp_security"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "aiohttp_security.api"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "async_exit_stack"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "async_generator"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "jose"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "neuro_auth_client.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "neuromation.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pytest"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "_pytest.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "setuptools"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "docker_image.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "trafaret"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "aiobotocore.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "botocore.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "platform_config_client.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "iso8601"
+ignore_missing_imports = true
