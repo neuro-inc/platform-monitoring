@@ -5,21 +5,20 @@ image:
 imagePullSecrets: []
 
 containerRuntime:
-  name: docker # containerd, cri-o
-  port: 9000
+  name: containerd # docker, cri-o
 
 replicas: 2
 
-jobsNamespace: default
+jobsNamespace: platform-jobs
 
 kubeletPort: 10250
 nvidiaDCGMPort:
 
 platform:
   clusterName: ""
-  authUrl: https://staging.neu.ro
-  configUrl: https://staging.neu.ro
-  apiUrl: https://staging.neu.ro
+  apiUrl: http://platform-api:8080
+  authUrl: http://platform-auth:8080
+  configUrl: http://platform-config:8080
   registryUrl: ""
   token: {}
 
@@ -32,7 +31,7 @@ resources:
     memory: "1Gi"
 
 ingress:
-  enabled: false
+  enabled: true
   ingressClassName: ""
   hosts: []
   annotations: {}
@@ -45,6 +44,8 @@ secrets: []
 podAnnotations: {}
 
 sentry:
+  dsn: ""
+  clusterName: ""
   appName: platform-monitoring
   sampleRate: 0.002
 
