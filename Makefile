@@ -1,56 +1,71 @@
 .PHONY: all test clean
 all test clean:
 
-
+.PHONY: venv
 venv:
-	python -m venv venv
-	. venv/bin/activate; \
-	python -m pip install --upgrade pip
+	poetry lock
+	poetry install --with dev;
+
+.PHONY: build
+build: venv poetry-plugins
+
+.PHONY: poetry-plugins
+poetry-plugins:
+	poetry self add "poetry-dynamic-versioning[plugin]"; \
+    poetry self add "poetry-plugin-export";
 
 .PHONY: setup
 setup: venv
-	. venv/bin/activate; \
-	pip install -e .[dev]; \
-	pre-commit install
+	poetry run pre-commit install;
 
 
 .PHONY: lint
-lint:
-	. venv/bin/activate; \
-	python -m pre_commit run --all-files
-	. venv/bin/activate; \
-	python -m mypy platform_monitoring tests
+lint: format
+	poetry run mypy platform_monitoring tests
 
+.PHONY: format
+format:
+ifdef CI
+	poetry run pre-commit run --all-files --show-diff-on-failure
+else
+	poetry run pre-commit run --all-files
+endif
 
 .PHONY: test_unit
 test_unit:
-	. venv/bin/activate; \
-	pytest -vv \
-		--cov=platform_monitoring --cov-report xml:.coverage-unit.xml \
+	poetry run pytest -vv \
+		--cov-config=pyproject.toml --cov-report xml:.coverage-unit.xml \
 		tests/unit
 
 .PHONY: test_integration
 test_integration:
-	. venv/bin/activate; \
-	pytest -svv \
-		--cov=platform_monitoring --cov-report xml:.coverage-integration.xml \
+	poetry run pytest -svv \
+		--cov-config=pyproject.toml --cov-report xml:.coverage-integration.xml \
 		--durations=10 \
 		--maxfail=0 \
 		--log-level=INFO \
 		tests/integration
 
+.PHONY: clean-dist
+clean-dist:
+	rm -rf dist
+
+IMAGE_NAME = platformmonitoringapi
 
 .PHONY: docker_build
-docker_build:
-	rm -rf build dist
-	. venv/bin/activate; \
-	pip install -U build; \
-	python -m build
+docker_build: dist
 	docker build \
-		--target service \
 		--build-arg PY_VERSION=$$(cat .python-version) \
-		-t platformmonitoringapi:latest .
+		-t $(IMAGE_NAME):latest .
 
+.python-version:
+	@echo "Error: .python-version file is missing!" && exit 1
+
+.PHONY: dist
+dist: build
+	rm -rf build dist; \
+	poetry export -f requirements.txt --without-hashes -o requirements.txt; \
+	poetry build -f wheel;
 
 install_k8s:
 	./tests/k8s/cluster.sh install
