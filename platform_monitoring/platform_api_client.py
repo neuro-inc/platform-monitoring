@@ -113,7 +113,7 @@ class ApiClient:
         cluster_name: str,
         being_dropped: bool | None = None,
         logs_removed: bool | None = None,
-    ) -> AbstractAsyncContextManager[AsyncGenerator[Job, None]]:
+    ) -> AbstractAsyncContextManager[AsyncGenerator[Job]]:
         return aclosing(
             self._get_jobs(
                 cluster_name=cluster_name,
@@ -128,7 +128,7 @@ class ApiClient:
         cluster_name: str,
         being_dropped: bool | None = None,
         logs_removed: bool | None = None,
-    ) -> AsyncGenerator[Job, None]:
+    ) -> AsyncGenerator[Job]:
         headers = {"Accept": "application/x-ndjson"}
         params: MultiDict[str] = MultiDict()
         params["cluster_name"] = cluster_name

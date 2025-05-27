@@ -1,4 +1,4 @@
-ARG PY_VERSION=3.11.4
+ARG PY_VERSION=3.13.3
 
 FROM python:${PY_VERSION}-slim-bookworm AS builder
 

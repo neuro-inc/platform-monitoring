@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_PODS_PER_NODE = 110
 
-JSON: t.TypeAlias = dict[str, t.Any]
+type JSON = dict[str, t.Any]
 
 
 class KubeClientException(Exception):
