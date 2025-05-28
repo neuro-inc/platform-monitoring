@@ -17,9 +17,10 @@ nvidiaDCGMPort:
 
 platform:
   clusterName: ""
-  apiUrl: http://platform-api:8080
-  authUrl: http://platform-auth:8080
-  configUrl: http://platform-config:8080
+  apiUrl: https://api.apolo.us
+  appsUrl: https://api.apolo.us
+  authUrl: https://api.apolo.us
+  configUrl: https://api.apolo.us
   registryUrl: ""
   token: {}
 
