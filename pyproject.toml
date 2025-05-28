@@ -34,6 +34,14 @@ dependencies = [
     "uvloop==0.21.0"
 ]
 
+# Remove this section when poetry-dynamic-versioning drops [tool.poetry] support in favor of [project].
+[tool.poetry]
+name = "platform_monitoring"
+version = "0.0.0"
+description = "Apolo platform monitoring"
+authors = ["Apolo.us <support@apolo.us>"]
+
+
 [project.scripts]
 platform-monitoring-api = "platform_monitoring.api:main"
 platform-monitoring-logs-compact = "platform_monitoring.log_compact:main"
