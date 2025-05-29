@@ -328,7 +328,7 @@ def get_service_url(service_name: str, namespace: str = "default") -> str:
         ("minikube", "service", "-n", namespace, service_name, "--url"),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        preexec_fn=os.setpgrp
+        preexec_fn=os.setpgrp,
     )
     stdout = process.stdout
     assert stdout
