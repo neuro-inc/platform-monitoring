@@ -982,9 +982,7 @@ class LogsService(abc.ABC):
                                 until = start
                             else:
                                 first = await self.get_first_log_entry_time(
-                                    pod_name,
-                                    namespace,
-                                    timeout_s=archive_delay_s
+                                    pod_name, namespace, timeout_s=archive_delay_s
                                 )
                                 if (
                                     first
@@ -1187,11 +1185,7 @@ class BaseLogsService(LogsService):
         )
 
     async def get_first_log_entry_time(
-        self,
-        pod_name: str,
-        namespace: str,
-        *,
-        timeout_s: float = 2.0 * 60
+        self, pod_name: str, namespace: str, *, timeout_s: float = 2.0 * 60
     ) -> datetime | None:
         return await get_first_log_entry_time(
             self._kube_client, pod_name, namespace, timeout_s=timeout_s
@@ -1409,7 +1403,7 @@ async def get_first_log_entry_time(
     pod_name: str,
     namespace: str,
     *,
-    timeout_s: float = 60 * 2.0
+    timeout_s: float = 60 * 2.0,
 ) -> datetime | None:
     """Return the timestamp of the first container log line from Kubernetes.
 

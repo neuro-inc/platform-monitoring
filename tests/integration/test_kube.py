@@ -1650,14 +1650,17 @@ class TestLogReader:
         job_pod.set_command(command)
         await kube_client.create_pod(job_pod.payload)
         first_ts = await get_first_log_entry_time(
-            kube_client, pod_name, kube_client.namespace, timeout_s=1)
+            kube_client, pod_name, kube_client.namespace, timeout_s=1
+        )
         assert first_ts is None
         await kube_client.wait_pod_is_running(pod_name)
         first_ts = await get_first_log_entry_time(
-            kube_client, pod_name, kube_client.namespace, timeout_s=1)
+            kube_client, pod_name, kube_client.namespace, timeout_s=1
+        )
         assert first_ts is None
         first_ts = await get_first_log_entry_time(
-            kube_client, pod_name, kube_client.namespace, timeout_s=5)
+            kube_client, pod_name, kube_client.namespace, timeout_s=5
+        )
         assert first_ts is not None
         await kube_client.wait_pod_is_terminated(pod_name)
         status = await kube_client.get_container_status(pod_name)
@@ -1666,7 +1669,8 @@ class TestLogReader:
         assert first_ts > status.started_at
         assert first_ts < status.finished_at
         first_ts2 = await get_first_log_entry_time(
-            kube_client, pod_name, kube_client.namespace, timeout_s=1)
+            kube_client, pod_name, kube_client.namespace, timeout_s=1
+        )
         assert first_ts2 == first_ts
 
     async def test_s3_log_reader_running_pod_compacted(
