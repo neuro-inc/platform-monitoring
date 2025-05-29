@@ -4,7 +4,7 @@ from contextlib import AbstractAsyncContextManager, aclosing
 from dataclasses import dataclass
 from enum import StrEnum, auto, unique
 from types import TracebackType
-from typing import Any
+from typing import Any, Self
 
 import aiohttp
 from multidict import MultiDict
@@ -39,19 +39,19 @@ class Job:
     uri: URL
     status: Status
     created_at: str
-    namespace: str | None = None
+    namespace: str
     name: str | None = None
 
-
-def _create_job(payload: dict[str, Any]) -> Job:
-    return Job(
-        id=payload["id"],
-        status=_create_job_status(payload["history"].get("status", "unknown")),
-        uri=URL(payload["uri"]),
-        name=payload.get("name"),
-        created_at=payload["history"].get("created_at"),
-        namespace=payload.get("namespace"),
-    )
+    @classmethod
+    def from_api(cls, payload: dict[str, Any]) -> Self:
+        return cls(
+            id=payload["id"],
+            status=_create_job_status(payload["history"].get("status", "unknown")),
+            uri=URL(payload["uri"]),
+            name=payload.get("name"),
+            created_at=payload["history"].get("created_at"),
+            namespace=payload["namespace"],
+        )
 
 
 def _create_job_status(value: str) -> Job.Status:
@@ -147,17 +147,17 @@ class ApiClient:
                     payload = json.loads(line)
                     if "error" in payload:
                         raise Exception(payload["error"])
-                    yield _create_job(payload)
+                    yield Job.from_api(payload)
             else:
                 response_json = await response.json()
                 for j in response_json["jobs"]:
-                    yield _create_job(j)
+                    yield Job.from_api(j)
 
     async def get_job(self, job_id: str) -> Job:
         async with self._client.get(self._base_url / "jobs" / job_id) as response:
             await self._raise_for_status(response)
             response_json = await response.json()
-            return _create_job(response_json)
+            return Job.from_api(response_json)
 
     async def mark_job_logs_dropped(self, job_id: str) -> None:
         async with self._client.post(
