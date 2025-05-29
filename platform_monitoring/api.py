@@ -99,6 +99,8 @@ APPS_MONITORING_APP_KEY = aiohttp.web.AppKey(
 )
 APPS_API_CLIENT_KEY = aiohttp.web.AppKey("apps_api_client", AppsApiClient)
 
+DEFAULT_SEPARATOR = "=== Live logs ==="
+
 logger = logging.getLogger(__name__)
 
 
@@ -187,41 +189,17 @@ class MonitoringApiHandler:
         return DEFAULT_ARCHIVE_DELAY
 
     async def stream_log(self, request: Request) -> StreamResponse:
-        timestamps = _get_bool_param(request, "timestamps", default=False)
-        debug = _get_bool_param(request, "debug", default=False)
-        since_str = request.query.get("since")
-        archive_delay_s = float(
-            request.query.get("archive_delay", self.get_archive_delay())
-        )
-        job = await self._resolve_job(request, "read")
-        since = parse_date(since_str) if since_str else parse_date(job.created_at)
-
-        pod_name = self._kube_helper.get_job_pod_name(job)
-        separator = request.query.get("separator")
-        if separator is None:
-            separator = "=== Live logs ===" + _getrandbytes(30).hex()
+        pod_reader_params = await self._log_reader_params_from_request(request)
 
         response = StreamResponse(status=200)
         response.enable_chunked_encoding()
         response.enable_compression(aiohttp.web.ContentCoding.identity)
         response.content_type = "text/plain"
         response.charset = "utf-8"
-        response.headers["X-Separator"] = separator
+        response.headers["X-Separator"] = pod_reader_params["separator"]
         await response.prepare(request)
 
-        async def stop_func() -> bool:
-            return self._jobs_helper.is_job_finished(await self._get_job(job.id))
-
-        async with self._logs_service.get_pod_log_reader(
-            pod_name,
-            job.namespace or self._config.kube.namespace,
-            separator=separator.encode(),
-            since=since,
-            timestamps=timestamps,
-            debug=debug,
-            archive_delay_s=archive_delay_s,
-            stop_func=stop_func,
-        ) as it:
+        async with self._logs_service.get_pod_log_reader(**pod_reader_params) as it:
             async for chunk in it:
                 await response.write(chunk)
 
@@ -229,33 +207,9 @@ class MonitoringApiHandler:
         return response
 
     async def ws_log(self, request: Request) -> StreamResponse:
-        timestamps = _get_bool_param(request, "timestamps", default=False)
-        debug = _get_bool_param(request, "debug", default=False)
-        since_str = request.query.get("since")
-        archive_delay_s = float(
-            request.query.get("archive_delay", self.get_archive_delay())
-        )
-        job = await self._resolve_job(request, "read")
-        since = parse_date(since_str) if since_str else parse_date(job.created_at)
+        pod_reader_params = await self._log_reader_params_from_request(request)
 
-        pod_name = self._kube_helper.get_job_pod_name(job)
-        separator = request.query.get("separator")
-        if separator is None:
-            separator = "=== Live logs ===" + _getrandbytes(30).hex()
-
-        async def stop_func() -> bool:
-            return self._jobs_helper.is_job_finished(await self._get_job(job.id))
-
-        async with self._logs_service.get_pod_log_reader(
-            pod_name,
-            job.namespace or self._config.kube.namespace,
-            separator=separator.encode(),
-            since=since,
-            timestamps=timestamps,
-            debug=debug,
-            archive_delay_s=archive_delay_s,
-            stop_func=stop_func,
-        ) as it:
+        async with self._logs_service.get_pod_log_reader(**pod_reader_params) as it:
             response = WebSocketResponse(
                 protocols=[WS_LOGS_PROTOCOL],
                 heartbeat=HEARTBEAT,
@@ -266,6 +220,38 @@ class MonitoringApiHandler:
                 _forward_bytes_iterating(response, it),
             )
             return response
+
+    async def _log_reader_params_from_request(
+        self,
+        request: Request,
+    ) -> dict[str, Any]:
+        timestamps = _get_bool_param(request, "timestamps", default=False)
+        debug = _get_bool_param(request, "debug", default=False)
+        since_str = request.query.get("since")
+        archive_delay_s = float(
+            request.query.get("archive_delay", self.get_archive_delay())
+        )
+        job = await self._resolve_job(request, "read")
+        since = parse_date(since_str) if since_str else parse_date(job.created_at)
+
+        pod_name = self._kube_helper.get_job_pod_name(job)
+        separator = request.query.get("separator")
+        if separator is None:
+            separator = f"{DEFAULT_SEPARATOR}{_getrandbytes(30).hex()}"
+
+        async def stop_func() -> bool:
+            return self._jobs_helper.is_job_finished(await self._get_job(job.id))
+
+        return {
+            "pod_name": pod_name,
+            "namespace": job.namespace,
+            "separator": separator,
+            "since": since,
+            "timestamps": timestamps,
+            "debug": debug,
+            "archive_delay_s": archive_delay_s,
+            "stop_func": stop_func,
+        }
 
     async def drop_log(self, request: Request) -> Response:
         job = await self._resolve_job(request, "write")
@@ -341,7 +327,7 @@ class MonitoringApiHandler:
         pod_name = self._kube_helper.get_job_pod_name(job)
         return KubeTelemetry(
             self._kube_client,
-            namespace_name=self._kube_client.namespace,
+            namespace_name=job.namespace,
             pod_name=pod_name,
             container_name=pod_name,
         )
@@ -620,49 +606,20 @@ class AppsMonitoringApiHandler:
         )
 
     async def stream_log(self, request: Request) -> StreamResponse:
-        app_instance = await self._resolve_app_instance(request=request)
-
-        timestamps = _get_bool_param(request, "timestamps", default=False)
-        debug = _get_bool_param(request, "debug", default=False)
-        prefix = _get_bool_param(request, "prefix", default=False)
-        since_str = request.query.get("since")
-        try:
-            containers = request.query.getall("container")
-        except KeyError:
-            containers = []
-        archive_delay_s = float(
-            request.query.get("archive_delay", self.get_archive_delay())
+        log_reader_params = await self._log_reader_container_params_from_request(
+            request
         )
-
-        since = parse_date(since_str) if since_str else None
-        separator = request.query.get("separator")
-
-        if separator is None:
-            separator = "=== Live logs ===" + _getrandbytes(30).hex()
-
         response = StreamResponse(status=200)
         response.enable_chunked_encoding()
         response.enable_compression(aiohttp.web.ContentCoding.identity)
         response.content_type = "text/plain"
         response.charset = "utf-8"
-        response.headers["X-Separator"] = separator
+        response.headers["X-Separator"] = log_reader_params["separator"]
         await response.prepare(request)
-
-        loki_label_selector = self._get_loki_label_selector(app_instance)
-        k8s_label_selector = self._get_k8s_label_selector(app_instance)
 
         assert isinstance(self._logs_service, LokiLogsService)
         async with self._logs_service.get_pod_log_reader_by_containers(
-            containers,
-            loki_label_selector,
-            k8s_label_selector,
-            app_instance.namespace,
-            separator=separator.encode(),
-            since=since,
-            timestamps=timestamps,
-            debug=debug,
-            archive_delay_s=archive_delay_s,
-            prefix=prefix,
+            **log_reader_params
         ) as it:
             async for chunk in it:
                 await response.write(chunk)
@@ -670,40 +627,12 @@ class AppsMonitoringApiHandler:
             return response
 
     async def ws_log(self, request: Request) -> StreamResponse:
-        app_instance = await self._resolve_app_instance(request=request)
-
-        timestamps = _get_bool_param(request, "timestamps", default=False)
-        debug = _get_bool_param(request, "debug", default=False)
-        prefix = _get_bool_param(request, "prefix", default=False)
-        since_str = request.query.get("since")
-        try:
-            containers = request.query.getall("container")
-        except KeyError:
-            containers = []
-        archive_delay_s = float(
-            request.query.get("archive_delay", self.get_archive_delay())
+        log_reader_params = await self._log_reader_container_params_from_request(
+            request
         )
-
-        since = parse_date(since_str) if since_str else None
-        separator = request.query.get("separator")
-        if separator is None:
-            separator = "=== Live logs ===" + _getrandbytes(30).hex()
-
-        loki_label_selector = self._get_loki_label_selector(app_instance)
-        k8s_label_selector = self._get_k8s_label_selector(app_instance)
-
         assert isinstance(self._logs_service, LokiLogsService)
         async with self._logs_service.get_pod_log_reader_by_containers(
-            containers,
-            loki_label_selector,
-            k8s_label_selector,
-            app_instance.namespace,
-            separator=separator.encode(),
-            since=since,
-            timestamps=timestamps,
-            debug=debug,
-            archive_delay_s=archive_delay_s,
-            prefix=prefix,
+            **log_reader_params
         ) as it:
             response = WebSocketResponse(
                 protocols=[WS_LOGS_PROTOCOL],
@@ -715,6 +644,46 @@ class AppsMonitoringApiHandler:
                 _forward_bytes_iterating(response, it),
             )
             return response
+
+    async def _log_reader_container_params_from_request(
+        self,
+        request: Request,
+    ) -> dict[str, Any]:
+        app_instance = await self._resolve_app_instance(request=request)
+
+        timestamps = _get_bool_param(request, "timestamps", default=False)
+        debug = _get_bool_param(request, "debug", default=False)
+        prefix = _get_bool_param(request, "prefix", default=False)
+        since_str = request.query.get("since")
+        try:
+            containers = request.query.getall("container")
+        except KeyError:
+            containers = []
+        archive_delay_s = float(
+            request.query.get("archive_delay", self.get_archive_delay())
+        )
+
+        since = parse_date(since_str) if since_str else None
+        separator = request.query.get("separator")
+
+        if separator is None:
+            separator = f"{DEFAULT_SEPARATOR}{_getrandbytes(30).hex()}"
+
+        loki_label_selector = self._get_loki_label_selector(app_instance)
+        k8s_label_selector = self._get_k8s_label_selector(app_instance)
+
+        return {
+            "containers": containers,
+            "loki_label_selector": loki_label_selector,
+            "k8s_label_selector": k8s_label_selector,
+            "namespace": app_instance.namespace,
+            "separator": separator,
+            "since": since,
+            "timestamps": timestamps,
+            "debug": debug,
+            "archive_delay_s": archive_delay_s,
+            "prefix": prefix,
+        }
 
     async def _resolve_app_instance(self, request: Request) -> AppInstance:
         self._check_logs_backend()
