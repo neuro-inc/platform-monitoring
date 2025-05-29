@@ -85,7 +85,7 @@ class JobsService:
     @asyncgeneratorcontextmanager
     async def save(self, job: Job, user: User, image: str) -> AsyncGenerator[bytes]:
         pod_name = self._kube_helper.get_job_pod_name(job)
-        pod = await self._get_running_jobs_pod(pod_name)
+        pod = await self._get_running_jobs_pod(pod_name, job.namespace)
         cont_id = pod.get_container_id(pod_name)
         assert cont_id
 
@@ -120,7 +120,7 @@ class JobsService:
         stderr: bool = True,
     ) -> AsyncIterator[aiohttp.ClientWebSocketResponse]:
         pod_name = self._kube_helper.get_job_pod_name(job)
-        pod = await self._get_running_jobs_pod(pod_name)
+        pod = await self._get_running_jobs_pod(pod_name, job.namespace)
         cont_id = pod.get_container_id(pod_name)
         assert cont_id
 
@@ -161,7 +161,7 @@ class JobsService:
         stderr: bool = True,
     ) -> AsyncIterator[aiohttp.ClientWebSocketResponse]:
         pod_name = self._kube_helper.get_job_pod_name(job)
-        pod = await self._get_running_jobs_pod(pod_name)
+        pod = await self._get_running_jobs_pod(pod_name, job.namespace)
         cont_id = pod.get_container_id(pod_name)
         assert cont_id
 
@@ -178,7 +178,7 @@ class JobsService:
     async def kill(self, job: Job) -> None:
         pod_name = self._kube_helper.get_job_pod_name(job)
 
-        pod = await self._get_running_jobs_pod(pod_name)
+        pod = await self._get_running_jobs_pod(pod_name, job.namespace)
         cont_id = pod.get_container_id(pod_name)
         assert cont_id
 
@@ -193,14 +193,18 @@ class JobsService:
         self, job: Job, port: int
     ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         pod_name = self._kube_helper.get_job_pod_name(job)
-        pod = await self._get_running_jobs_pod(pod_name)
+        pod = await self._get_running_jobs_pod(pod_name, job.namespace)
         reader, writer = await asyncio.open_connection(pod.status.pod_ip, port)
         return reader, writer
 
-    async def _get_running_jobs_pod(self, job_id: str) -> Pod:
+    async def _get_running_jobs_pod(
+        self,
+        job_id: str,
+        namespace: str,
+    ) -> Pod:
         pod: Pod | None
         try:
-            pod = await self._kube_client.get_pod(job_id)
+            pod = await self._kube_client.get_pod(job_id, namespace)
             if not pod.status.is_running:
                 pod = None
         except JobNotFoundException:
