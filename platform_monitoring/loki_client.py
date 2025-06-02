@@ -84,7 +84,9 @@ class LokiClient:
         self._validate_range(kwargs.get("params", {}))
         async with self._session.request(*args, **kwargs) as response:
             payload = await response.json()
+            # print(args, kwargs)
             logger.debug("Loki response payload: %s", payload)
+            # print(444444, len(payload["data"]["result"]))
             return payload
 
     @staticmethod
@@ -106,8 +108,8 @@ class LokiClient:
         query: str,
         start: str | int,
         end: str | int | None = None,
-        direction: str = "forward",
-        limit: int = 100,
+        direction: str = "backward",
+        limit: int = 5000,
         add_stream_to_log_entries: bool = True,
     ) -> dict[str, Any]:
         params = self._build_params(
@@ -115,6 +117,7 @@ class LokiClient:
         )
 
         url = str(self._query_range_url)
+        # print(url)
         result = await self._request(method="GET", url=url, params=params)
 
         # add stream data to each log entry
@@ -132,7 +135,7 @@ class LokiClient:
         )
 
         result["data"]["result"] = data_result
-
+        # print(result["data"]["result"])
         return result
 
     async def query_range_page_iterate(
@@ -141,9 +144,10 @@ class LokiClient:
         query: str,
         start: str | int,
         end: str | int | None = None,
-        direction: str = "forward",
-        limit: int = 100,
+        direction: str = "backward",  # or can be "forward"
+        limit: int = 5000,
     ) -> AsyncIterator[dict[str, Any]]:
+        # print(22222222, "query_range_page_iterate", start, end, direction)
         while True:
             response = await self.query_range(
                 query=query,
@@ -152,8 +156,10 @@ class LokiClient:
                 limit=limit,
                 direction=direction,
             )
+            # print(44444444, response)
             yield response
-
+            # print(start, end, direction, limit, (end - start) / 1000000000,
+            # response["data"]["stats"]["summary"]["totalEntriesReturned"])
             if response["data"]["stats"]["summary"]["totalEntriesReturned"] < limit:
                 break
 

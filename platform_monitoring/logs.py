@@ -18,9 +18,10 @@ from collections.abc import (
 from contextlib import AbstractAsyncContextManager, aclosing, suppress
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
+from itertools import islice
 from pathlib import Path
 from types import TracebackType
-from typing import IO, Any, Self, cast
+from typing import IO, Any, NamedTuple, Self, cast
 
 import aiohttp
 import botocore.exceptions
@@ -41,6 +42,11 @@ from .utils import asyncgeneratorcontextmanager, parse_date
 
 
 logger = logging.getLogger(__name__)
+
+
+class SplitInterval(NamedTuple):
+    start_ts: int
+    end_ts: int
 
 
 DEFAULT_ARCHIVE_DELAY = 3.0 * 60
@@ -1454,11 +1460,13 @@ class LokiLogReader(LogReader):
         loki_client: LokiClient,
         query: str,
         *,
-        start: str | int,
-        end: str | int | None = None,
-        direction: str = "forward",
+        start: int,
+        end: int | None = None,
+        direction: str = "backward",  # or can be "forward"
         timestamps: bool = False,
         prefix: bool = False,
+        split_time_range_count: int = 25,
+        concurrent_factor: int = 5,
     ) -> None:
         super().__init__(timestamps=timestamps)
 
@@ -1469,6 +1477,15 @@ class LokiLogReader(LogReader):
         self._direction = direction
         self._prefix = prefix
         self._iterator: AsyncIterator[bytes] | None = None
+
+        # intervals count that will be splited from start to end.
+        # Works only if greater than 1
+        self._split_time_range_count = split_time_range_count
+        # how many tasks run at the same time if split_time_range_count is used
+        if concurrent_factor < 1:
+            exc_txt = "concurrent_factor must be greater than 0"
+            raise ValueError(exc_txt)
+        self._concurrent_factor = concurrent_factor
 
     async def __aenter__(self) -> AsyncIterator[bytes]:
         self._iterator = self._iterate()
@@ -1492,15 +1509,96 @@ class LokiLogReader(LogReader):
 
         return log.encode()
 
+    def split_time_range(
+        self, start_ts: int, end_ts: int | None, count: int = 25
+    ) -> Iterable[SplitInterval]:
+        if start_ts >= end_ts:
+            exc_txt = "start_ts must be less than end_ts"
+            raise ValueError(exc_txt)
+
+        end_ts = end_ts or _utcnow().timestamp() * 1_000_000_000
+
+        if count < 2:
+            return [SplitInterval(start_ts, end_ts)]
+
+        intervals = []
+        time_range_duration = end_ts - start_ts
+        interval_delta = time_range_duration // count
+
+        for i in range(count):
+            current_ts = start_ts + i * interval_delta
+            next_ts = start_ts + (i + 1) * interval_delta
+            if i == count - 1:
+                next_ts = end_ts
+            intervals.append(SplitInterval(current_ts, next_ts))
+
+        if self._direction == "forward":
+            return intervals
+        return reversed(intervals)
+
+    @staticmethod
+    async def _read_interval_logs(
+        iterable: AsyncIterator[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        res = []
+        async for data in iterable:
+            res.append(data)
+        return res
+
+    async def sequential_chunked_iter(
+        self, *gens
+    ) -> AsyncIterator[list[dict[str, Any]]]:
+        """
+        Sequentially iterate over multiple generators that run concurrently
+        by n tasks (defined as self._concurrent_factor)
+        """
+
+        async with asyncio.TaskGroup() as tg:
+            gens_iter = iter(gens)
+            # print(5555555, gens_iter)
+            while True:
+                # print(4444444)
+                tasks = [
+                    tg.create_task(self._read_interval_logs(gen))
+                    for gen in islice(gens_iter, self._concurrent_factor)
+                ]
+
+                if not tasks:
+                    break
+
+                for task in tasks:
+                    ret = await task
+                    # print(333333333, time.time(), task)
+                    yield ret
+
+                # print("Waiting for next chunk...")
+                await asyncio.sleep(5)
+
     async def _iterate(self) -> AsyncIterator[bytes]:
-        async for res in self._loki_client.query_range_page_iterate(
-            query=self._query,
-            start=self._start,
-            end=self._end,
-            direction=self._direction,
+        split_time_range_count = self._split_time_range_count
+        if self._end - self._start < 23 * 60 * 60 * 1_000_000_000:
+            # If the time range is less than 24 hours no need
+            # to split into multiple intervals, make one query
+            split_time_range_count = 1
+
+        async for data in self.sequential_chunked_iter(
+            *[
+                self._loki_client.query_range_page_iterate(
+                    query=self._query,
+                    start=split_interval.start_ts,
+                    end=split_interval.end_ts,
+                    direction=self._direction,
+                )
+                for split_interval in self.split_time_range(
+                    self._start,
+                    self._end,
+                    split_time_range_count,
+                )
+            ]
         ):
-            for log_data in res["data"]["result"]:
-                yield self.encode_and_handle_log(log_data)
+            for res in data:
+                for log_data in res["data"]["result"]:
+                    yield self.encode_and_handle_log(log_data)
 
 
 class LokiLogsService(BaseLogsService):
@@ -1800,6 +1898,7 @@ class LokiLogsService(BaseLogsService):
                 async for chunk in it:
                     if not has_archive:
                         has_archive = True
+                    # print(22222222, time.time())
                     yield chunk
 
         if not has_archive:
@@ -1822,9 +1921,9 @@ class LokiLogsService(BaseLogsService):
         self,
         query: str,
         *,
-        start: str | int,
-        end: str | int | None = None,
-        direction: str = "forward",
+        start: int,
+        end: int | None = None,
+        direction: str = "backward",  # or can be "forward"
         timestamps: bool = False,
         prefix: bool = False,
     ) -> LogReader:

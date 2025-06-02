@@ -652,6 +652,7 @@ class AppsMonitoringApiHandler:
         k8s_label_selector = self._get_k8s_label_selector(app_instance)
 
         assert isinstance(self._logs_service, LokiLogsService)
+
         async with self._logs_service.get_pod_log_reader_by_containers(
             containers,
             loki_label_selector,
@@ -665,6 +666,7 @@ class AppsMonitoringApiHandler:
             prefix=prefix,
         ) as it:
             async for chunk in it:
+                # print(111111111, time.time(), chunk)
                 await response.write(chunk)
             await response.write_eof()
             return response
