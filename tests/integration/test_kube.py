@@ -1615,7 +1615,10 @@ class TestLogReader:
             await kube_client.create_pod(job_pod.payload)
             await kube_client.wait_pod_is_terminated(job_pod.name)
             log_reader = factory.get_pod_log_reader(
-                job_pod.name, separator=b"===", archive_delay_s=30.0
+                job_pod.name,
+                kube_client.namespace,
+                separator=b"===",
+                archive_delay_s=30.0,
             )
             payload = (await self._consume_log_reader(log_reader, delay=0.001)).decode()
         finally:

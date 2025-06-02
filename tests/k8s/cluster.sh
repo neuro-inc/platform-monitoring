@@ -41,6 +41,12 @@ function k8s::apply_all_configurations {
     kubectl apply -f tests/k8s/platformapi.yml
     kubectl apply -f tests/k8s/platformnotifications.yml
     kubectl apply -f tests/k8s/platformcontainerruntime.yml
+
+    # build newest platform monitoring image so we can use it in tests
+    docker build -t platformmonitoring:tests .
+    # load monitoring image into a minikube
+    docker image save -o platformmonitoring.tests.tar platformmonitoring:tests
+    minikube image load platformmonitoring.tests.tar
     kubectl apply -f tests/k8s/platformmonitoring.yml
     kubectl apply -f tests/k8s/extra-entities.yml
 

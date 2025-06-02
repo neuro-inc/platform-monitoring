@@ -97,6 +97,8 @@ APPS_MONITORING_APP_KEY = aiohttp.web.AppKey(
 )
 APPS_API_CLIENT_KEY = aiohttp.web.AppKey("apps_api_client", AppsApiClient)
 
+DEFAULT_SEPARATOR = "=== Live logs ==="
+
 logger = logging.getLogger(__name__)
 
 
@@ -197,7 +199,7 @@ class MonitoringApiHandler:
         pod_name = self._kube_helper.get_job_pod_name(job)
         separator = request.query.get("separator")
         if separator is None:
-            separator = "=== Live logs ===" + _getrandbytes(30).hex()
+            separator = f"{DEFAULT_SEPARATOR}{_getrandbytes(30).hex()}"
 
         response = StreamResponse(status=200)
         response.enable_chunked_encoding()
@@ -239,7 +241,7 @@ class MonitoringApiHandler:
         pod_name = self._kube_helper.get_job_pod_name(job)
         separator = request.query.get("separator")
         if separator is None:
-            separator = "=== Live logs ===" + _getrandbytes(30).hex()
+            separator = f"{DEFAULT_SEPARATOR}{_getrandbytes(30).hex()}"
 
         async def stop_func() -> bool:
             return self._jobs_helper.is_job_finished(await self._get_job(job.id))
@@ -336,7 +338,7 @@ class MonitoringApiHandler:
         pod_name = self._kube_helper.get_job_pod_name(job)
         return KubeTelemetry(
             self._kube_client,
-            namespace_name=self._kube_client.namespace,
+            namespace_name=job.namespace,
             pod_name=pod_name,
             container_name=pod_name,
         )
@@ -616,9 +618,7 @@ class AppsMonitoringApiHandler:
 
     @staticmethod
     def _as_ndjson(request: Request) -> bool:
-        if "application/x-ndjson" in request.headers.get("Accept", "*/*"):
-            return True
-        return False
+        return "application/x-ndjson" in request.headers.get("Accept", "*/*")
 
     async def stream_log(self, request: Request) -> StreamResponse:
         app_instance = await self._resolve_app_instance(request=request)
@@ -643,7 +643,7 @@ class AppsMonitoringApiHandler:
 
         separator = request.query.get("separator")
         if separator is None:
-            separator = "=== Live logs ===" + _getrandbytes(30).hex()
+            separator = f"{DEFAULT_SEPARATOR}{_getrandbytes(30).hex()}"
 
         response = StreamResponse(status=200)
         response.enable_chunked_encoding()
@@ -702,7 +702,7 @@ class AppsMonitoringApiHandler:
 
         separator = request.query.get("separator")
         if separator is None:
-            separator = "=== Live logs ===" + _getrandbytes(30).hex()
+            separator = f"{DEFAULT_SEPARATOR}{_getrandbytes(30).hex()}"
 
         loki_label_selector = self._get_loki_label_selector(app_instance)
         k8s_label_selector = self._get_k8s_label_selector(app_instance)
