@@ -1572,7 +1572,7 @@ class LokiLogReader(LogReader):
                     yield ret
 
                 # print("Waiting for next chunk...")
-                await asyncio.sleep(5)
+                # await asyncio.sleep(5)
 
     async def _iterate(self) -> AsyncIterator[bytes]:
         split_time_range_count = self._split_time_range_count

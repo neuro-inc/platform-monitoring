@@ -668,6 +668,7 @@ class AppsMonitoringApiHandler:
             async for chunk in it:
                 # print(111111111, time.time(), chunk)
                 await response.write(chunk)
+                # await response.drain()
             await response.write_eof()
             return response
 
