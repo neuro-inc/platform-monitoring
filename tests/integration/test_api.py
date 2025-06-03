@@ -1655,6 +1655,9 @@ class TestAppsLogApi:
                 log = next(
                     filter(lambda x: log_pattern.match(x["log"]), actual_log_list)
                 )
+                assert log["pod"] == pod_name
+                assert log["namespace"] == namespace
+                assert log["container"] == f"container{c_number}"
                 actual_log_list.remove(log)
         assert actual_log_list == []
 
