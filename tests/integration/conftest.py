@@ -324,15 +324,15 @@ def get_service_url(service_name: str, namespace: str = "default") -> str:
     timeout_s = 120
     interval_s = 10
 
-    process = subprocess.Popen(
-        ("minikube", "service", "-n", namespace, service_name, "--url"),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        preexec_fn=os.setpgrp,
-    )
-    stdout = process.stdout
-    assert stdout
     while timeout_s:
+        process = subprocess.Popen(
+            ("minikube", "service", "-n", namespace, service_name, "--url"),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            preexec_fn=os.setpgrp,
+        )
+        stdout = process.stdout
+        assert stdout
         output = stdout.readline()
         if output:
             url = output.decode().strip()
