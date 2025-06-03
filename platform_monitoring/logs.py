@@ -1465,6 +1465,7 @@ class LokiLogReader(LogReader):
         direction: str = "backward",  # or can be "forward"
         timestamps: bool = False,
         prefix: bool = False,
+        as_json: bool = False,
         split_time_range_count: int = 25,
         concurrent_factor: int = 5,
     ) -> None:
@@ -1473,10 +1474,11 @@ class LokiLogReader(LogReader):
         self._loki_client = loki_client
         self._query = query
         self._start = start
-        self._end = end
+        self._end = end or int(datetime.now(UTC).timestamp()) * 1_000_000_000
         self._direction = direction
         self._prefix = prefix
         self._iterator: AsyncIterator[bytes] | None = None
+        self._as_json = as_json
 
         # intervals count that will be splited from start to end.
         # Works only if greater than 1
@@ -1500,23 +1502,33 @@ class LokiLogReader(LogReader):
 
         if log[-1] != "\n":
             log = f"{log}\n"
+
+        stream = log_data[2]
+
         if self._timestamps:
             log_dt = datetime.fromtimestamp(int(log_data[0]) / 1_000_000_000, tz=UTC)
             log = f"{log_dt.strftime('%Y-%m-%dT%H:%M:%S.%f')}Z {log}"
         if self._prefix:
-            stream = log_data[2]
             log = f"{stream['pod']}/{stream['container']} {log}"
+
+        if self._as_json:
+            return orjson.dumps(
+                {
+                    "container": stream["container"],
+                    "log": log,
+                    "pod": stream["pod"],
+                    "namespace": stream["namespace"],
+                }
+            )
 
         return log.encode()
 
     def split_time_range(
-        self, start_ts: int, end_ts: int | None, count: int = 25
+        self, start_ts: int, end_ts: int, count: int = 25
     ) -> Iterable[SplitInterval]:
         if start_ts >= end_ts:
             exc_txt = "start_ts must be less than end_ts"
             raise ValueError(exc_txt)
-
-        end_ts = end_ts or _utcnow().timestamp() * 1_000_000_000
 
         if count < 2:
             return [SplitInterval(start_ts, end_ts)]
@@ -1546,7 +1558,7 @@ class LokiLogReader(LogReader):
         return res
 
     async def sequential_chunked_iter(
-        self, *gens
+        self, *gens: AsyncIterator[dict[str, Any]]
     ) -> AsyncIterator[list[dict[str, Any]]]:
         """
         Sequentially iterate over multiple generators that run concurrently
@@ -1555,9 +1567,7 @@ class LokiLogReader(LogReader):
 
         async with asyncio.TaskGroup() as tg:
             gens_iter = iter(gens)
-            # print(5555555, gens_iter)
             while True:
-                # print(4444444)
                 tasks = [
                     tg.create_task(self._read_interval_logs(gen))
                     for gen in islice(gens_iter, self._concurrent_factor)
@@ -1568,15 +1578,13 @@ class LokiLogReader(LogReader):
 
                 for task in tasks:
                     ret = await task
-                    # print(333333333, time.time(), task)
                     yield ret
 
-                # print("Waiting for next chunk...")
-                await asyncio.sleep(5)
-
-    async def _iterate(self) -> AsyncIterator[bytes]:
+    async def _iterate(
+        self,
+    ) -> AsyncIterator[bytes]:
         split_time_range_count = self._split_time_range_count
-        if self._end - self._start < 23 * 60 * 60 * 1_000_000_000:
+        if self._end - self._start < 24 * 60 * 60 * 1_000_000_000:
             # If the time range is less than 24 hours no need
             # to split into multiple intervals, make one query
             split_time_range_count = 1
@@ -1731,6 +1739,7 @@ class LokiLogsService(BaseLogsService):
         timestamps: bool = False,
         debug: bool = False,
         prefix: bool = True,
+        as_json: bool = False,
     ) -> AsyncIterator[bytes]:
         try:
             while True:
@@ -1756,6 +1765,17 @@ class LokiLogsService(BaseLogsService):
                     async for chunk in it:
                         if prefix:
                             chunk = f"[{pod_name}/{container_name}] ".encode() + chunk
+
+                        if as_json:
+                            chunk = orjson.dumps(
+                                {
+                                    "pod": pod_name,
+                                    "container": container_name,
+                                    "log": chunk.decode(),
+                                    "namespace": namespace,
+                                }
+                            )
+
                         yield chunk
 
                 if not status.can_restart:
@@ -1786,6 +1806,7 @@ class LokiLogsService(BaseLogsService):
         timestamps: bool = False,
         debug: bool = False,
         prefix: bool = True,
+        as_json: bool = False,
     ) -> AsyncIterator[bytes]:
         label_selector = ",".join(
             f"{key}={value}" for key, value in k8s_label_selector.items()
@@ -1805,6 +1826,7 @@ class LokiLogsService(BaseLogsService):
                     timestamps=timestamps,
                     debug=debug,
                     prefix=prefix,
+                    as_json=as_json,
                 )
                 for pod in pods
                 if pod.metadata.name
@@ -1853,6 +1875,7 @@ class LokiLogsService(BaseLogsService):
         archive_delay_s: float = 5,
         debug: bool = False,
         prefix: bool = False,
+        as_json: bool = False,
     ) -> AsyncGenerator[bytes]:
         containers = containers or []
         loki_label_selector = loki_label_selector or {}
@@ -1894,11 +1917,11 @@ class LokiLogsService(BaseLogsService):
                 end=end,
                 timestamps=timestamps,
                 prefix=prefix,
+                as_json=as_json,
             ) as it:
                 async for chunk in it:
                     if not has_archive:
                         has_archive = True
-                    # print(22222222, time.time())
                     yield chunk
 
         if not has_archive:
@@ -1914,6 +1937,7 @@ class LokiLogsService(BaseLogsService):
                 timestamps=timestamps,
                 debug=debug,
                 prefix=prefix,
+                as_json=as_json,
             ):
                 yield chunk
 
@@ -1926,6 +1950,7 @@ class LokiLogsService(BaseLogsService):
         direction: str = "backward",  # or can be "forward"
         timestamps: bool = False,
         prefix: bool = False,
+        as_json: bool = False,
     ) -> LogReader:
         # have another set of params unlike base method, need # type: ignore
         return LokiLogReader(
@@ -1936,6 +1961,7 @@ class LokiLogsService(BaseLogsService):
             direction=direction,
             timestamps=timestamps,
             prefix=prefix,
+            as_json=as_json,
         )
 
     async def get_label_values(

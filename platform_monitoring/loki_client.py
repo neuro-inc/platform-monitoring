@@ -147,7 +147,6 @@ class LokiClient:
         direction: str = "backward",  # or can be "forward"
         limit: int = 5000,
     ) -> AsyncIterator[dict[str, Any]]:
-        # print(22222222, "query_range_page_iterate", start, end, direction)
         while True:
             response = await self.query_range(
                 query=query,
@@ -156,10 +155,9 @@ class LokiClient:
                 limit=limit,
                 direction=direction,
             )
-            # print(44444444, response)
+
             yield response
-            # print(start, end, direction, limit, (end - start) / 1000000000,
-            # response["data"]["stats"]["summary"]["totalEntriesReturned"])
+
             if response["data"]["stats"]["summary"]["totalEntriesReturned"] < limit:
                 break
 
