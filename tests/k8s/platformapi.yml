@@ -69,7 +69,7 @@ spec:
         - name: NP_TOKEN
           value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZGVudGl0eSI6ImNvbXB1dGUifQ.IJDlKCfbiuNGZH9Sh6p-CdUL5KxEK5JStqzfDk4-RAA
       - name: platformapi-migrations
-        image: ghcr.io/neuro-inc/platformapi:latest
+        image: ghcr.io/neuro-inc/platformapi:project-namespace
         imagePullPolicy: Always
         command: ["alembic", "upgrade", "head"]
         env:
@@ -80,7 +80,7 @@ spec:
           value: postgresql://postgres:postgres@platformapi-postgres:5432
       containers:
       - name: platformapi
-        image: ghcr.io/neuro-inc/platformapi:latest
+        image: ghcr.io/neuro-inc/platformapi:project-namespace
         imagePullPolicy: Always
         env:
         - name: NP_LOG_LEVEL
@@ -164,7 +164,7 @@ spec:
           value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZGVudGl0eSI6ImNvbXB1dGUifQ.IJDlKCfbiuNGZH9Sh6p-CdUL5KxEK5JStqzfDk4-RAA
       containers:
       - name: platformapi
-        image: ghcr.io/neuro-inc/platformapi:latest
+        image: ghcr.io/neuro-inc/platformapi:project-namespace
         imagePullPolicy: Always
         command: [platform-api-poller]
         env:
