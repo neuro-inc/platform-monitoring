@@ -1724,7 +1724,7 @@ class TestAppsLogApi:
             container_count_end=2,
             logs_count_start=1,
             logs_count_end=5,
-            re_log_template=rf"\[{pod_name}/container[c_number]\] "
+            re_log_template=rf"{pod_name}/container[c_number] "
             f"container[c_number]_[l_number]\n",
         )
 
@@ -1846,7 +1846,7 @@ class TestAppsLogApi:
             container_count_end=2,
             logs_count_start=1,
             logs_count_end=5,
-            re_log_template=rf"\[{pod_name}/container[c_number]\] "
+            re_log_template=rf"{pod_name}/container[c_number] "
             f"container[c_number]_[l_number]\n",
         )
 
