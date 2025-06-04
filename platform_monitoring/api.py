@@ -619,6 +619,13 @@ class AppsMonitoringApiHandler:
             list(set(loki_containers_task.result() + k8s_containers_task.result()))
         )
 
+    @staticmethod
+    def _as_json(request: Request) -> bool:
+        content_type = request.headers.get("Content-Type")
+        if content_type and content_type.startswith("application/json"):
+            return True
+        return False
+
     async def stream_log(self, request: Request) -> StreamResponse:
         app_instance = await self._resolve_app_instance(request=request)
 
@@ -664,9 +671,9 @@ class AppsMonitoringApiHandler:
             debug=debug,
             archive_delay_s=archive_delay_s,
             prefix=prefix,
+            as_json=self._as_json(request),
         ) as it:
             async for chunk in it:
-                # print(111111111, time.time(), chunk)
                 await response.write(chunk)
                 # await response.drain()
             await response.write_eof()
@@ -707,6 +714,7 @@ class AppsMonitoringApiHandler:
             debug=debug,
             archive_delay_s=archive_delay_s,
             prefix=prefix,
+            as_json=self._as_json(request),
         ) as it:
             response = WebSocketResponse(
                 protocols=[WS_LOGS_PROTOCOL],
