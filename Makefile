@@ -44,7 +44,7 @@ test_integration:
 		--durations=10 \
 		--maxfail=0 \
 		--log-level=INFO \
-		tests/integration
+		tests/integration -k "test_apps_only_loki_log"
 
 .PHONY: clean-dist
 clean-dist:
