@@ -1814,7 +1814,7 @@ class TestAppsLogApi:
         headers_["Content-Type"] = "application/json"
         async with client.get(url, headers=headers_, params=params) as response:
             actual_log = await response.read()
-        async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
+        async with client.ws_connect(url_ws, headers=headers_, params=params) as ws:
             ws_actual_log = await self.read_ws(ws)
         assert actual_log == ws_actual_log
         self.assert_archive_logs_as_json(
@@ -1835,7 +1835,7 @@ class TestAppsLogApi:
         headers_["Content-Type"] = "application/json"
         async with client.get(url, headers=headers_, params=params) as response:
             actual_log = await response.read()
-        async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
+        async with client.ws_connect(url_ws, headers=headers_, params=params) as ws:
             ws_actual_log = await self.read_ws(ws)
         assert actual_log == ws_actual_log
         self.assert_archive_logs_as_json(
@@ -1857,7 +1857,7 @@ class TestAppsLogApi:
         headers_["Content-Type"] = "application/json"
         async with client.get(url, headers=headers_, params=params) as response:
             actual_log = await response.read()
-        async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
+        async with client.ws_connect(url_ws, headers=headers_, params=params) as ws:
             ws_actual_log = await self.read_ws(ws)
         assert actual_log == ws_actual_log
         self.assert_archive_logs_as_json(
