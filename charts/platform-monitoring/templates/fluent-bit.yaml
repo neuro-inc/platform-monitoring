@@ -1,3 +1,4 @@
+{{- if list "es" "s3" | has .Values.logs.persistence.type }}
 {{- $configPattern := "files/fluent-bit/*" }}
 {{- $config := tpl (.Files.Glob $configPattern).AsConfig . }}
 apiVersion: v1
@@ -106,3 +107,4 @@ spec:
       {{- if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName }}
       {{- end }}
+{{- end }}

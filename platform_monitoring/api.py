@@ -25,6 +25,7 @@ from aiohttp.web import (
     middleware,
 )
 from aiohttp.web_urldispatcher import AbstractRoute
+from apolo_api_client import ApiClient, Job
 from elasticsearch import AsyncElasticsearch
 from neuro_auth_client import AuthClient, Permission, check_permissions
 from neuro_auth_client.security import AuthScheme, setup_security
@@ -32,8 +33,7 @@ from neuro_config_client import ConfigClient
 from neuro_logging import init_logging, setup_sentry
 from yarl import URL
 
-from platform_monitoring import __version__
-
+from . import __version__
 from .base import JobStats, Telemetry
 from .config import (
     Config,
@@ -51,7 +51,6 @@ from .container_runtime_client import (
 )
 from .jobs_service import JobException, JobNotRunningException, JobsService
 from .kube_client import KubeClient, KubeTelemetry
-from .log_cleanup_poller import LogCleanupPoller
 from .logs import (
     DEFAULT_ARCHIVE_DELAY,
     ElasticsearchLogsService,
@@ -63,7 +62,6 @@ from .logs import (
     s3_client_error,
 )
 from .loki_client import LokiClient
-from .platform_api_client import ApiClient, Job
 from .platform_apps_client import AppInstance, AppsApiClient, AppsApiException
 from .user import untrusted_user
 from .utils import JobsHelper, KubeHelper, parse_date
@@ -194,7 +192,7 @@ class MonitoringApiHandler:
             request.query.get("archive_delay", self.get_archive_delay())
         )
         job = await self._resolve_job(request, "read")
-        since = parse_date(since_str) if since_str else parse_date(job.created_at)
+        since = parse_date(since_str) if since_str else job.history.created_at
 
         pod_name = self._kube_helper.get_job_pod_name(job)
         separator = request.query.get("separator")
@@ -236,7 +234,7 @@ class MonitoringApiHandler:
             request.query.get("archive_delay", self.get_archive_delay())
         )
         job = await self._resolve_job(request, "read")
-        since = parse_date(since_str) if since_str else parse_date(job.created_at)
+        since = parse_date(since_str) if since_str else job.history.created_at
 
         pod_name = self._kube_helper.get_job_pod_name(job)
         separator = request.query.get("separator")
@@ -268,10 +266,7 @@ class MonitoringApiHandler:
             return response
 
     async def drop_log(self, request: Request) -> Response:
-        job = await self._resolve_job(request, "write")
-
-        pod_name = self._kube_helper.get_job_pod_name(job)
-        await self._logs_service.drop_logs(pod_name)
+        await self._resolve_job(request, "write")
         return Response(status=aiohttp.web.HTTPNoContent.status_code)
 
     async def stream_top(self, request: Request) -> WebSocketResponse:
@@ -1124,14 +1119,6 @@ async def create_app(config: Config) -> aiohttp.web.Application:
                 kube_node_pool_label=config.kube.node_pool_label,
             )
             app[MONITORING_APP_KEY][JOBS_SERVICE_KEY] = jobs_service
-
-            await exit_stack.enter_async_context(
-                LogCleanupPoller(
-                    jobs_service=jobs_service,
-                    logs_service=logs_service,
-                    interval_sec=config.logs.cleanup_interval_sec,
-                )
-            )
 
             platform_apps_api_client = await exit_stack.enter_async_context(
                 create_platform_apps_api_client(

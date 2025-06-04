@@ -1,10 +1,11 @@
 import asyncio
 from collections import defaultdict
 from collections.abc import AsyncGenerator, AsyncIterator, Mapping, Sequence
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 import aiohttp
+from apolo_api_client import ApiClient, Job
 from neuro_config_client import ConfigClient, ResourcePoolType
 
 from .config import KubeConfig
@@ -21,7 +22,6 @@ from .kube_client import (
     NodeResources,
     Pod,
 )
-from .platform_api_client import ApiClient, Job
 from .user import User
 from .utils import KubeHelper, asyncgeneratorcontextmanager
 
@@ -69,18 +69,6 @@ class JobsService:
 
     async def get(self, job_id: str) -> Job:
         return await self._jobs_client.get_job(job_id)
-
-    def get_jobs_for_log_removal(
-        self,
-    ) -> AbstractAsyncContextManager[AsyncGenerator[Job]]:
-        return self._jobs_client.get_jobs(
-            cluster_name=self._cluster_name,
-            being_dropped=True,
-            logs_removed=False,
-        )
-
-    async def mark_logs_dropped(self, job_id: str) -> None:
-        await self._jobs_client.mark_job_logs_dropped(job_id)
 
     @asyncgeneratorcontextmanager
     async def save(self, job: Job, user: User, image: str) -> AsyncGenerator[bytes]:

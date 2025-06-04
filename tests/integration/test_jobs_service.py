@@ -9,6 +9,7 @@ from tempfile import mktemp
 from typing import Any
 
 import pytest
+from apolo_api_client import ApiClient
 from apolo_sdk import (
     Client as JobsClient,
     Container as JobContainer,
@@ -25,7 +26,6 @@ from platform_monitoring.api import create_platform_api_client
 from platform_monitoring.config import PlatformApiConfig
 from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
 from platform_monitoring.jobs_service import JobException, JobsService
-from platform_monitoring.platform_api_client import ApiClient
 
 from .conftest_admin import ProjectUser
 from .conftest_kube import MyKubeClient
@@ -361,41 +361,3 @@ class TestJobsService:
         result = await jobs_service.get_available_jobs_counts()
         assert result
         assert "cpu-small" in result
-
-    async def test_mark_logs_dropped(
-        self,
-        job_factory: JobFactory,
-        apolo_client: JobsClient,
-        jobs_service: JobsService,
-    ) -> None:
-        resources = Resources(
-            memory=16 * 1024**2,
-            cpu=0.1,
-            shm=False,
-            nvidia_gpu=None,
-            nvidia_gpu_model=None,
-        )
-        job = await job_factory(
-            "alpine:latest",
-            "sh -c 'exit 0'",
-            resources,
-            tty=False,
-        )
-        await self.wait_for_job_succeeded(job, apolo_client)
-
-        await apolo_client.jobs.kill(job.id)
-
-        # Drop request
-        # TODO: replace with sdk call when available
-        url = apolo_client._config.api_url / "jobs" / job.id / "drop"
-        auth = await apolo_client._config._api_auth()
-        async with apolo_client._core.request("POST", url, auth=auth):
-            pass
-
-        # Job should be still there
-        assert await apolo_client.jobs.status(job.id)
-
-        await jobs_service.mark_logs_dropped(job.id)
-
-        with pytest.raises(IllegalArgumentError):
-            await apolo_client.jobs.status(job.id)
