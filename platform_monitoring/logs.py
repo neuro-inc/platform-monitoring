@@ -1687,6 +1687,7 @@ class LokiLogsService(BaseLogsService):
                 start=start,
                 end=end,
                 timestamps=timestamps,
+                direction="forward",
             ) as it:
                 async for chunk in it:
                     has_archive = True
