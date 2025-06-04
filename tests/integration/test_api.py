@@ -1793,7 +1793,7 @@ class TestAppsLogApi:
         params["since"] = (finished_at - timedelta(seconds=2)).strftime(
             "%Y-%m-%dT%H:%M:%SZ"
         )
-        params["containers"] = "container2"
+        params["container"] = "container2"
         async with client.get(url, headers=headers, params=params) as response:
             actual_log = await response.read()
         async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
