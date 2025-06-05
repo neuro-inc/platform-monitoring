@@ -84,9 +84,7 @@ class LokiClient:
         self._validate_range(kwargs.get("params", {}))
         async with self._session.request(*args, **kwargs) as response:
             payload = await response.json()
-            # print(args, kwargs)
             logger.debug("Loki response payload: %s", payload)
-            # print(444444, len(payload["data"]["result"]))
             return payload
 
     @staticmethod
@@ -117,7 +115,7 @@ class LokiClient:
         )
 
         url = str(self._query_range_url)
-        # print(url)
+
         result = await self._request(method="GET", url=url, params=params)
 
         # add stream data to each log entry
@@ -135,7 +133,7 @@ class LokiClient:
         )
 
         result["data"]["result"] = data_result
-        # print(result["data"]["result"])
+
         return result
 
     async def query_range_page_iterate(

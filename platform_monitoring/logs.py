@@ -44,7 +44,7 @@ from .utils import asyncgeneratorcontextmanager, parse_date
 logger = logging.getLogger(__name__)
 
 
-class SplitInterval(NamedTuple):
+class TimeInterval(NamedTuple):
     start_ts: int
     end_ts: int
 
@@ -1523,15 +1523,15 @@ class LokiLogReader(LogReader):
 
         return log.encode()
 
-    def split_time_range(
+    def _split_time_range(
         self, start_ts: int, end_ts: int, count: int = 25
-    ) -> Iterable[SplitInterval]:
+    ) -> Iterable[TimeInterval]:
         if start_ts >= end_ts:
             exc_txt = "start_ts must be less than end_ts"
             raise ValueError(exc_txt)
 
         if count < 2:
-            return [SplitInterval(start_ts, end_ts)]
+            return [TimeInterval(start_ts, end_ts)]
 
         intervals = []
         time_range_duration = end_ts - start_ts
@@ -1542,14 +1542,14 @@ class LokiLogReader(LogReader):
             next_ts = start_ts + (i + 1) * interval_delta
             if i == count - 1:
                 next_ts = end_ts
-            intervals.append(SplitInterval(current_ts, next_ts))
+            intervals.append(TimeInterval(current_ts, next_ts))
 
         if self._direction == "forward":
             return intervals
         return reversed(intervals)
 
     @staticmethod
-    async def _read_interval_logs(
+    async def _consume_iter(
         iterable: AsyncIterator[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         res = []
@@ -1557,7 +1557,7 @@ class LokiLogReader(LogReader):
             res.append(data)
         return res
 
-    async def sequential_chunked_iter(
+    async def _run_concurrently(
         self, *gens: AsyncIterator[dict[str, Any]]
     ) -> AsyncIterator[list[dict[str, Any]]]:
         """
@@ -1569,7 +1569,7 @@ class LokiLogReader(LogReader):
             gens_iter = iter(gens)
             while True:
                 tasks = [
-                    tg.create_task(self._read_interval_logs(gen))
+                    tg.create_task(self._consume_iter(gen))
                     for gen in islice(gens_iter, self._concurrent_factor)
                 ]
 
@@ -1587,7 +1587,7 @@ class LokiLogReader(LogReader):
             # to split into multiple intervals, make one query
             split_time_range_count = 1
 
-        async for data in self.sequential_chunked_iter(
+        async for data in self._run_concurrently(
             *[
                 self._loki_client.query_range_page_iterate(
                     query=self._query,
@@ -1595,7 +1595,7 @@ class LokiLogReader(LogReader):
                     end=split_interval.end_ts,
                     direction=self._direction,
                 )
-                for split_interval in self.split_time_range(
+                for split_interval in self._split_time_range(
                     self._start,
                     self._end,
                     split_time_range_count,
