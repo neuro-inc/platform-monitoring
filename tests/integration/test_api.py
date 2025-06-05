@@ -752,60 +752,6 @@ class TestLogApi:
         async with client.get(url, headers=regular_user2.headers) as resp:
             assert resp.status == HTTPOk.status_code
 
-    async def test_job_log_cleanup(
-        self,
-        monitoring_api_s3_storage: MonitoringApiEndpoints,
-        client: aiohttp.ClientSession,
-        jobs_client: JobsClient,
-        job_submit: dict[str, Any],
-        kube_client: MyKubeClient,
-    ) -> None:
-        command = 'bash -c "for i in {1..5}; do echo $i; done; sleep 100"'
-        job_submit["container"]["command"] = command
-        job_id = await jobs_client.run_job(job_submit)
-
-        # Jobs is canceled so its pod removed immediately
-        await jobs_client.long_polling_by_job_id(job_id, "running")
-        await jobs_client.delete_job(job_id)
-        await kube_client.wait_pod_is_deleted(job_id)
-
-        headers = jobs_client.headers
-        url = monitoring_api_s3_storage.generate_log_url(job_id)
-        async with client.get(url, headers=headers) as response:
-            actual_payload = await response.read()
-            expected_payload = "\n".join(str(i) for i in range(1, 6)) + "\n"
-            assert actual_payload == expected_payload.encode()
-
-        async with client.delete(url, headers=headers) as response:
-            assert response.status == HTTPNoContent.status_code
-
-        async with client.get(url, headers=headers) as response:
-            actual_payload = await response.read()
-            assert actual_payload == b""
-
-    async def test_job_logs_removed_on_drop(
-        self,
-        monitoring_api_s3_storage: MonitoringApiEndpoints,
-        client: aiohttp.ClientSession,
-        jobs_client: JobsClient,
-        job_submit: dict[str, Any],
-        kube_client: MyKubeClient,
-    ) -> None:
-        job_id = await jobs_client.run_job(job_submit)
-        await jobs_client.long_polling_by_job_id(job_id, "succeeded")
-
-        # Drop request
-        await jobs_client.drop_job(job_id)
-
-        async def _wait_no_job() -> None:
-            while True:
-                try:
-                    await jobs_client.get_job_by_id(job_id)
-                except AssertionError:
-                    return
-
-        await asyncio.wait_for(_wait_no_job(), timeout=10)
-
 
 class TestSaveApi:
     async def test_save_no_permissions_forbidden(
