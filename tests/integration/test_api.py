@@ -1806,10 +1806,10 @@ class TestAppsLogApi:
             re_log_template=r"container[c_number]_[l_number]\n",
         )
 
-        # test with content-type application/json
+        # test with Accept header application/x-ndjson
         params = base_params.copy()
         headers_ = headers.copy()
-        headers_["Content-Type"] = "application/json"
+        headers_["Accept"] = "application/x-ndjson"
         async with client.get(url, headers=headers_, params=params) as response:
             actual_log = await response.read()
         async with client.ws_connect(url_ws, headers=headers_, params=params) as ws:
@@ -1826,11 +1826,11 @@ class TestAppsLogApi:
             re_log_template=r"container[c_number]_[l_number]\n",
         )
 
-        # test with content-type application/json and prefix
+        # test with Accept header application/x-ndjson and prefix
         params = base_params.copy()
         params["prefix"] = "true"
         headers_ = headers.copy()
-        headers_["Content-Type"] = "application/json"
+        headers_["Accept"] = "application/x-ndjson"
         async with client.get(url, headers=headers_, params=params) as response:
             actual_log = await response.read()
         async with client.ws_connect(url_ws, headers=headers_, params=params) as ws:
@@ -1848,11 +1848,11 @@ class TestAppsLogApi:
             f"container[c_number]_[l_number]\n",
         )
 
-        # test with content-type application/json and timestamps
+        # test with Accept header application/x-ndjson and timestamps
         params = base_params.copy()
         params["timestamps"] = "true"
         headers_ = headers.copy()
-        headers_["Content-Type"] = "application/json"
+        headers_["Accept"] = "application/x-ndjson"
         async with client.get(url, headers=headers_, params=params) as response:
             actual_log = await response.read()
         async with client.ws_connect(url_ws, headers=headers_, params=params) as ws:
