@@ -1582,8 +1582,8 @@ class LokiLogReader(LogReader):
 
     async def _iterate(self) -> AsyncIterator[bytes]:
         split_time_range_count = self._split_time_range_count
-        if self._end - self._start < 24 * 60 * 60 * 1_000_000_000:
-            # If the time range is less than 24 hours no need
+        if self._end - self._start < 25 * 60 * 60 * 1_000_000_000:
+            # If the time range is less than 25 hours no need
             # to split into multiple intervals, make one query
             split_time_range_count = 1
 
