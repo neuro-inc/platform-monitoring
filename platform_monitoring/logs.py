@@ -1465,7 +1465,7 @@ class LokiLogReader(LogReader):
         direction: str = "backward",  # or can be "forward"
         timestamps: bool = False,
         prefix: bool = False,
-        as_json: bool = False,
+        as_ndjson: bool = False,
         split_time_range_count: int = 25,
         concurrent_factor: int = 5,
     ) -> None:
@@ -1478,7 +1478,7 @@ class LokiLogReader(LogReader):
         self._direction = direction
         self._prefix = prefix
         self._iterator: AsyncIterator[bytes] | None = None
-        self._as_json = as_json
+        self._as_ndjson = as_ndjson
 
         # intervals count that will be splited from start to end.
         # Works only if greater than 1
@@ -1511,14 +1511,17 @@ class LokiLogReader(LogReader):
         if self._prefix:
             log = f"{stream['pod']}/{stream['container']} {log}"
 
-        if self._as_json:
-            return orjson.dumps(
-                {
-                    "container": stream["container"],
-                    "log": log,
-                    "pod": stream["pod"],
-                    "namespace": stream["namespace"],
-                }
+        if self._as_ndjson:
+            return (
+                orjson.dumps(
+                    {
+                        "container": stream["container"],
+                        "log": log,
+                        "pod": stream["pod"],
+                        "namespace": stream["namespace"],
+                    }
+                )
+                + b"\n"  # bring to ndjson format
             )
 
         return log.encode()
@@ -1738,7 +1741,7 @@ class LokiLogsService(BaseLogsService):
         timestamps: bool = False,
         debug: bool = False,
         prefix: bool = True,
-        as_json: bool = False,
+        as_ndjson: bool = False,
     ) -> AsyncIterator[bytes]:
         try:
             while True:
@@ -1765,14 +1768,17 @@ class LokiLogsService(BaseLogsService):
                         if prefix:
                             chunk = f"[{pod_name}/{container_name}] ".encode() + chunk
 
-                        if as_json:
-                            chunk = orjson.dumps(
-                                {
-                                    "pod": pod_name,
-                                    "container": container_name,
-                                    "log": chunk.decode(),
-                                    "namespace": namespace,
-                                }
+                        if as_ndjson:
+                            chunk = (
+                                orjson.dumps(
+                                    {
+                                        "pod": pod_name,
+                                        "container": container_name,
+                                        "log": chunk.decode(),
+                                        "namespace": namespace,
+                                    }
+                                )
+                                + b"\n"  # bring to ndjson format
                             )
 
                         yield chunk
@@ -1805,7 +1811,7 @@ class LokiLogsService(BaseLogsService):
         timestamps: bool = False,
         debug: bool = False,
         prefix: bool = True,
-        as_json: bool = False,
+        as_ndjson: bool = False,
     ) -> AsyncIterator[bytes]:
         label_selector = ",".join(
             f"{key}={value}" for key, value in k8s_label_selector.items()
@@ -1825,7 +1831,7 @@ class LokiLogsService(BaseLogsService):
                     timestamps=timestamps,
                     debug=debug,
                     prefix=prefix,
-                    as_json=as_json,
+                    as_ndjson=as_ndjson,
                 )
                 for pod in pods
                 if pod.metadata.name
@@ -1874,7 +1880,7 @@ class LokiLogsService(BaseLogsService):
         archive_delay_s: float = 5,
         debug: bool = False,
         prefix: bool = False,
-        as_json: bool = False,
+        as_ndjson: bool = False,
     ) -> AsyncGenerator[bytes]:
         containers = containers or []
         loki_label_selector = loki_label_selector or {}
@@ -1916,7 +1922,7 @@ class LokiLogsService(BaseLogsService):
                 end=end,
                 timestamps=timestamps,
                 prefix=prefix,
-                as_json=as_json,
+                as_ndjson=as_ndjson,
             ) as it:
                 async for chunk in it:
                     if not has_archive:
@@ -1936,7 +1942,7 @@ class LokiLogsService(BaseLogsService):
                 timestamps=timestamps,
                 debug=debug,
                 prefix=prefix,
-                as_json=as_json,
+                as_ndjson=as_ndjson,
             ):
                 yield chunk
 
@@ -1949,7 +1955,7 @@ class LokiLogsService(BaseLogsService):
         direction: str = "backward",  # or can be "forward"
         timestamps: bool = False,
         prefix: bool = False,
-        as_json: bool = False,
+        as_ndjson: bool = False,
     ) -> LogReader:
         # have another set of params unlike base method, need # type: ignore
         return LokiLogReader(
@@ -1960,7 +1966,7 @@ class LokiLogsService(BaseLogsService):
             direction=direction,
             timestamps=timestamps,
             prefix=prefix,
-            as_json=as_json,
+            as_ndjson=as_ndjson,
         )
 
     async def get_label_values(

@@ -620,9 +620,8 @@ class AppsMonitoringApiHandler:
         )
 
     @staticmethod
-    def _as_json(request: Request) -> bool:
-        content_type = request.headers.get("Content-Type")
-        if content_type and content_type.startswith("application/json"):
+    def _as_ndjson(request: Request) -> bool:
+        if "application/x-ndjson" in request.headers.get("Accept", "*/*"):
             return True
         return False
 
@@ -650,9 +649,12 @@ class AppsMonitoringApiHandler:
         response = StreamResponse(status=200)
         response.enable_chunked_encoding()
         response.enable_compression(aiohttp.web.ContentCoding.identity)
-        response.content_type = "text/plain"
         response.charset = "utf-8"
+        response.content_type = (
+            "application/x-ndjson" if self._as_ndjson(request) else "text/plain"
+        )
         response.headers["X-Separator"] = separator
+
         await response.prepare(request)
 
         loki_label_selector = self._get_loki_label_selector(app_instance)
@@ -671,7 +673,7 @@ class AppsMonitoringApiHandler:
             debug=debug,
             archive_delay_s=archive_delay_s,
             prefix=prefix,
-            as_json=self._as_json(request),
+            _as_ndjson=self._as_ndjson(request),
         ) as it:
             async for chunk in it:
                 await response.write(chunk)
@@ -714,7 +716,7 @@ class AppsMonitoringApiHandler:
             debug=debug,
             archive_delay_s=archive_delay_s,
             prefix=prefix,
-            as_json=self._as_json(request),
+            _as_ndjson=self._as_ndjson(request),
         ) as it:
             response = WebSocketResponse(
                 protocols=[WS_LOGS_PROTOCOL],

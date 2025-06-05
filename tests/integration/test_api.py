@@ -1628,7 +1628,7 @@ class TestAppsLogApi:
         assert actual_log == b""
 
     @staticmethod
-    def assert_archive_logs_as_json(
+    def assert_archive_logs_as_ndjson(
         actual_log: bytes,
         pod_name: str,
         namespace: str,
@@ -1638,9 +1638,7 @@ class TestAppsLogApi:
         logs_count_end: int,
         re_log_template: str,
     ) -> None:
-        actual_log_list = [
-            json.loads(obj) for obj in re.findall(rb"\{.*?\}", actual_log)
-        ]
+        actual_log_list = [json.loads(obj) for obj in actual_log.split(b"\n") if obj]
         for c_number in range(
             container_count_start, container_count_end + 1
         ):  # iterate over containers
@@ -1817,7 +1815,7 @@ class TestAppsLogApi:
         async with client.ws_connect(url_ws, headers=headers_, params=params) as ws:
             ws_actual_log = await self.read_ws(ws)
         assert actual_log == ws_actual_log
-        self.assert_archive_logs_as_json(
+        self.assert_archive_logs_as_ndjson(
             actual_log=actual_log,
             pod_name=pod_name,
             namespace=kube_client.namespace,
@@ -1838,7 +1836,7 @@ class TestAppsLogApi:
         async with client.ws_connect(url_ws, headers=headers_, params=params) as ws:
             ws_actual_log = await self.read_ws(ws)
         assert actual_log == ws_actual_log
-        self.assert_archive_logs_as_json(
+        self.assert_archive_logs_as_ndjson(
             actual_log=actual_log,
             pod_name=pod_name,
             namespace=kube_client.namespace,
@@ -1860,7 +1858,7 @@ class TestAppsLogApi:
         async with client.ws_connect(url_ws, headers=headers_, params=params) as ws:
             ws_actual_log = await self.read_ws(ws)
         assert actual_log == ws_actual_log
-        self.assert_archive_logs_as_json(
+        self.assert_archive_logs_as_ndjson(
             actual_log=actual_log,
             pod_name=pod_name,
             namespace=kube_client.namespace,
