@@ -6,6 +6,7 @@ from typing import Any
 from unittest import mock
 
 import pytest
+from apolo_api_client import ApiClient
 from neuro_config_client import (
     Cluster,
     ClusterStatus,
@@ -18,7 +19,6 @@ from neuro_config_client import (
 from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
 from platform_monitoring.jobs_service import JobsService
 from platform_monitoring.kube_client import KubeClient, Node, Pod
-from platform_monitoring.platform_api_client import ApiClient
 
 
 def create_node(

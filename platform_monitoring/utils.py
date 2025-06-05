@@ -5,8 +5,7 @@ from datetime import datetime
 from typing import Any, TypeVar
 
 import iso8601
-
-from .platform_api_client import Job
+from apolo_api_client import Job, JobStatus
 
 
 T_co = TypeVar("T_co", covariant=True)
@@ -26,13 +25,13 @@ def asyncgeneratorcontextmanager(
 
 class JobsHelper:
     def is_job_running(self, job: Job) -> bool:
-        return job.status == Job.Status.RUNNING
+        return job.status == JobStatus.RUNNING
 
     def is_job_finished(self, job: Job) -> bool:
         return job.status in (
-            Job.Status.SUCCEEDED,
-            Job.Status.FAILED,
-            Job.Status.CANCELLED,
+            JobStatus.SUCCEEDED,
+            JobStatus.FAILED,
+            JobStatus.CANCELLED,
         )
 
 

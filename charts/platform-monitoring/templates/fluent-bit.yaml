@@ -1,3 +1,4 @@
+{{- if list "es" "s3" | has .Values.logs.persistence.type }}
 {{- $configPattern := "files/fluent-bit/*" }}
 {{- $config := tpl (.Files.Glob $configPattern).AsConfig . }}
 apiVersion: v1
@@ -57,7 +58,7 @@ spec:
         volumeMounts:
         - mountPath: /var/log
           name: varlog
-        {{- if eq .Values.containerRuntime.name "docker" }}
+        {{- if eq .Values.fluentbit.containerRuntime.name "docker" }}
         - mountPath: /var/lib/docker/containers
           name: varlibdockercontainers
           readOnly: true
@@ -81,7 +82,7 @@ spec:
         hostPath:
           path: /var/log
           type: ""
-      {{- if eq .Values.containerRuntime.name "docker" }}
+      {{- if eq .Values.fluentbit.containerRuntime.name "docker" }}
       - name: varlibdockercontainers
         hostPath:
           path: /var/lib/docker/containers
@@ -106,3 +107,4 @@ spec:
       {{- if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName }}
       {{- end }}
+{{- end }}

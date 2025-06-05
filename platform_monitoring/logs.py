@@ -1134,10 +1134,6 @@ class LogsService(abc.ABC):
     ) -> LogReader:
         pass  # pragma: no cover
 
-    @abc.abstractmethod
-    async def drop_logs(self, pod_name: str) -> None:
-        pass  # pragma: no cover
-
 
 class BaseLogsService(LogsService):
     count = 0
@@ -1207,10 +1203,6 @@ class ElasticsearchLogsService(BaseLogsService):
             timestamps=timestamps,
         )
 
-    async def drop_logs(self, pod_name: str) -> None:
-        msg = "Dropping logs for Elasticsearch is not implemented"
-        raise NotImplementedError(msg)
-
 
 class S3LogsService(BaseLogsService):
     def __init__(
@@ -1247,11 +1239,6 @@ class S3LogsService(BaseLogsService):
             timestamps=timestamps,
             debug=debug,
         )
-
-    @trace
-    async def drop_logs(self, pod_name: str) -> None:
-        keys = await self._metadata_service.get_log_keys(pod_name)
-        await self._delete_keys(keys)
 
     @trace
     async def compact_all(
@@ -1861,6 +1848,3 @@ class LokiLogsService(BaseLogsService):
         )
 
         return result.get("data", [])
-
-    async def drop_logs(self, pod_name: str) -> None:
-        pass

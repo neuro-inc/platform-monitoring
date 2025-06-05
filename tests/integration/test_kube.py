@@ -1012,38 +1012,6 @@ class TestLogReader:
             expected_payload=expected_payload * 2,
         )
 
-    async def test_s3_logs_cleanup(
-        self,
-        kube_client: MyKubeClient,
-        job_pod: MyPodDescriptor,
-        s3_client: AioBaseClient,
-        s3_logs_metadata_service: S3LogsMetadataService,
-    ) -> None:
-        command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
-        expected_payload = ("\n".join(str(i) for i in range(1, 6)) + "\n").encode()
-        job_pod.set_command(command)
-        await kube_client.create_pod(job_pod.payload)
-        await kube_client.wait_pod_is_terminated(job_pod.name)
-
-        await self._check_s3_logs(
-            s3_client=s3_client,
-            metadata_service=s3_logs_metadata_service,
-            pod_name=job_pod.name,
-            expected_payload=expected_payload,
-        )
-
-        service = S3LogsService(kube_client, s3_client, s3_logs_metadata_service)
-
-        await service.drop_logs(job_pod.name)
-
-        await self._check_s3_logs(
-            s3_client=s3_client,
-            metadata_service=s3_logs_metadata_service,
-            pod_name=job_pod.name,
-            expected_payload=b"",
-            timeout_s=1,
-        )
-
     async def _check_kube_logs(
         self,
         *,
