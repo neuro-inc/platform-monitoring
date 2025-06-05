@@ -673,7 +673,7 @@ class AppsMonitoringApiHandler:
             debug=debug,
             archive_delay_s=archive_delay_s,
             prefix=prefix,
-            _as_ndjson=self._as_ndjson(request),
+            as_ndjson=self._as_ndjson(request),
         ) as it:
             async for chunk in it:
                 await response.write(chunk)
@@ -716,7 +716,7 @@ class AppsMonitoringApiHandler:
             debug=debug,
             archive_delay_s=archive_delay_s,
             prefix=prefix,
-            _as_ndjson=self._as_ndjson(request),
+            as_ndjson=self._as_ndjson(request),
         ) as it:
             response = WebSocketResponse(
                 protocols=[WS_LOGS_PROTOCOL],
