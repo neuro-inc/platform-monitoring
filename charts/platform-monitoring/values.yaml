@@ -5,7 +5,6 @@ image:
 imagePullSecrets: []
 
 containerRuntime:
-  name: containerd # docker, cri-o
   port: 9000
 
 replicas: 2
@@ -74,6 +73,8 @@ fluentbit:
   taildb:
     directory: /var/lib/platform-monitoring-fluent-bit
   logLevel: info
+  containerRuntime:
+    name: containerd # docker, cri-o
 
 logs:
   cleanup_interval_sec: 900
@@ -94,9 +95,9 @@ logs:
 
     keySecret: ""
 
-    es:
-      host: elasticsearch
-      port: 9200
+    # es:
+    #   host: elasticsearch
+    #   port: 9200
 
     # s3:
     #   region: us-east-1

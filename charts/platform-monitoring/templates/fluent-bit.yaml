@@ -58,7 +58,7 @@ spec:
         volumeMounts:
         - mountPath: /var/log
           name: varlog
-        {{- if eq .Values.containerRuntime.name "docker" }}
+        {{- if eq .Values.fluentbit.containerRuntime.name "docker" }}
         - mountPath: /var/lib/docker/containers
           name: varlibdockercontainers
           readOnly: true
@@ -82,7 +82,7 @@ spec:
         hostPath:
           path: /var/log
           type: ""
-      {{- if eq .Values.containerRuntime.name "docker" }}
+      {{- if eq .Values.fluentbit.containerRuntime.name "docker" }}
       - name: varlibdockercontainers
         hostPath:
           path: /var/lib/docker/containers
