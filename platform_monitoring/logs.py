@@ -18,9 +18,10 @@ from collections.abc import (
 from contextlib import AbstractAsyncContextManager, aclosing, suppress
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
+from itertools import islice
 from pathlib import Path
 from types import TracebackType
-from typing import IO, Any, Self, cast
+from typing import IO, Any, NamedTuple, Self, cast
 
 import aiohttp
 import botocore.exceptions
@@ -41,6 +42,11 @@ from .utils import asyncgeneratorcontextmanager, parse_date
 
 
 logger = logging.getLogger(__name__)
+
+
+class TimeInterval(NamedTuple):
+    start_ts: int
+    end_ts: int
 
 
 DEFAULT_ARCHIVE_DELAY = 3.0 * 60
@@ -1441,21 +1447,34 @@ class LokiLogReader(LogReader):
         loki_client: LokiClient,
         query: str,
         *,
-        start: str | int,
-        end: str | int | None = None,
-        direction: str = "forward",
+        start: int,
+        end: int | None = None,
+        direction: str = "forward",  # or can be "backward"
         timestamps: bool = False,
         prefix: bool = False,
+        as_ndjson: bool = False,
+        split_time_range_count: int = 25,
+        concurrent_factor: int = 5,
     ) -> None:
         super().__init__(timestamps=timestamps)
 
         self._loki_client = loki_client
         self._query = query
         self._start = start
-        self._end = end
+        self._end = end or int(datetime.now(UTC).timestamp()) * 1_000_000_000
         self._direction = direction
         self._prefix = prefix
         self._iterator: AsyncIterator[bytes] | None = None
+        self._as_ndjson = as_ndjson
+
+        # intervals count that will be splited from start to end.
+        # Works only if greater than 1
+        self._split_time_range_count = split_time_range_count
+        # how many tasks run at the same time if split_time_range_count is used
+        if concurrent_factor < 1:
+            exc_txt = "concurrent_factor must be greater than 0"
+            raise ValueError(exc_txt)
+        self._concurrent_factor = concurrent_factor
 
     async def __aenter__(self) -> AsyncIterator[bytes]:
         self._iterator = self._iterate()
@@ -1470,24 +1489,112 @@ class LokiLogReader(LogReader):
 
         if log[-1] != "\n":
             log = f"{log}\n"
+
+        stream = log_data[2]
+
         if self._timestamps:
             log_dt = datetime.fromtimestamp(int(log_data[0]) / 1_000_000_000, tz=UTC)
             log = f"{log_dt.strftime('%Y-%m-%dT%H:%M:%S.%f')}Z {log}"
         if self._prefix:
-            stream = log_data[2]
             log = f"{stream['pod']}/{stream['container']} {log}"
+
+        if self._as_ndjson:
+            return (
+                orjson.dumps(
+                    {
+                        "container": stream["container"],
+                        "log": log,
+                        "pod": stream["pod"],
+                        "namespace": stream["namespace"],
+                    }
+                )
+                + b"\n"  # bring to ndjson format
+            )
 
         return log.encode()
 
+    def _split_time_range(
+        self, start_ts: int, end_ts: int, count: int = 25
+    ) -> Iterable[TimeInterval]:
+        if start_ts >= end_ts:
+            exc_txt = "start_ts must be less than end_ts"
+            raise ValueError(exc_txt)
+
+        if count < 2:
+            return [TimeInterval(start_ts, end_ts)]
+
+        intervals = []
+        time_range_duration = end_ts - start_ts
+        interval_delta = time_range_duration // count
+
+        for i in range(count):
+            current_ts = start_ts + i * interval_delta
+            next_ts = start_ts + (i + 1) * interval_delta
+            if i == count - 1:
+                next_ts = end_ts
+            intervals.append(TimeInterval(current_ts, next_ts))
+
+        if self._direction == "forward":
+            return intervals
+        return reversed(intervals)
+
+    @staticmethod
+    async def _consume_iter(
+        iterable: AsyncIterator[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        res = []
+        async for data in iterable:
+            res.append(data)
+        return res
+
+    async def _run_concurrently(
+        self, *gens: AsyncIterator[dict[str, Any]]
+    ) -> AsyncIterator[list[dict[str, Any]]]:
+        """
+        Sequentially iterate over multiple generators that run concurrently
+        by n tasks (defined as self._concurrent_factor)
+        """
+
+        async with asyncio.TaskGroup() as tg:
+            gens_iter = iter(gens)
+            while True:
+                tasks = [
+                    tg.create_task(self._consume_iter(gen))
+                    for gen in islice(gens_iter, self._concurrent_factor)
+                ]
+
+                if not tasks:
+                    break
+
+                for task in tasks:
+                    ret = await task
+                    yield ret
+
     async def _iterate(self) -> AsyncIterator[bytes]:
-        async for res in self._loki_client.query_range_page_iterate(
-            query=self._query,
-            start=self._start,
-            end=self._end,
-            direction=self._direction,
+        split_time_range_count = self._split_time_range_count
+        if self._end - self._start < 25 * 60 * 60 * 1_000_000_000:
+            # If the time range is less than 25 hours no need
+            # to split into multiple intervals, make one query
+            split_time_range_count = 1
+
+        async for data in self._run_concurrently(
+            *[
+                self._loki_client.query_range_page_iterate(
+                    query=self._query,
+                    start=split_interval.start_ts,
+                    end=split_interval.end_ts,
+                    direction=self._direction,
+                )
+                for split_interval in self._split_time_range(
+                    self._start,
+                    self._end,
+                    split_time_range_count,
+                )
+            ]
         ):
-            for log_data in res["data"]["result"]:
-                yield self.encode_and_handle_log(log_data)
+            for res in data:
+                for log_data in res["data"]["result"]:
+                    yield self.encode_and_handle_log(log_data)
 
 
 class LokiLogsService(BaseLogsService):
@@ -1570,6 +1677,7 @@ class LokiLogsService(BaseLogsService):
                 start=start,
                 end=end,
                 timestamps=timestamps,
+                direction="forward",
             ) as it:
                 async for chunk in it:
                     has_archive = True
@@ -1620,6 +1728,7 @@ class LokiLogsService(BaseLogsService):
         timestamps: bool = False,
         debug: bool = False,
         prefix: bool = True,
+        as_ndjson: bool = False,
     ) -> AsyncIterator[bytes]:
         try:
             while True:
@@ -1645,6 +1754,20 @@ class LokiLogsService(BaseLogsService):
                     async for chunk in it:
                         if prefix:
                             chunk = f"[{pod_name}/{container_name}] ".encode() + chunk
+
+                        if as_ndjson:
+                            chunk = (
+                                orjson.dumps(
+                                    {
+                                        "pod": pod_name,
+                                        "container": container_name,
+                                        "log": chunk.decode(),
+                                        "namespace": namespace,
+                                    }
+                                )
+                                + b"\n"  # bring to ndjson format
+                            )
+
                         yield chunk
 
                 if not status.can_restart:
@@ -1675,6 +1798,7 @@ class LokiLogsService(BaseLogsService):
         timestamps: bool = False,
         debug: bool = False,
         prefix: bool = True,
+        as_ndjson: bool = False,
     ) -> AsyncIterator[bytes]:
         label_selector = ",".join(
             f"{key}={value}" for key, value in k8s_label_selector.items()
@@ -1694,6 +1818,7 @@ class LokiLogsService(BaseLogsService):
                     timestamps=timestamps,
                     debug=debug,
                     prefix=prefix,
+                    as_ndjson=as_ndjson,
                 )
                 for pod in pods
                 if pod.metadata.name
@@ -1742,6 +1867,7 @@ class LokiLogsService(BaseLogsService):
         archive_delay_s: float = 5,
         debug: bool = False,
         prefix: bool = False,
+        as_ndjson: bool = False,
     ) -> AsyncGenerator[bytes]:
         containers = containers or []
         loki_label_selector = loki_label_selector or {}
@@ -1783,6 +1909,7 @@ class LokiLogsService(BaseLogsService):
                 end=end,
                 timestamps=timestamps,
                 prefix=prefix,
+                as_ndjson=as_ndjson,
             ) as it:
                 async for chunk in it:
                     if not has_archive:
@@ -1802,6 +1929,7 @@ class LokiLogsService(BaseLogsService):
                 timestamps=timestamps,
                 debug=debug,
                 prefix=prefix,
+                as_ndjson=as_ndjson,
             ):
                 yield chunk
 
@@ -1809,11 +1937,12 @@ class LokiLogsService(BaseLogsService):
         self,
         query: str,
         *,
-        start: str | int,
-        end: str | int | None = None,
-        direction: str = "forward",
+        start: int,
+        end: int | None = None,
+        direction: str = "forward",  # or can be "backward"
         timestamps: bool = False,
         prefix: bool = False,
+        as_ndjson: bool = False,
     ) -> LogReader:
         # have another set of params unlike base method, need # type: ignore
         return LokiLogReader(
@@ -1824,6 +1953,7 @@ class LokiLogsService(BaseLogsService):
             direction=direction,
             timestamps=timestamps,
             prefix=prefix,
+            as_ndjson=as_ndjson,
         )
 
     async def get_label_values(

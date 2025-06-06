@@ -1518,6 +1518,7 @@ def _get_app_mock(
             org_name=regular_user1.org_name,
             project_name=regular_user1.project_name,
             namespace=kube_client.namespace,
+            created_at=datetime.now(UTC) - timedelta(days=1),
         )
 
     monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
@@ -1570,8 +1571,40 @@ class TestAppsLogApi:
                     .encode()
                 )
                 actual_log, replace_count = log_pattern.subn(b"", actual_log)
-                # assert replace_count == 1
-        # assert actual_log == b""
+                assert replace_count == 1
+        assert actual_log == b""
+
+    @staticmethod
+    def assert_archive_logs_as_ndjson(
+        actual_log: bytes,
+        pod_name: str,
+        namespace: str,
+        container_count_start: int,
+        container_count_end: int,
+        logs_count_start: int,
+        logs_count_end: int,
+        re_log_template: str,
+    ) -> None:
+        actual_log_list = [json.loads(obj) for obj in actual_log.split(b"\n") if obj]
+        for c_number in range(
+            container_count_start, container_count_end + 1
+        ):  # iterate over containers
+            for l_number in range(
+                logs_count_start, logs_count_end + 1
+            ):  # iterate over logs
+                log_pattern = re.compile(
+                    re_log_template.replace("[c_number]", str(c_number))
+                    .replace("[l_number]", str(l_number))
+                    .replace("[time]", r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{,9}Z")
+                )
+                log = next(
+                    filter(lambda x: log_pattern.match(x["log"]), actual_log_list)
+                )
+                assert log["pod"] == pod_name
+                assert log["namespace"] == namespace
+                assert log["container"] == f"container{c_number}"
+                actual_log_list.remove(log)
+        assert actual_log_list == []
 
     @pytest.mark.usefixtures("_get_app_mock")
     async def test_apps_only_loki_log(
@@ -1636,7 +1669,7 @@ class TestAppsLogApi:
             container_count_end=2,
             logs_count_start=1,
             logs_count_end=5,
-            re_log_template=rf"\[{pod_name}/container[c_number]\] "
+            re_log_template=rf"{pod_name}/container[c_number] "
             f"container[c_number]_[l_number]\n",
         )
 
@@ -1705,7 +1738,7 @@ class TestAppsLogApi:
         params["since"] = (finished_at - timedelta(seconds=2)).strftime(
             "%Y-%m-%dT%H:%M:%SZ"
         )
-        params["containers"] = "container2"
+        params["container"] = "container2"
         async with client.get(url, headers=headers, params=params) as response:
             actual_log = await response.read()
         async with client.ws_connect(url_ws, headers=headers, params=params) as ws:
@@ -1718,6 +1751,69 @@ class TestAppsLogApi:
             logs_count_start=4,
             logs_count_end=5,
             re_log_template=r"container[c_number]_[l_number]\n",
+        )
+
+        # test with Accept header application/x-ndjson
+        params = base_params.copy()
+        headers_ = headers.copy()
+        headers_["Accept"] = "application/x-ndjson"
+        async with client.get(url, headers=headers_, params=params) as response:
+            actual_log = await response.read()
+        async with client.ws_connect(url_ws, headers=headers_, params=params) as ws:
+            ws_actual_log = await self.read_ws(ws)
+        assert actual_log == ws_actual_log
+        self.assert_archive_logs_as_ndjson(
+            actual_log=actual_log,
+            pod_name=pod_name,
+            namespace=kube_client.namespace,
+            container_count_start=1,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=r"container[c_number]_[l_number]\n",
+        )
+
+        # test with Accept header application/x-ndjson and prefix
+        params = base_params.copy()
+        params["prefix"] = "true"
+        headers_ = headers.copy()
+        headers_["Accept"] = "application/x-ndjson"
+        async with client.get(url, headers=headers_, params=params) as response:
+            actual_log = await response.read()
+        async with client.ws_connect(url_ws, headers=headers_, params=params) as ws:
+            ws_actual_log = await self.read_ws(ws)
+        assert actual_log == ws_actual_log
+        self.assert_archive_logs_as_ndjson(
+            actual_log=actual_log,
+            pod_name=pod_name,
+            namespace=kube_client.namespace,
+            container_count_start=1,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=rf"{pod_name}/container[c_number] "
+            f"container[c_number]_[l_number]\n",
+        )
+
+        # test with Accept header application/x-ndjson and timestamps
+        params = base_params.copy()
+        params["timestamps"] = "true"
+        headers_ = headers.copy()
+        headers_["Accept"] = "application/x-ndjson"
+        async with client.get(url, headers=headers_, params=params) as response:
+            actual_log = await response.read()
+        async with client.ws_connect(url_ws, headers=headers_, params=params) as ws:
+            ws_actual_log = await self.read_ws(ws)
+        assert actual_log == ws_actual_log
+        self.assert_archive_logs_as_ndjson(
+            actual_log=actual_log,
+            pod_name=pod_name,
+            namespace=kube_client.namespace,
+            container_count_start=1,
+            container_count_end=2,
+            logs_count_start=1,
+            logs_count_end=5,
+            re_log_template=r"[time] container[c_number]_[l_number]\n",
         )
 
     @pytest.mark.usefixtures("_get_app_mock")

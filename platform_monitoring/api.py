@@ -614,6 +614,12 @@ class AppsMonitoringApiHandler:
             list(set(loki_containers_task.result() + k8s_containers_task.result()))
         )
 
+    @staticmethod
+    def _as_ndjson(request: Request) -> bool:
+        if "application/x-ndjson" in request.headers.get("Accept", "*/*"):
+            return True
+        return False
+
     async def stream_log(self, request: Request) -> StreamResponse:
         app_instance = await self._resolve_app_instance(request=request)
 
@@ -629,24 +635,32 @@ class AppsMonitoringApiHandler:
             request.query.get("archive_delay", self.get_archive_delay())
         )
 
-        since = parse_date(since_str) if since_str else None
-        separator = request.query.get("separator")
+        since = (
+            max(parse_date(since_str), app_instance.created_at)
+            if since_str
+            else app_instance.created_at
+        )
 
+        separator = request.query.get("separator")
         if separator is None:
             separator = "=== Live logs ===" + _getrandbytes(30).hex()
 
         response = StreamResponse(status=200)
         response.enable_chunked_encoding()
         response.enable_compression(aiohttp.web.ContentCoding.identity)
-        response.content_type = "text/plain"
+        response.content_type = (
+            "application/x-ndjson" if self._as_ndjson(request) else "text/plain"
+        )
         response.charset = "utf-8"
         response.headers["X-Separator"] = separator
+
         await response.prepare(request)
 
         loki_label_selector = self._get_loki_label_selector(app_instance)
         k8s_label_selector = self._get_k8s_label_selector(app_instance)
 
         assert isinstance(self._logs_service, LokiLogsService)
+
         async with self._logs_service.get_pod_log_reader_by_containers(
             containers,
             loki_label_selector,
@@ -658,6 +672,7 @@ class AppsMonitoringApiHandler:
             debug=debug,
             archive_delay_s=archive_delay_s,
             prefix=prefix,
+            as_ndjson=self._as_ndjson(request),
         ) as it:
             async for chunk in it:
                 await response.write(chunk)
@@ -679,7 +694,12 @@ class AppsMonitoringApiHandler:
             request.query.get("archive_delay", self.get_archive_delay())
         )
 
-        since = parse_date(since_str) if since_str else None
+        since = (
+            max(parse_date(since_str), app_instance.created_at)
+            if since_str
+            else app_instance.created_at
+        )
+
         separator = request.query.get("separator")
         if separator is None:
             separator = "=== Live logs ===" + _getrandbytes(30).hex()
@@ -699,6 +719,7 @@ class AppsMonitoringApiHandler:
             debug=debug,
             archive_delay_s=archive_delay_s,
             prefix=prefix,
+            as_ndjson=self._as_ndjson(request),
         ) as it:
             response = WebSocketResponse(
                 protocols=[WS_LOGS_PROTOCOL],
