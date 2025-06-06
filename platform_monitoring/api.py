@@ -649,10 +649,10 @@ class AppsMonitoringApiHandler:
         response = StreamResponse(status=200)
         response.enable_chunked_encoding()
         response.enable_compression(aiohttp.web.ContentCoding.identity)
-        response.charset = "utf-8"
         response.content_type = (
             "application/x-ndjson" if self._as_ndjson(request) else "text/plain"
         )
+        response.charset = "utf-8"
         response.headers["X-Separator"] = separator
 
         await response.prepare(request)
