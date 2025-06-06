@@ -1572,7 +1572,7 @@ def _get_app_mock(
             org_name=regular_user1.org_name,
             project_name=regular_user1.project_name,
             namespace=kube_client.namespace,
-            created_at=datetime.now(UTC),
+            created_at=datetime.now(UTC) - timedelta(days=1),
         )
 
     monkeypatch.setattr(AppsApiClient, "get_app", mock_get_app)
