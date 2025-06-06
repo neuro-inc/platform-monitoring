@@ -1462,7 +1462,7 @@ class LokiLogReader(LogReader):
         *,
         start: int,
         end: int | None = None,
-        direction: str = "backward",  # or can be "forward"
+        direction: str = "forward",  # or can be "backward"
         timestamps: bool = False,
         prefix: bool = False,
         as_ndjson: bool = False,
@@ -1500,6 +1500,9 @@ class LokiLogReader(LogReader):
     def encode_and_handle_log(self, log_data: list[Any]) -> bytes:
         log = orjson.loads(log_data[1])["_entry"]
 
+        if log[-1] != "\n":
+            log = f"{log}\n"
+
         stream = log_data[2]
 
         if self._timestamps:
@@ -1518,7 +1521,7 @@ class LokiLogReader(LogReader):
                         "namespace": stream["namespace"],
                     }
                 )
-                # + b"\n"  # bring to ndjson format
+                + b"\n"  # bring to ndjson format
             )
 
         return log.encode()
@@ -1603,10 +1606,8 @@ class LokiLogReader(LogReader):
             ]
         ):
             for res in data:
-                yield b"\n".join(
-                    self.encode_and_handle_log(log_data)
-                    for log_data in res["data"]["result"]
-                )
+                for log_data in res["data"]["result"]:
+                    yield self.encode_and_handle_log(log_data)
 
 
 class LokiLogsService(BaseLogsService):
@@ -1951,7 +1952,7 @@ class LokiLogsService(BaseLogsService):
         *,
         start: int,
         end: int | None = None,
-        direction: str = "backward",  # or can be "forward"
+        direction: str = "forward",  # or can be "backward"
         timestamps: bool = False,
         prefix: bool = False,
         as_ndjson: bool = False,

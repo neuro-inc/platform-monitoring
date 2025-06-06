@@ -640,9 +640,13 @@ class AppsMonitoringApiHandler:
             request.query.get("archive_delay", self.get_archive_delay())
         )
 
-        since = parse_date(since_str) if since_str else None
-        separator = request.query.get("separator")
+        since = (
+            max(parse_date(since_str), app_instance.created_at)
+            if since_str
+            else app_instance.created_at
+        )
 
+        separator = request.query.get("separator")
         if separator is None:
             separator = "=== Live logs ===" + _getrandbytes(30).hex()
 
@@ -695,7 +699,12 @@ class AppsMonitoringApiHandler:
             request.query.get("archive_delay", self.get_archive_delay())
         )
 
-        since = parse_date(since_str) if since_str else None
+        since = (
+            max(parse_date(since_str), app_instance.created_at)
+            if since_str
+            else app_instance.created_at
+        )
+
         separator = request.query.get("separator")
         if separator is None:
             separator = "=== Live logs ===" + _getrandbytes(30).hex()

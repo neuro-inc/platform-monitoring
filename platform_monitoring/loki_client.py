@@ -106,7 +106,7 @@ class LokiClient:
         query: str,
         start: str | int,
         end: str | int | None = None,
-        direction: str = "backward",
+        direction: str = "forward",
         limit: int = 5000,
         add_stream_to_log_entries: bool = True,
     ) -> dict[str, Any]:
@@ -142,7 +142,7 @@ class LokiClient:
         query: str,
         start: str | int,
         end: str | int | None = None,
-        direction: str = "backward",  # or can be "forward"
+        direction: str = "forward",  # or can be "backward"
         limit: int = 5000,
     ) -> AsyncIterator[dict[str, Any]]:
         while True:
