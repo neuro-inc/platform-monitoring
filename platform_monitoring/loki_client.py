@@ -107,7 +107,7 @@ class LokiClient:
         start: str | int,
         end: str | int | None = None,
         direction: str = "forward",
-        limit: int = 100,
+        limit: int = 5000,
         add_stream_to_log_entries: bool = True,
     ) -> dict[str, Any]:
         params = self._build_params(
@@ -115,6 +115,7 @@ class LokiClient:
         )
 
         url = str(self._query_range_url)
+
         result = await self._request(method="GET", url=url, params=params)
 
         # add stream data to each log entry
@@ -141,8 +142,8 @@ class LokiClient:
         query: str,
         start: str | int,
         end: str | int | None = None,
-        direction: str = "forward",
-        limit: int = 100,
+        direction: str = "forward",  # or can be "backward"
+        limit: int = 5000,
     ) -> AsyncIterator[dict[str, Any]]:
         while True:
             response = await self.query_range(
@@ -152,6 +153,7 @@ class LokiClient:
                 limit=limit,
                 direction=direction,
             )
+
             yield response
 
             if response["data"]["stats"]["summary"]["totalEntriesReturned"] < limit:

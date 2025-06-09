@@ -1,9 +1,12 @@
 from dataclasses import dataclass
+from datetime import datetime
 from types import TracebackType
 from typing import Any
 
 import aiohttp
 from yarl import URL
+
+from .utils import parse_date
 
 
 @dataclass(frozen=True)
@@ -13,6 +16,7 @@ class AppInstance:
     org_name: str
     project_name: str
     namespace: str
+    created_at: datetime
 
 
 class AppsApiException(Exception):
@@ -29,6 +33,7 @@ def _create_app_instance(payload: dict[str, Any]) -> AppInstance:
         org_name=payload["org_name"],
         project_name=payload["project_name"],
         namespace=payload["namespace"],
+        created_at=parse_date(payload["created_at"]),
     )
 
 
