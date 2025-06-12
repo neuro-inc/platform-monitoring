@@ -922,7 +922,7 @@ class LogsService(abc.ABC):
         namespace: str,
         *,
         since: datetime | None = None,
-        separator: str | bytes | None = None,
+        separator: bytes | None = None,
         timestamps: bool = False,
         timeout_s: float = 10.0 * 60,
         interval_s: float = 1.0,
@@ -1049,8 +1049,6 @@ class LogsService(abc.ABC):
 
         if not has_archive:
             separator = None
-        if isinstance(separator, str):
-            separator = separator.encode()
 
         try:
             if start is None:
@@ -1878,7 +1876,7 @@ class LokiLogsService(BaseLogsService):
         namespace: str,
         *,
         since: datetime | None = None,
-        separator: str | bytes | None = None,
+        separator: bytes | None = None,
         timestamps: bool = False,
         archive_delay_s: float = 5,
         debug: bool = False,
@@ -1934,8 +1932,6 @@ class LokiLogsService(BaseLogsService):
 
         if not has_archive:
             separator = None
-        if isinstance(separator, str):
-            separator = separator.encode()
 
         if should_get_live_logs:
             async for chunk in self.get_pod_containers_live_log_reader(
