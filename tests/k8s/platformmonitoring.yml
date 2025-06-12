@@ -19,8 +19,8 @@ spec:
     spec:
       containers:
       - name: platform-monitoring
-        image: ghcr.io/neuro-inc/platformmonitoringapi:latest
-        imagePullPolicy: IfNotPresent  # Always
+        image: docker.io/library/platformmonitoring:tests
+        imagePullPolicy: "IfNotPresent"
         env:
         - name: NP_MONITORING_CLUSTER_NAME
           value: default

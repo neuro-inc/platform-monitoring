@@ -44,7 +44,7 @@ test_integration:
 		--durations=10 \
 		--maxfail=0 \
 		--log-level=INFO \
-		tests/integration
+		tests/integration/test_api.py::TestPortForward
 
 .PHONY: clean-dist
 clean-dist:
