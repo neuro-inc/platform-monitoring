@@ -832,9 +832,6 @@ class KubeClient:
         self._assert_resource_kind("PodList", payload)
         pod_list = ListResult.from_primitive(payload, resource_cls=Pod)
         return pod_list.items
-        payload = await self._request(method="get", url=self._pods_url, params=params)
-        self._assert_resource_kind("PodList", payload)
-        return [Pod(p) for p in payload["items"]]
 
     async def get_node(self, name: str) -> Node:
         payload = await self._request(method="get", url=self._generate_node_url(name))
@@ -849,8 +846,6 @@ class KubeClient:
         self._assert_resource_kind("NodeList", payload)
         node_list = ListResult.from_primitive(payload, resource_cls=Node)
         return node_list.items
-        self._assert_resource_kind("NodeList", payload)
-        return [Node(item) for item in payload["items"]]
 
     async def _check_response_status(
         self, response: aiohttp.ClientResponse, job_id: str | None = None
@@ -873,7 +868,8 @@ class KubeClient:
             msg = f"unknown kind: {kind}"
             raise ValueError(msg)
 
-    def _raise_for_status(self, payload: JSON, job_id: str | None = None) -> t.NoReturn:  # noqa: C901
+    @staticmethod
+    def _raise_for_status(payload: JSON, job_id: str | None = None) -> t.NoReturn:  # noqa: C901
         code = payload["code"]
         reason = payload.get("reason")
         if code == 400 and job_id:
@@ -988,14 +984,16 @@ class StatsSummary:
         self._validate_payload(payload)
         self._payload = payload
 
-    def _validate_payload(self, payload: dict[str, t.Any]) -> None:
+    @staticmethod
+    def _validate_payload(payload: dict[str, t.Any]) -> None:
         if "pods" not in payload:
             err_msg = "Invalid stats summary response"
             logging.error("%s: `%s`", err_msg, payload)
             raise JobError(err_msg)
 
+    @staticmethod
     def _find_pod_in_stats_summary(
-        self, stats_summary: dict[str, t.Any], namespace_name: str, name: str
+        stats_summary: dict[str, t.Any], namespace_name: str, name: str
     ) -> dict[str, t.Any]:
         for pod_stats in stats_summary["pods"]:
             ref = pod_stats["podRef"]
@@ -1003,8 +1001,9 @@ class StatsSummary:
                 return pod_stats
         return {}
 
+    @staticmethod
     def _find_container_in_pod_stats(
-        self, pod_stats: dict[str, t.Any], name: str
+        pod_stats: dict[str, t.Any], name: str
     ) -> dict[str, t.Any]:
         containers = pod_stats.get("containers") or []
         for container_stats in containers:
@@ -1043,7 +1042,10 @@ class KubeTelemetry(Telemetry):
         self._container_name = container_name
 
     async def get_latest_stats(self) -> JobStats | None:
-        pod = await self._kube_client.get_pod(self._pod_name)
+        pod = await self._kube_client.get_pod(
+            self._pod_name,
+            self._namespace_name,
+        )
         if not pod.spec.node_name:
             return None
         if pod.resource_requests.has_gpu:
@@ -1052,7 +1054,10 @@ class KubeTelemetry(Telemetry):
 
     async def _get_latest_cpu_pod_stats(self, node_name: str) -> JobStats | None:
         pod_stats = await self._kube_client.get_pod_container_stats(
-            node_name, self._pod_name, self._container_name
+            node_name,
+            self._pod_name,
+            self._container_name,
+            namespace=self._namespace_name,
         )
         if not pod_stats:
             return None
@@ -1061,12 +1066,18 @@ class KubeTelemetry(Telemetry):
     async def _get_latest_gpu_pod_stats(self, node_name: str) -> JobStats | None:
         pod_stats_task = asyncio.create_task(
             self._kube_client.get_pod_container_stats(
-                node_name, self._pod_name, self._container_name
+                node_name,
+                self._pod_name,
+                self._container_name,
+                namespace=self._namespace_name,
             )
         )
         pod_gpu_stats_task = asyncio.create_task(
             self._kube_client.get_pod_container_gpu_stats(
-                node_name, self._pod_name, self._container_name
+                node_name,
+                self._pod_name,
+                self._container_name,
+                namespace=self._namespace_name,
             )
         )
         await asyncio.wait(

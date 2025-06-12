@@ -982,7 +982,7 @@ class LogsService(abc.ABC):
                                 until = start
                             else:
                                 first = await self.get_first_log_entry_time(
-                                    pod_name, timeout_s=archive_delay_s
+                                    pod_name, namespace, timeout_s=archive_delay_s
                                 )
                                 if (
                                     first
@@ -1023,7 +1023,7 @@ class LogsService(abc.ABC):
                             until = start
                             continue
                         first = await self.get_first_log_entry_time(
-                            pod_name, timeout_s=archive_delay_s
+                            pod_name, namespace, timeout_s=archive_delay_s
                         )
                         if first is not None:
                             if first > until:
@@ -1053,7 +1053,11 @@ class LogsService(abc.ABC):
         try:
             if start is None:
                 status = await self.wait_pod_is_running(
-                    pod_name, start, timeout_s=timeout_s, interval_s=interval_s
+                    pod_name,
+                    start,
+                    namespace=namespace,
+                    timeout_s=timeout_s,
+                    interval_s=interval_s,
                 )
                 start = status.started_at
             if start is not None and (since is None or since < start):
@@ -1079,7 +1083,11 @@ class LogsService(abc.ABC):
                 if not status.can_restart:
                     break
                 status = await self.wait_pod_is_running(
-                    pod_name, start, timeout_s=timeout_s, interval_s=interval_s
+                    pod_name,
+                    start,
+                    namespace=namespace,
+                    timeout_s=timeout_s,
+                    interval_s=interval_s,
                 )
                 since = start = status.started_at
         except JobNotFoundException:
@@ -1087,7 +1095,7 @@ class LogsService(abc.ABC):
 
     @abc.abstractmethod
     async def get_first_log_entry_time(
-        self, pod_name: str, *, timeout_s: float = 2.0 * 60
+        self, pod_name: str, namespace: str, *, timeout_s: float = 2.0 * 60
     ) -> datetime | None:
         pass  # pragma: no cover
 
@@ -1175,10 +1183,10 @@ class BaseLogsService(LogsService):
         )
 
     async def get_first_log_entry_time(
-        self, pod_name: str, *, timeout_s: float = 2.0 * 60
+        self, pod_name: str, namespace: str, *, timeout_s: float = 2.0 * 60
     ) -> datetime | None:
         return await get_first_log_entry_time(
-            self._kube_client, pod_name, timeout_s=timeout_s
+            self._kube_client, pod_name, namespace, timeout_s=timeout_s
         )
 
 
@@ -1389,7 +1397,11 @@ class S3LogsService(BaseLogsService):
 
 
 async def get_first_log_entry_time(
-    kube_client: KubeClient, pod_name: str, *, timeout_s: float = 60 * 2.0
+    kube_client: KubeClient,
+    pod_name: str,
+    namespace: str,
+    *,
+    timeout_s: float = 60 * 2.0,
 ) -> datetime | None:
     """Return the timestamp of the first container log line from Kubernetes.
 
@@ -1401,7 +1413,7 @@ async def get_first_log_entry_time(
         async with kube_client.create_pod_container_logs_stream(
             pod_name=pod_name,
             container_name=pod_name,
-            namespace=kube_client.namespace,
+            namespace=namespace,
             timestamps=True,
             read_timeout_s=timeout_s,
         ) as stream:
@@ -1711,6 +1723,7 @@ class LokiLogsService(BaseLogsService):
                     status = await self.wait_pod_is_running(
                         pod_name,
                         status.started_at,
+                        namespace=namespace,
                         timeout_s=timeout_s,
                         interval_s=interval_s,
                     )
@@ -1776,6 +1789,7 @@ class LokiLogsService(BaseLogsService):
                 status = await self.wait_pod_is_running(
                     pod_name,
                     status.started_at,
+                    namespace=namespace,
                 )
                 since = status.started_at
         except JobNotFoundException:

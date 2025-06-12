@@ -283,7 +283,7 @@ class JobsClient:
             assert response.status == HTTPOk.status_code, response_text
             return (await response.json())["materialized"]
 
-    async def run_job(self, job_submit: dict[str, Any]) -> str:
+    async def run_job(self, job_submit: dict[str, Any]) -> tuple[str, str]:
         headers = self.headers
         url = self._platform_api.jobs_base_url
         job_submit["cluster_name"] = self._user.cluster_name
@@ -296,7 +296,8 @@ class JobsClient:
             job_id = result["id"]
             if "name" in job_submit:
                 assert result["name"] == job_submit["name"]
-        return job_id
+            namespace = result["namespace"]
+        return job_id, namespace
 
     async def long_polling_by_job_id(
         self, job_id: str, status: str, interval_s: float = 0.5, max_time: float = 180
@@ -382,19 +383,19 @@ async def job_submit(
 async def job_factory(
     jobs_client: JobsClient,
     job_request_factory: Callable[[], dict[str, Any]],
-) -> AsyncIterator[Callable[[str], Awaitable[str]]]:
+) -> AsyncIterator[Callable[[str], Awaitable[tuple[str, str]]]]:
     jobs: list[str] = []
 
-    async def _f(command: str, name: str = "") -> str:
+    async def _f(command: str, name: str = "") -> tuple[str, str]:
         request_payload = job_request_factory()
         request_payload["container"]["command"] = command
         if name:
             request_payload["name"] = name
-        job_id = await jobs_client.run_job(request_payload)
+        job_id, namespace = await jobs_client.run_job(request_payload)
         jobs.append(job_id)
         await jobs_client.long_polling_by_job_id(job_id, status="running")
 
-        return job_id
+        return job_id, namespace
 
     yield _f
 
@@ -403,12 +404,14 @@ async def job_factory(
     for job_id in jobs:
         job = await jobs_client.get_job_by_id(job_id)
         if job["status"] == "cancelled":
-            # Wait until job is deleted from k8s
+            # Wait until a job is deleted from k8s
             await jobs_client.wait_job_dematerialized(job_id)
 
 
 @pytest.fixture
-async def infinite_job(job_factory: Callable[[str], Awaitable[str]]) -> str:
+async def infinite_job(
+    job_factory: Callable[[str], Awaitable[tuple[str, str]]],
+) -> tuple[str, str]:
     return await job_factory("tail -f /dev/null")
 
 
@@ -419,8 +422,8 @@ def job_name() -> str:
 
 @pytest.fixture
 async def named_infinite_job(
-    job_factory: Callable[[str, str], Awaitable[str]], job_name: str
-) -> str:
+    job_factory: Callable[[str, str], Awaitable[tuple[str, str]]], job_name: str
+) -> tuple[str, str]:
     return await job_factory("tail -f /dev/null", job_name)
 
 
@@ -486,12 +489,12 @@ class TestTopApi:
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        infinite_job: str,
+        infinite_job: tuple[str, str],
     ) -> None:
         num_request = 2
         records = []
-
-        url = monitoring_api.generate_top_url(job_id=infinite_job)
+        job_id, _ = infinite_job
+        url = monitoring_api.generate_top_url(job_id=job_id)
         async with client.ws_connect(url, headers=jobs_client.headers) as ws:
             # TODO move this ws communication to JobClient
             async for msg in ws:
@@ -515,13 +518,13 @@ class TestTopApi:
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
         job_name: str,
-        named_infinite_job: str,
+        named_infinite_job: tuple[str, str],
         regular_user2: ProjectUser,
         share_job: Callable[..., Awaitable[None]],
     ) -> None:
         await share_job(jobs_client.user, regular_user2, job_name)
-
-        url = monitoring_api.generate_top_url(named_infinite_job)
+        job_id, _ = named_infinite_job
+        url = monitoring_api.generate_top_url(job_id)
         async with client.ws_connect(url, headers=regular_user2.headers):
             pass
 
@@ -529,11 +532,12 @@ class TestTopApi:
         self,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
-        infinite_job: str,
+        infinite_job: tuple[str, str],
         regular_user1: ProjectUser,
         regular_user2: ProjectUser,
     ) -> None:
-        url = monitoring_api.generate_top_url(infinite_job)
+        job_id, _ = infinite_job
+        url = monitoring_api.generate_top_url(job_id)
         with pytest.raises(WSServerHandshakeError) as err:
             async with client.ws_connect(url, headers=regular_user2.headers):
                 pass
@@ -544,9 +548,10 @@ class TestTopApi:
         self,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
-        infinite_job: str,
+        infinite_job: tuple[str, str],
     ) -> None:
-        url = monitoring_api.generate_top_url(job_id=infinite_job)
+        job_id, _ = infinite_job
+        url = monitoring_api.generate_top_url(job_id=job_id)
         with pytest.raises(WSServerHandshakeError) as err:
             async with client.ws_connect(url):
                 pass
@@ -558,14 +563,13 @@ class TestTopApi:
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        infinite_job: str,
+        infinite_job: tuple[str, str],
     ) -> None:
-        await jobs_client.delete_job(infinite_job)
-        await jobs_client.long_polling_by_job_id(
-            job_id=infinite_job, status="cancelled"
-        )
+        job_id, _ = infinite_job
+        await jobs_client.delete_job(job_id)
+        await jobs_client.long_polling_by_job_id(job_id=job_id, status="cancelled")
 
-        url = monitoring_api.generate_top_url(job_id=infinite_job)
+        url = monitoring_api.generate_top_url(job_id=job_id)
         async with client.ws_connect(url, headers=jobs_client.headers) as ws:
             msg = await ws.receive()
             assert msg.type == aiohttp.WSMsgType.CLOSE
@@ -602,7 +606,7 @@ class TestTopApi:
     ) -> None:
         command = 'bash -c "for i in {1..10}; do echo $i; sleep 1; done"'
         job_submit["container"]["command"] = command
-        job_id = await jobs_client.run_job(job_submit)
+        job_id, _ = await jobs_client.run_job(job_submit)
 
         num_request = 2
         records: list[Any] = []
@@ -642,7 +646,7 @@ class TestTopApi:
     ) -> None:
         command = 'bash -c "for i in {1..2}; do echo $i; sleep 1; done"'
         job_submit["container"]["command"] = command
-        job_id = await jobs_client.run_job(job_submit)
+        job_id, _ = await jobs_client.run_job(job_submit)
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="succeeded")
 
         headers = jobs_client.headers
@@ -663,16 +667,17 @@ class TestLogApi:
         client: aiohttp.ClientSession,
         regular_user1: ProjectUser,
         regular_user2: ProjectUser,
-        infinite_job: str,
+        infinite_job: tuple[str, str],
         cluster_name: str,
     ) -> None:
-        url = monitoring_api.generate_log_url(infinite_job)
+        job_id, _ = infinite_job
+        url = monitoring_api.generate_log_url(job_id)
         async with client.get(url, headers=regular_user2.headers) as resp:
             assert resp.status == HTTPForbidden.status_code
             result = await resp.json()
             job_uri = (
                 f"job://{cluster_name}/{regular_user1.org_name}/"
-                f"{regular_user1.project_name}/{infinite_job}"
+                f"{regular_user1.project_name}/{job_id}"
             )
             assert result == {"missing": [{"uri": job_uri, "action": "read"}]}
 
@@ -681,9 +686,10 @@ class TestLogApi:
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        infinite_job: str,
+        infinite_job: tuple[str, str],
     ) -> None:
-        url = monitoring_api.generate_log_url(job_id=infinite_job)
+        job_id, _ = infinite_job
+        url = monitoring_api.generate_log_url(job_id=job_id)
         async with client.get(url) as resp:
             assert resp.status == HTTPUnauthorized.status_code
 
@@ -696,7 +702,7 @@ class TestLogApi:
     ) -> None:
         command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
         job_submit["container"]["command"] = command
-        job_id = await jobs_client.run_job(job_submit)
+        job_id, _ = await jobs_client.run_job(job_submit)
         await jobs_client.long_polling_by_job_id(job_id, "succeeded")
 
         headers = jobs_client.headers
@@ -720,7 +726,7 @@ class TestLogApi:
     ) -> None:
         command = 'bash -c "for i in {1..5}; do echo $i; sleep 1; done"'
         job_submit["container"]["command"] = command
-        job_id = await jobs_client.run_job(job_submit)
+        job_id, _ = await jobs_client.run_job(job_submit)
         await jobs_client.long_polling_by_job_id(job_id, "succeeded")
 
         headers = jobs_client.headers
@@ -740,7 +746,7 @@ class TestLogApi:
         self,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
-        named_infinite_job: str,
+        named_infinite_job: tuple[str, str],
         job_name: str,
         regular_user1: ProjectUser,
         regular_user2: ProjectUser,
@@ -748,7 +754,8 @@ class TestLogApi:
     ) -> None:
         await share_job(regular_user1, regular_user2, job_name)
 
-        url = monitoring_api.generate_log_url(named_infinite_job)
+        job_id, _ = named_infinite_job
+        url = monitoring_api.generate_log_url(job_id)
         async with client.get(url, headers=regular_user2.headers) as resp:
             assert resp.status == HTTPOk.status_code
 
@@ -758,18 +765,19 @@ class TestSaveApi:
         self,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
-        infinite_job: str,
+        infinite_job: tuple[str, str],
         regular_user1: ProjectUser,
         regular_user2: ProjectUser,
         cluster_name: str,
     ) -> None:
-        url = monitoring_api.generate_save_url(infinite_job)
+        job_id, _ = infinite_job
+        url = monitoring_api.generate_save_url(job_id)
         async with client.post(url, headers=regular_user2.headers) as resp:
             assert resp.status == HTTPForbidden.status_code
             result = await resp.json()
             job_uri = (
                 f"job://{cluster_name}/{regular_user1.org_name}/"
-                f"{regular_user1.project_name}/{infinite_job}"
+                f"{regular_user1.project_name}/{job_id}"
             )
             assert result == {"missing": [{"uri": job_uri, "action": "write"}]}
 
@@ -777,9 +785,10 @@ class TestSaveApi:
         self,
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
-        infinite_job: str,
+        infinite_job: tuple[str, str],
     ) -> None:
-        url = monitoring_api.generate_save_url(job_id=infinite_job)
+        job_id, _ = infinite_job
+        url = monitoring_api.generate_save_url(job_id=job_id)
         async with client.post(url) as resp:
             assert resp.status == HTTPUnauthorized.status_code
 
@@ -802,9 +811,10 @@ class TestSaveApi:
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        infinite_job: str,
+        infinite_job: tuple[str, str],
     ) -> None:
-        url = monitoring_api.generate_save_url(job_id=infinite_job)
+        job_id, _ = infinite_job
+        url = monitoring_api.generate_save_url(job_id=job_id)
         headers = jobs_client.headers
         payload = {"container": {"image": "unknown:5000/alpine:latest"}}
         async with client.post(url, headers=headers, json=payload) as resp:
@@ -817,20 +827,21 @@ class TestSaveApi:
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        infinite_job: str,
+        infinite_job: tuple[str, str],
         config: Config,
         kube_client: MyKubeClient,
     ) -> None:
-        await jobs_client.delete_job(infinite_job)
+        job_id, namespace = infinite_job
+        await jobs_client.delete_job(job_id)
         await kube_client.wait_pod_is_terminated(
-            pod_name=infinite_job, allow_pod_not_exists=True
+            pod_name=job_id,
+            namespace=namespace,
+            allow_pod_not_exists=True,
         )
 
-        url = monitoring_api.generate_save_url(job_id=infinite_job)
+        url = monitoring_api.generate_save_url(job_id=job_id)
         headers = jobs_client.headers
-        payload = {
-            "container": {"image": f"{config.registry.host}/alpine:{infinite_job}"}
-        }
+        payload = {"container": {"image": f"{config.registry.host}/alpine:{job_id}"}}
         async with client.post(url, headers=headers, json=payload) as resp:
             assert resp.status == HTTPOk.status_code, str(resp)
             chunks = [
@@ -848,18 +859,19 @@ class TestSaveApi:
         config_factory: Callable[..., Config],
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        infinite_job: str,
+        infinite_job: tuple[str, str],
     ) -> None:
+        job_id, _ = infinite_job
         invalid_runtime_config = ContainerRuntimeConfig(port=1)
         config = config_factory(container_runtime=invalid_runtime_config)
 
         app = await create_app(config)
         async with create_local_app_server(app, port=8080) as address:
             monitoring_api = MonitoringApiEndpoints(address=address)
-            url = monitoring_api.generate_save_url(job_id=infinite_job)
+            url = monitoring_api.generate_save_url(job_id=job_id)
 
             headers = jobs_client.headers
-            image = f"{config.registry.host}/alpine:{infinite_job}"
+            image = f"{config.registry.host}/alpine:{job_id}"
             payload = {"container": {"image": image}}
             async with client.post(url, headers=headers, json=payload) as resp:
                 assert resp.status == HTTPOk.status_code, str(resp)
@@ -881,13 +893,14 @@ class TestSaveApi:
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        infinite_job: str,
+        infinite_job: tuple[str, str],
         config: Config,
     ) -> None:
-        url = monitoring_api.generate_save_url(job_id=infinite_job)
+        job_id, _ = infinite_job
+        url = monitoring_api.generate_save_url(job_id=job_id)
         headers = jobs_client.headers
         repository = f"{config.registry.host}/alpine"
-        image = f"{repository}:{infinite_job}"
+        image = f"{repository}:{job_id}"
         payload = {"container": {"image": image}}
 
         async with client.post(url, headers=headers, json=payload) as resp:
@@ -913,7 +926,7 @@ class TestSaveApi:
             msg = f"The push refers to repository [{repository}]"
             assert chunks[2].get("status") == msg, debug
 
-            assert chunks[-1].get("aux", {}).get("Tag") == infinite_job, debug
+            assert chunks[-1].get("aux", {}).get("Tag") == job_id, debug
 
     async def test_save_shared_by_name(
         self,
@@ -921,16 +934,17 @@ class TestSaveApi:
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
         job_name: str,
-        named_infinite_job: str,
+        named_infinite_job: tuple[str, str],
         regular_user2: ProjectUser,
         share_job: Callable[..., Awaitable[None]],
         config: Config,
     ) -> None:
         await share_job(jobs_client.user, regular_user2, job_name, action="write")
 
-        url = monitoring_api.generate_save_url(job_id=named_infinite_job)
+        job_id, _ = named_infinite_job
+        url = monitoring_api.generate_save_url(job_id=job_id)
         repository = f"{config.registry.host}/alpine"
-        image = f"{repository}:{named_infinite_job}"
+        image = f"{repository}:{job_id}"
         payload = {"container": {"image": image}}
 
         async with client.post(
@@ -967,7 +981,7 @@ class TestAttachApi:
     ) -> None:
         command = 'bash -c "for i in {0..9}; do echo $i; sleep 1; done"'
         job_submit["container"]["command"] = command
-        job_id = await jobs_client.run_job(job_submit)
+        job_id, _ = await jobs_client.run_job(job_submit)
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
 
         headers = jobs_client.headers
@@ -1004,7 +1018,7 @@ class TestAttachApi:
         command = 'bash -c "for i in {0..9}; do echo $i; sleep 1; done"'
         job_submit["container"]["command"] = command
         job_submit["name"] = job_name
-        job_id = await jobs_client.run_job(job_submit)
+        job_id, _ = await jobs_client.run_job(job_submit)
 
         await share_job(jobs_client.user, regular_user2, job_name, action="write")
 
@@ -1042,7 +1056,7 @@ class TestAttachApi:
     ) -> None:
         command = 'bash -c "for i in {0..9}; do echo $i >&2; sleep 1; done"'
         job_submit["container"]["command"] = command
-        job_id = await jobs_client.run_job(job_submit)
+        job_id, _ = await jobs_client.run_job(job_submit)
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
 
         headers = jobs_client.headers
@@ -1076,7 +1090,7 @@ class TestAttachApi:
         command = "sh"
         job_submit["container"]["command"] = command
         job_submit["container"]["tty"] = True
-        job_id = await jobs_client.run_job(job_submit)
+        job_id, _ = await jobs_client.run_job(job_submit)
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
 
         headers = jobs_client.headers
@@ -1104,7 +1118,7 @@ class TestAttachApi:
         command = "sh"
         job_submit["container"]["command"] = command
         job_submit["container"]["tty"] = True
-        job_id = await jobs_client.run_job(job_submit)
+        job_id, _ = await jobs_client.run_job(job_submit)
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
 
         headers = jobs_client.headers
@@ -1150,7 +1164,7 @@ class TestAttachApi:
         command = "sh"
         job_submit["container"]["command"] = command
         job_submit["container"]["tty"] = True
-        job_id = await jobs_client.run_job(job_submit)
+        job_id, _ = await jobs_client.run_job(job_submit)
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
 
         headers = jobs_client.headers
@@ -1184,12 +1198,12 @@ class TestExecApi:
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        infinite_job: str,
+        infinite_job: tuple[str, str],
     ) -> None:
         headers = jobs_client.headers
-
+        job_id, _ = infinite_job
         url = monitoring_api.generate_exec_url(
-            infinite_job,
+            job_id,
             "sh -c 'sleep 5; echo abc'",
             tty=False,
             stdin=False,
@@ -1207,14 +1221,14 @@ class TestExecApi:
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
         job_name: str,
-        named_infinite_job: str,
+        named_infinite_job: tuple[str, str],
         regular_user2: ProjectUser,
         share_job: Callable[..., Awaitable[None]],
     ) -> None:
         await share_job(jobs_client.user, regular_user2, job_name, action="write")
-
+        job_id, _ = named_infinite_job
         url = monitoring_api.generate_exec_url(
-            named_infinite_job,
+            job_id,
             "sh -c 'sleep 5; echo abc'",
             tty=False,
             stdin=False,
@@ -1231,12 +1245,13 @@ class TestExecApi:
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        infinite_job: str,
+        infinite_job: tuple[str, str],
     ) -> None:
         headers = jobs_client.headers
 
+        job_id, _ = infinite_job
         url = monitoring_api.generate_exec_url(
-            infinite_job,
+            job_id,
             "sh -c 'sleep 5; echo abc 1>&2'",
             tty=False,
             stdin=False,
@@ -1253,12 +1268,12 @@ class TestExecApi:
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        infinite_job: str,
+        infinite_job: tuple[str, str],
     ) -> None:
         headers = jobs_client.headers
-
+        job_id, _ = infinite_job
         url = monitoring_api.generate_exec_url(
-            infinite_job,
+            job_id,
             "sh",
             tty=True,
             stdin=True,
@@ -1277,12 +1292,12 @@ class TestExecApi:
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        infinite_job: str,
+        infinite_job: tuple[str, str],
     ) -> None:
         headers = jobs_client.headers
-
+        job_id, _ = infinite_job
         url = monitoring_api.generate_exec_url(
-            infinite_job,
+            job_id,
             "sh",
             tty=True,
             stdin=True,
@@ -1319,15 +1334,15 @@ class TestKillApi:
         monitoring_api: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        infinite_job: str,
+        infinite_job: tuple[str, str],
     ) -> None:
         headers = jobs_client.headers
-
-        url = monitoring_api.generate_kill_url(infinite_job)
+        job_id, _ = infinite_job
+        url = monitoring_api.generate_kill_url(job_id)
         async with client.post(url, headers=headers) as response:
             assert response.status == HTTPNoContent.status_code, await response.text()
 
-        result = await jobs_client.long_polling_by_job_id(infinite_job, status="failed")
+        result = await jobs_client.long_polling_by_job_id(job_id, status="failed")
         assert result["history"]["exit_code"] == 128 + signal.SIGKILL, result
 
     async def test_kill_shared_by_name(
@@ -1336,19 +1351,17 @@ class TestKillApi:
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
         job_name: str,
-        named_infinite_job: str,
+        named_infinite_job: tuple[str, str],
         regular_user2: ProjectUser,
         share_job: Callable[..., Awaitable[None]],
     ) -> None:
         await share_job(jobs_client.user, regular_user2, job_name, action="write")
-
-        url = monitoring_api.generate_kill_url(named_infinite_job)
+        job_id, _ = named_infinite_job
+        url = monitoring_api.generate_kill_url(job_id)
         async with client.post(url, headers=regular_user2.headers) as response:
             assert response.status == HTTPNoContent.status_code, await response.text()
 
-        result = await jobs_client.long_polling_by_job_id(
-            named_infinite_job, status="failed"
-        )
+        result = await jobs_client.long_polling_by_job_id(job_id, status="failed")
         assert result["history"]["exit_code"] == 128 + signal.SIGKILL, result
 
 
@@ -1358,12 +1371,12 @@ class TestPortForward:
         monitoring_api_ep: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        infinite_job: str,
+        infinite_job: tuple[str, str],
     ) -> None:
         headers = jobs_client.headers
-
+        job_id, _ = infinite_job
         # String port is invalid
-        url = monitoring_api_ep.generate_port_forward_url(infinite_job, "abc")
+        url = monitoring_api_ep.generate_port_forward_url(job_id, "abc")
 
         async with client.get(url, headers=headers) as response:
             assert response.status == HTTPBadRequest.status_code, await response.text()
@@ -1373,12 +1386,12 @@ class TestPortForward:
         monitoring_api_ep: MonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
-        infinite_job: str,
+        infinite_job: tuple[str, str],
     ) -> None:
         headers = jobs_client.headers
-
+        job_id, _ = infinite_job
         # Port 60001 is not handled
-        url = monitoring_api_ep.generate_port_forward_url(infinite_job, 60001)
+        url = monitoring_api_ep.generate_port_forward_url(job_id, 60001)
 
         async with client.get(url, headers=headers) as response:
             assert response.status == HTTPBadRequest.status_code, await response.text()
@@ -1408,7 +1421,7 @@ class TestPortForward:
         command = f"python -c '{py}'"
         job_submit["container"]["command"] = command
         job_submit["container"]["image"] = "python:latest"
-        job_id = await jobs_client.run_job(job_submit)
+        job_id, _ = await jobs_client.run_job(job_submit)
         await jobs_client.long_polling_by_job_id(job_id=job_id, status="running")
 
         headers = jobs_client.headers

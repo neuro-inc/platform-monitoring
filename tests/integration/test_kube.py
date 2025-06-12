@@ -1436,7 +1436,7 @@ class TestLogReader:
         assert re.sub(rb"\[.*?\]\n", b"", payload0) == expected_payload * 3
         for i, (name, payload) in enumerate(zip(names, payloads, strict=False)):
             if i < 2 or i >= len(names) - 1:
-                # No separator in earlest (live only) and
+                # No separator in the earliest (live only) and
                 # latest (archive only) logs.
                 assert b"===" not in payload, name
             elif "restarted 1 " in name:
@@ -1652,12 +1652,18 @@ class TestLogReader:
         command = "bash -c 'sleep 5; echo first; sleep 5; echo second'"
         job_pod.set_command(command)
         await kube_client.create_pod(job_pod.payload)
-        first_ts = await get_first_log_entry_time(kube_client, pod_name, timeout_s=1)
+        first_ts = await get_first_log_entry_time(
+            kube_client, pod_name, kube_client.namespace, timeout_s=1
+        )
         assert first_ts is None
         await kube_client.wait_pod_is_running(pod_name)
-        first_ts = await get_first_log_entry_time(kube_client, pod_name, timeout_s=1)
+        first_ts = await get_first_log_entry_time(
+            kube_client, pod_name, kube_client.namespace, timeout_s=1
+        )
         assert first_ts is None
-        first_ts = await get_first_log_entry_time(kube_client, pod_name, timeout_s=5)
+        first_ts = await get_first_log_entry_time(
+            kube_client, pod_name, kube_client.namespace, timeout_s=5
+        )
         assert first_ts is not None
         await kube_client.wait_pod_is_terminated(pod_name)
         status = await kube_client.get_container_status(pod_name)
@@ -1665,7 +1671,9 @@ class TestLogReader:
         assert status.finished_at is not None
         assert first_ts > status.started_at
         assert first_ts < status.finished_at
-        first_ts2 = await get_first_log_entry_time(kube_client, pod_name, timeout_s=1)
+        first_ts2 = await get_first_log_entry_time(
+            kube_client, pod_name, kube_client.namespace, timeout_s=1
+        )
         assert first_ts2 == first_ts
 
     async def test_s3_log_reader_running_pod_compacted(
@@ -2499,7 +2507,7 @@ class TestS3LogsService:
         raw_keys = await s3_logs_metadata_service.get_raw_log_keys(pod_name)
         assert raw_keys == pod_keys
 
-        # pod should be added to cleanup queue every time logs are merged
+        # pod should be added to clean up queue every time logs are merged
         cleanup_queue = await s3_logs_metadata_service.get_pods_cleanup_queue(
             cleanup_interval=0
         )
@@ -2597,8 +2605,8 @@ class TestS3LogsService:
         metadata = await s3_logs_metadata_service.get_metadata(pod_name)
         orphaned_key = metadata.get_log_keys()[0]
 
-        # Current log file has space for more log records.
-        # After merge its content will be copied to a new log file
+        # The current log file has space for more log records.
+        # After merge, its content will be copied to a new log file
         # and it will become orphaned.
         await write_lines_to_s3(pod_keys[1], records[1])
         await s3_log_service.compact_one(pod_name)
@@ -2665,7 +2673,7 @@ class TestS3LogsService:
         metadata = await s3_logs_metadata_service.get_metadata(pod_name)
         orphaned_key = metadata.get_log_keys()[0]
 
-        # Create orphaned file
+        # Create an orphaned file
         await write_lines_to_s3(pod_keys[1], records[1])
         await s3_log_service.compact_one(pod_name)
 
