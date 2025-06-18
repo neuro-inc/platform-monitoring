@@ -1501,9 +1501,15 @@ class MyAppsPodDescriptor:
 
 
 @pytest.fixture
+def app_name() -> str:
+    return "test-apps-instance"
+
+
+@pytest.fixture
 async def apps_basic_pod(
     kube_client: MyKubeClient,
     regular_user1: ProjectUser,
+    app_name: str,
 ) -> AsyncIterator[MyAppsPodDescriptor]:
     pod_name = f"test-pod-{uuid4()}"
     apps_pod_description = MyAppsPodDescriptor(pod_name)
@@ -1511,6 +1517,7 @@ async def apps_basic_pod(
         {
             "platform.apolo.us/org": regular_user1.org_name,
             "platform.apolo.us/project": regular_user1.project_name,
+            "platform.apolo.us/app": app_name,
         }
     )
     await kube_client.create_pod(apps_pod_description.payload)
@@ -1523,11 +1530,12 @@ def _get_app_mock(
     monkeypatch: pytest.MonkeyPatch,
     regular_user1: ProjectUser,
     kube_client: MyKubeClient,
+    app_name: str,
 ) -> None:
     async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:
         return AppInstance(
             id="app_instance_id",
-            name="test-apps-instance",
+            name=app_name,
             org_name=regular_user1.org_name,
             project_name=regular_user1.project_name,
             namespace=kube_client.namespace,
