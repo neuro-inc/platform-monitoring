@@ -557,7 +557,7 @@ class AppsMonitoringApiHandler:
         return {
             K8S_LABEL_APOLO_ORG: app_instance.org_name,
             K8S_LABEL_APOLO_PROJECT: app_instance.project_name,
-            # K8S_LABEL_APOLO_APP_ID: app_instance.id,
+            K8S_LABEL_APOLO_APP_ID: app_instance.name,
         }
 
     @staticmethod
@@ -565,7 +565,7 @@ class AppsMonitoringApiHandler:
         return {
             "apolo_org_name": app_instance.org_name,
             "apolo_project_name": app_instance.project_name,
-            # "apolo_app_id": app_instance.id,
+            "apolo_app_id": app_instance.name,
             "namespace": app_instance.namespace,
         }
 
