@@ -81,7 +81,7 @@ HEARTBEAT = 30
 # k8s labels
 K8S_LABEL_APOLO_ORG = "platform.apolo.us/org"
 K8S_LABEL_APOLO_PROJECT = "platform.apolo.us/project"
-K8S_LABEL_APOLO_APP_ID = "platform.apolo.us/app"
+K8S_LABEL_APOLO_APP_INSTANCE_NAME = "platform.apolo.us/app-instance-name"
 
 
 CONFIG_KEY = aiohttp.web.AppKey("config", Config)
@@ -557,7 +557,7 @@ class AppsMonitoringApiHandler:
         return {
             K8S_LABEL_APOLO_ORG: app_instance.org_name,
             K8S_LABEL_APOLO_PROJECT: app_instance.project_name,
-            K8S_LABEL_APOLO_APP_ID: app_instance.name,
+            K8S_LABEL_APOLO_APP_INSTANCE_NAME: app_instance.name,
         }
 
     @staticmethod
@@ -565,7 +565,7 @@ class AppsMonitoringApiHandler:
         return {
             "apolo_org_name": app_instance.org_name,
             "apolo_project_name": app_instance.project_name,
-            "apolo_app_id": app_instance.name,
+            "apolo_app_instance_name": app_instance.name,
             "namespace": app_instance.namespace,
         }
 
