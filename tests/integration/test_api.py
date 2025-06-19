@@ -28,7 +28,12 @@ from aiohttp.web_exceptions import (
 )
 from yarl import URL
 
-from platform_monitoring.api import create_app
+from platform_monitoring.api import (
+    K8S_LABEL_APOLO_APP_INSTANCE_NAME,
+    K8S_LABEL_APOLO_ORG,
+    K8S_LABEL_APOLO_PROJECT,
+    create_app,
+)
 from platform_monitoring.config import (
     Config,
     ContainerRuntimeConfig,
@@ -1501,16 +1506,23 @@ class MyAppsPodDescriptor:
 
 
 @pytest.fixture
+def app_name() -> str:
+    return "test-apps-instance"
+
+
+@pytest.fixture
 async def apps_basic_pod(
     kube_client: MyKubeClient,
     regular_user1: ProjectUser,
+    app_name: str,
 ) -> AsyncIterator[MyAppsPodDescriptor]:
     pod_name = f"test-pod-{uuid4()}"
     apps_pod_description = MyAppsPodDescriptor(pod_name)
     apps_pod_description.add_labels(
         {
-            "platform.apolo.us/org": regular_user1.org_name,
-            "platform.apolo.us/project": regular_user1.project_name,
+            K8S_LABEL_APOLO_ORG: regular_user1.org_name,
+            K8S_LABEL_APOLO_PROJECT: regular_user1.project_name,
+            K8S_LABEL_APOLO_APP_INSTANCE_NAME: app_name,
         }
     )
     await kube_client.create_pod(apps_pod_description.payload)
@@ -1523,11 +1535,12 @@ def _get_app_mock(
     monkeypatch: pytest.MonkeyPatch,
     regular_user1: ProjectUser,
     kube_client: MyKubeClient,
+    app_name: str,
 ) -> None:
     async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:
         return AppInstance(
             id="app_instance_id",
-            name="test-apps-instance",
+            name=app_name,
             org_name=regular_user1.org_name,
             project_name=regular_user1.project_name,
             namespace=kube_client.namespace,
