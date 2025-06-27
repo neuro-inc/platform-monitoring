@@ -2,16 +2,13 @@ import functools
 from collections.abc import AsyncGenerator, Callable
 from contextlib import AbstractAsyncContextManager, aclosing
 from datetime import datetime
-from typing import Any, TypeVar
+from typing import Any
 
 import iso8601
 from apolo_api_client import Job, JobStatus
 
 
-T_co = TypeVar("T_co", covariant=True)
-
-
-def asyncgeneratorcontextmanager(
+def asyncgeneratorcontextmanager[T_co](
     func: Callable[..., AsyncGenerator[T_co, Any]],
 ) -> Callable[..., AbstractAsyncContextManager[AsyncGenerator[T_co, Any]]]:
     @functools.wraps(func)
