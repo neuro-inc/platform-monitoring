@@ -66,9 +66,6 @@ class Resource(t.Protocol):
     def from_primitive(cls, payload: JSON) -> t.Self: ...
 
 
-TResource = t.TypeVar("TResource", bound=Resource)
-
-
 @dataclass(frozen=True)
 class Metadata:
     name: str | None
@@ -85,7 +82,7 @@ class Metadata:
 
 
 @dataclass(frozen=True)
-class ListResult(t.Generic[TResource]):
+class ListResult[TResource: Resource]:
     metadata: Metadata
     items: list[TResource]
 
