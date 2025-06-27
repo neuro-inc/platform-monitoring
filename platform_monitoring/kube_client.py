@@ -82,7 +82,7 @@ class Metadata:
 
 
 @dataclass(frozen=True)
-class ListResult[TResource: Resource](t.Generic[TResource]):
+class ListResult[TResource: Resource]:
     metadata: Metadata
     items: list[TResource]
 
