@@ -118,14 +118,14 @@ spec:
           while [ $code != 0 ]
           do
             sleep 1
-            curl -f "$NP_PLATFORM_CONFIG_URL/api/v1/ping"
+            curl -f "$NP_PLATFORM_CONFIG_URL/ping"
             code=$?
           done
 
           while [ $code != 0 ]
           do
             sleep 1
-            curl -f "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/ping"
+            curl -f "$NP_PLATFORM_ADMIN_URL/ping"
             code=$?
           done
         env:
