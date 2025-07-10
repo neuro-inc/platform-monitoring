@@ -1499,12 +1499,7 @@ class LokiLogReader(LogReader):
     def encode_and_handle_log(self, log_data: list[Any]) -> bytes:
         log = orjson.loads(log_data[1])["_entry"]
 
-        # sometimes log can be a string. let's convert to a list
-        if not isinstance(log, list):
-            log = [log]
-
-        if log[-1] != "\n":
-            log = f"{log}\n"
+        log = log if log.endswith("\n") else log + "\n"
 
         stream = log_data[2]
 
