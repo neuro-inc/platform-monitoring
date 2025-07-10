@@ -1652,7 +1652,10 @@ class LokiLogsService(BaseLogsService):
         should_get_live_logs = True
         try:
             status = await self._kube_client.wait_pod_is_not_waiting(
-                pod_name, timeout_s=timeout_s, interval_s=interval_s
+                pod_name,
+                namespace=namespace,
+                timeout_s=timeout_s,
+                interval_s=interval_s,
             )
 
             if start_dt >= archive_border_dt:
