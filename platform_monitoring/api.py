@@ -593,7 +593,11 @@ class AppsMonitoringApiHandler:
         start_str = request.query.get("since")
         end_str = request.query.get("until")
 
-        start_dt = parse_date(start_str) if start_str else None
+        start_dt = (
+            max(parse_date(start_str), app_instance.created_at)
+            if start_str
+            else app_instance.created_at
+        )
         end_dt = parse_date(end_str) if end_str else None
 
         loki_label_selector = self._get_loki_label_selector(app_instance)
