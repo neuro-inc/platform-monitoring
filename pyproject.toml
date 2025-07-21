@@ -63,7 +63,7 @@ pytest-cov = "6.2.1"
 pytest-xdist = "3.8.0"
 python-jose = "3.5.0"
 ruff = "0.12.4"
-types-cachetools = "6.0.0.20250525"
+types-cachetools = "6.1.0.20250717"
 
 [tool.ruff]
 target-version = "py313"
