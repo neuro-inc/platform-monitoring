@@ -55,7 +55,7 @@ optional = true
 
 [tool.poetry.group.dev.dependencies]
 apolo-sdk = "25.7.2"
-mypy = "1.16.1"
+mypy = "1.17.0"
 pre-commit = "4.2.0"
 pytest = "8.4.1"
 pytest-asyncio = "1.1.0"
