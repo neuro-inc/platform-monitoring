@@ -569,7 +569,7 @@ class AppsMonitoringApiHandler:
             "namespace": app_instance.namespace,
         }
 
-    async def _get_labels_from_k8s(self, app_instance: AppInstance) -> list[str]:
+    async def _get_containers_from_k8s(self, app_instance: AppInstance) -> list[str]:
         k8s_label_selector = self._get_k8s_label_selector(app_instance)
 
         label_selector = ",".join(
@@ -603,22 +603,17 @@ class AppsMonitoringApiHandler:
         loki_label_selector = self._get_loki_label_selector(app_instance)
 
         assert isinstance(self._logs_service, LokiLogsService)
-        async with asyncio.TaskGroup() as tg:
-            loki_containers_task = tg.create_task(
-                self._logs_service.get_label_values(
-                    label="container",
-                    loki_label_selector=loki_label_selector,
-                    since=start_dt,
-                    until=end_dt,
-                )
-            )
-            k8s_containers_task = tg.create_task(
-                self._get_labels_from_k8s(app_instance)
+
+        containers = await self._get_containers_from_k8s(app_instance)
+        if not containers:
+            containers = await self._logs_service.get_label_values(
+                label="container",
+                loki_label_selector=loki_label_selector,
+                since=start_dt,
+                until=end_dt,
             )
 
-        return json_response(
-            list(set(loki_containers_task.result() + k8s_containers_task.result()))
-        )
+        return json_response(containers)
 
     @staticmethod
     def _as_ndjson(request: Request) -> bool:

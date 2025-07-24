@@ -18,10 +18,9 @@ from collections.abc import (
 from contextlib import AbstractAsyncContextManager, aclosing, suppress
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
-from itertools import islice
 from pathlib import Path
 from types import TracebackType
-from typing import IO, Any, NamedTuple, Self, cast
+from typing import IO, Any, Self, cast
 
 import aiohttp
 import botocore.exceptions
@@ -42,11 +41,6 @@ from .utils import asyncgeneratorcontextmanager, parse_date
 
 
 logger = logging.getLogger(__name__)
-
-
-class TimeInterval(NamedTuple):
-    start_ts: int
-    end_ts: int
 
 
 DEFAULT_ARCHIVE_DELAY = 3.0 * 60
@@ -1479,15 +1473,6 @@ class LokiLogReader(LogReader):
         self._iterator: AsyncIterator[bytes] | None = None
         self._as_ndjson = as_ndjson
 
-        # intervals count that will be splited from start to end.
-        # Works only if greater than 1
-        self._split_time_range_count = split_time_range_count
-        # how many tasks run at the same time if split_time_range_count is used
-        if concurrent_factor < 1:
-            exc_txt = "concurrent_factor must be greater than 0"
-            raise ValueError(exc_txt)
-        self._concurrent_factor = concurrent_factor
-
     async def __aenter__(self) -> AsyncIterator[bytes]:
         self._iterator = self._iterate()
         return self._iterator
@@ -1524,88 +1509,15 @@ class LokiLogReader(LogReader):
 
         return log.encode()
 
-    def _split_time_range(
-        self, start_ts: int, end_ts: int, count: int = 25
-    ) -> Iterable[TimeInterval]:
-        if start_ts >= end_ts:
-            exc_txt = "start_ts must be less than end_ts"
-            raise ValueError(exc_txt)
-
-        if count < 2:
-            return [TimeInterval(start_ts, end_ts)]
-
-        intervals = []
-        time_range_duration = end_ts - start_ts
-        interval_delta = time_range_duration // count
-
-        for i in range(count):
-            current_ts = start_ts + i * interval_delta
-            next_ts = start_ts + (i + 1) * interval_delta
-            if i == count - 1:
-                next_ts = end_ts
-            intervals.append(TimeInterval(current_ts, next_ts))
-
-        if self._direction == "forward":
-            return intervals
-        return reversed(intervals)
-
-    @staticmethod
-    async def _consume_iter(
-        iterable: AsyncIterator[dict[str, Any]],
-    ) -> list[dict[str, Any]]:
-        res = []
-        async for data in iterable:
-            res.append(data)
-        return res
-
-    async def _run_concurrently(
-        self, *gens: AsyncIterator[dict[str, Any]]
-    ) -> AsyncIterator[list[dict[str, Any]]]:
-        """
-        Sequentially iterate over multiple generators that run concurrently
-        by n tasks (defined as self._concurrent_factor)
-        """
-
-        async with asyncio.TaskGroup() as tg:
-            gens_iter = iter(gens)
-            while True:
-                tasks = [
-                    tg.create_task(self._consume_iter(gen))
-                    for gen in islice(gens_iter, self._concurrent_factor)
-                ]
-
-                if not tasks:
-                    break
-
-                for task in tasks:
-                    ret = await task
-                    yield ret
-
     async def _iterate(self) -> AsyncIterator[bytes]:
-        split_time_range_count = self._split_time_range_count
-        if self._end - self._start < 25 * 60 * 60 * 1_000_000_000:
-            # If the time range is less than 25 hours no need
-            # to split into multiple intervals, make one query
-            split_time_range_count = 1
-
-        async for data in self._run_concurrently(
-            *[
-                self._loki_client.query_range_page_iterate(
-                    query=self._query,
-                    start=split_interval.start_ts,
-                    end=split_interval.end_ts,
-                    direction=self._direction,
-                )
-                for split_interval in self._split_time_range(
-                    self._start,
-                    self._end,
-                    split_time_range_count,
-                )
-            ]
+        async for res in self._loki_client.query_range_page_iterate(
+            query=self._query,
+            start=self._start,
+            end=self._end,
+            direction=self._direction,
         ):
-            for res in data:
-                for log_data in res["data"]["result"]:
-                    yield self.encode_and_handle_log(log_data)
+            for log_data in res["data"]["result"]:
+                yield self.encode_and_handle_log(log_data)
 
 
 class LokiLogsService(BaseLogsService):

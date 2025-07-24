@@ -11,6 +11,10 @@ from yarl import URL
 logger = logging.getLogger(__name__)
 
 
+class LokiClientError(Exception):
+    pass
+
+
 class LokiClient:
     def __init__(
         self,
@@ -38,18 +42,19 @@ class LokiClient:
             connect=self._conn_timeout_s, total=self._read_timeout_s
         )
 
-        async def custom_check(response: aiohttp.ClientResponse) -> None | NoReturn:
-            if not 200 <= response.status < 300:
+        async def _raise_for_status(
+            response: aiohttp.ClientResponse,
+        ) -> None:
+            if not response.ok:
                 text = await response.text()
-                exc_text = f"Loki response status is not 2xx. Response: {text}"
-                raise Exception(exc_text)
-            return None
+                exc_text = f"Loki client error. Status: {response.status}. Body: {text}"
+                raise LokiClientError(exc_text)
 
         self._session = aiohttp.ClientSession(
             connector=connector,
             timeout=timeout,
             trace_configs=self._trace_configs,
-            raise_for_status=custom_check,
+            raise_for_status=_raise_for_status,
         )
 
     async def close(self) -> None:
