@@ -45,9 +45,9 @@ class LokiClient:
         async def _raise_for_status(
             response: aiohttp.ClientResponse,
         ) -> None:
-            if response.status >= 300:
+            if not response.ok:
                 text = await response.text()
-                exc_text = f"Loki response status is not 2xx. Response: {text}"
+                exc_text = f"Loki client error. Status: {response.status}. Body: {text}"
                 raise LokiClientError(exc_text)
 
         self._session = aiohttp.ClientSession(
