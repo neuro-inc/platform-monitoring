@@ -2,6 +2,7 @@ import enum
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
+from apolo_apps_client import AppsClientConfig
 from yarl import URL
 
 
@@ -25,12 +26,6 @@ class PlatformAuthConfig:
 
 @dataclass(frozen=True)
 class PlatformConfig:
-    url: URL
-    token: str = field(repr=False)
-
-
-@dataclass(frozen=True)
-class PlatformAppsConfig:
     url: URL
     token: str = field(repr=False)
 
@@ -129,7 +124,7 @@ class Config:
     platform_api: PlatformApiConfig
     platform_auth: PlatformAuthConfig
     platform_config: PlatformConfig
-    platform_apps: PlatformAppsConfig
+    platform_apps: AppsClientConfig
     logs: LogsConfig
     kube: KubeConfig
     container_runtime: ContainerRuntimeConfig

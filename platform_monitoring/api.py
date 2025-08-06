@@ -26,6 +26,12 @@ from aiohttp.web import (
 )
 from aiohttp.web_urldispatcher import AbstractRoute
 from apolo_api_client import ApiClient, Job
+from apolo_apps_client import (
+    AppInstance,
+    AppsApiClient,
+    AppsApiException,
+    AppsClientConfig,
+)
 from elasticsearch import AsyncElasticsearch
 from neuro_auth_client import AuthClient, Permission, check_permissions
 from neuro_auth_client.security import AuthScheme, setup_security
@@ -62,7 +68,6 @@ from .logs import (
     s3_client_error,
 )
 from .loki_client import LokiClient
-from .platform_apps_client import AppInstance, AppsApiClient, AppsApiException
 from .user import untrusted_user
 from .utils import JobsHelper, KubeHelper, parse_date
 from .validators import (
@@ -922,11 +927,9 @@ async def create_platform_api_client(
 
 @asynccontextmanager
 async def create_platform_apps_api_client(
-    url: URL, token: str, trace_configs: list[aiohttp.TraceConfig] | None = None
+    config: AppsClientConfig, trace_configs: list[aiohttp.TraceConfig] | None = None
 ) -> AsyncIterator[AppsApiClient]:
-    async with AppsApiClient(
-        url=url, token=token, trace_configs=trace_configs
-    ) as client:
+    async with AppsApiClient(config=config, trace_configs=trace_configs) as client:
         yield client
 
 
@@ -1141,9 +1144,7 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             app[MONITORING_APP_KEY][JOBS_SERVICE_KEY] = jobs_service
 
             platform_apps_api_client = await exit_stack.enter_async_context(
-                create_platform_apps_api_client(
-                    config.platform_apps.url, config.platform_apps.token
-                )
+                create_platform_apps_api_client(config=config.platform_apps)
             )
             app[APPS_MONITORING_APP_KEY][APPS_API_CLIENT_KEY] = platform_apps_api_client
 

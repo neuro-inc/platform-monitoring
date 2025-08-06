@@ -15,6 +15,7 @@ import aiohttp.web
 import pytest
 from _pytest.fixtures import FixtureRequest
 from aiobotocore.client import AioBaseClient
+from apolo_apps_client import AppsClientConfig
 from elasticsearch import AsyncElasticsearch
 from yarl import URL
 
@@ -32,7 +33,6 @@ from platform_monitoring.config import (
     LogsStorageType,
     LokiConfig,
     PlatformApiConfig,
-    PlatformAppsConfig,
     PlatformAuthConfig,
     PlatformConfig,
     RegistryConfig,
@@ -244,7 +244,7 @@ def config_factory(
     auth_config: PlatformAuthConfig,
     platform_api_config: PlatformApiConfig,
     platform_config: PlatformConfig,
-    platform_apps: PlatformAppsConfig,
+    platform_apps: AppsClientConfig,
     s3_config: S3Config,
     loki_config: LokiConfig,
     logs_config: LogsConfig,

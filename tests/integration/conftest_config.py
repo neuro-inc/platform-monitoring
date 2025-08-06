@@ -2,13 +2,13 @@ import asyncio
 from collections.abc import AsyncIterator, Callable
 
 import pytest
+from apolo_apps_client import AppsClientConfig
 from neuro_config_client import ConfigClient
 from yarl import URL
 
 from platform_monitoring.api import create_platform_api_client
 from platform_monitoring.config import (
     PlatformApiConfig,
-    PlatformAppsConfig,
     PlatformConfig,
 )
 from tests.integration.conftest import get_service_url
@@ -45,10 +45,8 @@ def platform_config(
 @pytest.fixture
 def platform_apps(
     platform_config_url: URL, token_factory: Callable[[str], str]
-) -> PlatformAppsConfig:
-    return PlatformAppsConfig(
-        url=URL("http://platform-apps"), token=token_factory("cluster")
-    )
+) -> AppsClientConfig:
+    return AppsClientConfig(url="http://platform-apps", token=token_factory("cluster"))
 
 
 @pytest.fixture

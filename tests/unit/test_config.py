@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from apolo_apps_client import AppsClientConfig
 from yarl import URL
 
 from platform_monitoring.config import (
@@ -14,7 +15,6 @@ from platform_monitoring.config import (
     LogsConfig,
     LogsStorageType,
     PlatformApiConfig,
-    PlatformAppsConfig,
     PlatformAuthConfig,
     PlatformConfig,
     RegistryConfig,
@@ -88,8 +88,8 @@ def test_create(environ: dict[str, Any], token_path: str) -> None:
         platform_config=PlatformConfig(
             url=URL("http://platformconfig"), token="platform-config-token"
         ),
-        platform_apps=PlatformAppsConfig(
-            url=URL("http://platform-apps"), token="platform-apps-token"
+        platform_apps=AppsClientConfig(
+            url="http://platform-apps", token="platform-apps-token"
         ),
         elasticsearch=ElasticsearchConfig(hosts=["http://es1", "http://es2"]),
         logs=LogsConfig(storage_type=LogsStorageType.ELASTICSEARCH),
