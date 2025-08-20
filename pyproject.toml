@@ -27,7 +27,7 @@ dependencies = [
     "elasticsearch<8.0.0",
     "iso8601==2.1.0",
     "neuro-auth-client==25.5.1",
-    "neuro-config-client==25.2.0",
+    "neuro-config-client==25.8.3",
     "neuro-logging==25.1.0",
     "orjson==3.10.18",
     "trafaret==2.1.1",

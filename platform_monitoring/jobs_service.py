@@ -216,8 +216,8 @@ class JobsService:
             preset_resources = ContainerResources(
                 cpu_m=int(preset.cpu * 1000),
                 memory=preset.memory,
-                nvidia_gpu=preset.nvidia_gpu or 0,
-                amd_gpu=preset.amd_gpu or 0,
+                nvidia_gpu=preset.nvidia_gpu.count if preset.nvidia_gpu else 0,
+                amd_gpu=preset.amd_gpu.count if preset.amd_gpu else 0,
             )
             node_pools = [pool_types[r] for r in preset.available_resource_pool_names]
             for node_pool in node_pools:
@@ -289,6 +289,6 @@ class JobsService:
         return ContainerResources(
             cpu_m=int(node_pool.available_cpu * 1000),
             memory=node_pool.available_memory,
-            nvidia_gpu=node_pool.nvidia_gpu or 0,
-            amd_gpu=node_pool.amd_gpu or 0,
+            nvidia_gpu=node_pool.nvidia_gpu.count if node_pool.nvidia_gpu else 0,
+            amd_gpu=node_pool.amd_gpu.count if node_pool.amd_gpu else 0,
         )
