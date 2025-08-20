@@ -54,7 +54,7 @@ vcs = "git"
 optional = true
 
 [tool.poetry.group.dev.dependencies]
-apolo-sdk = "25.7.2"
+apolo-sdk = "25.8.1"
 mypy = "1.17.0"
 pre-commit = "4.3.0"
 pytest = "8.4.1"
