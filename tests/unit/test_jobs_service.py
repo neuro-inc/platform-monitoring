@@ -8,9 +8,13 @@ from unittest import mock
 import pytest
 from apolo_api_client import ApiClient
 from neuro_config_client import (
+    AMDGPU,
+    AMDGPUPreset,
     Cluster,
     ClusterStatus,
     ConfigClient,
+    NvidiaGPU,
+    NvidiaGPUPreset,
     OrchestratorConfig,
     ResourcePoolType,
     ResourcePreset,
@@ -120,8 +124,8 @@ def cluster() -> Cluster:
                     max_size=2,
                     cpu=1,
                     memory=2**30,
-                    nvidia_gpu=1,
-                    amd_gpu=2,
+                    nvidia_gpu=NvidiaGPU(count=1, model="nvidia-gpu"),
+                    amd_gpu=AMDGPU(count=2, model="amd-gpu"),
                 ),
             ],
             resource_presets=[
@@ -145,7 +149,7 @@ def cluster() -> Cluster:
                     credits_per_hour=Decimal(10),
                     cpu=0.2,
                     memory=100 * 2**20,
-                    nvidia_gpu=1,
+                    nvidia_gpu=NvidiaGPUPreset(count=1),
                     available_resource_pool_names=["minikube-gpu"],
                 ),
                 ResourcePreset(
@@ -153,7 +157,7 @@ def cluster() -> Cluster:
                     credits_per_hour=Decimal(10),
                     cpu=0.2,
                     memory=100 * 2**20,
-                    amd_gpu=1,
+                    amd_gpu=AMDGPUPreset(count=1),
                     available_resource_pool_names=["minikube-gpu"],
                 ),
             ],
