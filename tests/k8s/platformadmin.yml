@@ -68,8 +68,8 @@ spec:
         image: ghcr.io/neuro-inc/platformadmin:latest
         imagePullPolicy: Always
         env:
-        - name: NP_LOG_LEVEL
-          value: INFO
+        - name: NP_JWT_SECRET
+          value: secret
         - name: NP_ADMIN_AUTH_TOKEN
           value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImFkbWluIiwiaHR0cHM6Ly9wbGF0Zm9ybS5uZXVyb21hdGlvbi5pby91c2VyIjoiYWRtaW4ifQ._F3y_fr2W0yiJ_-r46NPszsv3H1LzWAvGNXjl0eXwVI
         - name: NP_ADMIN_AUTH_URL
