@@ -2,6 +2,7 @@ import logging
 import os
 from pathlib import Path
 
+from apolo_apps_client import AppsClientConfig
 from yarl import URL
 
 from .config import (
@@ -15,7 +16,6 @@ from .config import (
     LogsStorageType,
     LokiConfig,
     PlatformApiConfig,
-    PlatformAppsConfig,
     PlatformAuthConfig,
     PlatformConfig,
     RegistryConfig,
@@ -69,10 +69,10 @@ class EnvironConfigFactory:
         token = self._environ["NP_MONITORING_PLATFORM_AUTH_TOKEN"]
         return PlatformAuthConfig(url=url, token=token)
 
-    def _create_platform_apps_config(self) -> PlatformAppsConfig:
-        url = URL(self._environ["NP_MONITORING_PLATFORM_APPS_URL"])
+    def _create_platform_apps_config(self) -> AppsClientConfig:
+        url = self._environ["NP_MONITORING_PLATFORM_APPS_URL"]
         token = self._environ["NP_MONITORING_PLATFORM_APPS_TOKEN"]
-        return PlatformAppsConfig(url=url, token=token)
+        return AppsClientConfig(url=url, token=token)
 
     def _create_platform_config(self) -> PlatformConfig:
         url = URL(self._environ["NP_MONITORING_PLATFORM_CONFIG_URL"])

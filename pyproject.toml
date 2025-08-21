@@ -31,7 +31,8 @@ dependencies = [
     "neuro-logging==25.1.0",
     "orjson==3.10.18",
     "trafaret==2.1.1",
-    "uvloop==0.21.0"
+    "uvloop==0.21.0",
+    "apolo-apps-client==25.8.1",
 ]
 
 # Remove this section when poetry-dynamic-versioning drops [tool.poetry] support in favor of [project].

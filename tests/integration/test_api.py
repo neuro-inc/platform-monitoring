@@ -26,6 +26,11 @@ from aiohttp.web_exceptions import (
     HTTPNotFound,
     HTTPUnauthorized,
 )
+from apolo_apps_client import (
+    AppInstance,
+    AppsApiClient,
+    AppsApiException,
+)
 from yarl import URL
 
 from platform_monitoring.api import (
@@ -39,11 +44,6 @@ from platform_monitoring.config import (
     ContainerRuntimeConfig,
     LokiConfig,
     PlatformApiConfig,
-)
-from platform_monitoring.platform_apps_client import (
-    AppInstance,
-    AppsApiClient,
-    AppsApiException,
 )
 
 from .conftest import ApiAddress, create_local_app_server, random_str
@@ -1541,6 +1541,8 @@ def _get_app_mock(
         return AppInstance(
             id="app_instance_id",
             name=app_name,
+            creator="creator",
+            cluster_name="default",
             org_name=regular_user1.org_name,
             project_name=regular_user1.project_name,
             namespace=kube_client.namespace,
