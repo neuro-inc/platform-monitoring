@@ -214,8 +214,3 @@ class EnvironConfigFactory:
                 )
             ),
         )
-
-    def _create_apps_client_config(self) -> AppsClientConfig:
-        url = self._environ["NP_MONITORING_PLATFORM_APPS_URL"]
-        token = self._environ["NP_MONITORING_PLATFORM_APPS_TOKEN"]
-        return AppsClientConfig(url=url, token=token)
