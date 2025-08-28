@@ -1599,7 +1599,10 @@ class LokiLogsService(BaseLogsService):
             start = int(start_dt.timestamp() * 1_000_000_000)
             end = int(archive_border_dt.timestamp() * 1_000_000_000) - 1
             async with self.get_pod_archive_log_reader(
-                f'{{namespace="{namespace}", pod="{pod_name}"}}',
+                # Note: For jobs container store the same value as pod_name.
+                # Pod name located in json log entry, while container is in label.
+                # So we filter by container label, it faster.
+                f'{{namespace="{namespace}", container="{pod_name}"}}',
                 start=start,
                 end=end,
                 timestamps=timestamps,
