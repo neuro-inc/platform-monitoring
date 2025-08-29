@@ -1905,7 +1905,7 @@ class LokiLogsService(BaseLogsService):
         if since:
             start_dt = max(start_dt, since)
 
-        start = int(since.timestamp() * 1_000_000_000)  # type: ignore
+        start = int(start_dt.timestamp() * 1_000_000_000)
         end = int(until.timestamp() * 1_000_000_000) if until else None
 
         result = await self._loki_client.label_values(
