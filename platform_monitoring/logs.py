@@ -1898,10 +1898,14 @@ class LokiLogsService(BaseLogsService):
             exactly_equal_labels=loki_label_selector
         )
 
-        since = since or datetime.now(UTC) - timedelta(
-            seconds=self._max_query_lookback_s
-        ) + timedelta(hours=1)  # +1 hour prevent max query length error
-        start = int(since.timestamp() * 1_000_000_000)
+        now_dt = datetime.now(UTC)
+        start_dt = (
+            now_dt - timedelta(seconds=self._max_query_lookback_s) + timedelta(hours=1)
+        )  # +1 hour prevent max query length error
+        if since:
+            start_dt = max(start_dt, since)
+
+        start = int(start_dt.timestamp() * 1_000_000_000)
         end = int(until.timestamp() * 1_000_000_000) if until else None
 
         result = await self._loki_client.label_values(

@@ -585,12 +585,14 @@ class AppsMonitoringApiHandler:
             namespace=app_instance.namespace, label_selector=label_selector
         )
 
-        return [
-            container.name
-            for pod in pods
-            if pod.metadata.name
-            for container in pod.spec.containers
-        ]
+        return list(
+            {
+                container.name
+                for pod in pods
+                if pod.metadata.name
+                for container in pod.spec.containers
+            }
+        )
 
     async def containers(self, request: Request) -> Response:
         app_instance = await self._resolve_app_instance(request=request)
@@ -609,16 +611,15 @@ class AppsMonitoringApiHandler:
 
         assert isinstance(self._logs_service, LokiLogsService)
 
-        containers = await self._get_containers_from_k8s(app_instance)
-        if not containers:
-            containers = await self._logs_service.get_label_values(
-                label="container",
-                loki_label_selector=loki_label_selector,
-                since=start_dt,
-                until=end_dt,
-            )
+        k8s_containers = await self._get_containers_from_k8s(app_instance)
+        loki_containers = await self._logs_service.get_label_values(
+            label="container",
+            loki_label_selector=loki_label_selector,
+            since=start_dt,
+            until=end_dt,
+        )
 
-        return json_response(containers)
+        return json_response(list(set(k8s_containers + loki_containers)))
 
     @staticmethod
     def _as_ndjson(request: Request) -> bool:
