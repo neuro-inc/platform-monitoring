@@ -1,4 +1,12 @@
-from kubernetes.client import V1Node, V1NodeStatus, V1ObjectMeta, V1Pod
+from kubernetes.client import (
+    V1Container,
+    V1Node,
+    V1NodeStatus,
+    V1ObjectMeta,
+    V1Pod,
+    V1PodSpec,
+    V1ResourceRequirements,
+)
 from neuro_config_client import NvidiaGPU, ResourcePoolType
 
 from platform_monitoring.resources.monitoring import (
@@ -19,7 +27,7 @@ class TestResourcePoolTypeFactory:
                 capacity={"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"},
             ),
         )
-        result = ResourcePoolTypeFactory().create_from_nodes([node], [])
+        result = ResourcePoolTypeFactory().create_from_nodes([node], {})
 
         assert result == ResourcePoolType(
             name="test-node-pool",
@@ -46,7 +54,7 @@ class TestResourcePoolTypeFactory:
                 allocatable={"cpu": "3", "memory": "12Gi", "ephemeral-storage": "80Gi"},
             ),
         )
-        result = ResourcePoolTypeFactory().create_from_nodes([node], [])
+        result = ResourcePoolTypeFactory().create_from_nodes([node], {})
 
         assert result == ResourcePoolType(
             name="test-node-pool",
@@ -85,7 +93,7 @@ class TestResourcePoolTypeFactory:
                 allocatable={"cpu": "1", "memory": "4Gi", "ephemeral-storage": "40Gi"},
             ),
         )
-        result = ResourcePoolTypeFactory().create_from_nodes([node1, node2], [])
+        result = ResourcePoolTypeFactory().create_from_nodes([node1, node2], {})
 
         assert result == ResourcePoolType(
             name="test-node-pool",
@@ -115,28 +123,21 @@ class TestResourcePoolTypeFactory:
             metadata=V1ObjectMeta(
                 name="test-pod-1",
             ),
-            spec=type(
-                "spec",
-                (),
-                {
-                    "node_name": "test-node-1",
-                    "containers": [
-                        type(
-                            "container",
-                            (),
-                            {
-                                "resources": type(
-                                    "resources",
-                                    (),
-                                    {"requests": {"cpu": "1", "memory": "2Gi"}},
-                                )
-                            },
-                        )
-                    ],
-                },
-            )(),
+            spec=V1PodSpec(
+                node_name="test-node-1",
+                containers=[
+                    V1Container(
+                        name="test-container",
+                        resources=V1ResourceRequirements(
+                            requests={"cpu": "1", "memory": "2Gi"}
+                        ),
+                    )
+                ],
+            ),
         )
-        result = ResourcePoolTypeFactory().create_from_nodes([node], [pod])
+        result = ResourcePoolTypeFactory().create_from_nodes(
+            [node], {"test-node-1": [pod]}
+        )
 
         assert result == ResourcePoolType(
             name="test-node-pool",
@@ -177,54 +178,36 @@ class TestResourcePoolTypeFactory:
             metadata=V1ObjectMeta(
                 name="test-pod-1",
             ),
-            spec=type(
-                "spec",
-                (),
-                {
-                    "node_name": "test-node-1",
-                    "containers": [
-                        type(
-                            "container",
-                            (),
-                            {
-                                "resources": type(
-                                    "resources",
-                                    (),
-                                    {"requests": {"cpu": "1", "memory": "2Gi"}},
-                                )
-                            },
-                        )
-                    ],
-                },
-            )(),
+            spec=V1PodSpec(
+                node_name="test-node-1",
+                containers=[
+                    V1Container(
+                        name="test-container",
+                        resources=V1ResourceRequirements(
+                            requests={"cpu": "1", "memory": "2Gi"}
+                        ),
+                    )
+                ],
+            ),
         )
         pod2 = V1Pod(
             metadata=V1ObjectMeta(
                 name="test-pod-2",
             ),
-            spec=type(
-                "spec",
-                (),
-                {
-                    "node_name": "test-node-2",
-                    "containers": [
-                        type(
-                            "container",
-                            (),
-                            {
-                                "resources": type(
-                                    "resources",
-                                    (),
-                                    {"requests": {"cpu": "0.5", "memory": "1Gi"}},
-                                )
-                            },
-                        )
-                    ],
-                },
-            )(),
+            spec=V1PodSpec(
+                node_name="test-node-2",
+                containers=[
+                    V1Container(
+                        name="test-container",
+                        resources=V1ResourceRequirements(
+                            requests={"cpu": "0.1", "memory": "100Mi"}
+                        ),
+                    )
+                ],
+            ),
         )
         result = ResourcePoolTypeFactory().create_from_nodes(
-            [node1, node2], [pod1, pod2]
+            [node1, node2], {"test-node-1": [pod1], "test-node-2": [pod2]}
         )
 
         assert result == ResourcePoolType(
@@ -232,9 +215,9 @@ class TestResourcePoolTypeFactory:
             min_size=2,
             max_size=2,
             cpu=2,
-            available_cpu=1.5,
+            available_cpu=1.9,
             memory=8 * 2**30,
-            available_memory=7 * 2**30,
+            available_memory=8 * 2**30 - 100 * 2**20,
             disk_size=50 * 2**30,
             available_disk_size=50 * 2**30,
         )
@@ -258,7 +241,7 @@ class TestResourcePoolTypeFactory:
                 },
             ),
         )
-        result = ResourcePoolTypeFactory().create_from_nodes([node], [])
+        result = ResourcePoolTypeFactory().create_from_nodes([node], {})
 
         assert result == ResourcePoolType(
             name="test-node-pool",
@@ -310,7 +293,7 @@ class TestResourcePoolTypeFactory:
                 },
             ),
         )
-        result = ResourcePoolTypeFactory().create_from_nodes([node1, node2], [])
+        result = ResourcePoolTypeFactory().create_from_nodes([node1, node2], {})
 
         assert result == ResourcePoolType(
             name="test-node-pool",
@@ -362,7 +345,7 @@ class TestResourcePoolTypeFactory:
                 },
             ),
         )
-        result = ResourcePoolTypeFactory().create_from_nodes([node1, node2], [])
+        result = ResourcePoolTypeFactory().create_from_nodes([node1, node2], {})
 
         assert result == ResourcePoolType(
             name="test-node-pool",

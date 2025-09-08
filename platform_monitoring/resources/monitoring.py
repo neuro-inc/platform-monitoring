@@ -335,7 +335,7 @@ class ClusterSyncer:
 
     def _create_resource_pool_types(self) -> list[ResourcePoolType]:
         result = []
-        pods = list(self._kube_state.pods.values())
+        pods = self._group_pods_by_node()
         for nodes in self._group_nodes_by_node_pool().values():
             pool_type = self._resource_pool_type_factory.create_from_nodes(nodes, pods)
             result.append(pool_type)
@@ -351,13 +351,20 @@ class ClusterSyncer:
                 result[node_pool_name].append(node)
         return result
 
+    def _group_pods_by_node(self) -> dict[str, list[V1Pod]]:
+        result = defaultdict(list)
+        for pod in self._kube_state.pods.values():
+            if pod.spec.node_name:
+                result[pod.spec.node_name].append(pod)
+        return result
+
 
 _T_GPU = TypeVar("_T_GPU", bound=GPU)
 
 
 class ResourcePoolTypeFactory:
     def create_from_nodes(
-        self, nodes: Sequence[V1Node], pods: Sequence[V1Pod]
+        self, nodes: Sequence[V1Node], pods: Mapping[str, Sequence[V1Pod]]
     ) -> ResourcePoolType:
         assert nodes, "at least one node is required"
 
@@ -381,10 +388,9 @@ class ResourcePoolTypeFactory:
                 node.status.allocatable or node.status.capacity or {}
             )
             LOGGER.debug("Node %s allocatable: %r", node.metadata.name, allocatable)
-            node_pods = [
-                pod for pod in pods if pod.spec.node_name == node.metadata.name
-            ]
-            allocated = self._get_node_allocated_resources(node_pods)
+            allocated = self._get_node_allocated_resources(
+                pods.get(node.metadata.name, ())
+            )
             LOGGER.debug("Node %s allocated: %r", node.metadata.name, allocated)
 
             # Subtract resources that are allocated to platform services on each node
