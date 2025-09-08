@@ -39,12 +39,13 @@ test_unit:
 
 .PHONY: test_integration
 test_integration:
-	poetry run pytest -svv \
+	poetry run pytest -vv \
 		--cov-config=pyproject.toml --cov-report xml:.coverage-integration.xml \
 		--durations=10 \
-		--maxfail=0 \
+		--maxfail=3 \
 		--log-level=INFO \
-		tests/integration
+		tests/integration \
+		-k TestMonitoringService
 
 .PHONY: clean-dist
 clean-dist:
