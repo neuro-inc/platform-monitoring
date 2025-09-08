@@ -26,13 +26,13 @@ function k8s::start {
         --addons=registry \
         --install-addons=true
     kubectl config use-context minikube
-    kubectl get nodes -o name | xargs -I {} kubectl label {} --overwrite \
-        platform.neuromation.io/nodepool=minikube
 }
 
 function k8s::apply_all_configurations {
     echo "Applying configurations..."
     kubectl config use-context minikube
+    kubectl get nodes -o name | xargs -I {} \
+        kubectl label {} --overwrite platform.apolo.us/node-pool=minikube
     kubectl apply -f tests/k8s/rbac.yml
     kubectl apply -f tests/k8s/logging.yml
     kubectl apply -f tests/k8s/platformauth.yml
