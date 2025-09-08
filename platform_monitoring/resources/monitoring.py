@@ -274,7 +274,6 @@ def _get_node_pool_name(node: V1Node) -> str | None:
     )
 
 
-# TODO: move
 class ClusterSyncer:
     def __init__(
         self, *, kube_state: _KubeState, config_client: ConfigClient, cluster_name: str
