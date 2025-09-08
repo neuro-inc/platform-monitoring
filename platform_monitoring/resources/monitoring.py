@@ -87,6 +87,8 @@ class MonitoringService(_KubeState):
         return self._pods
 
     async def start(self) -> None:
+        self._cluster_syncer.start()
+
         start_watchers_event = asyncio.Event()
         self._nodes_watch_task = await self._start_nodes_watcher(
             start_watcher_event=start_watchers_event
@@ -94,10 +96,9 @@ class MonitoringService(_KubeState):
         self._pods_watch_task = await self._start_pods_watcher(
             start_watcher_event=start_watchers_event
         )
-        self._cluster_syncer.start()
 
-        start_watchers_event.set()
         self._cluster_syncer.notify()
+        start_watchers_event.set()
 
     async def _start_nodes_watcher(
         self, *, start_watcher_event: asyncio.Event
