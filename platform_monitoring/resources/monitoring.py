@@ -94,6 +94,7 @@ class MonitoringService(_KubeState):
         self._pods_watch_task = await self._start_pods_watcher(
             start_watcher_event=start_watchers_event
         )
+        self._cluster_syncer.start()
 
         start_watchers_event.set()
         self._cluster_syncer.notify()

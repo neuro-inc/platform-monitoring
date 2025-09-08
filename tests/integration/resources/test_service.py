@@ -26,7 +26,7 @@ from neuro_config_client import (
     ResourcePoolType,
 )
 
-from platform_monitoring.cluster_resources.service import (
+from platform_monitoring.resources.monitoring import (
     APOLO_PLATFORM_JOB_LABEL_KEY,
     APOLO_PLATFORM_NODE_POOL_LABEL_KEY,
     APOLO_PLATFORM_ROLE_LABEL_KEY,
@@ -60,7 +60,7 @@ async def kube_client(kube_config: KubeConfig) -> AsyncIterator[KubeClient]:
 def config_client() -> Iterator[mock.AsyncMock]:
     client = mock.AsyncMock(spec=ConfigClient)
     with mock.patch(
-        "platform_monitoring.cluster_resources.service.ConfigClient",
+        "platform_monitoring.resources.monitoring.ConfigClient",
         return_value=client,
     ):
         yield client
