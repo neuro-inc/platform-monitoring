@@ -43,7 +43,7 @@ test_integration:
 		--cov-config=pyproject.toml --cov-report xml:.coverage-integration.xml \
 		--durations=10 \
 		--maxfail=3 \
-		--log-level=INFO \
+		--log-level=DEBUG \
 		tests/integration \
 		-k TestMonitoringService
 
