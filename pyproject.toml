@@ -47,6 +47,7 @@ authors = ["Apolo.us <support@apolo.us>"]
 
 [project.scripts]
 platform-monitoring-api = "platform_monitoring.api:main"
+platform-monitoring-resources-monitor = "platform_monitoring.resources.main:main"
 platform-monitoring-logs-compact = "platform_monitoring.log_compact:main"
 
 [tool.poetry-dynamic-versioning]
