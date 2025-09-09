@@ -87,48 +87,33 @@ class MonitoringService(_KubeState):
         return self._pods
 
     async def start(self) -> None:
+        nodes_resource_version = await self._reset_nodes()
+        pods_resource_version = await self._reset_pods()
+
         self._cluster_syncer.start()
+        self._cluster_syncer.notify()  # Initial sync during startup
 
-        start_watchers_event = asyncio.Event()
-        self._nodes_watch_task = await self._start_nodes_watcher(
-            start_watcher_event=start_watchers_event
+        self._nodes_watch_task = asyncio.create_task(
+            self._run_nodes_watcher(resource_version=nodes_resource_version)
         )
-        self._pods_watch_task = await self._start_pods_watcher(
-            start_watcher_event=start_watchers_event
+        self._pods_watch_task = asyncio.create_task(
+            self._run_pods_watcher(resource_version=pods_resource_version)
         )
 
-        self._cluster_syncer.notify()
-        start_watchers_event.set()
-
-    async def _start_nodes_watcher(
-        self, *, start_watcher_event: asyncio.Event
-    ) -> asyncio.Task[None]:
+    async def _reset_nodes(self) -> str:
         node_list = await self._kube_client.core_v1.node.get_list()
         resource_version = node_list.metadata.resource_version
-        LOGGER.info("Initial nodes resource version: %s", resource_version)
+        LOGGER.info("Nodes resource version: %s", resource_version)
         self._init_nodes(node_list.items)
+        return resource_version
 
-        return asyncio.create_task(
-            self._run_nodes_watcher(
-                resource_version=resource_version,
-                start_watcher_event=start_watcher_event,
-            )
-        )
-
-    async def _run_nodes_watcher(
-        self, *, resource_version: str | None, start_watcher_event: asyncio.Event
-    ) -> None:
-        await start_watcher_event.wait()
-
+    async def _run_nodes_watcher(self, *, resource_version: str | None) -> None:
         LOGGER.info("Starting nodes watcher")
 
         while True:
             try:
                 if resource_version is None:
-                    node_list = await self._kube_client.core_v1.node.get_list()
-                    resource_version = node_list.metadata.resource_version
-                    LOGGER.info("Set nodes resource version: %s", resource_version)
-                    self._init_nodes(node_list.items)
+                    resource_version = await self._reset_nodes()
                     self._cluster_syncer.notify()
 
                 watch = self._kube_client.core_v1.node.watch(
@@ -159,6 +144,7 @@ class MonitoringService(_KubeState):
 
     def _is_workload_node(self, node: V1Node) -> bool:
         labels = node.metadata.labels
+        LOGGER.debug("Node %s labels: %r", node.metadata.name, labels)
         if not labels:
             return False
         if value := labels.get(APOLO_PLATFORM_ROLE_LABEL_KEY):
@@ -179,39 +165,22 @@ class MonitoringService(_KubeState):
         if result is not None:
             LOGGER.debug("Removing node %s", node.metadata.name)
 
-    async def _start_pods_watcher(
-        self, *, start_watcher_event: asyncio.Event
-    ) -> asyncio.Task[None]:
+    async def _reset_pods(self) -> str:
         pod_list = await self._kube_client.core_v1.pod.get_list(
             label_selector=PODS_LABEL_SELECTOR, all_namespaces=True
         )
         resource_version = pod_list.metadata.resource_version
-        LOGGER.info("Initial pods resource version: %s", resource_version)
+        LOGGER.info("Pods resource version: %s", resource_version)
         self._init_pods(pod_list.items)
+        return resource_version
 
-        return asyncio.create_task(
-            self._run_pods_watcher(
-                resource_version=resource_version,
-                start_watcher_event=start_watcher_event,
-            )
-        )
-
-    async def _run_pods_watcher(
-        self, *, resource_version: str | None, start_watcher_event: asyncio.Event
-    ) -> None:
-        await start_watcher_event.wait()
-
+    async def _run_pods_watcher(self, *, resource_version: str | None) -> None:
         LOGGER.info("Starting pods watcher")
 
         while True:
             try:
                 if resource_version is None:
-                    pod_list = await self._kube_client.core_v1.pod.get_list(
-                        label_selector=PODS_LABEL_SELECTOR, all_namespaces=True
-                    )
-                    resource_version = pod_list.metadata.resource_version
-                    LOGGER.info("Set pods resource version: %s", resource_version)
-                    self._init_pods(pod_list.items)
+                    resource_version = await self._reset_pods()
                     self._cluster_syncer.notify()
 
                 watch = self._kube_client.core_v1.pod.watch(
