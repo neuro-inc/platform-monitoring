@@ -106,6 +106,20 @@ class PodPhase(enum.StrEnum):
     UNKNOWN = "Unknown"
 
 
+def parse_memory(memory: str) -> int:
+    try:
+        return int(memory)
+    except ValueError:
+        pass
+    for suffix, power in (("K", 1), ("M", 2), ("G", 3), ("T", 4), ("P", 5)):
+        if memory.endswith(suffix):
+            return int(memory[:-1]) * 1000**power
+        if memory.endswith(f"{suffix}i"):
+            return int(memory[:-2]) * 1024**power
+    msg = f"Memory unit for {memory} is not supported"
+    raise KubeClientException(msg)
+
+
 @dataclass(frozen=True)
 class ContainerResources:
     cpu_m: int = 0
@@ -116,11 +130,15 @@ class ContainerResources:
     nvidia_gpu_key: t.ClassVar[str] = "nvidia.com/gpu"
     amd_gpu_key: t.ClassVar[str] = "amd.com/gpu"
 
+    @property
+    def cpu(self) -> float:
+        return self.cpu_m / 1000
+
     @classmethod
     def from_primitive(cls, payload: JSON) -> t.Self:
         return cls(
             cpu_m=cls._parse_cpu_m(str(payload.get("cpu", "0"))),
-            memory=cls._parse_memory(str(payload.get("memory", "0"))),
+            memory=parse_memory(str(payload.get("memory", "0"))),
             nvidia_gpu=int(payload.get(cls.nvidia_gpu_key, 0)),
             amd_gpu=int(payload.get(cls.amd_gpu_key, 0)),
         )
@@ -131,23 +149,17 @@ class ContainerResources:
             return int(value[:-1])
         return int(float(value) * 1000)
 
-    @classmethod
-    def _parse_memory(cls, memory: str) -> int:
-        try:
-            return int(memory)
-        except ValueError:
-            pass
-        for suffix, power in (("K", 1), ("M", 2), ("G", 3), ("T", 4), ("P", 5)):
-            if memory.endswith(suffix):
-                return int(memory[:-1]) * 1000**power
-            if memory.endswith(f"{suffix}i"):
-                return int(memory[:-2]) * 1024**power
-        msg = f"Memory unit for {memory} is not supported"
-        raise KubeClientException(msg)
+    @property
+    def has_nvidia_gpu(self) -> bool:
+        return self.nvidia_gpu != 0
+
+    @property
+    def has_amd_gpu(self) -> bool:
+        return self.amd_gpu != 0
 
     @property
     def has_gpu(self) -> bool:
-        return self.nvidia_gpu != 0 or self.amd_gpu != 0
+        return self.has_nvidia_gpu or self.has_amd_gpu
 
     def __bool__(self) -> bool:
         return (
@@ -328,7 +340,7 @@ class NodeResources(ContainerResources):
             **{
                 **asdict(resources),
                 "pods": int(payload.get("pods", cls.pods)),
-                "ephemeral_storage": cls._parse_memory(
+                "ephemeral_storage": parse_memory(
                     payload.get("ephemeral-storage", cls.ephemeral_storage)
                 ),
             }
