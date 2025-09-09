@@ -213,6 +213,8 @@ class MonitoringService(_KubeState):
         self._pods = new_pods
 
     def _is_pod_running(self, pod: V1Pod) -> bool:
+        LOGGER.debug("Pod %s node name: %r", pod.metadata.name, pod.spec.node_name)
+        LOGGER.debug("Pod %s status: %r", pod.metadata.name, pod.status)
         return pod.spec.node_name and pod.status and pod.status.phase == "Running"
 
     def _handle_pod_update(self, pod: V1Pod) -> None:
