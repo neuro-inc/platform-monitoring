@@ -47,6 +47,7 @@ authors = ["Apolo.us <support@apolo.us>"]
 
 [project.scripts]
 platform-monitoring-api = "platform_monitoring.api:main"
+platform-monitoring-resources-monitor = "platform_monitoring.resources.main:main"
 platform-monitoring-logs-compact = "platform_monitoring.log_compact:main"
 
 [tool.poetry-dynamic-versioning]
@@ -62,7 +63,7 @@ mypy = "1.17.1"
 pre-commit = "4.3.0"
 pytest = "8.4.1"
 pytest-asyncio = "1.1.0"
-pytest-cov = "6.2.1"
+pytest-cov = "6.3.0"
 pytest-xdist = "3.8.0"
 python-jose = "3.5.0"
 ruff = "0.12.11"
