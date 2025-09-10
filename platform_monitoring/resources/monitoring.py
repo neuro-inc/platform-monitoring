@@ -128,8 +128,6 @@ class MonitoringService(_KubeState):
                         case "DELETED":
                             self._handle_node_deletion(event.object)
                     self._cluster_syncer.notify()
-            except TimeoutError:
-                LOGGER.debug("Nodes watcher timed out, restarting")
             except Exception:
                 LOGGER.exception("Nodes watcher failed")
 
@@ -200,8 +198,6 @@ class MonitoringService(_KubeState):
                         case "DELETED":
                             self._handle_pod_deletion(event.object)
                     self._cluster_syncer.notify()
-            except TimeoutError:
-                LOGGER.debug("Pods watcher timed out, restarting")
             except Exception:
                 LOGGER.exception("Pods watcher failed")
 
