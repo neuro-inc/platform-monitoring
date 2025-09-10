@@ -2,7 +2,7 @@ import asyncio
 import logging
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from contextlib import suppress
+from contextlib import aclosing, suppress
 from dataclasses import dataclass
 from typing import Protocol, Self, TypeVar
 
@@ -187,14 +187,14 @@ class MonitoringService(_KubeState):
                 watch = self._kube_client.core_v1.node.watch(
                     resource_version=resource_version, allow_watch_bookmarks=True
                 )
-                gen = watch.stream()
-                async for event in gen:
-                    match event.type:
-                        case "ADDED" | "MODIFIED":
-                            self._handle_node_update(event.object)
-                        case "DELETED":
-                            self._handle_node_deletion(event.object)
-                    self._cluster_syncer.notify()
+                async with aclosing(watch.stream()) as event_stream:
+                    async for event in event_stream:
+                        match event.type:
+                            case "ADDED" | "MODIFIED":
+                                self._handle_node_update(event.object)
+                            case "DELETED":
+                                self._handle_node_deletion(event.object)
+                        self._cluster_syncer.notify()
             except Exception:
                 LOGGER.exception("Nodes watcher failed")
 
@@ -258,13 +258,14 @@ class MonitoringService(_KubeState):
                     resource_version=resource_version,
                     allow_watch_bookmarks=True,
                 )
-                async for event in watch.stream():
-                    match event.type:
-                        case "ADDED" | "MODIFIED":
-                            self._handle_pod_update(event.object)
-                        case "DELETED":
-                            self._handle_pod_deletion(event.object)
-                    self._cluster_syncer.notify()
+                async with aclosing(watch.stream()) as event_stream:
+                    async for event in event_stream:
+                        match event.type:
+                            case "ADDED" | "MODIFIED":
+                                self._handle_pod_update(event.object)
+                            case "DELETED":
+                                self._handle_pod_deletion(event.object)
+                        self._cluster_syncer.notify()
             except Exception:
                 LOGGER.exception("Pods watcher failed")
 
