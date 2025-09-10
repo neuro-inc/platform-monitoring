@@ -41,6 +41,8 @@ PODS_LABEL_SELECTOR = (
     f"!{APOLO_PLATFORM_JOB_LABEL_KEY},!{APOLO_PLATFORM_APP_INSTANCE_NAME_LABEL_KEY}"
 )
 
+MiB = 2**20
+
 
 class _KubeState(Protocol):
     @property
@@ -126,6 +128,8 @@ class MonitoringService(_KubeState):
                         case "DELETED":
                             self._handle_node_deletion(event.object)
                     self._cluster_syncer.notify()
+            except TimeoutError:
+                LOGGER.debug("Nodes watcher timed out, restarting")
             except Exception:
                 LOGGER.exception("Nodes watcher failed")
 
@@ -196,6 +200,8 @@ class MonitoringService(_KubeState):
                         case "DELETED":
                             self._handle_pod_deletion(event.object)
                     self._cluster_syncer.notify()
+            except TimeoutError:
+                LOGGER.debug("Pods watcher timed out, restarting")
             except Exception:
                 LOGGER.exception("Pods watcher failed")
 
@@ -382,8 +388,8 @@ class ResourcePoolTypeFactory:
             name=name,
             min_size=len(nodes),
             max_size=len(nodes),
-            cpu=min(cpu),
-            available_cpu=min(available_cpu),
+            cpu=int(min(cpu) * 1000) / 1000,
+            available_cpu=int(min(available_cpu) * 1000) / 1000,
             memory=min(memory),
             available_memory=min(available_memory),
             disk_size=min(disk_size),
@@ -416,7 +422,7 @@ class ResourcePoolTypeFactory:
             return NvidiaGPU(
                 count=capacity.nvidia_gpu,
                 model=model,
-                memory=parse_memory(labels.get(NVIDIA_GPU_MEMORY, "0")),
+                memory=int(labels.get(NVIDIA_GPU_MEMORY, "0")) * MiB,
             )
         return None
 
