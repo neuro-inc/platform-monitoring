@@ -1,30 +1,23 @@
-from kubernetes.client import (
-    V1Container,
-    V1Node,
-    V1NodeStatus,
-    V1ObjectMeta,
-    V1Pod,
-    V1PodSpec,
-    V1ResourceRequirements,
-)
 from neuro_config_client import NvidiaGPU, ResourcePoolType
 
+from platform_monitoring.kube_client import ContainerResources, NodeResources
 from platform_monitoring.resources.monitoring import (
     ResourcePoolTypeFactory,
+    _Node,
+    _Pod,
 )
 
 
 class TestResourcePoolTypeFactory:
     def test_create_from_nodes__cpu__no_allocatable__no_pods(self) -> None:
-        node = V1Node(
-            metadata=V1ObjectMeta(
-                name="test-node-1",
-                labels={
-                    "platform.apolo.us/node-pool": "test-node-pool",
-                },
+        node = _Node(
+            name="test-node-1",
+            node_pool_name="test-node-pool",
+            capacity=NodeResources.from_primitive(
+                {"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"}
             ),
-            status=V1NodeStatus(
-                capacity={"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"},
+            allocatable=NodeResources.from_primitive(
+                {"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"}
             ),
         )
         result = ResourcePoolTypeFactory().create_from_nodes([node], {})
@@ -42,16 +35,14 @@ class TestResourcePoolTypeFactory:
         )
 
     def test_create_from_nodes__cpu__different_allocatable__no_pods(self) -> None:
-        node = V1Node(
-            metadata=V1ObjectMeta(
-                name="test-node-1",
-                labels={
-                    "platform.apolo.us/node-pool": "test-node-pool",
-                },
+        node = _Node(
+            name="test-node-1",
+            node_pool_name="test-node-pool",
+            capacity=NodeResources.from_primitive(
+                {"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"}
             ),
-            status=V1NodeStatus(
-                capacity={"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"},
-                allocatable={"cpu": "3", "memory": "12Gi", "ephemeral-storage": "80Gi"},
+            allocatable=NodeResources.from_primitive(
+                {"cpu": "3", "memory": "12Gi", "ephemeral-storage": "80Gi"}
             ),
         )
         result = ResourcePoolTypeFactory().create_from_nodes([node], {})
@@ -69,28 +60,24 @@ class TestResourcePoolTypeFactory:
         )
 
     def test_create_from_nodes__cpu__multiple_nodes__no_pods(self) -> None:
-        node1 = V1Node(
-            metadata=V1ObjectMeta(
-                name="test-node-1",
-                labels={
-                    "platform.apolo.us/node-pool": "test-node-pool",
-                },
+        node1 = _Node(
+            name="test-node-1",
+            node_pool_name="test-node-pool",
+            capacity=NodeResources.from_primitive(
+                {"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"}
             ),
-            status=V1NodeStatus(
-                capacity={"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"},
-                allocatable={"cpu": "3", "memory": "12Gi", "ephemeral-storage": "80Gi"},
+            allocatable=NodeResources.from_primitive(
+                {"cpu": "3", "memory": "12Gi", "ephemeral-storage": "80Gi"}
             ),
         )
-        node2 = V1Node(
-            metadata=V1ObjectMeta(
-                name="test-node-2",
-                labels={
-                    "platform.apolo.us/node-pool": "test-node-pool",
-                },
+        node2 = _Node(
+            name="test-node-2",
+            node_pool_name="test-node-pool",
+            capacity=NodeResources.from_primitive(
+                {"cpu": "2", "memory": "8Gi", "ephemeral-storage": "50Gi"}
             ),
-            status=V1NodeStatus(
-                capacity={"cpu": "2", "memory": "8Gi", "ephemeral-storage": "50Gi"},
-                allocatable={"cpu": "1", "memory": "4Gi", "ephemeral-storage": "40Gi"},
+            allocatable=NodeResources.from_primitive(
+                {"cpu": "1", "memory": "4Gi", "ephemeral-storage": "40Gi"}
             ),
         )
         result = ResourcePoolTypeFactory().create_from_nodes([node1, node2], {})
@@ -108,31 +95,21 @@ class TestResourcePoolTypeFactory:
         )
 
     def test_create_from_nodes__has_pods(self) -> None:
-        node = V1Node(
-            metadata=V1ObjectMeta(
-                name="test-node-1",
-                labels={
-                    "platform.apolo.us/node-pool": "test-node-pool",
-                },
+        node = _Node(
+            name="test-node-1",
+            node_pool_name="test-node-pool",
+            capacity=NodeResources.from_primitive(
+                {"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"}
             ),
-            status=V1NodeStatus(
-                capacity={"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"},
+            allocatable=NodeResources.from_primitive(
+                {"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"}
             ),
         )
-        pod = V1Pod(
-            metadata=V1ObjectMeta(
-                name="test-pod-1",
-            ),
-            spec=V1PodSpec(
-                node_name="test-node-1",
-                containers=[
-                    V1Container(
-                        name="test-container",
-                        resources=V1ResourceRequirements(
-                            requests={"cpu": "1", "memory": "2Gi"}
-                        ),
-                    )
-                ],
+        pod = _Pod(
+            name="test-pod-1",
+            node_name="test-node-1",
+            resource_requests=ContainerResources.from_primitive(
+                {"cpu": "1", "memory": "2Gi"}
             ),
         )
         result = ResourcePoolTypeFactory().create_from_nodes(
@@ -152,58 +129,38 @@ class TestResourcePoolTypeFactory:
         )
 
     def test_create_from_nodes__multiple_nodes__has_pods(self) -> None:
-        node1 = V1Node(
-            metadata=V1ObjectMeta(
-                name="test-node-1",
-                labels={
-                    "platform.apolo.us/node-pool": "test-node-pool",
-                },
+        node1 = _Node(
+            name="test-node-1",
+            node_pool_name="test-node-pool",
+            capacity=NodeResources.from_primitive(
+                {"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"}
             ),
-            status=V1NodeStatus(
-                capacity={"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"},
-            ),
-        )
-        node2 = V1Node(
-            metadata=V1ObjectMeta(
-                name="test-node-2",
-                labels={
-                    "platform.apolo.us/node-pool": "test-node-pool",
-                },
-            ),
-            status=V1NodeStatus(
-                capacity={"cpu": "2", "memory": "8Gi", "ephemeral-storage": "50Gi"},
+            allocatable=NodeResources.from_primitive(
+                {"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"}
             ),
         )
-        pod1 = V1Pod(
-            metadata=V1ObjectMeta(
-                name="test-pod-1",
+        node2 = _Node(
+            name="test-node-2",
+            node_pool_name="test-node-pool",
+            capacity=NodeResources.from_primitive(
+                {"cpu": "2", "memory": "8Gi", "ephemeral-storage": "50Gi"}
             ),
-            spec=V1PodSpec(
-                node_name="test-node-1",
-                containers=[
-                    V1Container(
-                        name="test-container",
-                        resources=V1ResourceRequirements(
-                            requests={"cpu": "1", "memory": "2Gi"}
-                        ),
-                    )
-                ],
+            allocatable=NodeResources.from_primitive(
+                {"cpu": "2", "memory": "8Gi", "ephemeral-storage": "50Gi"}
             ),
         )
-        pod2 = V1Pod(
-            metadata=V1ObjectMeta(
-                name="test-pod-2",
+        pod1 = _Pod(
+            name="test-pod-1",
+            node_name="test-node-1",
+            resource_requests=ContainerResources.from_primitive(
+                {"cpu": "1", "memory": "2Gi"}
             ),
-            spec=V1PodSpec(
-                node_name="test-node-2",
-                containers=[
-                    V1Container(
-                        name="test-container",
-                        resources=V1ResourceRequirements(
-                            requests={"cpu": "0.1", "memory": "100Mi"}
-                        ),
-                    )
-                ],
+        )
+        pod2 = _Pod(
+            name="test-pod-2",
+            node_name="test-node-2",
+            resource_requests=ContainerResources.from_primitive(
+                {"cpu": "0.1", "memory": "100Mi"}
             ),
         )
         result = ResourcePoolTypeFactory().create_from_nodes(
@@ -223,23 +180,27 @@ class TestResourcePoolTypeFactory:
         )
 
     def test_create_from_nodes__gpu(self) -> None:
-        node = V1Node(
-            metadata=V1ObjectMeta(
-                name="test-node-1",
-                labels={
-                    "platform.apolo.us/node-pool": "test-node-pool",
-                    "nvidia.com/gpu.product": "A100",
-                    "nvidia.com/gpu.memory": str(40 * 2**10),
-                },
-            ),
-            status=V1NodeStatus(
-                capacity={
+        node = _Node(
+            name="test-node-1",
+            node_pool_name="test-node-pool",
+            capacity=NodeResources.from_primitive(
+                {
                     "cpu": "4",
                     "memory": "16Gi",
                     "ephemeral-storage": "100Gi",
-                    "nvidia.com/gpu": "2",
-                },
+                    NodeResources.nvidia_gpu_key: "2",
+                }
             ),
+            allocatable=NodeResources.from_primitive(
+                {
+                    "cpu": "4",
+                    "memory": "16Gi",
+                    "ephemeral-storage": "100Gi",
+                    NodeResources.nvidia_gpu_key: "2",
+                }
+            ),
+            nvidia_gpu_model="A100",
+            nvidia_gpu_memory=40 * 2**30,
         )
         result = ResourcePoolTypeFactory().create_from_nodes([node], {})
 
@@ -257,41 +218,51 @@ class TestResourcePoolTypeFactory:
         )
 
     def test_create_from_nodes__gpu__multiple_nodes__different_gpus(self) -> None:
-        node1 = V1Node(
-            metadata=V1ObjectMeta(
-                name="test-node-1",
-                labels={
-                    "platform.apolo.us/node-pool": "test-node-pool",
-                    "nvidia.com/gpu.product": "A100",
-                    "nvidia.com/gpu.memory": str(40 * 2**10),
-                },
-            ),
-            status=V1NodeStatus(
-                capacity={
+        node1 = _Node(
+            name="test-node-1",
+            node_pool_name="test-node-pool",
+            capacity=NodeResources.from_primitive(
+                {
                     "cpu": "4",
                     "memory": "16Gi",
                     "ephemeral-storage": "100Gi",
-                    "nvidia.com/gpu": "2",
-                },
+                    NodeResources.nvidia_gpu_key: "2",
+                }
             ),
+            allocatable=NodeResources.from_primitive(
+                {
+                    "cpu": "4",
+                    "memory": "16Gi",
+                    "ephemeral-storage": "100Gi",
+                    NodeResources.nvidia_gpu_key: "2",
+                }
+            ),
+            nvidia_gpu_model="A100",
+            nvidia_gpu_memory=40 * 2**30,
         )
-        node2 = V1Node(
-            metadata=V1ObjectMeta(
-                name="test-node-2",
-                labels={
-                    "platform.apolo.us/node-pool": "test-node-pool",
-                    "nvidia.com/gpu.product": "A100",
-                    "nvidia.com/gpu.memory": str(41 * 2**10),
-                },
-            ),
-            status=V1NodeStatus(
-                capacity={
+        node2 = _Node(
+            name="test-node-2",
+            node_pool_name="test-node-pool",
+            capacity=NodeResources.from_primitive(
+                {
                     "cpu": "4",
                     "memory": "16Gi",
                     "ephemeral-storage": "100Gi",
-                    "nvidia.com/gpu": "1",
-                },
+                    NodeResources.nvidia_gpu_key: "1",
+                }
             ),
+            allocatable=NodeResources.from_primitive(
+                {
+                    "cpu": "4",
+                    "memory": "16Gi",
+                    "ephemeral-storage": "100Gi",
+                    NodeResources.nvidia_gpu_key: "1",
+                }
+            ),
+            nvidia_gpu_model="A100",
+            nvidia_gpu_memory=41 * 2**30,
+            amd_gpu_device_id=None,
+            amd_gpu_vram=None,
         )
         result = ResourcePoolTypeFactory().create_from_nodes([node1, node2], {})
 
@@ -309,41 +280,51 @@ class TestResourcePoolTypeFactory:
         )
 
     def test_create_from_nodes__gpu__multiple_nodes__different_gpu_models(self) -> None:
-        node1 = V1Node(
-            metadata=V1ObjectMeta(
-                name="test-node-1",
-                labels={
-                    "platform.apolo.us/node-pool": "test-node-pool",
-                    "nvidia.com/gpu.product": "A100",
-                    "nvidia.com/gpu.memory": str(40 * 2**10),
-                },
-            ),
-            status=V1NodeStatus(
-                capacity={
+        node1 = _Node(
+            name="test-node-1",
+            node_pool_name="test-node-pool",
+            capacity=NodeResources.from_primitive(
+                {
                     "cpu": "4",
                     "memory": "16Gi",
                     "ephemeral-storage": "100Gi",
-                    "nvidia.com/gpu": "2",
-                },
+                    NodeResources.nvidia_gpu_key: "2",
+                }
             ),
+            allocatable=NodeResources.from_primitive(
+                {
+                    "cpu": "4",
+                    "memory": "16Gi",
+                    "ephemeral-storage": "100Gi",
+                    NodeResources.nvidia_gpu_key: "2",
+                }
+            ),
+            nvidia_gpu_model="A100",
+            nvidia_gpu_memory=40 * 2**30,
         )
-        node2 = V1Node(
-            metadata=V1ObjectMeta(
-                name="test-node-2",
-                labels={
-                    "platform.apolo.us/node-pool": "test-node-pool",
-                    "nvidia.com/gpu.product": "V100",
-                    "nvidia.com/gpu.memory": str(16 * 2**10),
-                },
-            ),
-            status=V1NodeStatus(
-                capacity={
+        node2 = _Node(
+            name="test-node-2",
+            node_pool_name="test-node-pool",
+            capacity=NodeResources.from_primitive(
+                {
                     "cpu": "2",
                     "memory": "8Gi",
                     "ephemeral-storage": "50Gi",
-                    "nvidia.com/gpu": "1",
-                },
+                    NodeResources.nvidia_gpu_key: "1",
+                }
             ),
+            allocatable=NodeResources.from_primitive(
+                {
+                    "cpu": "2",
+                    "memory": "8Gi",
+                    "ephemeral-storage": "50Gi",
+                    NodeResources.nvidia_gpu_key: "1",
+                }
+            ),
+            nvidia_gpu_model="V100",
+            nvidia_gpu_memory=16 * 2**30,
+            amd_gpu_device_id=None,
+            amd_gpu_vram=None,
         )
         result = ResourcePoolTypeFactory().create_from_nodes([node1, node2], {})
 

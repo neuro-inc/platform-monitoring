@@ -45,17 +45,17 @@ PODS_LABEL_SELECTOR = (
 MiB = 2**20
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class _Node:
     name: str
     node_pool_name: str
-    role: str | None
+    role: str | None = None
     capacity: NodeResources
     allocatable: NodeResources
-    nvidia_gpu_model: str | None
-    nvidia_gpu_memory: int | None
-    amd_gpu_device_id: str | None
-    amd_gpu_vram: int | None
+    nvidia_gpu_model: str | None = None
+    nvidia_gpu_memory: int | None = None
+    amd_gpu_device_id: str | None = None
+    amd_gpu_vram: int | None = None
 
     @classmethod
     def from_v1_node(cls, node: V1Node) -> Self:
