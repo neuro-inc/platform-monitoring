@@ -229,7 +229,7 @@ class TestResourcePoolTypeFactory:
                 labels={
                     "platform.apolo.us/node-pool": "test-node-pool",
                     "nvidia.com/gpu.product": "A100",
-                    "nvidia.com/gpu.memory": "40Gi",
+                    "nvidia.com/gpu.memory": str(40 * 2**10),
                 },
             ),
             status=V1NodeStatus(
@@ -263,7 +263,7 @@ class TestResourcePoolTypeFactory:
                 labels={
                     "platform.apolo.us/node-pool": "test-node-pool",
                     "nvidia.com/gpu.product": "A100",
-                    "nvidia.com/gpu.memory": "40Gi",
+                    "nvidia.com/gpu.memory": str(40 * 2**10),
                 },
             ),
             status=V1NodeStatus(
@@ -281,7 +281,7 @@ class TestResourcePoolTypeFactory:
                 labels={
                     "platform.apolo.us/node-pool": "test-node-pool",
                     "nvidia.com/gpu.product": "A100",
-                    "nvidia.com/gpu.memory": "41Gi",
+                    "nvidia.com/gpu.memory": str(41 * 2**10),
                 },
             ),
             status=V1NodeStatus(
@@ -315,7 +315,7 @@ class TestResourcePoolTypeFactory:
                 labels={
                     "platform.apolo.us/node-pool": "test-node-pool",
                     "nvidia.com/gpu.product": "A100",
-                    "nvidia.com/gpu.memory": "40Gi",
+                    "nvidia.com/gpu.memory": str(40 * 2**10),
                 },
             ),
             status=V1NodeStatus(
@@ -333,7 +333,7 @@ class TestResourcePoolTypeFactory:
                 labels={
                     "platform.apolo.us/node-pool": "test-node-pool",
                     "nvidia.com/gpu.product": "V100",
-                    "nvidia.com/gpu.memory": "16Gi",
+                    "nvidia.com/gpu.memory": str(16 * 2**10),
                 },
             ),
             status=V1NodeStatus(
