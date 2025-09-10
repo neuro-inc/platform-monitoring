@@ -31,6 +31,7 @@ from platform_monitoring.resources.monitoring import (
     APOLO_PLATFORM_NODE_POOL_LABEL_KEY,
     APOLO_PLATFORM_ROLE_LABEL_KEY,
     MonitoringService,
+    round_cpu,
 )
 
 
@@ -368,7 +369,9 @@ class TestMonitoringService:
                 assert self._has_pool_type(patch_request, node_pool_name)
 
                 pool_type = self._get_pool_type(patch_request, node_pool_name)
-                assert pool_type.available_cpu == initial_pool_type.available_cpu - 0.1
+                assert pool_type.available_cpu == round_cpu(
+                    initial_pool_type.available_cpu - 0.1
+                )
                 assert (
                     pool_type.available_memory
                     == initial_pool_type.available_memory - 128 * 1024**2
@@ -429,7 +432,9 @@ class TestMonitoringService:
                 assert self._has_pool_type(patch_request, node_pool_name)
 
                 pool_type = self._get_pool_type(patch_request, node_pool_name)
-                assert pool_type.available_cpu == initial_pool_type.available_cpu - 0.1
+                assert pool_type.available_cpu == round_cpu(
+                    initial_pool_type.available_cpu - 0.1
+                )
                 assert (
                     pool_type.available_memory
                     == initial_pool_type.available_memory - 128 * 1024**2
