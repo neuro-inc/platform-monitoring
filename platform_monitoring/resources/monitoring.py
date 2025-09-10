@@ -388,8 +388,8 @@ class ResourcePoolTypeFactory:
             name=name,
             min_size=len(nodes),
             max_size=len(nodes),
-            cpu=int(min(cpu) * 1000) / 1000,
-            available_cpu=int(min(available_cpu) * 1000) / 1000,
+            cpu=self._round_cpu(min(cpu)),
+            available_cpu=self._round_cpu(min(available_cpu)),
             memory=min(memory),
             available_memory=min(available_memory),
             disk_size=min(disk_size),
@@ -397,6 +397,10 @@ class ResourcePoolTypeFactory:
             nvidia_gpu=self._min_gpu(nvidia_gpu, NvidiaGPU),
             amd_gpu=self._min_gpu(amd_gpu, AMDGPU),
         )
+
+    @classmethod
+    def _round_cpu(cls, cpu: float) -> float:
+        return int(cpu * 1000) / 1000
 
     def _get_node_allocated_resources(
         self, pods: Sequence[V1Pod]
