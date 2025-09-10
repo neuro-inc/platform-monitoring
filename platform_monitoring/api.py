@@ -1181,7 +1181,7 @@ def main() -> None:  # pragma: no coverage
     init_logging()
     config = EnvironConfigFactory().create()
     # NOTE: If config is passed as arg all secrets will be logged in
-    # log receord args attribute.
+    # log record args attribute.
     logging.info(f"Loaded config: {config!r}")  # noqa: G004
     setup_sentry()
     aiohttp.web.run_app(

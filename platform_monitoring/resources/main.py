@@ -75,7 +75,7 @@ def main() -> None:  # pragma: no coverage
     init_logging(health_check_url_path="/ping")
     config = EnvironConfigFactory().create_resources_monitor()
     # NOTE: If config is passed as arg all secrets will be logged in
-    # log receord args attribute.
+    # log record args attribute.
     logging.info(f"Loaded config: {config!r}")  # noqa: G004
     setup_sentry(health_check_url_path="/ping")
     aiohttp.web.run_app(
