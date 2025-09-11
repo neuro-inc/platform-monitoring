@@ -49,7 +49,6 @@ MiB = 2**20
 class _Node:
     name: str
     node_pool_name: str
-    role: str | None = None
     capacity: NodeResources
     allocatable: NodeResources
     nvidia_gpu_model: str | None = None
@@ -65,7 +64,6 @@ class _Node:
         return cls(
             name=node.metadata.name,
             node_pool_name=node_pool_name,
-            role=labels.get(APOLO_PLATFORM_ROLE_LABEL_KEY, "").lower() or None,
             capacity=NodeResources.from_primitive(node.status.capacity or {}),
             allocatable=NodeResources.from_primitive(
                 node.status.allocatable or node.status.capacity or {}
