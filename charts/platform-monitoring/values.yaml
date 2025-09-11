@@ -116,7 +116,7 @@ priorityClassName: ""
 resourcesMonitor:
   resources:
     requests:
-      cpu: "0.1"
+      cpu: 30m
       memory: "200Mi"
     limits:
       memory: "300Mi"
