@@ -13,11 +13,15 @@ class TestResourcePoolTypeFactory:
         node = _Node(
             name="test-node-1",
             node_pool_name="test-node-pool",
-            capacity=NodeResources.from_primitive(
-                {"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"}
+            capacity=NodeResources(
+                cpu_m=4000,
+                memory=16 * 2**30,
+                ephemeral_storage=100 * 2**30,
             ),
-            allocatable=NodeResources.from_primitive(
-                {"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"}
+            allocatable=NodeResources(
+                cpu_m=4000,
+                memory=16 * 2**30,
+                ephemeral_storage=100 * 2**30,
             ),
         )
         result = ResourcePoolTypeFactory().create_from_nodes([node], {})
@@ -38,11 +42,15 @@ class TestResourcePoolTypeFactory:
         node = _Node(
             name="test-node-1",
             node_pool_name="test-node-pool",
-            capacity=NodeResources.from_primitive(
-                {"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"}
+            capacity=NodeResources(
+                cpu_m=4000,
+                memory=16 * 2**30,
+                ephemeral_storage=100 * 2**30,
             ),
-            allocatable=NodeResources.from_primitive(
-                {"cpu": "3", "memory": "12Gi", "ephemeral-storage": "80Gi"}
+            allocatable=NodeResources(
+                cpu_m=3000,
+                memory=12 * 2**30,
+                ephemeral_storage=80 * 2**30,
             ),
         )
         result = ResourcePoolTypeFactory().create_from_nodes([node], {})
@@ -63,21 +71,29 @@ class TestResourcePoolTypeFactory:
         node1 = _Node(
             name="test-node-1",
             node_pool_name="test-node-pool",
-            capacity=NodeResources.from_primitive(
-                {"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"}
+            capacity=NodeResources(
+                cpu_m=4000,
+                memory=16 * 2**30,
+                ephemeral_storage=100 * 2**30,
             ),
-            allocatable=NodeResources.from_primitive(
-                {"cpu": "3", "memory": "12Gi", "ephemeral-storage": "80Gi"}
+            allocatable=NodeResources(
+                cpu_m=3000,
+                memory=12 * 2**30,
+                ephemeral_storage=80 * 2**30,
             ),
         )
         node2 = _Node(
             name="test-node-2",
             node_pool_name="test-node-pool",
-            capacity=NodeResources.from_primitive(
-                {"cpu": "2", "memory": "8Gi", "ephemeral-storage": "50Gi"}
+            capacity=NodeResources(
+                cpu_m=2000,
+                memory=8 * 2**30,
+                ephemeral_storage=50 * 2**30,
             ),
-            allocatable=NodeResources.from_primitive(
-                {"cpu": "1", "memory": "4Gi", "ephemeral-storage": "40Gi"}
+            allocatable=NodeResources(
+                cpu_m=1000,
+                memory=4 * 2**30,
+                ephemeral_storage=40 * 2**30,
             ),
         )
         result = ResourcePoolTypeFactory().create_from_nodes([node1, node2], {})
@@ -98,11 +114,15 @@ class TestResourcePoolTypeFactory:
         node = _Node(
             name="test-node-1",
             node_pool_name="test-node-pool",
-            capacity=NodeResources.from_primitive(
-                {"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"}
+            capacity=NodeResources(
+                cpu_m=4000,
+                memory=16 * 2**30,
+                ephemeral_storage=100 * 2**30,
             ),
-            allocatable=NodeResources.from_primitive(
-                {"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"}
+            allocatable=NodeResources(
+                cpu_m=4000,
+                memory=16 * 2**30,
+                ephemeral_storage=100 * 2**30,
             ),
         )
         pod = _Pod(
@@ -132,21 +152,29 @@ class TestResourcePoolTypeFactory:
         node1 = _Node(
             name="test-node-1",
             node_pool_name="test-node-pool",
-            capacity=NodeResources.from_primitive(
-                {"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"}
+            capacity=NodeResources(
+                cpu_m=4000,
+                memory=16 * 2**30,
+                ephemeral_storage=100 * 2**30,
             ),
-            allocatable=NodeResources.from_primitive(
-                {"cpu": "4", "memory": "16Gi", "ephemeral-storage": "100Gi"}
+            allocatable=NodeResources(
+                cpu_m=4000,
+                memory=16 * 2**30,
+                ephemeral_storage=100 * 2**30,
             ),
         )
         node2 = _Node(
             name="test-node-2",
             node_pool_name="test-node-pool",
-            capacity=NodeResources.from_primitive(
-                {"cpu": "2", "memory": "8Gi", "ephemeral-storage": "50Gi"}
+            capacity=NodeResources(
+                cpu_m=2000,
+                memory=8 * 2**30,
+                ephemeral_storage=50 * 2**30,
             ),
-            allocatable=NodeResources.from_primitive(
-                {"cpu": "2", "memory": "8Gi", "ephemeral-storage": "50Gi"}
+            allocatable=NodeResources(
+                cpu_m=2000,
+                memory=8 * 2**30,
+                ephemeral_storage=50 * 2**30,
             ),
         )
         pod1 = _Pod(
@@ -183,21 +211,17 @@ class TestResourcePoolTypeFactory:
         node = _Node(
             name="test-node-1",
             node_pool_name="test-node-pool",
-            capacity=NodeResources.from_primitive(
-                {
-                    "cpu": "4",
-                    "memory": "16Gi",
-                    "ephemeral-storage": "100Gi",
-                    NodeResources.nvidia_gpu_key: "2",
-                }
+            capacity=NodeResources(
+                cpu_m=4000,
+                memory=16 * 2**30,
+                ephemeral_storage=100 * 2**30,
+                nvidia_gpu=2,
             ),
-            allocatable=NodeResources.from_primitive(
-                {
-                    "cpu": "4",
-                    "memory": "16Gi",
-                    "ephemeral-storage": "100Gi",
-                    NodeResources.nvidia_gpu_key: "2",
-                }
+            allocatable=NodeResources(
+                cpu_m=4000,
+                memory=16 * 2**30,
+                ephemeral_storage=100 * 2**30,
+                nvidia_gpu=2,
             ),
             nvidia_gpu_model="A100",
             nvidia_gpu_memory=40 * 2**30,
@@ -221,21 +245,17 @@ class TestResourcePoolTypeFactory:
         node1 = _Node(
             name="test-node-1",
             node_pool_name="test-node-pool",
-            capacity=NodeResources.from_primitive(
-                {
-                    "cpu": "4",
-                    "memory": "16Gi",
-                    "ephemeral-storage": "100Gi",
-                    NodeResources.nvidia_gpu_key: "2",
-                }
+            capacity=NodeResources(
+                cpu_m=4000,
+                memory=16 * 2**30,
+                ephemeral_storage=100 * 2**30,
+                nvidia_gpu=2,
             ),
-            allocatable=NodeResources.from_primitive(
-                {
-                    "cpu": "4",
-                    "memory": "16Gi",
-                    "ephemeral-storage": "100Gi",
-                    NodeResources.nvidia_gpu_key: "2",
-                }
+            allocatable=NodeResources(
+                cpu_m=4000,
+                memory=16 * 2**30,
+                ephemeral_storage=100 * 2**30,
+                nvidia_gpu=2,
             ),
             nvidia_gpu_model="A100",
             nvidia_gpu_memory=40 * 2**30,
@@ -243,21 +263,17 @@ class TestResourcePoolTypeFactory:
         node2 = _Node(
             name="test-node-2",
             node_pool_name="test-node-pool",
-            capacity=NodeResources.from_primitive(
-                {
-                    "cpu": "4",
-                    "memory": "16Gi",
-                    "ephemeral-storage": "100Gi",
-                    NodeResources.nvidia_gpu_key: "1",
-                }
+            capacity=NodeResources(
+                cpu_m=4000,
+                memory=16 * 2**30,
+                ephemeral_storage=100 * 2**30,
+                nvidia_gpu=1,
             ),
-            allocatable=NodeResources.from_primitive(
-                {
-                    "cpu": "4",
-                    "memory": "16Gi",
-                    "ephemeral-storage": "100Gi",
-                    NodeResources.nvidia_gpu_key: "1",
-                }
+            allocatable=NodeResources(
+                cpu_m=4000,
+                memory=16 * 2**30,
+                ephemeral_storage=100 * 2**30,
+                nvidia_gpu=1,
             ),
             nvidia_gpu_model="A100",
             nvidia_gpu_memory=41 * 2**30,
@@ -283,21 +299,17 @@ class TestResourcePoolTypeFactory:
         node1 = _Node(
             name="test-node-1",
             node_pool_name="test-node-pool",
-            capacity=NodeResources.from_primitive(
-                {
-                    "cpu": "4",
-                    "memory": "16Gi",
-                    "ephemeral-storage": "100Gi",
-                    NodeResources.nvidia_gpu_key: "2",
-                }
+            capacity=NodeResources(
+                cpu_m=4000,
+                memory=16 * 2**30,
+                ephemeral_storage=100 * 2**30,
+                nvidia_gpu=2,
             ),
-            allocatable=NodeResources.from_primitive(
-                {
-                    "cpu": "4",
-                    "memory": "16Gi",
-                    "ephemeral-storage": "100Gi",
-                    NodeResources.nvidia_gpu_key: "2",
-                }
+            allocatable=NodeResources(
+                cpu_m=4000,
+                memory=16 * 2**30,
+                ephemeral_storage=100 * 2**30,
+                nvidia_gpu=2,
             ),
             nvidia_gpu_model="A100",
             nvidia_gpu_memory=40 * 2**30,
@@ -305,21 +317,17 @@ class TestResourcePoolTypeFactory:
         node2 = _Node(
             name="test-node-2",
             node_pool_name="test-node-pool",
-            capacity=NodeResources.from_primitive(
-                {
-                    "cpu": "2",
-                    "memory": "8Gi",
-                    "ephemeral-storage": "50Gi",
-                    NodeResources.nvidia_gpu_key: "1",
-                }
+            capacity=NodeResources(
+                cpu_m=2000,
+                memory=8 * 2**30,
+                ephemeral_storage=50 * 2**30,
+                nvidia_gpu=1,
             ),
-            allocatable=NodeResources.from_primitive(
-                {
-                    "cpu": "2",
-                    "memory": "8Gi",
-                    "ephemeral-storage": "50Gi",
-                    NodeResources.nvidia_gpu_key: "1",
-                }
+            allocatable=NodeResources(
+                cpu_m=2000,
+                memory=8 * 2**30,
+                ephemeral_storage=50 * 2**30,
+                nvidia_gpu=1,
             ),
             nvidia_gpu_model="V100",
             nvidia_gpu_memory=16 * 2**30,
