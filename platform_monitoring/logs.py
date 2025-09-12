@@ -1500,7 +1500,6 @@ class LokiLogReader(LogReader):
                     {
                         "container": stream["container"],
                         "log": log,
-                        "pod": stream["pod"],
                         "namespace": stream["namespace"],
                     }
                 )
