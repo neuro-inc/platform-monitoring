@@ -1,3 +1,10 @@
+from kubernetes.client.models import (
+    V1Container,
+    V1ObjectMeta,
+    V1Pod,
+    V1PodSpec,
+    V1ResourceRequirements,
+)
 from neuro_config_client import NvidiaGPU, ResourcePoolType
 
 from platform_monitoring.kube_client import ContainerResources, NodeResources
@@ -347,4 +354,44 @@ class TestResourcePoolTypeFactory:
             disk_size=50 * 2**30,
             available_disk_size=50 * 2**30,
             nvidia_gpu=NvidiaGPU(count=2, model="A100", memory=40 * 2**30),
+        )
+
+
+class TestPod:
+    def test_from_v1_pod__with_init_containers(self) -> None:
+        v1_pod = V1Pod(
+            metadata=V1ObjectMeta(name="test-pod-1"),
+            spec=V1PodSpec(
+                node_name="test-node-1",
+                init_containers=[
+                    V1Container(
+                        name="test-init-container-1",
+                        resources=V1ResourceRequirements(
+                            requests={"cpu": "200m", "memory": "512Mi"}
+                        ),
+                    ),
+                    V1Container(
+                        name="test-init-container-2",
+                        resources=V1ResourceRequirements(
+                            requests={"cpu": "300m", "memory": "512Mi"}
+                        ),
+                    ),
+                ],
+                containers=[
+                    V1Container(
+                        name="test-container-1",
+                        resources=V1ResourceRequirements(
+                            requests={"cpu": "100m", "memory": "256Mi"}
+                        ),
+                    ),
+                ],
+            ),
+        )
+
+        pod = _Pod.from_v1_pod(v1_pod)
+
+        assert pod == _Pod(
+            name="test-pod-1",
+            node_name="test-node-1",
+            resource_requests=ContainerResources(cpu_m=300, memory=512 * 2**20),
         )

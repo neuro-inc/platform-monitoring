@@ -1,4 +1,5 @@
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
+from datetime import UTC, datetime
 from typing import Any
 from unittest import mock
 from uuid import uuid4
@@ -21,10 +22,26 @@ from kubernetes.client.models import (
     V1ResourceRequirements,
 )
 from neuro_config_client import (
+    ACMEEnvironment,
+    AppsConfig,
+    BucketsConfig,
+    Cluster,
+    ClusterStatus,
     ConfigClient,
+    DisksConfig,
+    DNSConfig,
+    EnergyConfig,
+    IngressConfig,
+    MetricsConfig,
+    MonitoringConfig,
+    OrchestratorConfig,
     PatchClusterRequest,
+    RegistryConfig,
     ResourcePoolType,
+    SecretsConfig,
+    StorageConfig,
 )
+from yarl import URL
 
 from platform_monitoring.resources.monitoring import (
     APOLO_PLATFORM_JOB_LABEL_KEY,
@@ -149,6 +166,40 @@ class TestMonitoringService:
         msg = f"No pool type named {pool_type_name} in patch request"
         raise ValueError(msg)
 
+    def _create_cluster(
+        self, *, resource_pool_types: Sequence[ResourcePoolType] = ()
+    ) -> Cluster:
+        name = "test-cluster"
+        return Cluster(
+            name=name,
+            status=ClusterStatus.DEPLOYED,
+            created_at=datetime.now(UTC),
+            orchestrator=OrchestratorConfig(
+                job_hostname_template=f"{{job_id}}.jobs.{name}.org.apolo.us",
+                job_fallback_hostname="default.apolo.us",
+                job_schedule_timeout_s=60,
+                job_schedule_scale_up_timeout_s=30,
+                resource_pool_types=resource_pool_types,
+            ),
+            storage=StorageConfig(url=URL(f"https://{name}.org.apolo.us")),
+            registry=RegistryConfig(url=URL(f"https://{name}.org.apolo.us")),
+            buckets=BucketsConfig(url=URL(f"https://{name}.org.apolo.us")),
+            disks=DisksConfig(
+                url=URL(f"https://{name}.org.apolo.us"),
+                storage_limit_per_user=10240 * 2**30,
+            ),
+            monitoring=MonitoringConfig(url=URL(f"https://{name}.org.apolo.us")),
+            dns=DNSConfig(name=f"{name}.org.apolo.us"),
+            ingress=IngressConfig(acme_environment=ACMEEnvironment.PRODUCTION),
+            secrets=SecretsConfig(url=URL(f"https://{name}.org.apolo.us")),
+            metrics=MetricsConfig(url=URL(f"https://{name}.org.apolo.us")),
+            apps=AppsConfig(
+                apps_hostname_templates=[f"{{app_name}}.apps.{name}.org.apolo.us"],
+                app_proxy_url=URL(f"https://proxy.apps.{name}.org.apolo.us"),
+            ),
+            energy=EnergyConfig(),
+        )
+
     async def test_start__existing_nodes(
         self,
         config_client: mock.AsyncMock,
@@ -177,6 +228,8 @@ class TestMonitoringService:
         )
         delete_node_later(node)
 
+        config_client.get_cluster.return_value = self._create_cluster()
+
         await service.start()
 
         async for attempt in tenacity.AsyncRetrying(
@@ -201,6 +254,8 @@ class TestMonitoringService:
         delete_node_later: Callable[[V1Node], None],
         service: MonitoringService,
     ) -> None:
+        config_client.get_cluster.return_value = self._create_cluster()
+
         await service.start()
 
         # Add a node
@@ -311,6 +366,8 @@ class TestMonitoringService:
         delete_pod_later: Callable[[V1Pod], None],
         service: MonitoringService,
     ) -> None:
+        config_client.get_cluster.return_value = self._create_cluster()
+
         await service.start()
 
         node_pool_name = "minikube"
@@ -458,3 +515,114 @@ class TestMonitoringService:
 
                 pool_type = self._get_pool_type(patch_request, node_pool_name)
                 assert pool_type == initial_pool_type
+
+    async def test_start__keep_sizes(
+        self,
+        config_client: mock.AsyncMock,
+        kube_client: KubeClient,
+        delete_node_later: Callable[[V1Node], None],
+        service: MonitoringService,
+        cluster_name: str,
+    ) -> None:
+        node_pool_name = str(uuid4())
+        node = await kube_client.core_v1.node.create(
+            V1Node(
+                api_version="v1",
+                kind="Node",
+                metadata={
+                    "name": str(uuid4()),
+                    "labels": {
+                        APOLO_PLATFORM_ROLE_LABEL_KEY: "workload",
+                        APOLO_PLATFORM_NODE_POOL_LABEL_KEY: node_pool_name,
+                    },
+                },
+                status=V1NodeStatus(
+                    capacity={"cpu": "1", "memory": "1Gi"},
+                    allocatable={"cpu": "1", "memory": "1Gi"},
+                ),
+            )
+        )
+        delete_node_later(node)
+
+        config_client.get_cluster.return_value = self._create_cluster(
+            resource_pool_types=[
+                ResourcePoolType(name=node_pool_name, min_size=1, max_size=2)
+            ]
+        )
+
+        await service.start()
+
+        async for attempt in tenacity.AsyncRetrying(
+            wait=tenacity.wait_fixed(0.1),
+            stop=tenacity.stop_after_delay(5),
+            reraise=True,
+        ):
+            with attempt:
+                config_client.patch_cluster.assert_awaited()
+
+                assert (
+                    config_client.patch_cluster.call_args_list[-1][0][0] == cluster_name
+                )
+
+                patch_request = config_client.patch_cluster.call_args_list[-1][0][1]
+                assert self._has_pool_type(patch_request, node_pool_name)
+
+                pool_type = self._get_pool_type(patch_request, node_pool_name)
+                assert pool_type.min_size == 1
+                assert pool_type.max_size == 2
+
+    async def test_start__keep_downscaled_pools(
+        self,
+        config_client: mock.AsyncMock,
+        kube_client: KubeClient,
+        delete_node_later: Callable[[V1Node], None],
+        service: MonitoringService,
+        cluster_name: str,
+    ) -> None:
+        node_pool_name = str(uuid4())
+        node = await kube_client.core_v1.node.create(
+            V1Node(
+                api_version="v1",
+                kind="Node",
+                metadata={
+                    "name": str(uuid4()),
+                    "labels": {
+                        APOLO_PLATFORM_ROLE_LABEL_KEY: "workload",
+                        APOLO_PLATFORM_NODE_POOL_LABEL_KEY: node_pool_name,
+                    },
+                },
+                status=V1NodeStatus(
+                    capacity={"cpu": "1", "memory": "1Gi"},
+                    allocatable={"cpu": "1", "memory": "1Gi"},
+                ),
+            )
+        )
+        delete_node_later(node)
+
+        downscaled_pool_name = str(uuid4())
+        config_client.get_cluster.return_value = self._create_cluster(
+            resource_pool_types=[
+                ResourcePoolType(name=downscaled_pool_name, min_size=0, max_size=1)
+            ]
+        )
+
+        await service.start()
+
+        async for attempt in tenacity.AsyncRetrying(
+            wait=tenacity.wait_fixed(0.1),
+            stop=tenacity.stop_after_delay(5),
+            reraise=True,
+        ):
+            with attempt:
+                config_client.patch_cluster.assert_awaited()
+
+                assert (
+                    config_client.patch_cluster.call_args_list[-1][0][0] == cluster_name
+                )
+
+                patch_request = config_client.patch_cluster.call_args_list[-1][0][1]
+                assert self._has_pool_type(patch_request, downscaled_pool_name)
+
+                pool_type = self._get_pool_type(patch_request, downscaled_pool_name)
+                assert pool_type.min_size == 0
+                assert pool_type.max_size == 1
