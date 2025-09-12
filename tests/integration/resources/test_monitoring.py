@@ -26,7 +26,6 @@ from neuro_config_client import (
     AppsConfig,
     BucketsConfig,
     Cluster,
-    ClusterStatus,
     ConfigClient,
     DisksConfig,
     DNSConfig,
@@ -172,7 +171,6 @@ class TestMonitoringService:
         name = "test-cluster"
         return Cluster(
             name=name,
-            status=ClusterStatus.DEPLOYED,
             created_at=datetime.now(UTC),
             orchestrator=OrchestratorConfig(
                 job_hostname_template=f"{{job_id}}.jobs.{name}.org.apolo.us",

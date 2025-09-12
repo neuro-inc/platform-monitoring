@@ -14,7 +14,6 @@ from neuro_config_client import (
     AppsConfig,
     BucketsConfig,
     Cluster,
-    ClusterStatus,
     ConfigClient,
     DisksConfig,
     DNSConfig,
@@ -122,7 +121,6 @@ def create_pod(
 def cluster() -> Cluster:
     return Cluster(
         name="default",
-        status=ClusterStatus.DEPLOYED,
         created_at=datetime.datetime(2022, 4, 6),
         orchestrator=OrchestratorConfig(
             job_hostname_template="",
