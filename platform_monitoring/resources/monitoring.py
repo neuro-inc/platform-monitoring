@@ -2,12 +2,13 @@ import asyncio
 import logging
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from contextlib import suppress
+from contextlib import aclosing, suppress
+from dataclasses import dataclass, replace
 from typing import Protocol, Self, TypeVar
 
 import tenacity
 from apolo_kube_client import KubeClient
-from kubernetes.client.models import V1Node, V1Pod
+from kubernetes.client.models import V1Container, V1Node, V1Pod
 from neuro_config_client import (
     AMDGPU,
     GPU,
@@ -44,12 +45,102 @@ PODS_LABEL_SELECTOR = (
 MiB = 2**20
 
 
+@dataclass(frozen=True, kw_only=True)
+class _Node:
+    name: str
+    node_pool_name: str
+    capacity: NodeResources
+    allocatable: NodeResources
+    nvidia_gpu_model: str | None = None
+    nvidia_gpu_memory: int | None = None
+    amd_gpu_device_id: str | None = None
+    amd_gpu_vram: int | None = None
+
+    @classmethod
+    def from_v1_node(cls, node: V1Node) -> Self:
+        labels = node.metadata.labels or {}
+        node_pool_name = _get_node_pool_name(node)
+        assert node_pool_name, "node pool name is required"
+        return cls(
+            name=node.metadata.name,
+            node_pool_name=node_pool_name,
+            capacity=NodeResources.from_primitive(node.status.capacity or {}),
+            allocatable=NodeResources.from_primitive(
+                node.status.allocatable or node.status.capacity or {}
+            ),
+            nvidia_gpu_model=labels.get(NVIDIA_GPU_PRODUCT),
+            nvidia_gpu_memory=int(labels.get(NVIDIA_GPU_MEMORY, "0")) * MiB or None,
+            amd_gpu_device_id=labels.get(AMD_GPU_DEVICE_ID),
+            amd_gpu_vram=parse_memory(labels.get(AMD_GPU_VRAM, "0")) or None,
+        )
+
+
+@dataclass(frozen=True)
+class _Pod:
+    name: str
+    node_name: str
+    resource_requests: ContainerResources
+
+    @classmethod
+    def from_v1_pod(cls, pod: V1Pod) -> Self:
+        assert pod.spec.node_name, "pod must be scheduled on a node"
+        init_resource_requests = cls._max_container_resource_requests(
+            pod.spec.init_containers or ()
+        )
+        resource_requests = cls._sum_container_resource_requests(
+            pod.spec.containers or ()
+        )
+        return cls(
+            name=pod.metadata.name,
+            node_name=pod.spec.node_name,
+            resource_requests=cls._max_container_resources(
+                init_resource_requests, resource_requests
+            ),
+        )
+
+    @classmethod
+    def _max_container_resources(
+        cls, r1: ContainerResources, r2: ContainerResources
+    ) -> ContainerResources:
+        return ContainerResources(
+            cpu_m=max(r1.cpu_m, r2.cpu_m),
+            memory=max(r1.memory, r2.memory),
+            nvidia_gpu=max(r1.nvidia_gpu, r2.nvidia_gpu),
+            amd_gpu=max(r1.amd_gpu, r2.amd_gpu),
+        )
+
+    @classmethod
+    def _max_container_resource_requests(
+        cls, containers: Sequence[V1Container]
+    ) -> ContainerResources:
+        resource_requests = ContainerResources()
+        for container in containers:
+            if container.resources and container.resources.requests:
+                resource_requests = cls._max_container_resources(
+                    resource_requests,
+                    ContainerResources.from_primitive(container.resources.requests),
+                )
+        return resource_requests
+
+    @classmethod
+    def _sum_container_resource_requests(
+        cls, containers: Sequence[V1Container]
+    ) -> ContainerResources:
+        resource_requests = ContainerResources()
+        for container in containers:
+            if container.resources and container.resources.requests:
+                resource_requests += ContainerResources.from_primitive(
+                    container.resources.requests
+                )
+        return resource_requests
+
+
 class _KubeState(Protocol):
     @property
-    def nodes(self) -> Mapping[str, V1Node]: ...
+    def nodes(self) -> Mapping[str, _Node]: ...
 
     @property
-    def pods(self) -> Mapping[str, V1Pod]: ...
+    def pods(self) -> Mapping[str, _Pod]: ...
 
 
 class MonitoringService(_KubeState):
@@ -61,8 +152,8 @@ class MonitoringService(_KubeState):
         cluster_name: str,
     ) -> None:
         self._kube_client = kube_client
-        self._nodes: dict[str, V1Node] = {}
-        self._pods: dict[str, V1Pod] = {}
+        self._nodes: dict[str, _Node] = {}
+        self._pods: dict[str, _Pod] = {}
         self._nodes_watch_task: asyncio.Task[None] | None = None
         self._pods_watch_task: asyncio.Task[None] | None = None
 
@@ -81,11 +172,11 @@ class MonitoringService(_KubeState):
         await self._cluster_syncer.stop()
 
     @property
-    def nodes(self) -> Mapping[str, V1Node]:
+    def nodes(self) -> Mapping[str, _Node]:
         return self._nodes
 
     @property
-    def pods(self) -> Mapping[str, V1Pod]:
+    def pods(self) -> Mapping[str, _Pod]:
         return self._pods
 
     async def start(self) -> None:
@@ -109,6 +200,17 @@ class MonitoringService(_KubeState):
         self._init_nodes(node_list.items)
         return resource_version
 
+    def _init_nodes(self, nodes: Sequence[V1Node]) -> None:
+        LOGGER.debug("Initializing nodes")
+        new_nodes = {}
+        for node in nodes:
+            if self._is_workload_node(node):
+                LOGGER.debug("Adding workload node %s", node.metadata.name)
+                new_nodes[node.metadata.name] = _Node.from_v1_node(node)
+            else:
+                LOGGER.debug("Ignoring non-workload node %s", node.metadata.name)
+        self._nodes = new_nodes
+
     async def _run_nodes_watcher(self, *, resource_version: str | None) -> None:
         LOGGER.info("Starting nodes watcher")
 
@@ -121,28 +223,18 @@ class MonitoringService(_KubeState):
                 watch = self._kube_client.core_v1.node.watch(
                     resource_version=resource_version, allow_watch_bookmarks=True
                 )
-                async for event in watch.stream():
-                    match event.type:
-                        case "ADDED" | "MODIFIED":
-                            self._handle_node_update(event.object)
-                        case "DELETED":
-                            self._handle_node_deletion(event.object)
-                    self._cluster_syncer.notify()
+                async with aclosing(watch.stream()) as event_stream:
+                    async for event in event_stream:
+                        match event.type:
+                            case "ADDED" | "MODIFIED":
+                                self._handle_node_update(event.object)
+                            case "DELETED":
+                                self._handle_node_deletion(event.object)
+                        self._cluster_syncer.notify()
             except Exception:
                 LOGGER.exception("Nodes watcher failed")
 
             resource_version = None
-
-    def _init_nodes(self, nodes: Sequence[V1Node]) -> None:
-        LOGGER.debug("Initializing nodes")
-        new_nodes = {}
-        for node in nodes:
-            if self._is_workload_node(node):
-                LOGGER.debug("Adding workload node %s", node.metadata.name)
-                new_nodes[node.metadata.name] = node
-            else:
-                LOGGER.debug("Ignoring non-workload node %s", node.metadata.name)
-        self._nodes = new_nodes
 
     def _is_workload_node(self, node: V1Node) -> bool:
         labels = node.metadata.labels
@@ -157,7 +249,7 @@ class MonitoringService(_KubeState):
     def _handle_node_update(self, node: V1Node) -> None:
         if self._is_workload_node(node):
             LOGGER.debug("Updating workload node %s", node.metadata.name)
-            self._nodes[node.metadata.name] = node
+            self._nodes[node.metadata.name] = _Node.from_v1_node(node)
         else:
             LOGGER.debug("Ignoring non-workload node %s", node.metadata.name)
             self._nodes.pop(node.metadata.name, None)
@@ -176,6 +268,17 @@ class MonitoringService(_KubeState):
         self._init_pods(pod_list.items)
         return resource_version
 
+    def _init_pods(self, pods: Sequence[V1Pod]) -> None:
+        LOGGER.debug("Initializing pods")
+        new_pods = {}
+        for pod in pods:
+            if self._is_pod_running(pod):
+                LOGGER.debug("Adding running pod %s", pod.metadata.name)
+                new_pods[pod.metadata.name] = _Pod.from_v1_pod(pod)
+            else:
+                LOGGER.debug("Ignoring non-running pod %s", pod.metadata.name)
+        self._pods = new_pods
+
     async def _run_pods_watcher(self, *, resource_version: str | None) -> None:
         LOGGER.info("Starting pods watcher")
 
@@ -191,28 +294,18 @@ class MonitoringService(_KubeState):
                     resource_version=resource_version,
                     allow_watch_bookmarks=True,
                 )
-                async for event in watch.stream():
-                    match event.type:
-                        case "ADDED" | "MODIFIED":
-                            self._handle_pod_update(event.object)
-                        case "DELETED":
-                            self._handle_pod_deletion(event.object)
-                    self._cluster_syncer.notify()
+                async with aclosing(watch.stream()) as event_stream:
+                    async for event in event_stream:
+                        match event.type:
+                            case "ADDED" | "MODIFIED":
+                                self._handle_pod_update(event.object)
+                            case "DELETED":
+                                self._handle_pod_deletion(event.object)
+                        self._cluster_syncer.notify()
             except Exception:
                 LOGGER.exception("Pods watcher failed")
 
             resource_version = None
-
-    def _init_pods(self, pods: Sequence[V1Pod]) -> None:
-        LOGGER.debug("Initializing pods")
-        new_pods = {}
-        for pod in pods:
-            if self._is_pod_running(pod):
-                LOGGER.debug("Adding running pod %s", pod.metadata.name)
-                new_pods[pod.metadata.name] = pod
-            else:
-                LOGGER.debug("Ignoring non-running pod %s", pod.metadata.name)
-        self._pods = new_pods
 
     def _is_pod_running(self, pod: V1Pod) -> bool:
         LOGGER.debug("Pod %s node name: %r", pod.metadata.name, pod.spec.node_name)
@@ -222,7 +315,7 @@ class MonitoringService(_KubeState):
     def _handle_pod_update(self, pod: V1Pod) -> None:
         if self._is_pod_running(pod):
             LOGGER.debug("Updating running pod %s", pod.metadata.name)
-            self._pods[pod.metadata.name] = pod
+            self._pods[pod.metadata.name] = _Pod.from_v1_pod(pod)
         else:
             LOGGER.debug("Ignoring non-running pod %s", pod.metadata.name)
             self._pods.pop(pod.metadata.name, None)
@@ -272,14 +365,12 @@ class ClusterSyncer:
     async def _start_cluster_sync(self) -> None:
         LOGGER.info("Starting cluster sync")
 
-        last_synced_pool_types: list[ResourcePoolType] = []
-
         while True:
             await self._event.wait()
             self._event.clear()
 
             LOGGER.info("Syncing cluster resource pools")
-            last_synced_pool_types = await self._sync_cluster(last_synced_pool_types)
+            await self._sync_cluster()
 
     # Retry forever
     @tenacity.retry(
@@ -288,14 +379,28 @@ class ClusterSyncer:
         after=tenacity.after_log(LOGGER, logging.INFO),
         retry=tenacity.retry_if_not_exception_type(asyncio.CancelledError),
     )
-    async def _sync_cluster(
-        self, last_synced_pool_types: Sequence[ResourcePoolType]
-    ) -> list[ResourcePoolType]:
+    async def _sync_cluster(self) -> None:
+        # TODO: temporary solution to avoid overriding sizes of node pools
+        # which support autoscaling. It's better to implement optimistic locking.
+        cluster = await self._config_client.get_cluster(self._cluster_name)
+        current_pool_types = cluster.orchestrator.resource_pool_types
         pool_types = self._create_resource_pool_types()
-        if pool_types == last_synced_pool_types:
-            LOGGER.info("Cluster resource pools are up-to-date")
-            return pool_types
+        pool_types = self._update_resource_pool_sizes(
+            pool_types=pool_types, current_pool_types=current_pool_types
+        )
+        pool_types.extend(
+            self._get_downscaled_resource_pools(
+                pool_types=pool_types, current_pool_types=current_pool_types
+            )
+        )
+        pool_types.sort(key=lambda t: t.name)
 
+        if pool_types == current_pool_types:
+            LOGGER.info("Cluster resource pools are up-to-date")
+            return
+
+        LOGGER.debug("Current resource pools: %r", current_pool_types)
+        LOGGER.debug("New resource pools: %r", pool_types)
         LOGGER.info("Updating cluster resource pools")
 
         await self._config_client.patch_cluster(
@@ -306,7 +411,6 @@ class ClusterSyncer:
                 )
             ),
         )
-        return pool_types
 
     def _create_resource_pool_types(self) -> list[ResourcePoolType]:
         result = []
@@ -318,20 +422,67 @@ class ClusterSyncer:
         result.sort(key=lambda t: t.name)
         return result
 
-    def _group_nodes_by_node_pool(self) -> dict[str, list[V1Node]]:
+    def _group_nodes_by_node_pool(self) -> dict[str, list[_Node]]:
         result = defaultdict(list)
         for node in self._kube_state.nodes.values():
-            node_pool_name = _get_node_pool_name(node)
+            node_pool_name = node.node_pool_name
             if node_pool_name:
                 result[node_pool_name].append(node)
         return result
 
-    def _group_pods_by_node(self) -> dict[str, list[V1Pod]]:
+    def _group_pods_by_node(self) -> dict[str, list[_Pod]]:
         result = defaultdict(list)
         for pod in self._kube_state.pods.values():
-            if pod.spec.node_name:
-                result[pod.spec.node_name].append(pod)
+            if pod.node_name:
+                result[pod.node_name].append(pod)
         return result
+
+    def _update_resource_pool_sizes(
+        self,
+        *,
+        pool_types: Sequence[ResourcePoolType],
+        current_pool_types: Sequence[ResourcePoolType],
+    ) -> list[ResourcePoolType]:
+        current_pool_types_by_name = {pt.name: pt for pt in current_pool_types}
+        updated_pool_types = []
+        for pool_type in pool_types:
+            current_pool_type = current_pool_types_by_name.get(pool_type.name)
+            if not current_pool_type:
+                updated_pool_types.append(pool_type)
+                continue
+            if current_pool_type.min_size == current_pool_type.max_size:
+                # Allow updating sizes of non-autoscaling pools only
+                updated_pool_types.append(pool_type)
+                continue
+            LOGGER.debug(
+                "Preserving sizes of resource pool %s: min_size=%d, max_size=%d",
+                pool_type.name,
+                current_pool_type.min_size,
+                current_pool_type.max_size,
+            )
+            updated_pool_types.append(
+                replace(
+                    pool_type,
+                    min_size=current_pool_type.min_size,
+                    max_size=current_pool_type.max_size,
+                )
+            )
+        return updated_pool_types
+
+    def _get_downscaled_resource_pools(
+        self,
+        *,
+        pool_types: Sequence[ResourcePoolType],
+        current_pool_types: Sequence[ResourcePoolType],
+    ) -> list[ResourcePoolType]:
+        pool_types_by_name = {pt.name: pt for pt in pool_types}
+        downscaled_pool_types = []
+        for pool_type in current_pool_types:
+            if pool_type.name in pool_types_by_name:
+                continue
+            if pool_type.min_size != pool_type.max_size:
+                downscaled_pool_types.append(pool_type)
+        return downscaled_pool_types
 
 
 _T_GPU = TypeVar("_T_GPU", bound=GPU)
@@ -343,12 +494,9 @@ def round_cpu(cpu: float) -> float:
 
 class ResourcePoolTypeFactory:
     def create_from_nodes(
-        self, nodes: Sequence[V1Node], pods: Mapping[str, Sequence[V1Pod]]
+        self, nodes: Sequence[_Node], pods: Mapping[str, Sequence[_Pod]]
     ) -> ResourcePoolType:
         assert nodes, "at least one node is required"
-
-        name = _get_node_pool_name(nodes[0])
-        assert name is not None, "node pool name must be set"
 
         cpu = []
         available_cpu = []
@@ -361,31 +509,29 @@ class ResourcePoolTypeFactory:
         # TODO: support Intel GPU
 
         for node in nodes:
-            capacity = NodeResources.from_primitive(node.status.capacity or {})
-            LOGGER.debug("Node %s capacity: %r", node.metadata.name, capacity)
-            allocatable = NodeResources.from_primitive(
-                node.status.allocatable or node.status.capacity or {}
+            LOGGER.debug("Node %s capacity: %r", node.name, node.capacity)
+            LOGGER.debug("Node %s allocatable: %r", node.name, node.allocatable)
+            node_pods = pods.get(node.name, ())
+            allocated = sum(
+                (pod.resource_requests for pod in node_pods), start=ContainerResources()
             )
-            LOGGER.debug("Node %s allocatable: %r", node.metadata.name, allocatable)
-            allocated = self._get_node_allocated_resources(
-                pods.get(node.metadata.name, ())
-            )
-            LOGGER.debug("Node %s allocated: %r", node.metadata.name, allocated)
+            LOGGER.debug("Node %s pods: %r", node.name, node_pods)
+            LOGGER.debug("Node %s allocated: %r", node.name, allocated)
 
             # Subtract resources that are allocated to platform services on each node
-            cpu.append(capacity.cpu)
-            available_cpu.append(allocatable.cpu - allocated.cpu)
-            memory.append(capacity.memory)
-            available_memory.append(allocatable.memory - allocated.memory)
-            disk_size.append(capacity.ephemeral_storage)
-            available_disk_size.append(allocatable.ephemeral_storage)
-            if ng := self._create_nvidia_gpu(node, capacity):
+            cpu.append(node.capacity.cpu)
+            available_cpu.append(node.allocatable.cpu - allocated.cpu)
+            memory.append(node.capacity.memory)
+            available_memory.append(node.allocatable.memory - allocated.memory)
+            disk_size.append(node.capacity.ephemeral_storage)
+            available_disk_size.append(node.allocatable.ephemeral_storage)
+            if ng := self._create_nvidia_gpu(node):
                 nvidia_gpu.append(ng)
-            if ag := self._create_amd_gpu(node, capacity):
+            if ag := self._create_amd_gpu(node):
                 amd_gpu.append(ag)
 
         return ResourcePoolType(
-            name=name,
+            name=nodes[0].node_pool_name,
             min_size=len(nodes),
             max_size=len(nodes),
             cpu=round_cpu(min(cpu)),
@@ -398,47 +544,27 @@ class ResourcePoolTypeFactory:
             amd_gpu=self._min_gpu(amd_gpu, AMDGPU),
         )
 
-    def _get_node_allocated_resources(
-        self, pods: Sequence[V1Pod]
-    ) -> ContainerResources:
-        resources = ContainerResources()
-        for pod in pods:
-            for container in pod.spec.containers:
-                if container.resources and container.resources.requests:
-                    resources += ContainerResources.from_primitive(
-                        container.resources.requests
-                    )
-        return resources
+    def _create_nvidia_gpu(self, node: _Node) -> NvidiaGPU | None:
+        if not node.capacity.has_nvidia_gpu:
+            return None
+        if not node.nvidia_gpu_model:
+            return None
+        return NvidiaGPU(
+            count=node.capacity.nvidia_gpu,
+            model=node.nvidia_gpu_model,
+            memory=node.nvidia_gpu_memory,
+        )
 
-    def _create_nvidia_gpu(
-        self, node: V1Node, capacity: NodeResources
-    ) -> NvidiaGPU | None:
-        if not capacity.has_nvidia_gpu:
+    def _create_amd_gpu(self, node: _Node) -> AMDGPU | None:
+        if not node.capacity.has_amd_gpu:
             return None
-        labels = node.metadata.labels
-        if not labels:
+        if not node.amd_gpu_device_id:
             return None
-        if model := labels.get(NVIDIA_GPU_PRODUCT):
-            return NvidiaGPU(
-                count=capacity.nvidia_gpu,
-                model=model,
-                memory=int(labels.get(NVIDIA_GPU_MEMORY, "0")) * MiB,
-            )
-        return None
-
-    def _create_amd_gpu(self, node: V1Node, capacity: NodeResources) -> AMDGPU | None:
-        if not capacity.has_amd_gpu:
-            return None
-        labels = node.metadata.labels
-        if not labels:
-            return None
-        if model := labels.get(AMD_GPU_DEVICE_ID):
-            return AMDGPU(
-                count=capacity.amd_gpu,
-                model=model,
-                memory=parse_memory(labels.get(AMD_GPU_VRAM, "0")),
-            )
-        return None
+        return AMDGPU(
+            count=node.capacity.amd_gpu,
+            model=node.amd_gpu_device_id,
+            memory=node.amd_gpu_vram,
+        )
 
     def _min_gpu(self, gpus: list[_T_GPU], cls: type[_T_GPU]) -> _T_GPU | None:
         if not gpus:

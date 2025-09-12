@@ -9,16 +9,28 @@ import pytest
 from apolo_api_client import ApiClient
 from neuro_config_client import (
     AMDGPU,
+    ACMEEnvironment,
     AMDGPUPreset,
+    AppsConfig,
+    BucketsConfig,
     Cluster,
-    ClusterStatus,
     ConfigClient,
+    DisksConfig,
+    DNSConfig,
+    EnergyConfig,
+    IngressConfig,
+    MetricsConfig,
+    MonitoringConfig,
     NvidiaGPU,
     NvidiaGPUPreset,
     OrchestratorConfig,
+    RegistryConfig,
     ResourcePoolType,
     ResourcePreset,
+    SecretsConfig,
+    StorageConfig,
 )
+from yarl import URL
 
 from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
 from platform_monitoring.jobs_service import JobsService
@@ -109,11 +121,9 @@ def create_pod(
 def cluster() -> Cluster:
     return Cluster(
         name="default",
-        status=ClusterStatus.DEPLOYED,
         created_at=datetime.datetime(2022, 4, 6),
         orchestrator=OrchestratorConfig(
             job_hostname_template="",
-            job_internal_hostname_template="",
             job_fallback_hostname="",
             job_schedule_timeout_s=1,
             job_schedule_scale_up_timeout_s=1,
@@ -162,6 +172,23 @@ def cluster() -> Cluster:
                 ),
             ],
         ),
+        storage=StorageConfig(url=URL("https://default.org.apolo.us")),
+        registry=RegistryConfig(url=URL("https://default.org.apolo.us")),
+        buckets=BucketsConfig(url=URL("https://default.org.apolo.us")),
+        disks=DisksConfig(
+            url=URL("https://default.org.apolo.us"),
+            storage_limit_per_user=10240 * 2**30,
+        ),
+        monitoring=MonitoringConfig(url=URL("https://default.org.apolo.us")),
+        dns=DNSConfig(name="default.org.apolo.us"),
+        ingress=IngressConfig(acme_environment=ACMEEnvironment.PRODUCTION),
+        secrets=SecretsConfig(url=URL("https://default.org.apolo.us")),
+        metrics=MetricsConfig(url=URL("https://default.org.apolo.us")),
+        apps=AppsConfig(
+            apps_hostname_templates=["{app_name}.apps.default.org.apolo.us"],
+            app_proxy_url=URL("https://proxy.apps.default.org.apolo.us"),
+        ),
+        energy=EnergyConfig(),
     )
 
 

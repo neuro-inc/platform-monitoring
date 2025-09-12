@@ -116,9 +116,9 @@ priorityClassName: ""
 resourcesMonitor:
   resources:
     requests:
-      cpu: "0.1"
-      memory: "250Mi"
+      cpu: 30m
+      memory: "200Mi"
     limits:
-      memory: "500Mi"
+      memory: "300Mi"
 
   podAnnotations: {}
