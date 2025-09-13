@@ -78,6 +78,27 @@ def job_pod() -> MyPodDescriptor:
 
 @pytest.fixture
 async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
+    async def _get_pods(request: web.Request) -> web.Response:
+        payload: dict[str, Any] = {
+            "kind": "PodList",
+            "items": [
+                {
+                    "kind": "Pod",
+                    "metadata": {"name": "testname"},
+                    "spec": {
+                        "containers": [{"name": "testname", "image": "testimage"}],
+                        "nodeName": "whatever",
+                    },
+                    "status": {
+                        "phase": "Running",
+                        "podIP": "127.0.0.1",
+                    },
+                }
+            ],
+        }
+
+        return web.json_response(payload)
+
     async def _get_pod(request: web.Request) -> web.Response:
         payload: dict[str, Any] = {
             "kind": "Pod",
@@ -113,11 +134,12 @@ async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
         app = web.Application()
         app.add_routes(
             [
+                web.get("/api/v1/pods", _get_pods),
                 web.get("/api/v1/namespaces/mock/pods/whatever", _get_pod),
                 web.get(
                     "/api/v1/nodes/whatever:10255/proxy/stats/summary", _stats_summary
                 ),
-                web.get("/api/v1/nodes/whatever:9400/proxy/metrics", _gpu_metrics),
+                web.get("/metrics", _gpu_metrics),
                 web.get(
                     "/api/v1/nodes/unauthorized:9400/proxy/metrics",
                     _unauthorized_gpu_metrics(),
@@ -475,7 +497,7 @@ class TestKubeClient:
         async with KubeClient(
             base_url=str(f"http://{srv.host}:{srv.port}"),
             namespace="mock",
-            nvidia_dcgm_node_port=9400,
+            nvidia_dcgm_node_port=srv.port,
         ) as client:
             stats = await client.get_pod_container_gpu_stats(
                 "whatever", "whatever", "whenever"

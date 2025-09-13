@@ -1178,12 +1178,12 @@ async def create_app(config: Config) -> aiohttp.web.Application:
 
 
 def main() -> None:  # pragma: no coverage
-    init_logging()
+    init_logging(health_check_url_path="/ping")
     config = EnvironConfigFactory().create()
     # NOTE: If config is passed as arg all secrets will be logged in
     # log record args attribute.
     logging.info(f"Loaded config: {config!r}")  # noqa: G004
-    setup_sentry()
+    setup_sentry(health_check_url_path="/ping")
     aiohttp.web.run_app(
         create_app(config), host=config.server.host, port=config.server.port
     )

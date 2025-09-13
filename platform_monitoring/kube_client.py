@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_PODS_PER_NODE = 110
 
+NVIDIA_DCGM_LABEL_SELECTOR = "app=nvidia-dcgm-exporter"
+
 type JSON = dict[str, t.Any]
 
 
@@ -618,11 +620,10 @@ class KubeClient:
         proxy_url = self._generate_node_proxy_url(name, self._kubelet_port)
         return f"{proxy_url}/stats/summary"
 
-    def _generate_node_gpu_metrics_url(self, name: str) -> str | None:
+    def _generate_nvidia_gpu_metrics_url(self, pod_ip: str) -> str | None:
         if not self._nvidia_dcgm_port:
             return None
-        proxy_url = self._generate_node_proxy_url(name, self._nvidia_dcgm_port)
-        return f"{proxy_url}/metrics"
+        return f"http://{pod_ip}:{self._nvidia_dcgm_port}/metrics"
 
     def _generate_pod_log_url(
         self, pod_name: str, container_name: str, namespace: str | None
@@ -765,7 +766,12 @@ class KubeClient:
         namespace: str | None = None,
     ) -> PodContainerGPUStats | None:
         namespace = namespace or self._namespace
-        url = self._generate_node_gpu_metrics_url(node_name)
+        nvidia_dcgm_pod_ip = await self._get_nvidia_dcgm_pod_ip(node_name)
+        logger.debug("Nvidia DCGM exporter pod ip: %s", nvidia_dcgm_pod_ip)
+        if not nvidia_dcgm_pod_ip:
+            return None
+        url = self._generate_nvidia_gpu_metrics_url(nvidia_dcgm_pod_ip)
+        logger.debug("Nvidia DCGM exporter metrics url: %s", url)
         if not url:
             return None
         try:
@@ -781,6 +787,24 @@ class KubeClient:
         except aiohttp.ClientError as e:
             logger.exception(e)
         return None
+
+    async def _get_nvidia_dcgm_pod_ip(self, node_name: str) -> str | None:
+        if not self._nvidia_dcgm_port:
+            return None
+        payload = await self._request(
+            method="GET",
+            url=self._pods_url,
+            headers=self._create_headers(),
+            params={
+                "labelSelector": NVIDIA_DCGM_LABEL_SELECTOR,
+                "fieldSelector": f"spec.nodeName={node_name}",
+            },
+        )
+        self._assert_resource_kind(expected_kind="PodList", payload=payload)
+        items = payload.get("items", [])
+        if len(items) != 1:
+            return None
+        return items[0].get("status", {}).get("podIP") or None
 
     async def check_pod_exists(self, pod_name: str) -> bool:
         try:
@@ -971,9 +995,10 @@ class GPUCounters:
         memory_used = 0
         for c in self.counters:
             if (
-                c.labels["namespace"] != namespace_name
-                or c.labels["pod"] != pod_name
-                or c.labels["container"] != container_name
+                c.name not in ("DCGM_FI_DEV_GPU_UTIL", "DCGM_FI_DEV_FB_USED")
+                or c.labels.get("namespace") != namespace_name
+                or c.labels.get("pod") != pod_name
+                or c.labels.get("container") != container_name
             ):
                 continue
             if c.name == "DCGM_FI_DEV_GPU_UTIL":
