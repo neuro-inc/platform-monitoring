@@ -11,7 +11,6 @@ from collections.abc import (
     AsyncIterator,
     Awaitable,
     Callable,
-    Coroutine,
     Iterable,
     Iterator,
     Sequence,
@@ -78,6 +77,27 @@ def job_pod() -> MyPodDescriptor:
 
 @pytest.fixture
 async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
+    async def _get_pods(request: web.Request) -> web.Response:
+        payload: dict[str, Any] = {
+            "kind": "PodList",
+            "items": [
+                {
+                    "kind": "Pod",
+                    "metadata": {"name": "testname"},
+                    "spec": {
+                        "containers": [{"name": "testname", "image": "testimage"}],
+                        "nodeName": "whatever",
+                    },
+                    "status": {
+                        "phase": "Running",
+                        "podIP": "127.0.0.1",
+                    },
+                }
+            ],
+        }
+
+        return web.json_response(payload)
+
     async def _get_pod(request: web.Request) -> web.Response:
         payload: dict[str, Any] = {
             "kind": "Pod",
@@ -96,32 +116,23 @@ async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
         return web.Response(content_type="text/plain")
 
     async def _gpu_metrics(request: web.Request) -> web.Response:
-        return web.Response(content_type="text/plain")
-
-    def _unauthorized_gpu_metrics() -> Callable[
-        [web.Request], Coroutine[Any, Any, web.Response]
-    ]:
-        async def _inner(request: web.Request) -> web.Response:
-            auth_header = request.headers.get("Authorization", "")
-            if auth_header.split(" ")[1] == "authorized":
-                return web.Response(content_type="text/plain")
-            return web.Response(status=401)
-
-        return _inner
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header:
+            return web.Response(content_type="text/plain")
+        if auth_header.split(" ")[1] == "authorized":
+            return web.Response(content_type="text/plain")
+        return web.Response(status=401)
 
     def _create_app() -> web.Application:
         app = web.Application()
         app.add_routes(
             [
+                web.get("/api/v1/pods", _get_pods),
                 web.get("/api/v1/namespaces/mock/pods/whatever", _get_pod),
                 web.get(
                     "/api/v1/nodes/whatever:10255/proxy/stats/summary", _stats_summary
                 ),
-                web.get("/api/v1/nodes/whatever:9400/proxy/metrics", _gpu_metrics),
-                web.get(
-                    "/api/v1/nodes/unauthorized:9400/proxy/metrics",
-                    _unauthorized_gpu_metrics(),
-                ),
+                web.get("/metrics", _gpu_metrics),
             ]
         )
         return app
@@ -475,7 +486,7 @@ class TestKubeClient:
         async with KubeClient(
             base_url=str(f"http://{srv.host}:{srv.port}"),
             namespace="mock",
-            nvidia_dcgm_node_port=9400,
+            nvidia_dcgm_node_port=srv.port,
         ) as client:
             stats = await client.get_pod_container_gpu_stats(
                 "whatever", "whatever", "whenever"
@@ -644,7 +655,7 @@ class TestKubeClient:
         async with KubeClient(
             base_url=f"http://{srv.host}:{srv.port}",
             namespace="mock",
-            nvidia_dcgm_node_port=9400,
+            nvidia_dcgm_node_port=srv.port,
             auth_type=KubeClientAuthType.TOKEN,
             token="bad",
             token_path=str(token_path),
