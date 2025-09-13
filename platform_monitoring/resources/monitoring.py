@@ -225,12 +225,16 @@ class MonitoringService(_KubeState):
                 )
                 async with aclosing(watch.stream()) as event_stream:
                     async for event in event_stream:
+                        notify = False
                         match event.type:
                             case "ADDED" | "MODIFIED":
-                                self._handle_node_update(event.object)
+                                notify = self._handle_node_update(event.object)
                             case "DELETED":
-                                self._handle_node_deletion(event.object)
-                        self._cluster_syncer.notify()
+                                notify = self._handle_node_deletion(event.object)
+                        if notify:
+                            self._cluster_syncer.notify()
+                        else:
+                            LOGGER.debug("Nodes state unchanged")
             except Exception:
                 LOGGER.exception("Nodes watcher failed")
 
@@ -246,18 +250,25 @@ class MonitoringService(_KubeState):
                 return False
         return bool(_get_node_pool_name(node))
 
-    def _handle_node_update(self, node: V1Node) -> None:
+    def _handle_node_update(self, node: V1Node) -> bool:
         if self._is_workload_node(node):
             LOGGER.debug("Updating workload node %s", node.metadata.name)
+            old = self._nodes.get(node.metadata.name)
+            new = _Node.from_v1_node(node)
+            if old == new:
+                return False
             self._nodes[node.metadata.name] = _Node.from_v1_node(node)
-        else:
-            LOGGER.debug("Ignoring non-workload node %s", node.metadata.name)
-            self._nodes.pop(node.metadata.name, None)
+            return True
+        LOGGER.debug("Ignoring non-workload node %s", node.metadata.name)
+        old = self._nodes.pop(node.metadata.name, None)
+        return old is not None
 
-    def _handle_node_deletion(self, node: V1Node) -> None:
-        result = self._nodes.pop(node.metadata.name, None)
-        if result is not None:
+    def _handle_node_deletion(self, node: V1Node) -> bool:
+        old = self._nodes.pop(node.metadata.name, None)
+        if old is not None:
             LOGGER.debug("Removing node %s", node.metadata.name)
+            return True
+        return False
 
     async def _reset_pods(self) -> str:
         pod_list = await self._kube_client.core_v1.pod.get_list(
@@ -296,12 +307,16 @@ class MonitoringService(_KubeState):
                 )
                 async with aclosing(watch.stream()) as event_stream:
                     async for event in event_stream:
+                        notify = False
                         match event.type:
                             case "ADDED" | "MODIFIED":
-                                self._handle_pod_update(event.object)
+                                notify = self._handle_pod_update(event.object)
                             case "DELETED":
-                                self._handle_pod_deletion(event.object)
-                        self._cluster_syncer.notify()
+                                notify = self._handle_pod_deletion(event.object)
+                        if notify:
+                            self._cluster_syncer.notify()
+                        else:
+                            LOGGER.debug("Pods state unchanged")
             except Exception:
                 LOGGER.exception("Pods watcher failed")
 
@@ -312,18 +327,25 @@ class MonitoringService(_KubeState):
         LOGGER.debug("Pod %s status: %r", pod.metadata.name, pod.status)
         return pod.spec.node_name and pod.status and pod.status.phase == "Running"
 
-    def _handle_pod_update(self, pod: V1Pod) -> None:
+    def _handle_pod_update(self, pod: V1Pod) -> bool:
         if self._is_pod_running(pod):
             LOGGER.debug("Updating running pod %s", pod.metadata.name)
+            old = self._pods.get(pod.metadata.name)
+            new = _Pod.from_v1_pod(pod)
+            if old == new:
+                return False
             self._pods[pod.metadata.name] = _Pod.from_v1_pod(pod)
-        else:
-            LOGGER.debug("Ignoring non-running pod %s", pod.metadata.name)
-            self._pods.pop(pod.metadata.name, None)
+            return True
+        LOGGER.debug("Ignoring non-running pod %s", pod.metadata.name)
+        old = self._pods.pop(pod.metadata.name, None)
+        return old is not None
 
-    def _handle_pod_deletion(self, pod: V1Pod) -> None:
-        result = self._pods.pop(pod.metadata.name, None)
-        if result is not None:
+    def _handle_pod_deletion(self, pod: V1Pod) -> bool:
+        old = self._pods.pop(pod.metadata.name, None)
+        if old is not None:
             LOGGER.debug("Removing pod %s", pod.metadata.name)
+            return True
+        return False
 
 
 async def _cancel_task(task: asyncio.Task[None] | None) -> None:
