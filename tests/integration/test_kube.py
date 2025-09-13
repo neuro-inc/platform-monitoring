@@ -11,7 +11,6 @@ from collections.abc import (
     AsyncIterator,
     Awaitable,
     Callable,
-    Coroutine,
     Iterable,
     Iterator,
     Sequence,
@@ -117,18 +116,12 @@ async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
         return web.Response(content_type="text/plain")
 
     async def _gpu_metrics(request: web.Request) -> web.Response:
-        return web.Response(content_type="text/plain")
-
-    def _unauthorized_gpu_metrics() -> Callable[
-        [web.Request], Coroutine[Any, Any, web.Response]
-    ]:
-        async def _inner(request: web.Request) -> web.Response:
-            auth_header = request.headers.get("Authorization", "")
-            if auth_header.split(" ")[1] == "authorized":
-                return web.Response(content_type="text/plain")
-            return web.Response(status=401)
-
-        return _inner
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header:
+            return web.Response(content_type="text/plain")
+        if auth_header.split(" ")[1] == "authorized":
+            return web.Response(content_type="text/plain")
+        return web.Response(status=401)
 
     def _create_app() -> web.Application:
         app = web.Application()
@@ -140,10 +133,6 @@ async def mock_kubernetes_server() -> AsyncIterator[ApiAddress]:
                     "/api/v1/nodes/whatever:10255/proxy/stats/summary", _stats_summary
                 ),
                 web.get("/metrics", _gpu_metrics),
-                web.get(
-                    "/api/v1/nodes/unauthorized:9400/proxy/metrics",
-                    _unauthorized_gpu_metrics(),
-                ),
             ]
         )
         return app
@@ -666,7 +655,7 @@ class TestKubeClient:
         async with KubeClient(
             base_url=f"http://{srv.host}:{srv.port}",
             namespace="mock",
-            nvidia_dcgm_node_port=9400,
+            nvidia_dcgm_node_port=srv.port,
             auth_type=KubeClientAuthType.TOKEN,
             token="bad",
             token_path=str(token_path),
