@@ -1482,9 +1482,10 @@ class LokiLogReader(LogReader):
         await self._iterator.aclose()  # type: ignore
 
     def encode_and_handle_log(self, log_data: list[Any]) -> bytes:
-        log = orjson.loads(log_data[1])["_entry"]
-
+        log_entry = orjson.loads(log_data[1])
+        log = log_entry["_entry"]
         log = log if log.endswith("\n") else log + "\n"
+        pod = log_entry.get("pod")
 
         stream = log_data[2]
 
@@ -1500,6 +1501,7 @@ class LokiLogReader(LogReader):
                     {
                         "container": stream["container"],
                         "log": log,
+                        "pod": pod,
                         "namespace": stream["namespace"],
                     }
                 )
