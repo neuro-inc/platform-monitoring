@@ -1482,9 +1482,10 @@ class LokiLogReader(LogReader):
         await self._iterator.aclose()  # type: ignore
 
     def encode_and_handle_log(self, log_data: list[Any]) -> bytes:
-        log = orjson.loads(log_data[1])["_entry"]
-
+        log_entry = orjson.loads(log_data[1])
+        log = log_entry["_entry"]
         log = log if log.endswith("\n") else log + "\n"
+        pod = log_entry["pod"]
 
         stream = log_data[2]
 
@@ -1492,7 +1493,7 @@ class LokiLogReader(LogReader):
             log_dt = datetime.fromtimestamp(int(log_data[0]) / 1_000_000_000, tz=UTC)
             log = f"{log_dt.strftime('%Y-%m-%dT%H:%M:%S.%f')}Z {log}"
         if self._prefix:
-            log = f"{stream['pod']}/{stream['container']} {log}"
+            log = f"{pod}/{stream['container']} {log}"
 
         if self._as_ndjson:
             return (
@@ -1500,7 +1501,7 @@ class LokiLogReader(LogReader):
                     {
                         "container": stream["container"],
                         "log": log,
-                        "pod": stream["pod"],
+                        "pod": pod,
                         "namespace": stream["namespace"],
                     }
                 )
