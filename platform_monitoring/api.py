@@ -4,6 +4,7 @@ import logging
 import random
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
+from dataclasses import asdict
 from typing import Any
 
 import aiobotocore.session
@@ -31,6 +32,11 @@ from apolo_apps_client import (
     AppsApiClient,
     AppsApiException,
     AppsClientConfig,
+)
+from apolo_kube_client import (
+    KubeClient as ApoloKubeClient,
+    KubeClientAuthType as ApoloKubeClientAuthType,
+    KubeConfig as ApoloKubeConfig,
 )
 from elasticsearch import AsyncElasticsearch
 from neuro_auth_client import AuthClient, Permission, check_permissions
@@ -74,6 +80,10 @@ from .validators import (
     create_exec_create_request_payload_validator,
     create_save_request_payload_validator,
 )
+from .vcluster import (
+    VClusterService,
+    VClusterServiceError,
+)
 
 
 WS_ATTACH_PROTOCOL = "v2.channels.neu.ro"
@@ -91,6 +101,7 @@ K8S_LABEL_APOLO_APP_INSTANCE_NAME = "platform.apolo.us/app-instance-name"
 
 CONFIG_KEY = aiohttp.web.AppKey("config", Config)
 KUBE_CLIENT_KEY = aiohttp.web.AppKey("kube_client", KubeClient)
+APOLO_KUBE_CLIENT_KEY = aiohttp.web.AppKey("apolo_kube_client", ApoloKubeClient)
 LOKI_CLIENT_KEY = aiohttp.web.AppKey("loki_client", LokiClient)
 JOBS_SERVICE_KEY = aiohttp.web.AppKey("jobs_service", JobsService)
 LOGS_SERVICE_KEY = aiohttp.web.AppKey("logs_service", LogsService)
@@ -107,16 +118,59 @@ DEFAULT_SEPARATOR = "=== Live logs ==="
 logger = logging.getLogger(__name__)
 
 
-class ApiHandler:
+class VClusterHandler:
+    def __init__(self, root_app: aiohttp.web.Application) -> None:
+        self._root_app = root_app
+
     def register(self, app: aiohttp.web.Application) -> list[AbstractRoute]:
         return app.add_routes(
             [
-                aiohttp.web.get("/ping", self.handle_ping),
+                aiohttp.web.get(
+                    "/vclusters/org/{org_name}/project/{project_name}/kubeconfig",
+                    self.get_vcluster_kubeconfig,
+                ),
             ]
         )
 
-    async def handle_ping(self, request: Request) -> Response:
-        return Response(text="Pong")
+    @property
+    def _config(self) -> Config:
+        return self._root_app[CONFIG_KEY]
+
+    @property
+    def _monitoring_app(self) -> aiohttp.web.Application:
+        return self._root_app[MONITORING_APP_KEY]
+
+    @property
+    def _apolo_kube_client(self) -> ApoloKubeClient:
+        return self._monitoring_app[APOLO_KUBE_CLIENT_KEY]
+
+    async def get_vcluster_kubeconfig(self, request: Request) -> Response:
+        org_name = request.match_info["org_name"]
+        project_name = request.match_info["project_name"]
+
+        # ensure cluster manager
+        await check_permissions(
+            request,
+            [
+                [
+                    Permission(
+                        uri=f"cluster://{self._config.cluster_name}",
+                        action="manage",
+                    )
+                ]
+            ],
+        )
+
+        service = VClusterService(self._apolo_kube_client)
+        try:
+            kubeconfig = await service.get_kubeconfig(org_name, project_name)
+        except VClusterServiceError as exc:
+            return json_response(
+                {"error": exc.message},
+                status=exc.status_code,
+            )
+
+        return json_response(asdict(kubeconfig))
 
 
 class MonitoringApiHandler:
@@ -1113,6 +1167,25 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             )
             app[MONITORING_APP_KEY][KUBE_CLIENT_KEY] = kube_client
 
+            apolo_kube_config = ApoloKubeConfig(
+                endpoint_url=config.kube.endpoint_url,
+                cert_authority_data_pem=config.kube.cert_authority_data_pem,
+                cert_authority_path=config.kube.cert_authority_path,
+                auth_type=ApoloKubeClientAuthType(config.kube.auth_type.value),
+                auth_cert_path=config.kube.auth_cert_path,
+                auth_cert_key_path=config.kube.auth_cert_key_path,
+                token=config.kube.token,
+                token_path=config.kube.token_path,
+                namespace=config.kube.namespace,
+                client_conn_timeout_s=config.kube.client_conn_timeout_s,
+                client_read_timeout_s=config.kube.client_read_timeout_s,
+                client_conn_pool_size=config.kube.client_conn_pool_size,
+            )
+            apolo_kube_client = await exit_stack.enter_async_context(
+                ApoloKubeClient(config=apolo_kube_config)
+            )
+            app[MONITORING_APP_KEY][APOLO_KUBE_CLIENT_KEY] = apolo_kube_client
+
             logger.info("Initializing Platform Config client")
             config_client = await exit_stack.enter_async_context(
                 ConfigClient(config.platform_config.url, config.platform_config.token)
@@ -1154,8 +1227,8 @@ async def create_app(config: Config) -> aiohttp.web.Application:
     app.cleanup_ctx.append(_init_app)
 
     api_v1_app = aiohttp.web.Application()
-    api_v1_handler = ApiHandler()
-    api_v1_handler.register(api_v1_app)
+    vcluster_handler = VClusterHandler(app)
+    vcluster_handler.register(api_v1_app)
 
     monitoring_app = await create_monitoring_app(config)
     app[MONITORING_APP_KEY] = monitoring_app
