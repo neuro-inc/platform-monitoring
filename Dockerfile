@@ -17,7 +17,7 @@ FROM python:${PY_VERSION}-slim-bookworm AS runtime
 LABEL org.opencontainers.image.source="https://github.com/neuro-inc/platform-monitoring"
 
 # Name of your service (folder under /home)
-ARG SERVICE_NAME="/platform-monitoring-api"
+ARG SERVICE_NAME="platform-monitoring-api"
 ARG SERVICE_UID=1001
 ARG SERVICE_GID=1001
 
