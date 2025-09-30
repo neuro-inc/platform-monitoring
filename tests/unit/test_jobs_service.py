@@ -61,12 +61,10 @@ def create_node(
                     "cpu": str(cpu),
                     "memory": str(memory),
                     "nvidia.com/gpu": str(nvidia_gpu),
-                    **(
-                        {
-                            f"nvidia.com/mig-{key}": str(count)
-                            for key, count in (nvidia_mig or {}).items()
-                        }
-                    ),
+                    **{
+                        f"nvidia.com/mig-{key}": str(count)
+                        for key, count in (nvidia_mig or {}).items()
+                    },
                     "amd.com/gpu": str(amd_gpu),
                 },
                 "nodeInfo": {"containerRuntimeVersion": "containerd"},
