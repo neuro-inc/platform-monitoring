@@ -764,3 +764,22 @@ class TestContainerResources:
         assert total // ContainerResources(nvidia_migs={"2g.10gb": 1}) == 0
         assert total // ContainerResources() == 110
         assert ContainerResources() // ContainerResources() == 0
+
+    def test_from_primitive(self) -> None:
+        resources = ContainerResources.from_primitive(
+            {
+                "cpu": "1",
+                "memory": 2**30,
+                "nvidia.com/gpu": 1,
+                "nvidia.com/mig-1g.5gb": 2,
+                "amd.com/gpu": 3,
+            }
+        )
+
+        assert resources == ContainerResources(
+            cpu_m=1000,
+            memory=2**30,
+            nvidia_gpu=1,
+            nvidia_migs={"1g.5gb": 2},
+            amd_gpu=3,
+        )
