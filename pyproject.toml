@@ -27,7 +27,7 @@ dependencies = [
     "elasticsearch<8.0.0",
     "iso8601==2.1.0",
     "neuro-auth-client==25.5.1",
-    "neuro-config-client==25.9.0",
+    "neuro-config-client==25.9.5",
     "neuro-logging==25.1.0",
     "orjson==3.10.18",
     "trafaret==2.1.1",
@@ -66,7 +66,7 @@ pytest-asyncio = "1.2.0"
 pytest-cov = "7.0.0"
 pytest-xdist = "3.8.0"
 python-jose = "3.5.0"
-ruff = "0.13.1"
+ruff = "0.13.2"
 types-cachetools = "6.2.0.20250827"
 
 [tool.ruff]

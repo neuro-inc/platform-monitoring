@@ -7,9 +7,10 @@ import logging
 import re
 import ssl
 import typing as t
-from collections.abc import AsyncIterator
+from collections import defaultdict
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager, suppress
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote_plus, urlsplit
@@ -127,9 +128,11 @@ class ContainerResources:
     cpu_m: int = 0
     memory: int = 0
     nvidia_gpu: int = 0
+    nvidia_migs: Mapping[str, int] = field(default_factory=dict)
     amd_gpu: int = 0
 
     nvidia_gpu_key: t.ClassVar[str] = "nvidia.com/gpu"
+    nvidia_mig_key_prefix: t.ClassVar[str] = "nvidia.com/mig-"
     amd_gpu_key: t.ClassVar[str] = "amd.com/gpu"
 
     @property
@@ -138,10 +141,16 @@ class ContainerResources:
 
     @classmethod
     def from_primitive(cls, payload: JSON) -> t.Self:
+        nvidia_migs = {}
+        for key, value in payload.items():
+            if key.startswith(cls.nvidia_mig_key_prefix):
+                profile_name = key[len(cls.nvidia_mig_key_prefix) :]
+                nvidia_migs[profile_name] = int(value)
         return cls(
             cpu_m=cls._parse_cpu_m(str(payload.get("cpu", "0"))),
             memory=parse_memory(str(payload.get("memory", "0"))),
             nvidia_gpu=int(payload.get(cls.nvidia_gpu_key, 0)),
+            nvidia_migs=nvidia_migs,
             amd_gpu=int(payload.get(cls.amd_gpu_key, 0)),
         )
 
@@ -156,52 +165,66 @@ class ContainerResources:
         return self.nvidia_gpu != 0
 
     @property
+    def has_nvidia_migs(self) -> bool:
+        return len(self.nvidia_migs) != 0
+
+    @property
     def has_amd_gpu(self) -> bool:
         return self.amd_gpu != 0
 
     @property
     def has_gpu(self) -> bool:
-        return self.has_nvidia_gpu or self.has_amd_gpu
+        return self.has_nvidia_gpu or self.has_nvidia_migs or self.has_amd_gpu
 
     def __bool__(self) -> bool:
-        return (
-            self.cpu_m != 0
-            or self.memory != 0
-            or self.nvidia_gpu != 0
-            or self.amd_gpu != 0
-        )
+        return self.cpu_m != 0 or self.memory != 0 or self.has_gpu
 
     def __add__(self, other: ContainerResources) -> t.Self:
+        nvidia_migs = defaultdict(int, **self.nvidia_migs)
+        for key, count in other.nvidia_migs.items():
+            nvidia_migs[key] = nvidia_migs[key] + count
         return replace(
             self,
             cpu_m=self.cpu_m + other.cpu_m,
             memory=self.memory + other.memory,
             nvidia_gpu=self.nvidia_gpu + other.nvidia_gpu,
+            nvidia_migs=nvidia_migs,
             amd_gpu=self.amd_gpu + other.amd_gpu,
         )
 
     def __sub__(self, used: ContainerResources) -> t.Self:
+        nvidia_migs = defaultdict(int, **self.nvidia_migs)
+        for key, count in used.nvidia_migs.items():
+            nvidia_migs[key] = max(0, nvidia_migs[key] - count)
         return replace(
             self,
             cpu_m=max(0, self.cpu_m - used.cpu_m),
             memory=max(0, self.memory - used.memory),
             nvidia_gpu=max(0, self.nvidia_gpu - used.nvidia_gpu),
+            nvidia_migs=nvidia_migs,
             amd_gpu=max(0, self.amd_gpu - used.amd_gpu),
         )
 
     def __floordiv__(self, resources: ContainerResources) -> int:
         if not self:
             return 0
-        result = DEFAULT_MAX_PODS_PER_NODE
+        counts = []
         if resources.cpu_m:
-            result = min(result, self.cpu_m // resources.cpu_m)
+            counts.append(self.cpu_m // resources.cpu_m)
         if resources.memory:
-            result = min(result, self.memory // resources.memory)
+            counts.append(self.memory // resources.memory)
         if resources.nvidia_gpu:
-            result = min(result, self.nvidia_gpu // resources.nvidia_gpu)
+            counts.append(self.nvidia_gpu // resources.nvidia_gpu)
+        if resources.nvidia_migs:
+            for key, count in resources.nvidia_migs.items():
+                if count:
+                    counts.append(self.nvidia_migs.get(key, 0) // count)
         if resources.amd_gpu:
-            result = min(result, self.amd_gpu // resources.amd_gpu)
-        return result
+            counts.append(self.amd_gpu // resources.amd_gpu)
+        if not counts:
+            msg = "Cannot divide by zero resources"
+            raise ValueError(msg)
+        return min(counts)
 
 
 class PodRestartPolicy(enum.StrEnum):
@@ -340,7 +363,10 @@ class NodeResources(ContainerResources):
         resources = super().from_primitive(payload)
         return cls(
             **{
-                **asdict(resources),
+                **{
+                    field.name: getattr(resources, field.name)
+                    for field in fields(resources)
+                },
                 "pods": int(payload.get("pods", cls.pods)),
                 "ephemeral_storage": parse_memory(
                     payload.get("ephemeral-storage", cls.ephemeral_storage)
@@ -348,8 +374,14 @@ class NodeResources(ContainerResources):
             }
         )
 
-    def with_pods(self, value: int) -> t.Self:
-        return replace(self, pods=max(0, value))
+    def reduce_pods(self, value: int) -> t.Self:
+        return replace(self, pods=max(0, self.pods - value))
+
+    def __floordiv__(self, resources: ContainerResources) -> int:
+        if not resources:
+            return self.pods
+        count = super().__floordiv__(resources)
+        return min(self.pods or count, count)
 
 
 @dataclass(frozen=True)
