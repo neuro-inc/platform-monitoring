@@ -1,9 +1,11 @@
 import asyncio
+import itertools
 import logging
+import re
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from contextlib import aclosing, suppress
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Protocol, Self, TypeVar
 
 import tenacity
@@ -14,6 +16,7 @@ from neuro_config_client import (
     GPU,
     ConfigClient,
     NvidiaGPU,
+    NvidiaMIG,
     PatchClusterRequest,
     PatchOrchestratorConfigRequest,
     ResourcePoolType,
@@ -34,6 +37,7 @@ NEURO_PLATFORM_NODE_POOL_LABEL_KEY = "platform.neuromation.io/nodepool"
 
 NVIDIA_GPU_PRODUCT = "nvidia.com/gpu.product"
 NVIDIA_GPU_MEMORY = "nvidia.com/gpu.memory"
+NVIDIA_MIG_MEMORY_PATTERN = re.compile(r"nvidia\.com/mig-(?P<profile_name>.+)\.memory")
 
 AMD_GPU_DEVICE_ID = "amd.com/gpu.device-id"
 AMD_GPU_VRAM = "amd.com/gpu.vram"
@@ -53,6 +57,7 @@ class _Node:
     allocatable: NodeResources
     nvidia_gpu_model: str | None = None
     nvidia_gpu_memory: int | None = None
+    nvidia_mig_memories: Mapping[str, int] = field(default_factory=dict)
     amd_gpu_device_id: str | None = None
     amd_gpu_vram: int | None = None
 
@@ -70,9 +75,17 @@ class _Node:
             ),
             nvidia_gpu_model=labels.get(NVIDIA_GPU_PRODUCT),
             nvidia_gpu_memory=int(labels.get(NVIDIA_GPU_MEMORY, "0")) * MiB or None,
+            nvidia_mig_memories={
+                match.group("profile_name"): int(value) * MiB
+                for key, value in labels.items()
+                if (match := NVIDIA_MIG_MEMORY_PATTERN.fullmatch(key))
+            },
             amd_gpu_device_id=labels.get(AMD_GPU_DEVICE_ID),
             amd_gpu_vram=parse_memory(labels.get(AMD_GPU_VRAM, "0")) or None,
         )
+
+    def allocate_resources(self, resources: ContainerResources) -> Self:
+        return replace(self, allocatable=self.allocatable - resources)
 
 
 @dataclass(frozen=True)
@@ -106,6 +119,13 @@ class _Pod:
             cpu_m=max(r1.cpu_m, r2.cpu_m),
             memory=max(r1.memory, r2.memory),
             nvidia_gpu=max(r1.nvidia_gpu, r2.nvidia_gpu),
+            nvidia_migs={
+                profile_name: max(
+                    r1.nvidia_migs.get(profile_name, 0),
+                    r2.nvidia_migs.get(profile_name, 0),
+                )
+                for profile_name in set(r1.nvidia_migs) | set(r2.nvidia_migs)
+            },
             amd_gpu=max(r1.amd_gpu, r2.amd_gpu),
         )
 
@@ -510,10 +530,6 @@ class ClusterSyncer:
 _T_GPU = TypeVar("_T_GPU", bound=GPU)
 
 
-def round_cpu(cpu: float) -> float:
-    return int(cpu * 1000) / 1000
-
-
 class ResourcePoolTypeFactory:
     def create_from_nodes(
         self, nodes: Sequence[_Node], pods: Mapping[str, Sequence[_Pod]]
@@ -527,6 +543,7 @@ class ResourcePoolTypeFactory:
         disk_size = []
         available_disk_size = []
         nvidia_gpu = []
+        nvidia_migs = []
         amd_gpu = []
         # TODO: support Intel GPU
 
@@ -537,18 +554,21 @@ class ResourcePoolTypeFactory:
             allocated = sum(
                 (pod.resource_requests for pod in node_pods), start=ContainerResources()
             )
+            node = node.allocate_resources(allocated)
             LOGGER.debug("Node %s pods: %r", node.name, node_pods)
             LOGGER.debug("Node %s allocated: %r", node.name, allocated)
+            LOGGER.debug("Node %s available: %r", node.name, node.allocatable)
 
-            # Subtract resources that are allocated to platform services on each node
             cpu.append(node.capacity.cpu)
-            available_cpu.append(node.allocatable.cpu - allocated.cpu)
+            available_cpu.append(node.allocatable.cpu)
             memory.append(node.capacity.memory)
-            available_memory.append(node.allocatable.memory - allocated.memory)
+            available_memory.append(node.allocatable.memory)
             disk_size.append(node.capacity.ephemeral_storage)
             available_disk_size.append(node.allocatable.ephemeral_storage)
             if ng := self._create_nvidia_gpu(node):
                 nvidia_gpu.append(ng)
+            if migs := self._create_nvidia_migs(node):
+                nvidia_migs.append(migs)
             if ag := self._create_amd_gpu(node):
                 amd_gpu.append(ag)
 
@@ -556,34 +576,50 @@ class ResourcePoolTypeFactory:
             name=nodes[0].node_pool_name,
             min_size=len(nodes),
             max_size=len(nodes),
-            cpu=round_cpu(min(cpu)),
-            available_cpu=round_cpu(min(available_cpu)),
+            cpu=min(cpu),
+            available_cpu=min(available_cpu),
             memory=min(memory),
             available_memory=min(available_memory),
             disk_size=min(disk_size),
             available_disk_size=min(available_disk_size),
             nvidia_gpu=self._min_gpu(nvidia_gpu, NvidiaGPU),
+            nvidia_migs=self._min_nvidia_migs(nvidia_migs),
             amd_gpu=self._min_gpu(amd_gpu, AMDGPU),
         )
 
     def _create_nvidia_gpu(self, node: _Node) -> NvidiaGPU | None:
-        if not node.capacity.has_nvidia_gpu:
+        if not node.allocatable.has_nvidia_gpu:
             return None
         if not node.nvidia_gpu_model:
             return None
         return NvidiaGPU(
-            count=node.capacity.nvidia_gpu,
+            count=node.allocatable.nvidia_gpu,
             model=node.nvidia_gpu_model,
             memory=node.nvidia_gpu_memory,
         )
 
+    def _create_nvidia_migs(self, node: _Node) -> list[NvidiaMIG] | None:
+        if not node.allocatable.has_nvidia_migs:
+            return None
+        if not node.nvidia_gpu_model:
+            return None
+        return [
+            NvidiaMIG(
+                profile_name=profile_name,
+                count=count,
+                model=node.nvidia_gpu_model,
+                memory=node.nvidia_mig_memories.get(profile_name),
+            )
+            for profile_name, count in node.allocatable.nvidia_migs.items()
+        ]
+
     def _create_amd_gpu(self, node: _Node) -> AMDGPU | None:
-        if not node.capacity.has_amd_gpu:
+        if not node.allocatable.has_amd_gpu:
             return None
         if not node.amd_gpu_device_id:
             return None
         return AMDGPU(
-            count=node.capacity.amd_gpu,
+            count=node.allocatable.amd_gpu,
             model=node.amd_gpu_device_id,
             memory=node.amd_gpu_vram,
         )
@@ -595,3 +631,21 @@ class ResourcePoolTypeFactory:
         count = min(gpu.count for gpu in gpus if gpu.model == model)
         memory = min(gpu.memory for gpu in gpus if gpu.memory and gpu.model == model)
         return cls(count=count, model=model, memory=memory)
+
+    def _min_nvidia_migs(
+        self, nvidia_migs: list[list[NvidiaMIG]]
+    ) -> list[NvidiaMIG] | None:
+        if not nvidia_migs:
+            return None
+        grouped_migs = defaultdict(list)
+        for mig in itertools.chain.from_iterable(nvidia_migs):
+            grouped_migs[(mig.model, mig.profile_name)].append(mig)
+        return [
+            NvidiaMIG(
+                profile_name=next(mig.profile_name for mig in migs),
+                count=min(mig.count for mig in migs),
+                model=next(mig.model for mig in migs),
+                memory=min((mig.memory for mig in migs if mig.memory), default=None),
+            )
+            for migs in grouped_migs.values()
+        ]
