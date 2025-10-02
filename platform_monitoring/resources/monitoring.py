@@ -530,10 +530,6 @@ class ClusterSyncer:
 _T_GPU = TypeVar("_T_GPU", bound=GPU)
 
 
-def round_cpu(cpu: float) -> float:
-    return int(cpu * 1000) / 1000
-
-
 class ResourcePoolTypeFactory:
     def create_from_nodes(
         self, nodes: Sequence[_Node], pods: Mapping[str, Sequence[_Pod]]
@@ -563,7 +559,6 @@ class ResourcePoolTypeFactory:
             LOGGER.debug("Node %s allocated: %r", node.name, allocated)
             LOGGER.debug("Node %s available: %r", node.name, node.allocatable)
 
-            # Subtract resources that are allocated to platform services on each node
             cpu.append(node.capacity.cpu)
             available_cpu.append(node.allocatable.cpu)
             memory.append(node.capacity.memory)
@@ -581,8 +576,8 @@ class ResourcePoolTypeFactory:
             name=nodes[0].node_pool_name,
             min_size=len(nodes),
             max_size=len(nodes),
-            cpu=round_cpu(min(cpu)),
-            available_cpu=round_cpu(min(available_cpu)),
+            cpu=min(cpu),
+            available_cpu=min(available_cpu),
             memory=min(memory),
             available_memory=min(available_memory),
             disk_size=min(disk_size),
