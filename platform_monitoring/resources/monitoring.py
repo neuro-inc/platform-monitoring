@@ -16,7 +16,6 @@ from neuro_config_client import (
     GPU,
     ConfigClient,
     NvidiaGPU,
-    NvidiaMIG,
     PatchClusterRequest,
     PatchOrchestratorConfigRequest,
     ResourcePoolType,
@@ -38,6 +37,7 @@ NEURO_PLATFORM_NODE_POOL_LABEL_KEY = "platform.neuromation.io/nodepool"
 NVIDIA_GPU_PRODUCT = "nvidia.com/gpu.product"
 NVIDIA_GPU_MEMORY = "nvidia.com/gpu.memory"
 NVIDIA_MIG_MEMORY_PATTERN = re.compile(r"nvidia\.com/mig-(?P<profile_name>.+)\.memory")
+NVIDIA_MIG_MODEL_PATTERN = re.compile(r"nvidia\.com/mig-(?P<profile_name>.+)\.product")
 
 AMD_GPU_DEVICE_ID = "amd.com/gpu.device-id"
 AMD_GPU_VRAM = "amd.com/gpu.vram"
@@ -57,6 +57,7 @@ class _Node:
     allocatable: NodeResources
     nvidia_gpu_model: str | None = None
     nvidia_gpu_memory: int | None = None
+    nvidia_mig_models: Mapping[str, str] = field(default_factory=dict)
     nvidia_mig_memories: Mapping[str, int] = field(default_factory=dict)
     amd_gpu_device_id: str | None = None
     amd_gpu_vram: int | None = None
@@ -75,6 +76,11 @@ class _Node:
             ),
             nvidia_gpu_model=labels.get(NVIDIA_GPU_PRODUCT),
             nvidia_gpu_memory=int(labels.get(NVIDIA_GPU_MEMORY, "0")) * MiB or None,
+            nvidia_mig_models={
+                match.group("profile_name"): value
+                for key, value in labels.items()
+                if (match := NVIDIA_MIG_MODEL_PATTERN.fullmatch(key))
+            },
             nvidia_mig_memories={
                 match.group("profile_name"): int(value) * MiB
                 for key, value in labels.items()
@@ -598,20 +604,19 @@ class ResourcePoolTypeFactory:
             memory=node.nvidia_gpu_memory,
         )
 
-    def _create_nvidia_migs(self, node: _Node) -> list[NvidiaMIG] | None:
+    def _create_nvidia_migs(self, node: _Node) -> dict[str, NvidiaGPU] | None:
         if not node.allocatable.has_nvidia_migs:
             return None
-        if not node.nvidia_gpu_model:
-            return None
-        return [
-            NvidiaMIG(
-                profile_name=profile_name,
+        result = {
+            key: NvidiaGPU(
                 count=count,
-                model=node.nvidia_gpu_model,
-                memory=node.nvidia_mig_memories.get(profile_name),
+                model=model,
+                memory=node.nvidia_mig_memories.get(key),
             )
-            for profile_name, count in node.allocatable.nvidia_migs.items()
-        ]
+            for key, count in node.allocatable.nvidia_migs.items()
+            if (model := node.nvidia_mig_models.get(key))
+        }
+        return result or None
 
     def _create_amd_gpu(self, node: _Node) -> AMDGPU | None:
         if not node.allocatable.has_amd_gpu:
@@ -627,25 +632,33 @@ class ResourcePoolTypeFactory:
     def _min_gpu(self, gpus: list[_T_GPU], cls: type[_T_GPU]) -> _T_GPU | None:
         if not gpus:
             return None
-        model = next(gpu.model for gpu in gpus if gpu.model)
+        model = next(gpu.model for gpu in gpus)
         count = min(gpu.count for gpu in gpus if gpu.model == model)
-        memory = min(gpu.memory for gpu in gpus if gpu.memory and gpu.model == model)
+        memory = min(
+            (gpu.memory for gpu in gpus if gpu.memory and gpu.model == model),
+            default=None,
+        )
         return cls(count=count, model=model, memory=memory)
 
     def _min_nvidia_migs(
-        self, nvidia_migs: list[list[NvidiaMIG]]
-    ) -> list[NvidiaMIG] | None:
+        self, nvidia_migs: list[dict[str, NvidiaGPU]]
+    ) -> dict[str, NvidiaGPU] | None:
         if not nvidia_migs:
             return None
         grouped_migs = defaultdict(list)
-        for mig in itertools.chain.from_iterable(nvidia_migs):
-            grouped_migs[(mig.model, mig.profile_name)].append(mig)
-        return [
-            NvidiaMIG(
-                profile_name=next(mig.profile_name for mig in migs),
-                count=min(mig.count for mig in migs),
-                model=next(mig.model for mig in migs),
-                memory=min((mig.memory for mig in migs if mig.memory), default=None),
+        for profile_name, mig in itertools.chain.from_iterable(
+            migs.items() for migs in nvidia_migs
+        ):
+            grouped_migs[profile_name].append(mig)
+        result = {}
+        for profile_name, migs in grouped_migs.items():
+            model = next(mig.model for mig in migs)
+            result[profile_name] = NvidiaGPU(
+                count=min(mig.count for mig in migs if mig.model == model),
+                model=model,
+                memory=min(
+                    (mig.memory for mig in migs if mig.memory and mig.model == model),
+                    default=None,
+                ),
             )
-            for migs in grouped_migs.values()
-        ]
+        return result

@@ -247,7 +247,7 @@ class JobsService:
             memory=preset.memory,
             nvidia_gpu=preset.nvidia_gpu.count if preset.nvidia_gpu else 0,
             nvidia_migs=(
-                {mig.profile_name: mig.count for mig in preset.nvidia_migs}
+                {key: value.count for key, value in preset.nvidia_migs.items()}
                 if preset.nvidia_migs
                 else {}
             ),
@@ -301,7 +301,7 @@ class JobsService:
             memory=node_pool.available_memory,
             nvidia_gpu=node_pool.nvidia_gpu.count if node_pool.nvidia_gpu else 0,
             nvidia_migs=(
-                {mig.profile_name: mig.count for mig in node_pool.nvidia_migs}
+                {key: value.count for key, value in node_pool.nvidia_migs.items()}
                 if node_pool.nvidia_migs
                 else {}
             ),
