@@ -23,8 +23,6 @@ from neuro_config_client import (
     MonitoringConfig,
     NvidiaGPU,
     NvidiaGPUPreset,
-    NvidiaMIG,
-    NvidiaMIGPreset,
     OrchestratorConfig,
     RegistryConfig,
     ResourcePoolType,
@@ -157,13 +155,12 @@ def cluster() -> Cluster:
                         count=1,
                         model="nvidia-gpu",
                     ),
-                    nvidia_migs=[
-                        NvidiaMIG(
-                            profile_name="1g.5gb",
+                    nvidia_migs={
+                        "1g.5gb": NvidiaGPU(
                             count=7,
                             model="nvidia-gpu-1g-5gb",
                         )
-                    ],
+                    },
                 ),
             ],
             resource_presets=[
@@ -198,7 +195,7 @@ def cluster() -> Cluster:
                     credits_per_hour=Decimal(10),
                     cpu=0.1,
                     memory=100 * 2**20,
-                    nvidia_migs=[NvidiaMIGPreset(profile_name="1g.5gb", count=1)],
+                    nvidia_migs={"1g.5gb": NvidiaGPUPreset(count=1)},
                     available_resource_pool_names=["minikube-nvidia-mig"],
                 ),
                 ResourcePreset(

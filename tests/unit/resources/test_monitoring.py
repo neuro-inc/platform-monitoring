@@ -5,7 +5,7 @@ from kubernetes.client.models import (
     V1PodSpec,
     V1ResourceRequirements,
 )
-from neuro_config_client import AMDGPU, NvidiaGPU, NvidiaMIG, ResourcePoolType
+from neuro_config_client import AMDGPU, NvidiaGPU, ResourcePoolType
 
 from platform_monitoring.kube_client import ContainerResources, NodeResources
 from platform_monitoring.resources.monitoring import (
@@ -38,6 +38,7 @@ class TestResourcePoolTypeFactory:
             ),
             nvidia_gpu_model="A100",
             nvidia_gpu_memory=40 * 2**30,
+            nvidia_mig_models={"1g.5gb": "A100-1g.5gb"},
             nvidia_mig_memories={"1g.5gb": 5 * 2**30},
             amd_gpu_device_id="RX-6800",
             amd_gpu_vram=80 * 2**30,
@@ -55,11 +56,9 @@ class TestResourcePoolTypeFactory:
             disk_size=100 * 2**30,
             available_disk_size=80 * 2**30,
             nvidia_gpu=NvidiaGPU(count=1, model="A100", memory=40 * 2**30),
-            nvidia_migs=[
-                NvidiaMIG(
-                    profile_name="1g.5gb", count=3, model="A100", memory=5 * 2**30
-                )
-            ],
+            nvidia_migs={
+                "1g.5gb": NvidiaGPU(count=3, model="A100-1g.5gb", memory=5 * 2**30)
+            },
             amd_gpu=AMDGPU(count=2, model="RX-6800", memory=80 * 2**30),
         )
 
@@ -85,6 +84,7 @@ class TestResourcePoolTypeFactory:
             ),
             nvidia_gpu_model="A100",
             nvidia_gpu_memory=40 * 2**30,
+            nvidia_mig_models={"1g.5gb": "A100-1g.5gb"},
             nvidia_mig_memories={"1g.5gb": 5 * 2**30},
             amd_gpu_device_id="RX-6800",
             amd_gpu_vram=80 * 2**30,
@@ -110,6 +110,7 @@ class TestResourcePoolTypeFactory:
             ),
             nvidia_gpu_model="A100",
             nvidia_gpu_memory=40 * 2**30,
+            nvidia_mig_models={"1g.5gb": "A100-1g.5gb"},
             nvidia_mig_memories={"1g.5gb": 5 * 2**30},
             amd_gpu_device_id="RX-6800",
             amd_gpu_vram=80 * 2**30,
@@ -127,11 +128,9 @@ class TestResourcePoolTypeFactory:
             disk_size=50 * 2**30,
             available_disk_size=40 * 2**30,
             nvidia_gpu=NvidiaGPU(count=1, model="A100", memory=40 * 2**30),
-            nvidia_migs=[
-                NvidiaMIG(
-                    profile_name="1g.5gb", count=6, model="A100", memory=5 * 2**30
-                )
-            ],
+            nvidia_migs={
+                "1g.5gb": NvidiaGPU(count=6, model="A100-1g.5gb", memory=5 * 2**30)
+            },
             amd_gpu=AMDGPU(count=3, model="RX-6800", memory=80 * 2**30),
         )
 
@@ -159,7 +158,8 @@ class TestResourcePoolTypeFactory:
             ),
             nvidia_gpu_model="A100",
             nvidia_gpu_memory=40 * 2**30,
-            nvidia_mig_memories={"1g.5gb": 5 * 2**30},
+            nvidia_mig_models={"1g.5gb": "A100-1g.5gb"},
+            nvidia_mig_memories={"1g.5gb": 5 * 2**30 - 1},
             amd_gpu_device_id="RX-6800",
             amd_gpu_vram=80 * 2**30,
         )
@@ -184,6 +184,7 @@ class TestResourcePoolTypeFactory:
             ),
             nvidia_gpu_model="V100",
             nvidia_gpu_memory=16 * 2**30,
+            nvidia_mig_models={"1g.5gb": "V100-1g.5gb"},
             nvidia_mig_memories={"1g.5gb": 5 * 2**30},
             amd_gpu_device_id="RX-7800",
             amd_gpu_vram=40 * 2**30,
@@ -201,14 +202,11 @@ class TestResourcePoolTypeFactory:
             disk_size=50 * 2**30,
             available_disk_size=50 * 2**30,
             nvidia_gpu=NvidiaGPU(count=2, model="A100", memory=40 * 2**30),
-            nvidia_migs=[
-                NvidiaMIG(
-                    profile_name="1g.5gb", count=14, model="A100", memory=5 * 2**30
+            nvidia_migs={
+                "1g.5gb": NvidiaGPU(
+                    count=14, model="A100-1g.5gb", memory=5 * 2**30 - 1
                 ),
-                NvidiaMIG(
-                    profile_name="1g.5gb", count=7, model="V100", memory=5 * 2**30
-                ),
-            ],
+            },
             amd_gpu=AMDGPU(count=3, model="RX-6800", memory=80 * 2**30),
         )
 
@@ -234,6 +232,7 @@ class TestResourcePoolTypeFactory:
             ),
             nvidia_gpu_model="A100",
             nvidia_gpu_memory=40 * 2**30,
+            nvidia_mig_models={"1g.5gb": "A100-1g.5gb"},
             nvidia_mig_memories={"1g.5gb": 5 * 2**30},
             amd_gpu_device_id="RX-6800",
             amd_gpu_vram=40 * 2**30,
@@ -266,11 +265,9 @@ class TestResourcePoolTypeFactory:
             disk_size=100 * 2**30,
             available_disk_size=100 * 2**30,
             nvidia_gpu=NvidiaGPU(count=1, model="A100", memory=40 * 2**30),
-            nvidia_migs=[
-                NvidiaMIG(
-                    profile_name="1g.5gb", count=6, model="A100", memory=5 * 2**30
-                )
-            ],
+            nvidia_migs={
+                "1g.5gb": NvidiaGPU(count=6, model="A100-1g.5gb", memory=5 * 2**30)
+            },
             amd_gpu=AMDGPU(count=2, model="RX-6800", memory=40 * 2**30),
         )
 
@@ -296,6 +293,7 @@ class TestResourcePoolTypeFactory:
             ),
             nvidia_gpu_model="A100",
             nvidia_gpu_memory=40 * 2**30,
+            nvidia_mig_models={"1g.5gb": "A100-1g.5gb"},
             nvidia_mig_memories={"1g.5gb": 5 * 2**30},
             amd_gpu_device_id="RX-6800",
             amd_gpu_vram=40 * 2**30,
@@ -360,11 +358,9 @@ class TestResourcePoolTypeFactory:
             disk_size=50 * 2**30,
             available_disk_size=50 * 2**30,
             nvidia_gpu=NvidiaGPU(count=1, model="A100", memory=40 * 2**30),
-            nvidia_migs=[
-                NvidiaMIG(
-                    profile_name="1g.5gb", count=4, model="A100", memory=5 * 2**30
-                )
-            ],
+            nvidia_migs={
+                "1g.5gb": NvidiaGPU(count=4, model="A100-1g.5gb", memory=5 * 2**30)
+            },
             amd_gpu=AMDGPU(count=1, model="RX-6800", memory=40 * 2**30),
         )
 
