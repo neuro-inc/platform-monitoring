@@ -107,7 +107,7 @@ jobs:
         kubernetes-version: v1.31.0
         addons: registry
         start-args: '--nodes 1 --disk-size 30g'
-    - uses: azure/setup-helm@v4.3.0
+    - uses: azure/setup-helm@v4.3.1
       with:
         version: '3.16.4' # default is latest (stable)
       id: install
