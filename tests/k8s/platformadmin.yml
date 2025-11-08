@@ -84,8 +84,6 @@ spec:
           value: http://platformnotifications:8080
         - name: NP_ADMIN_NOTIFICATIONS_TOKEN
           value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZGVudGl0eSI6ImNvbXB1dGUifQ.IJDlKCfbiuNGZH9Sh6p-CdUL5KxEK5JStqzfDk4-RAA
-        - name: NP_JWT_SECRET
-          value: secret
       volumes:
         - name: jwks-secret-volume
           secret:

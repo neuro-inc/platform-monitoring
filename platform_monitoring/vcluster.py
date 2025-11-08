@@ -5,10 +5,9 @@ import binascii
 from dataclasses import dataclass
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPUnprocessableEntity
-from apolo_kube_client import KubeClient
+from apolo_kube_client import KubeClientSelector, V1Secret
 from apolo_kube_client._errors import ResourceNotFound
 from apolo_kube_client.apolo import generate_namespace_name
-from kubernetes.client.models import V1Secret
 
 
 class VClusterServiceError(Exception):
@@ -24,7 +23,7 @@ class VClusterServiceError(Exception):
 
 
 class VClusterSecretNotFoundError(VClusterServiceError):
-    def __init__() -> None:
+    def __init__(self) -> None:
         super().__init__(
             status_code=HTTPNotFound.status_code,
             message="VCluster secret was not found",
@@ -32,7 +31,7 @@ class VClusterSecretNotFoundError(VClusterServiceError):
 
 
 class VClusterKubeconfigMalformed(VClusterServiceError):
-    def __init__() -> None:
+    def __init__(self) -> None:
         super().__init__(
             status_code=HTTPUnprocessableEntity.status_code,
             message="VCluster secret malformed",
@@ -48,8 +47,8 @@ class VClusterKubeconfig:
 
 
 class VClusterService:
-    def __init__(self, kube_client: KubeClient) -> None:
-        self._kube_client = kube_client
+    def __init__(self, kube_client_selector: KubeClientSelector) -> None:
+        self._kube_client_selector = kube_client_selector
 
     async def get_kubeconfig(
         self,
@@ -57,12 +56,13 @@ class VClusterService:
         project_name: str,
     ) -> VClusterKubeconfig:
         namespace = generate_namespace_name(org_name, project_name)
-        secret_name = f"vc-{project_name}"
-
+        secret_name = f"vc-{namespace}"
         try:
-            secret: V1Secret = await self._kube_client.core_v1.secret.get(
-                name=secret_name,
-                namespace=namespace,
+            secret: V1Secret = (
+                await self._kube_client_selector.host_client.core_v1.secret.get(
+                    name=secret_name,
+                    namespace=namespace,
+                )
             )
         except ResourceNotFound as exc:
             raise VClusterSecretNotFoundError() from exc

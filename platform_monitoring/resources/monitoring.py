@@ -9,8 +9,7 @@ from dataclasses import dataclass, field, replace
 from typing import Protocol, Self, TypeVar
 
 import tenacity
-from apolo_kube_client import KubeClient
-from kubernetes.client.models import V1Container, V1Node, V1Pod
+from apolo_kube_client import KubeClient, V1Container, V1Node, V1Pod
 from neuro_config_client import (
     AMDGPU,
     GPU,
@@ -64,6 +63,7 @@ class _Node:
 
     @classmethod
     def from_v1_node(cls, node: V1Node) -> Self:
+        assert node.metadata.name, "node name is required"
         labels = node.metadata.labels or {}
         node_pool_name = _get_node_pool_name(node)
         assert node_pool_name, "node pool name is required"
@@ -102,6 +102,8 @@ class _Pod:
 
     @classmethod
     def from_v1_pod(cls, pod: V1Pod) -> Self:
+        assert pod.metadata.name, "pod name is required"
+        assert pod.spec, "pod must have a spec"
         assert pod.spec.node_name, "pod must be scheduled on a node"
         init_resource_requests = cls._max_container_resource_requests(
             pod.spec.init_containers or ()
@@ -219,7 +221,7 @@ class MonitoringService(_KubeState):
             self._run_pods_watcher(resource_version=pods_resource_version)
         )
 
-    async def _reset_nodes(self) -> str:
+    async def _reset_nodes(self) -> str | None:
         node_list = await self._kube_client.core_v1.node.get_list()
         resource_version = node_list.metadata.resource_version
         LOGGER.info("Nodes resource version: %s", resource_version)
@@ -232,6 +234,7 @@ class MonitoringService(_KubeState):
         for node in nodes:
             if self._is_workload_node(node):
                 LOGGER.debug("Adding workload node %s", node.metadata.name)
+                assert node.metadata.name, "node name is required"
                 new_nodes[node.metadata.name] = _Node.from_v1_node(node)
             else:
                 LOGGER.debug("Ignoring non-workload node %s", node.metadata.name)
@@ -277,6 +280,7 @@ class MonitoringService(_KubeState):
         return bool(_get_node_pool_name(node))
 
     def _handle_node_update(self, node: V1Node) -> bool:
+        assert node.metadata.name, "node name is required"
         if self._is_workload_node(node):
             LOGGER.debug("Updating workload node %s", node.metadata.name)
             old = self._nodes.get(node.metadata.name)
@@ -290,13 +294,14 @@ class MonitoringService(_KubeState):
         return old is not None
 
     def _handle_node_deletion(self, node: V1Node) -> bool:
+        assert node.metadata.name, "node name is required"
         old = self._nodes.pop(node.metadata.name, None)
         if old is not None:
             LOGGER.debug("Removing node %s", node.metadata.name)
             return True
         return False
 
-    async def _reset_pods(self) -> str:
+    async def _reset_pods(self) -> str | None:
         pod_list = await self._kube_client.core_v1.pod.get_list(
             label_selector=PODS_LABEL_SELECTOR, all_namespaces=True
         )
@@ -309,6 +314,7 @@ class MonitoringService(_KubeState):
         LOGGER.debug("Initializing pods")
         new_pods = {}
         for pod in pods:
+            assert pod.metadata.name, "pod name is required"
             if self._is_pod_running(pod):
                 LOGGER.debug("Adding running pod %s", pod.metadata.name)
                 new_pods[pod.metadata.name] = _Pod.from_v1_pod(pod)
@@ -348,12 +354,21 @@ class MonitoringService(_KubeState):
 
             resource_version = None
 
-    def _is_pod_running(self, pod: V1Pod) -> bool:
+    @staticmethod
+    def _is_pod_running(pod: V1Pod) -> bool:
+        assert pod.metadata, "pod metadata is required"
+        assert pod.spec, "pod spec is required"
         LOGGER.debug("Pod %s node name: %r", pod.metadata.name, pod.spec.node_name)
         LOGGER.debug("Pod %s status: %r", pod.metadata.name, pod.status)
-        return pod.spec.node_name and pod.status and pod.status.phase == "Running"
+        return bool(
+            pod.spec
+            and pod.spec.node_name
+            and pod.status
+            and pod.status.phase == "Running"
+        )
 
     def _handle_pod_update(self, pod: V1Pod) -> bool:
+        assert pod.metadata.name, "pod name is required"
         if self._is_pod_running(pod):
             LOGGER.debug("Updating running pod %s", pod.metadata.name)
             old = self._pods.get(pod.metadata.name)
@@ -367,6 +382,7 @@ class MonitoringService(_KubeState):
         return old is not None
 
     def _handle_pod_deletion(self, pod: V1Pod) -> bool:
+        assert pod.metadata.name, "pod name is required"
         old = self._pods.pop(pod.metadata.name, None)
         if old is not None:
             LOGGER.debug("Removing pod %s", pod.metadata.name)

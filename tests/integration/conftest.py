@@ -47,6 +47,15 @@ from platform_monitoring.loki_client import LokiClient
 logger = logging.getLogger(__name__)
 
 
+pytest_plugins = [
+    "tests.integration.conftest_admin",
+    "tests.integration.conftest_auth",
+    "tests.integration.conftest_config",
+    "tests.integration.conftest_kube",
+    "tests.integration.conftest_s3",
+]
+
+
 @pytest.fixture(scope="session")
 def in_docker() -> bool:
     return Path("/.dockerenv").is_file()
@@ -126,15 +135,20 @@ async def container_runtime_config(in_minikube: bool) -> ContainerRuntimeConfig:
         "platform-container-runtime", url / "api/v1/ping", timeout_s=120
     )
     assert url.port
-    return ContainerRuntimeConfig(port=url.port)
+    return ContainerRuntimeConfig(
+        port=url.port, host=None if in_minikube else "localhost"
+    )
 
 
 @pytest.fixture
 async def container_runtime_client_registry(
+    *,
+    in_minikube: bool,
     container_runtime_config: ContainerRuntimeConfig,
 ) -> AsyncIterator[ContainerRuntimeClientRegistry]:
     async with ContainerRuntimeClientRegistry(
-        container_runtime_port=container_runtime_config.port
+        container_runtime_port=container_runtime_config.port,
+        container_runtime_host=None if in_minikube else "localhost",
     ) as registry:
         yield registry
 
