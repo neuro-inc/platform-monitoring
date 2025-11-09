@@ -299,15 +299,12 @@ def service(
     config_client: ConfigClient,
     jobs_client: ApiClient,
     kube_client: KubeClient,
-    *,
-    in_minikube: bool,
 ) -> JobsService:
     return JobsService(
         config_client=config_client,
         jobs_client=jobs_client,
         kube_client=kube_client,
         container_runtime_client_registry=ContainerRuntimeClientRegistry(
-            container_runtime_host=None if in_minikube else "localhost",
             container_runtime_port=9000,
         ),
         cluster_name="default",
