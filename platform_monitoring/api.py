@@ -4,7 +4,6 @@ import logging
 import random
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
-from dataclasses import asdict
 from typing import Any
 
 import aiobotocore.session
@@ -25,7 +24,6 @@ from aiohttp.web import (
     json_response,
     middleware,
 )
-from aiohttp.web_urldispatcher import AbstractRoute
 from apolo_api_client import ApiClient, Job
 from apolo_apps_client import (
     AppInstance,
@@ -80,10 +78,6 @@ from .validators import (
     create_exec_create_request_payload_validator,
     create_save_request_payload_validator,
 )
-from .vcluster import (
-    VClusterService,
-    VClusterServiceError,
-)
 
 
 WS_ATTACH_PROTOCOL = "v2.channels.neu.ro"
@@ -101,7 +95,7 @@ K8S_LABEL_APOLO_APP_INSTANCE_NAME = "platform.apolo.us/app-instance-name"
 
 CONFIG_KEY = aiohttp.web.AppKey("config", Config)
 KUBE_CLIENT_KEY = aiohttp.web.AppKey("kube_client", KubeClient)
-APOLO_KUBE_CLIENT_KEY = aiohttp.web.AppKey("apolo_kube_client", KubeClientSelector)
+KUBE_CLIENT_SELECTOR = aiohttp.web.AppKey("apolo_kube_client", KubeClientSelector)
 LOKI_CLIENT_KEY = aiohttp.web.AppKey("loki_client", LokiClient)
 JOBS_SERVICE_KEY = aiohttp.web.AppKey("jobs_service", JobsService)
 LOGS_SERVICE_KEY = aiohttp.web.AppKey("logs_service", LogsService)
@@ -116,61 +110,6 @@ APPS_API_CLIENT_KEY = aiohttp.web.AppKey("apps_api_client", AppsApiClient)
 DEFAULT_SEPARATOR = "=== Live logs ==="
 
 logger = logging.getLogger(__name__)
-
-
-class VClusterHandler:
-    def __init__(self, root_app: aiohttp.web.Application) -> None:
-        self._root_app = root_app
-
-    def register(self, app: aiohttp.web.Application) -> list[AbstractRoute]:
-        return app.add_routes(
-            [
-                aiohttp.web.get(
-                    "/vclusters/org/{org_name}/project/{project_name}/kubeconfig",
-                    self.get_vcluster_kubeconfig,
-                ),
-            ]
-        )
-
-    @property
-    def _config(self) -> Config:
-        return self._root_app[CONFIG_KEY]
-
-    @property
-    def _monitoring_app(self) -> aiohttp.web.Application:
-        return self._root_app[MONITORING_APP_KEY]
-
-    @property
-    def _kube_client_selector(self) -> KubeClientSelector:
-        return self._monitoring_app[APOLO_KUBE_CLIENT_KEY]
-
-    async def get_vcluster_kubeconfig(self, request: Request) -> Response:
-        org_name = request.match_info["org_name"]
-        project_name = request.match_info["project_name"]
-
-        # ensure cluster manager
-        await check_permissions(
-            request,
-            [
-                [
-                    Permission(
-                        uri=f"cluster://{self._config.cluster_name}",
-                        action="manage",
-                    )
-                ]
-            ],
-        )
-
-        service = VClusterService(self._kube_client_selector)
-        try:
-            kubeconfig = await service.get_kubeconfig(org_name, project_name)
-        except VClusterServiceError as exc:
-            return json_response(
-                {"error": exc.message},
-                status=exc.status_code,
-            )
-
-        return json_response(asdict(kubeconfig))
 
 
 class MonitoringApiHandler:
@@ -596,7 +535,7 @@ class AppsMonitoringApiHandler:
 
     @property
     def _kube_client_selector(self) -> KubeClientSelector:
-        return self._app[APOLO_KUBE_CLIENT_KEY]
+        return self._app[KUBE_CLIENT_SELECTOR]
 
     @property
     def _logs_storage_type(self) -> LogsStorageType:
@@ -1191,7 +1130,7 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             kube_client_selector = await exit_stack.enter_async_context(
                 KubeClientSelector(config=apolo_kube_config)
             )
-            app[MONITORING_APP_KEY][APOLO_KUBE_CLIENT_KEY] = kube_client_selector
+            app[MONITORING_APP_KEY][KUBE_CLIENT_SELECTOR] = kube_client_selector
 
             logger.info("Initializing Platform Config client")
             config_client = await exit_stack.enter_async_context(
@@ -1207,7 +1146,7 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             app[APPS_MONITORING_APP_KEY][LOGS_STORAGE_TYPE_KEY] = (
                 config.logs.storage_type
             )
-            app[APPS_MONITORING_APP_KEY][APOLO_KUBE_CLIENT_KEY] = kube_client_selector
+            app[APPS_MONITORING_APP_KEY][KUBE_CLIENT_SELECTOR] = kube_client_selector
 
             container_runtime_client_registry = await exit_stack.enter_async_context(
                 ContainerRuntimeClientRegistry(
@@ -1235,8 +1174,6 @@ async def create_app(config: Config) -> aiohttp.web.Application:
     app.cleanup_ctx.append(_init_app)
 
     api_v1_app = aiohttp.web.Application()
-    vcluster_handler = VClusterHandler(app)
-    vcluster_handler.register(api_v1_app)
 
     monitoring_app = await create_monitoring_app(config)
     app[MONITORING_APP_KEY] = monitoring_app

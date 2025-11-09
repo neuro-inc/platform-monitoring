@@ -360,12 +360,7 @@ class MonitoringService(_KubeState):
         assert pod.spec, "pod spec is required"
         LOGGER.debug("Pod %s node name: %r", pod.metadata.name, pod.spec.node_name)
         LOGGER.debug("Pod %s status: %r", pod.metadata.name, pod.status)
-        return bool(
-            pod.spec
-            and pod.spec.node_name
-            and pod.status
-            and pod.status.phase == "Running"
-        )
+        return bool(pod.spec.node_name and pod.status and pod.status.phase == "Running")
 
     def _handle_pod_update(self, pod: V1Pod) -> bool:
         assert pod.metadata.name, "pod name is required"

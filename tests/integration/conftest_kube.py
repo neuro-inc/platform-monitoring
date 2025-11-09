@@ -26,6 +26,16 @@ from platform_monitoring.kube_client import (
 )
 
 
+@pytest.fixture(scope="session")
+def in_docker() -> bool:
+    return Path("/.dockerenv").is_file()
+
+
+@pytest.fixture(scope="session")
+def in_minikube(in_docker: bool) -> bool:  # noqa: FBT001
+    return in_docker
+
+
 class MyKubeClient(KubeClient):
     # TODO (A Yushkovskiy, 30-May-2019) delete pods automatically
 
