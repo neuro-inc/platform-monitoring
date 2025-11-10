@@ -124,9 +124,7 @@ async def container_runtime_config(in_minikube: bool) -> ContainerRuntimeConfig:
         "platform-container-runtime", url / "api/v1/ping", timeout_s=120
     )
     assert url.port
-    return ContainerRuntimeConfig(
-        port=url.port, host=None if in_minikube else "localhost"
-    )
+    return ContainerRuntimeConfig(port=url.port)
 
 
 @pytest.fixture
@@ -136,8 +134,7 @@ async def container_runtime_client_registry(
     container_runtime_config: ContainerRuntimeConfig,
 ) -> AsyncIterator[ContainerRuntimeClientRegistry]:
     async with ContainerRuntimeClientRegistry(
-        container_runtime_port=container_runtime_config.port,
-        container_runtime_host=None if in_minikube else "localhost",
+        container_runtime_port=container_runtime_config.port
     ) as registry:
         yield registry
 

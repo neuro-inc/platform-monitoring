@@ -1150,7 +1150,6 @@ async def create_app(config: Config) -> aiohttp.web.Application:
 
             container_runtime_client_registry = await exit_stack.enter_async_context(
                 ContainerRuntimeClientRegistry(
-                    container_runtime_host=config.container_runtime.host,
                     container_runtime_port=config.container_runtime.port,
                 )
             )
