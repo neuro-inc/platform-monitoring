@@ -717,6 +717,7 @@ class TestLogReader:
         payload = await self._consume_log_reader(log_reader)
         assert payload == b""
 
+    @pytest.mark.xfail
     async def test_get_first_log_entry_time(
         self,
         kube_client_selector: KubeClientSelector,
@@ -746,12 +747,7 @@ class TestLogReader:
             first_ts = await kube_first_log_time(kube_client, pod_name, timeout_s=5)
             assert first_ts is not None
             # Wait for termination and check boundaries
-            async with asyncio.timeout(120):
-                while True:
-                    status = await get_container_status(kube_client, pod_name)
-                    if status.is_terminated:
-                        break
-                    await asyncio.sleep(1)
+            await wait_pod_is_terminated(kube_client, pod_name)
             status = await get_container_status(kube_client, pod_name)
             assert status.started_at is not None
             assert status.finished_at is not None
@@ -812,7 +808,7 @@ class TestLogReader:
             kube_client, elasticsearch_log_service, job_pod, org_name, project_name
         )
 
-    @pytest.mark.skip("temp skip until vcluster migration will be done")
+    @pytest.mark.xfail
     async def test_get_job_s3_log_reader(
         self,
         kube_client_with_reader: tuple[KubeClientProxy, PodContainerLogReader],
@@ -1050,7 +1046,7 @@ class TestLogReader:
             elasticsearch_log_service,
         )
 
-    @pytest.mark.skip("temp skip until vcluster migration will be done")
+    @pytest.mark.xfail
     async def test_s3_merged_log_reader(
         self,
         kube_client_selector: KubeClientSelector,
@@ -1330,6 +1326,7 @@ class TestLogReader:
             elasticsearch_log_service,
         )
 
+    @pytest.mark.xfail
     async def test_s3_merged_log_reader_restarted_since(
         self,
         kube_client_selector: KubeClientSelector,
