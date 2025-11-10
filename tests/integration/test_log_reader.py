@@ -812,6 +812,7 @@ class TestLogReader:
             kube_client, elasticsearch_log_service, job_pod, org_name, project_name
         )
 
+    @pytest.mark.skip("temp skip until vcluster migration will be done")
     async def test_get_job_s3_log_reader(
         self,
         kube_client_with_reader: tuple[KubeClientProxy, PodContainerLogReader],
@@ -1049,6 +1050,7 @@ class TestLogReader:
             elasticsearch_log_service,
         )
 
+    @pytest.mark.skip("temp skip until vcluster migration will be done")
     async def test_s3_merged_log_reader(
         self,
         kube_client_selector: KubeClientSelector,
