@@ -8,15 +8,24 @@ import re
 import ssl
 import typing as t
 from collections import defaultdict
-from collections.abc import AsyncIterator, Mapping
-from contextlib import asynccontextmanager, suppress
+from collections.abc import Mapping
+from contextlib import suppress
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import quote_plus, urlsplit
+from urllib.parse import urlsplit
 
 import aiohttp
 from aiohttp import ContentTypeError
+from apolo_kube_client import (
+    KubeClientProxy,
+    V1Container,
+    V1ContainerStatus,
+    V1ObjectMeta,
+    V1Pod,
+    V1PodSpec,
+    V1PodStatus,
+)
 
 from .base import JobStats, Telemetry
 from .config import KubeClientAuthType, KubeConfig
@@ -81,6 +90,14 @@ class Metadata:
             name=payload.get("name"),
             resource_version=payload.get("resourceVersion"),
             labels=payload.get("labels", {}),
+        )
+
+    @classmethod
+    def from_model(cls, model: V1ObjectMeta) -> t.Self:
+        return cls(
+            name=model.name,
+            resource_version=model.resource_version,
+            labels=model.labels,
         )
 
 
@@ -253,6 +270,18 @@ class Container:
             tty=payload.get("tty"),
         )
 
+    @classmethod
+    def from_model(cls, model: V1Container) -> t.Self:
+        return cls(
+            name=model.name,
+            resource_requests=ContainerResources.from_primitive(
+                model.resources.requests or {}
+            ),
+            stdin=model.stdin,
+            stdin_once=model.stdin_once,
+            tty=model.tty,
+        )
+
 
 @dataclass(frozen=True)
 class PodSpec:
@@ -270,6 +299,14 @@ class PodSpec:
             containers=[
                 Container.from_primitive(c) for c in payload.get("containers", ())
             ],
+        )
+
+    @classmethod
+    def from_model(cls, model: V1PodSpec) -> t.Self:
+        return cls(
+            node_name=model.node_name,
+            restart_policy=PodRestartPolicy(model.restart_policy or cls.restart_policy),
+            containers=[Container.from_model(c) for c in model.containers],
         )
 
 
@@ -292,6 +329,18 @@ class PodStatus:
             ],
         )
 
+    @classmethod
+    def from_model(cls, payload: V1PodStatus) -> t.Self:
+        return cls(
+            phase=PodPhase(payload.phase or PodPhase.PENDING.value),
+            pod_ip=payload.pod_ip,
+            host_ip=payload.host_ip,
+            container_statuses=[
+                ContainerStatus.from_model(s)
+                for s in (payload.container_statuses or ())
+            ],
+        )
+
     @property
     def is_running(self) -> bool:
         return self.phase == PodPhase.RUNNING
@@ -309,6 +358,15 @@ class Pod(Resource):
             metadata=Metadata.from_primitive(payload["metadata"]),
             spec=PodSpec.from_primitive(payload["spec"]),
             status=PodStatus.from_primitive(payload.get("status", {})),
+        )
+
+    @classmethod
+    def from_model(cls, model: V1Pod) -> t.Self:
+        assert model.spec
+        return cls(
+            metadata=Metadata.from_model(model.metadata),
+            spec=PodSpec.from_model(model.spec),
+            status=PodStatus.from_model(model.status),
         )
 
     def get_container_status(self, name: str) -> ContainerStatus:
@@ -441,6 +499,41 @@ class ContainerStatus:
             restart_count=payload.get("restartCount", 0),
             state=payload.get("state", {}),
             last_state=payload.get("lastState", {}),
+        )
+
+    @classmethod
+    def from_model(cls, payload: V1ContainerStatus) -> t.Self:
+        state: dict[str, t.Any] = {}
+        last_state: dict[str, t.Any] = {}
+
+        for prop, state_attr_name in (
+            (state, "state"),
+            (last_state, "last_state"),
+        ):
+            state_attr = getattr(payload, state_attr_name)
+            if state_attr.running.started_at:
+                prop["running"] = {
+                    "startedAt": format_date(state_attr.running.started_at)
+                }
+            if state_attr.terminated:
+                terminated = {"exitCode": state_attr.terminated.exit_code}
+                if state_attr.terminated.started_at:
+                    terminated["startedAt"] = format_date(
+                        state_attr.terminated.started_at
+                    )
+                if state_attr.terminated.finished_at:
+                    terminated["finishedAt"] = format_date(
+                        state_attr.terminated.finished_at
+                    )
+                prop["terminated"] = terminated
+            if state_attr.waiting.message or state_attr.waiting.reason:
+                prop["waiting"] = True
+        return cls(
+            name=payload.name,
+            container_id=(payload.container_id or "").replace("docker://", "") or None,
+            restart_count=payload.restart_count or 0,
+            state=state,
+            last_state=last_state,
         )
 
     def with_pod_restart_policy(self, value: PodRestartPolicy) -> t.Self:
@@ -657,12 +750,6 @@ class KubeClient:
             return None
         return f"http://{pod_ip}:{self._nvidia_dcgm_port}/metrics"
 
-    def _generate_pod_log_url(
-        self, pod_name: str, container_name: str, namespace: str | None
-    ) -> str:
-        url = self._generate_pod_url(pod_name, namespace)
-        return f"{url}/log?container={container_name}&follow=true"
-
     def _create_headers(
         self, headers: dict[str, t.Any] | None = None
     ) -> dict[str, t.Any]:
@@ -844,37 +931,6 @@ class KubeClient:
             return True
         except JobNotFoundException:
             return False
-
-    @asynccontextmanager
-    async def create_pod_container_logs_stream(
-        self,
-        pod_name: str,
-        container_name: str,
-        namespace: str,
-        *,
-        conn_timeout_s: float = 60 * 5,
-        read_timeout_s: float = 60 * 30,
-        previous: bool = False,
-        since: datetime | None = None,
-        timestamps: bool = False,
-    ) -> AsyncIterator[aiohttp.StreamReader]:
-        url = self._generate_pod_log_url(pod_name, container_name, namespace)
-        if previous:
-            url = f"{url}&previous=true"
-        if since is not None:
-            since_str = quote_plus(format_date(since))
-            url = f"{url}&sinceTime={since_str}"
-        if timestamps:
-            url = f"{url}&timestamps=true"
-        client_timeout = aiohttp.ClientTimeout(
-            connect=conn_timeout_s, sock_read=read_timeout_s
-        )
-        assert self._client
-        async with self._client.get(
-            url, headers=self._create_headers(), timeout=client_timeout
-        ) as response:
-            await self._check_response_status(response, job_id=pod_name)
-            yield response.content
 
     async def get_pods(
         self,
@@ -1161,3 +1217,67 @@ class KubeTelemetry(Telemetry):
             gpu_utilization=pod_gpu_stats.utilization,
             gpu_memory_used=pod_gpu_stats.memory_used,
         )
+
+
+async def get_pod(
+    kube_client: KubeClientProxy,
+    name: str,
+) -> Pod:
+    pod = await kube_client.core_v1.pod.get(name)
+    return Pod.from_model(pod)
+
+
+async def get_container_status(
+    kube_client: KubeClientProxy,
+    name: str,
+    container_name: str | None = None,
+) -> ContainerStatus:
+    pod = await get_pod(kube_client, name)
+    container_name = container_name or name
+    return pod.get_container_status(container_name)
+
+
+async def wait_pod_is_not_waiting(
+    kube_client: KubeClientProxy,
+    pod_name: str,
+    *,
+    container_name: str | None = None,
+    timeout_s: float = 10.0 * 60,
+    interval_s: float = 1.0,
+) -> ContainerStatus:
+    """Wait until the pod transitions from the waiting state.
+    Raise JobNotFoundException if there is no such pod.
+    Raise asyncio.TimeoutError if it takes too long for the pod.
+    """
+    container_name = container_name or pod_name
+    async with asyncio.timeout(timeout_s):
+        while True:
+            pod = await get_pod(kube_client, pod_name)
+            status = pod.get_container_status(container_name)
+            if not status.is_waiting:
+                return status
+            await asyncio.sleep(interval_s)
+
+
+async def wait_pod_is_running(
+    kube_client: KubeClientProxy,
+    pod_name: str,
+    *,
+    container_name: str | None = None,
+    timeout_s: float = 10.0 * 60,
+    interval_s: float = 1.0,
+) -> ContainerStatus:
+    """Wait until the pod transitions to the running state.
+    Raise JobNotFoundException if there is no such pod.
+    Raise asyncio.TimeoutError if it takes too long for the pod.
+    """
+    container_name = container_name or pod_name
+    async with asyncio.timeout(timeout_s):
+        while True:
+            pod = await get_pod(kube_client, pod_name)
+            status = pod.get_container_status(container_name)
+            if status.is_running:
+                return status
+            if status.is_terminated and not status.can_restart:
+                raise JobNotFoundException
+            await asyncio.sleep(interval_s)

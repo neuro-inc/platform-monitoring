@@ -7,10 +7,10 @@ from collections.abc import AsyncIterator, Coroutine
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from typing import Any, NoReturn
 
+from apolo_kube_client import KubeClientAuthType, KubeClientSelector, KubeConfig
 from neuro_logging import init_logging
 
 from .api import (
-    create_kube_client,
     create_s3_client,
     create_s3_logs_bucket,
     create_s3_logs_service,
@@ -32,9 +32,22 @@ class App:
         self.config = config
 
         async with AsyncExitStack() as exit_stack:
-            logger.info("Initializing Kube client")
-            kube_client = await exit_stack.enter_async_context(
-                create_kube_client(config.kube)
+            apolo_kube_config = KubeConfig(
+                endpoint_url=config.kube.endpoint_url,
+                cert_authority_data_pem=config.kube.cert_authority_data_pem,
+                cert_authority_path=config.kube.cert_authority_path,
+                auth_type=KubeClientAuthType(config.kube.auth_type.value),
+                auth_cert_path=config.kube.auth_cert_path,
+                auth_cert_key_path=config.kube.auth_cert_key_path,
+                token=config.kube.token,
+                token_path=config.kube.token_path,
+                namespace=config.kube.namespace,
+                client_conn_timeout_s=config.kube.client_conn_timeout_s,
+                client_read_timeout_s=config.kube.client_read_timeout_s,
+                client_conn_pool_size=config.kube.client_conn_pool_size,
+            )
+            kube_client_selector = await exit_stack.enter_async_context(
+                KubeClientSelector(config=apolo_kube_config)
             )
 
             logger.info("Initializing S3 client")
@@ -49,7 +62,7 @@ class App:
             # one instance of it running and only compactor can update
             # metadata in s3.
             self.service = create_s3_logs_service(
-                config, kube_client, s3_client, cache_log_metadata=True
+                config, kube_client_selector, s3_client, cache_log_metadata=True
             )
 
             yield self
