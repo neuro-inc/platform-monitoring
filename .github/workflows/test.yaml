@@ -8,9 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout commit
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version-file: .python-version
     - name: Install pipx
@@ -35,9 +35,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout commit
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version-file: .python-version
     - name: Install pipx
@@ -68,13 +68,11 @@ jobs:
     name: Integration tests
     runs-on: ubuntu-latest
     timeout-minutes: 75
-    env:
-      MINIKUBE_DRIVER: none
     steps:
     - name: Checkout commit
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version-file: .python-version
     - name: Install pipx
@@ -151,9 +149,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout commit
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version-file: .python-version
     - name: Install pipx

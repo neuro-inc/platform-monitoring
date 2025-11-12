@@ -114,6 +114,7 @@ class RegistryConfig:
 
 @dataclass(frozen=True)
 class ContainerRuntimeConfig:
+    host: str | None = None
     port: int = 9000
 
 
@@ -132,3 +133,11 @@ class Config:
     elasticsearch: ElasticsearchConfig | None = None
     s3: S3Config | None = None
     loki: LokiConfig | None = None
+
+
+@dataclass(frozen=True)
+class ResourcesMonitorConfig:
+    server: ServerConfig
+    kube: KubeConfig
+    platform_config: PlatformConfig
+    cluster_name: str

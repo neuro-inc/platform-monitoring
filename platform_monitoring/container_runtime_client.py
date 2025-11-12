@@ -161,8 +161,10 @@ class ContainerRuntimeClientRegistry:
     def __init__(
         self,
         container_runtime_port: int,
+        container_runtime_host: str | None = None,
         trace_configs: list[aiohttp.TraceConfig] | None = None,
     ) -> None:
+        self._container_runtime_host = container_runtime_host
         self._port = container_runtime_port
         self._exit_stack = AsyncExitStack()
         self._registry: dict[str, ContainerRuntimeClient] = {}
@@ -176,6 +178,7 @@ class ContainerRuntimeClientRegistry:
         await self._exit_stack.aclose()
 
     async def get(self, host: str) -> "ContainerRuntimeClient":
+        host = self._container_runtime_host or host
         client = self._registry.get(host)
 
         if client:

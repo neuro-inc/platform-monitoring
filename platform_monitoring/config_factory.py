@@ -19,6 +19,7 @@ from .config import (
     PlatformAuthConfig,
     PlatformConfig,
     RegistryConfig,
+    ResourcesMonitorConfig,
     S3Config,
     ServerConfig,
 )
@@ -52,6 +53,14 @@ class EnvironConfigFactory:
             kube=self._create_kube(),
             registry=self._create_registry(),
             container_runtime=self._create_container_runtime(),
+        )
+
+    def create_resources_monitor(self) -> ResourcesMonitorConfig:
+        return ResourcesMonitorConfig(
+            server=self._create_server(),
+            kube=self._create_kube(),
+            platform_config=self._create_platform_config(),
+            cluster_name=self._environ["NP_MONITORING_CLUSTER_NAME"],
         )
 
     def _create_server(self) -> ServerConfig:

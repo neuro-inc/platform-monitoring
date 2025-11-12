@@ -7,15 +7,25 @@ import logging
 import re
 import ssl
 import typing as t
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager, suppress
-from dataclasses import asdict, dataclass, field, replace
+from collections import defaultdict
+from collections.abc import Mapping
+from contextlib import suppress
+from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import quote_plus, urlsplit
+from urllib.parse import urlsplit
 
 import aiohttp
 from aiohttp import ContentTypeError
+from apolo_kube_client import (
+    KubeClientProxy,
+    V1Container,
+    V1ContainerStatus,
+    V1ObjectMeta,
+    V1Pod,
+    V1PodSpec,
+    V1PodStatus,
+)
 
 from .base import JobStats, Telemetry
 from .config import KubeClientAuthType, KubeConfig
@@ -25,6 +35,8 @@ from .utils import format_date, parse_date
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_PODS_PER_NODE = 110
+
+NVIDIA_DCGM_LABEL_SELECTOR = "app=nvidia-dcgm-exporter"
 
 type JSON = dict[str, t.Any]
 
@@ -80,6 +92,14 @@ class Metadata:
             labels=payload.get("labels", {}),
         )
 
+    @classmethod
+    def from_model(cls, model: V1ObjectMeta) -> t.Self:
+        return cls(
+            name=model.name,
+            resource_version=model.resource_version,
+            labels=model.labels,
+        )
+
 
 @dataclass(frozen=True)
 class ListResult[TResource: Resource]:
@@ -106,22 +126,48 @@ class PodPhase(enum.StrEnum):
     UNKNOWN = "Unknown"
 
 
+def parse_memory(memory: str) -> int:
+    try:
+        return int(memory)
+    except ValueError:
+        pass
+    for suffix, power in (("K", 1), ("M", 2), ("G", 3), ("T", 4), ("P", 5)):
+        if memory.endswith(suffix):
+            return int(memory[:-1]) * 1000**power
+        if memory.endswith(f"{suffix}i"):
+            return int(memory[:-2]) * 1024**power
+    msg = f"Memory unit for {memory} is not supported"
+    raise KubeClientException(msg)
+
+
 @dataclass(frozen=True)
 class ContainerResources:
     cpu_m: int = 0
     memory: int = 0
     nvidia_gpu: int = 0
+    nvidia_migs: Mapping[str, int] = field(default_factory=dict)
     amd_gpu: int = 0
 
     nvidia_gpu_key: t.ClassVar[str] = "nvidia.com/gpu"
+    nvidia_mig_key_prefix: t.ClassVar[str] = "nvidia.com/mig-"
     amd_gpu_key: t.ClassVar[str] = "amd.com/gpu"
+
+    @property
+    def cpu(self) -> float:
+        return self.cpu_m / 1000
 
     @classmethod
     def from_primitive(cls, payload: JSON) -> t.Self:
+        nvidia_migs = {}
+        for key, value in payload.items():
+            if key.startswith(cls.nvidia_mig_key_prefix):
+                profile_name = key[len(cls.nvidia_mig_key_prefix) :]
+                nvidia_migs[profile_name] = int(value)
         return cls(
             cpu_m=cls._parse_cpu_m(str(payload.get("cpu", "0"))),
-            memory=cls._parse_memory(str(payload.get("memory", "0"))),
+            memory=parse_memory(str(payload.get("memory", "0"))),
             nvidia_gpu=int(payload.get(cls.nvidia_gpu_key, 0)),
+            nvidia_migs=nvidia_migs,
             amd_gpu=int(payload.get(cls.amd_gpu_key, 0)),
         )
 
@@ -131,63 +177,71 @@ class ContainerResources:
             return int(value[:-1])
         return int(float(value) * 1000)
 
-    @classmethod
-    def _parse_memory(cls, memory: str) -> int:
-        try:
-            return int(memory)
-        except ValueError:
-            pass
-        for suffix, power in (("K", 1), ("M", 2), ("G", 3), ("T", 4), ("P", 5)):
-            if memory.endswith(suffix):
-                return int(memory[:-1]) * 1000**power
-            if memory.endswith(f"{suffix}i"):
-                return int(memory[:-2]) * 1024**power
-        msg = f"Memory unit for {memory} is not supported"
-        raise KubeClientException(msg)
+    @property
+    def has_nvidia_gpu(self) -> bool:
+        return self.nvidia_gpu != 0
+
+    @property
+    def has_nvidia_migs(self) -> bool:
+        return len(self.nvidia_migs) != 0
+
+    @property
+    def has_amd_gpu(self) -> bool:
+        return self.amd_gpu != 0
 
     @property
     def has_gpu(self) -> bool:
-        return self.nvidia_gpu != 0 or self.amd_gpu != 0
+        return self.has_nvidia_gpu or self.has_nvidia_migs or self.has_amd_gpu
 
     def __bool__(self) -> bool:
-        return (
-            self.cpu_m != 0
-            or self.memory != 0
-            or self.nvidia_gpu != 0
-            or self.amd_gpu != 0
-        )
+        return self.cpu_m != 0 or self.memory != 0 or self.has_gpu
 
     def __add__(self, other: ContainerResources) -> t.Self:
+        nvidia_migs = defaultdict(int, **self.nvidia_migs)
+        for key, count in other.nvidia_migs.items():
+            nvidia_migs[key] = nvidia_migs[key] + count
         return replace(
             self,
             cpu_m=self.cpu_m + other.cpu_m,
             memory=self.memory + other.memory,
             nvidia_gpu=self.nvidia_gpu + other.nvidia_gpu,
+            nvidia_migs=nvidia_migs,
             amd_gpu=self.amd_gpu + other.amd_gpu,
         )
 
     def __sub__(self, used: ContainerResources) -> t.Self:
+        nvidia_migs = defaultdict(int, **self.nvidia_migs)
+        for key, count in used.nvidia_migs.items():
+            nvidia_migs[key] = max(0, nvidia_migs[key] - count)
         return replace(
             self,
             cpu_m=max(0, self.cpu_m - used.cpu_m),
             memory=max(0, self.memory - used.memory),
             nvidia_gpu=max(0, self.nvidia_gpu - used.nvidia_gpu),
+            nvidia_migs=nvidia_migs,
             amd_gpu=max(0, self.amd_gpu - used.amd_gpu),
         )
 
     def __floordiv__(self, resources: ContainerResources) -> int:
         if not self:
             return 0
-        result = DEFAULT_MAX_PODS_PER_NODE
+        counts = []
         if resources.cpu_m:
-            result = min(result, self.cpu_m // resources.cpu_m)
+            counts.append(self.cpu_m // resources.cpu_m)
         if resources.memory:
-            result = min(result, self.memory // resources.memory)
+            counts.append(self.memory // resources.memory)
         if resources.nvidia_gpu:
-            result = min(result, self.nvidia_gpu // resources.nvidia_gpu)
+            counts.append(self.nvidia_gpu // resources.nvidia_gpu)
+        if resources.nvidia_migs:
+            for key, count in resources.nvidia_migs.items():
+                if count:
+                    counts.append(self.nvidia_migs.get(key, 0) // count)
         if resources.amd_gpu:
-            result = min(result, self.amd_gpu // resources.amd_gpu)
-        return result
+            counts.append(self.amd_gpu // resources.amd_gpu)
+        if not counts:
+            msg = "Cannot divide by zero resources"
+            raise ValueError(msg)
+        return min(counts)
 
 
 class PodRestartPolicy(enum.StrEnum):
@@ -216,6 +270,18 @@ class Container:
             tty=payload.get("tty"),
         )
 
+    @classmethod
+    def from_model(cls, model: V1Container) -> t.Self:
+        return cls(
+            name=model.name,
+            resource_requests=ContainerResources.from_primitive(
+                model.resources.requests or {}
+            ),
+            stdin=model.stdin,
+            stdin_once=model.stdin_once,
+            tty=model.tty,
+        )
+
 
 @dataclass(frozen=True)
 class PodSpec:
@@ -233,6 +299,14 @@ class PodSpec:
             containers=[
                 Container.from_primitive(c) for c in payload.get("containers", ())
             ],
+        )
+
+    @classmethod
+    def from_model(cls, model: V1PodSpec) -> t.Self:
+        return cls(
+            node_name=model.node_name,
+            restart_policy=PodRestartPolicy(model.restart_policy or cls.restart_policy),
+            containers=[Container.from_model(c) for c in model.containers],
         )
 
 
@@ -255,6 +329,18 @@ class PodStatus:
             ],
         )
 
+    @classmethod
+    def from_model(cls, payload: V1PodStatus) -> t.Self:
+        return cls(
+            phase=PodPhase(payload.phase or PodPhase.PENDING.value),
+            pod_ip=payload.pod_ip,
+            host_ip=payload.host_ip,
+            container_statuses=[
+                ContainerStatus.from_model(s)
+                for s in (payload.container_statuses or ())
+            ],
+        )
+
     @property
     def is_running(self) -> bool:
         return self.phase == PodPhase.RUNNING
@@ -272,6 +358,15 @@ class Pod(Resource):
             metadata=Metadata.from_primitive(payload["metadata"]),
             spec=PodSpec.from_primitive(payload["spec"]),
             status=PodStatus.from_primitive(payload.get("status", {})),
+        )
+
+    @classmethod
+    def from_model(cls, model: V1Pod) -> t.Self:
+        assert model.spec
+        return cls(
+            metadata=Metadata.from_model(model.metadata),
+            spec=PodSpec.from_model(model.spec),
+            status=PodStatus.from_model(model.status),
         )
 
     def get_container_status(self, name: str) -> ContainerStatus:
@@ -326,16 +421,25 @@ class NodeResources(ContainerResources):
         resources = super().from_primitive(payload)
         return cls(
             **{
-                **asdict(resources),
+                **{
+                    field.name: getattr(resources, field.name)
+                    for field in fields(resources)
+                },
                 "pods": int(payload.get("pods", cls.pods)),
-                "ephemeral_storage": cls._parse_memory(
+                "ephemeral_storage": parse_memory(
                     payload.get("ephemeral-storage", cls.ephemeral_storage)
                 ),
             }
         )
 
-    def with_pods(self, value: int) -> t.Self:
-        return replace(self, pods=max(0, value))
+    def reduce_pods(self, value: int) -> t.Self:
+        return replace(self, pods=max(0, self.pods - value))
+
+    def __floordiv__(self, resources: ContainerResources) -> int:
+        if not resources:
+            return self.pods
+        count = super().__floordiv__(resources)
+        return min(self.pods or count, count)
 
 
 @dataclass(frozen=True)
@@ -395,6 +499,41 @@ class ContainerStatus:
             restart_count=payload.get("restartCount", 0),
             state=payload.get("state", {}),
             last_state=payload.get("lastState", {}),
+        )
+
+    @classmethod
+    def from_model(cls, payload: V1ContainerStatus) -> t.Self:
+        state: dict[str, t.Any] = {}
+        last_state: dict[str, t.Any] = {}
+
+        for prop, state_attr_name in (
+            (state, "state"),
+            (last_state, "last_state"),
+        ):
+            state_attr = getattr(payload, state_attr_name)
+            if state_attr.running.started_at:
+                prop["running"] = {
+                    "startedAt": format_date(state_attr.running.started_at)
+                }
+            if state_attr.terminated:
+                terminated = {"exitCode": state_attr.terminated.exit_code}
+                if state_attr.terminated.started_at:
+                    terminated["startedAt"] = format_date(
+                        state_attr.terminated.started_at
+                    )
+                if state_attr.terminated.finished_at:
+                    terminated["finishedAt"] = format_date(
+                        state_attr.terminated.finished_at
+                    )
+                prop["terminated"] = terminated
+            if state_attr.waiting.message or state_attr.waiting.reason:
+                prop["waiting"] = True
+        return cls(
+            name=payload.name,
+            container_id=(payload.container_id or "").replace("docker://", "") or None,
+            restart_count=payload.restart_count or 0,
+            state=state,
+            last_state=last_state,
         )
 
     def with_pod_restart_policy(self, value: PodRestartPolicy) -> t.Self:
@@ -606,17 +745,10 @@ class KubeClient:
         proxy_url = self._generate_node_proxy_url(name, self._kubelet_port)
         return f"{proxy_url}/stats/summary"
 
-    def _generate_node_gpu_metrics_url(self, name: str) -> str | None:
+    def _generate_nvidia_gpu_metrics_url(self, pod_ip: str) -> str | None:
         if not self._nvidia_dcgm_port:
             return None
-        proxy_url = self._generate_node_proxy_url(name, self._nvidia_dcgm_port)
-        return f"{proxy_url}/metrics"
-
-    def _generate_pod_log_url(
-        self, pod_name: str, container_name: str, namespace: str | None
-    ) -> str:
-        url = self._generate_pod_url(pod_name, namespace)
-        return f"{url}/log?container={container_name}&follow=true"
+        return f"http://{pod_ip}:{self._nvidia_dcgm_port}/metrics"
 
     def _create_headers(
         self, headers: dict[str, t.Any] | None = None
@@ -753,7 +885,12 @@ class KubeClient:
         namespace: str | None = None,
     ) -> PodContainerGPUStats | None:
         namespace = namespace or self._namespace
-        url = self._generate_node_gpu_metrics_url(node_name)
+        nvidia_dcgm_pod_ip = await self._get_nvidia_dcgm_pod_ip(node_name)
+        logger.debug("Nvidia DCGM exporter pod ip: %s", nvidia_dcgm_pod_ip)
+        if not nvidia_dcgm_pod_ip:
+            return None
+        url = self._generate_nvidia_gpu_metrics_url(nvidia_dcgm_pod_ip)
+        logger.debug("Nvidia DCGM exporter metrics url: %s", url)
         if not url:
             return None
         try:
@@ -770,43 +907,30 @@ class KubeClient:
             logger.exception(e)
         return None
 
+    async def _get_nvidia_dcgm_pod_ip(self, node_name: str) -> str | None:
+        if not self._nvidia_dcgm_port:
+            return None
+        payload = await self._request(
+            method="GET",
+            url=self._pods_url,
+            headers=self._create_headers(),
+            params={
+                "labelSelector": NVIDIA_DCGM_LABEL_SELECTOR,
+                "fieldSelector": f"spec.nodeName={node_name}",
+            },
+        )
+        self._assert_resource_kind(expected_kind="PodList", payload=payload)
+        items = payload.get("items", [])
+        if len(items) != 1:
+            return None
+        return items[0].get("status", {}).get("podIP") or None
+
     async def check_pod_exists(self, pod_name: str) -> bool:
         try:
             await self.get_raw_pod(pod_name)
             return True
         except JobNotFoundException:
             return False
-
-    @asynccontextmanager
-    async def create_pod_container_logs_stream(
-        self,
-        pod_name: str,
-        container_name: str,
-        namespace: str,
-        *,
-        conn_timeout_s: float = 60 * 5,
-        read_timeout_s: float = 60 * 30,
-        previous: bool = False,
-        since: datetime | None = None,
-        timestamps: bool = False,
-    ) -> AsyncIterator[aiohttp.StreamReader]:
-        url = self._generate_pod_log_url(pod_name, container_name, namespace)
-        if previous:
-            url = f"{url}&previous=true"
-        if since is not None:
-            since_str = quote_plus(format_date(since))
-            url = f"{url}&sinceTime={since_str}"
-        if timestamps:
-            url = f"{url}&timestamps=true"
-        client_timeout = aiohttp.ClientTimeout(
-            connect=conn_timeout_s, sock_read=read_timeout_s
-        )
-        assert self._client
-        async with self._client.get(
-            url, headers=self._create_headers(), timeout=client_timeout
-        ) as response:
-            await self._check_response_status(response, job_id=pod_name)
-            yield response.content
 
     async def get_pods(
         self,
@@ -959,9 +1083,10 @@ class GPUCounters:
         memory_used = 0
         for c in self.counters:
             if (
-                c.labels["namespace"] != namespace_name
-                or c.labels["pod"] != pod_name
-                or c.labels["container"] != container_name
+                c.name not in ("DCGM_FI_DEV_GPU_UTIL", "DCGM_FI_DEV_FB_USED")
+                or c.labels.get("namespace") != namespace_name
+                or c.labels.get("pod") != pod_name
+                or c.labels.get("container") != container_name
             ):
                 continue
             if c.name == "DCGM_FI_DEV_GPU_UTIL":
@@ -1092,3 +1217,67 @@ class KubeTelemetry(Telemetry):
             gpu_utilization=pod_gpu_stats.utilization,
             gpu_memory_used=pod_gpu_stats.memory_used,
         )
+
+
+async def get_pod(
+    kube_client: KubeClientProxy,
+    name: str,
+) -> Pod:
+    pod = await kube_client.core_v1.pod.get(name)
+    return Pod.from_model(pod)
+
+
+async def get_container_status(
+    kube_client: KubeClientProxy,
+    name: str,
+    container_name: str | None = None,
+) -> ContainerStatus:
+    pod = await get_pod(kube_client, name)
+    container_name = container_name or name
+    return pod.get_container_status(container_name)
+
+
+async def wait_pod_is_not_waiting(
+    kube_client: KubeClientProxy,
+    pod_name: str,
+    *,
+    container_name: str | None = None,
+    timeout_s: float = 10.0 * 60,
+    interval_s: float = 1.0,
+) -> ContainerStatus:
+    """Wait until the pod transitions from the waiting state.
+    Raise JobNotFoundException if there is no such pod.
+    Raise asyncio.TimeoutError if it takes too long for the pod.
+    """
+    container_name = container_name or pod_name
+    async with asyncio.timeout(timeout_s):
+        while True:
+            pod = await get_pod(kube_client, pod_name)
+            status = pod.get_container_status(container_name)
+            if not status.is_waiting:
+                return status
+            await asyncio.sleep(interval_s)
+
+
+async def wait_pod_is_running(
+    kube_client: KubeClientProxy,
+    pod_name: str,
+    *,
+    container_name: str | None = None,
+    timeout_s: float = 10.0 * 60,
+    interval_s: float = 1.0,
+) -> ContainerStatus:
+    """Wait until the pod transitions to the running state.
+    Raise JobNotFoundException if there is no such pod.
+    Raise asyncio.TimeoutError if it takes too long for the pod.
+    """
+    container_name = container_name or pod_name
+    async with asyncio.timeout(timeout_s):
+        while True:
+            pod = await get_pod(kube_client, pod_name)
+            status = pod.get_container_status(container_name)
+            if status.is_running:
+                return status
+            if status.is_terminated and not status.can_restart:
+                raise JobNotFoundException
+            await asyncio.sleep(interval_s)
