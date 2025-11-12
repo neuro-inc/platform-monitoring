@@ -114,6 +114,7 @@ class RegistryConfig:
 
 @dataclass(frozen=True)
 class ContainerRuntimeConfig:
+    host: str | None = None
     port: int = 9000
 
 

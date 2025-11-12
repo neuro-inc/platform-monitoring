@@ -296,14 +296,16 @@ def kube_client() -> mock.Mock:
 
 @pytest.fixture
 def service(
-    config_client: ConfigClient, jobs_client: ApiClient, kube_client: KubeClient
+    config_client: ConfigClient,
+    jobs_client: ApiClient,
+    kube_client: KubeClient,
 ) -> JobsService:
     return JobsService(
         config_client=config_client,
         jobs_client=jobs_client,
         kube_client=kube_client,
         container_runtime_client_registry=ContainerRuntimeClientRegistry(
-            container_runtime_port=9000
+            container_runtime_port=9000,
         ),
         cluster_name="default",
     )
