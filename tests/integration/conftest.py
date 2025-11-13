@@ -6,7 +6,6 @@ import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 from uuid import uuid1
 
@@ -47,14 +46,13 @@ from platform_monitoring.loki_client import LokiClient
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="session")
-def in_docker() -> bool:
-    return Path("/.dockerenv").is_file()
-
-
-@pytest.fixture(scope="session")
-def in_minikube(in_docker: bool) -> bool:  # noqa: FBT001
-    return in_docker
+pytest_plugins = [
+    "tests.integration.conftest_admin",
+    "tests.integration.conftest_auth",
+    "tests.integration.conftest_config",
+    "tests.integration.conftest_kube",
+    "tests.integration.conftest_s3",
+]
 
 
 def random_str(length: int = 8) -> str:
@@ -131,6 +129,8 @@ async def container_runtime_config(in_minikube: bool) -> ContainerRuntimeConfig:
 
 @pytest.fixture
 async def container_runtime_client_registry(
+    *,
+    in_minikube: bool,
     container_runtime_config: ContainerRuntimeConfig,
 ) -> AsyncIterator[ContainerRuntimeClientRegistry]:
     async with ContainerRuntimeClientRegistry(
