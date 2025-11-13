@@ -12,6 +12,7 @@ from platform_monitoring.kube_client import (
     GPUCounters,
     JobError,
     Node,
+    NodeResources,
     Pod,
     PodContainerStats,
     PodPhase,
@@ -690,40 +691,95 @@ class TestNode:
 class TestContainerResources:
     def test_add(self) -> None:
         resources1 = ContainerResources(
-            cpu_m=1, memory=2 * 2**20, nvidia_gpu=3, amd_gpu=4
+            cpu_m=1,
+            memory=2 * 2**20,
+            nvidia_gpu=3,
+            amd_gpu=4,
+            nvidia_migs={"1g.5gb": 1, "3g.20gb": 1},
         )
         resources2 = ContainerResources(
-            cpu_m=4, memory=5 * 2**20, nvidia_gpu=6, amd_gpu=7
+            cpu_m=4,
+            memory=5 * 2**20,
+            nvidia_gpu=6,
+            amd_gpu=7,
+            nvidia_migs={"1g.5gb": 1, "2g.10gb": 1},
         )
         assert resources1 + resources2 == ContainerResources(
-            cpu_m=5, memory=7 * 2**20, nvidia_gpu=9, amd_gpu=11
+            cpu_m=5,
+            memory=7 * 2**20,
+            nvidia_gpu=9,
+            amd_gpu=11,
+            nvidia_migs={"1g.5gb": 2, "2g.10gb": 1, "3g.20gb": 1},
         )
 
     def test_sub(self) -> None:
         total = ContainerResources(
-            cpu_m=1000, memory=1024 * 2**20, nvidia_gpu=2, amd_gpu=4
+            cpu_m=1000,
+            memory=1024 * 2**20,
+            nvidia_gpu=2,
+            amd_gpu=4,
+            nvidia_migs={"1g.5gb": 7, "2g.10gb": 1},
         )
         used = ContainerResources(
-            cpu_m=100, memory=256 * 2**20, nvidia_gpu=1, amd_gpu=2
+            cpu_m=100,
+            memory=256 * 2**20,
+            nvidia_gpu=1,
+            amd_gpu=2,
+            nvidia_migs={"1g.5gb": 1, "3g.20gb": 1},
         )
         assert total - used == ContainerResources(
-            cpu_m=900, memory=768 * 2**20, nvidia_gpu=1, amd_gpu=2
+            cpu_m=900,
+            memory=768 * 2**20,
+            nvidia_gpu=1,
+            amd_gpu=2,
+            nvidia_migs={"1g.5gb": 6, "2g.10gb": 1, "3g.20gb": 0},
         )
 
     def test_floordiv(self) -> None:
-        total = ContainerResources(
-            cpu_m=1000, memory=1024 * 2**20, nvidia_gpu=2, amd_gpu=4
+        total = NodeResources(
+            cpu_m=1000,
+            memory=1024 * 2**20,
+            nvidia_gpu=2,
+            amd_gpu=4,
+            nvidia_migs={"1g.5gb": 7},
         )
 
         assert (
             total
             // ContainerResources(
-                cpu_m=100, memory=128 * 2**20, nvidia_gpu=1, amd_gpu=2
+                cpu_m=100,
+                memory=128 * 2**20,
+                nvidia_gpu=1,
+                amd_gpu=2,
+                nvidia_migs={"1g.5gb": 1},
             )
             == 2
         )
         assert total // ContainerResources(cpu_m=100, memory=128 * 2**20) == 8
         assert total // ContainerResources(cpu_m=100) == 10
         assert total // ContainerResources(cpu_m=1100) == 0
+        assert total // ContainerResources(nvidia_migs={"1g.5gb": 1}) == 7
+        assert total // ContainerResources(nvidia_migs={"1g.5gb": 8}) == 0
+        assert total // ContainerResources(nvidia_migs={"1g.5gb": 1, "2g.10gb": 0}) == 7
+        assert total // ContainerResources(nvidia_migs={"2g.10gb": 1}) == 0
         assert total // ContainerResources() == 110
         assert ContainerResources() // ContainerResources() == 0
+
+    def test_from_primitive(self) -> None:
+        resources = ContainerResources.from_primitive(
+            {
+                "cpu": "1",
+                "memory": 2**30,
+                "nvidia.com/gpu": 1,
+                "nvidia.com/mig-1g.5gb": 2,
+                "amd.com/gpu": 3,
+            }
+        )
+
+        assert resources == ContainerResources(
+            cpu_m=1000,
+            memory=2**30,
+            nvidia_gpu=1,
+            nvidia_migs={"1g.5gb": 2},
+            amd_gpu=3,
+        )
