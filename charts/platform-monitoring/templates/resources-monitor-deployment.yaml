@@ -1,76 +1,59 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "platformMonitoring.fullname" . }}
+  name: {{ include "platformMonitoring.fullname" . }}-resources-monitor
   labels:
     {{- include "platformMonitoring.labels.standard" . | nindent 4 }}
-    service: platform-monitoring
+    service: platform-resources-monitor
 spec:
-  replicas: {{ .Values.replicas }}
+  replicas: 1
   selector:
     matchLabels:
       app: {{ include "platformMonitoring.name" . }}
       release: {{ .Release.Name }}
-      service: platform-monitoring
-  strategy:
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
-    type: RollingUpdate
+      service: platform-resources-monitor
   template:
     metadata:
       labels:
         app: {{ include "platformMonitoring.name" . }}
         release: {{ .Release.Name }}
-        service: platform-monitoring
+        service: platform-resources-monitor
+      {{- if or .Values.annotations .Values.resourcesMonitor.podAnnotations }}
       annotations:
         {{- with .Values.annotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-        {{- if .Values.secrets }}
-        checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
-        {{- end }}
-        {{- with .Values.podAnnotations }}
+        {{- with .Values.resourcesMonitor.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+      {{- end }}
     spec:
       containers:
-      - name: platform-monitoring
+      - name: resources-monitor
         image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+        command: [platform-monitoring-resources-monitor]
         livenessProbe:
           httpGet:
             path: /ping
-            port: tcp-web
+            port: http
           initialDelaySeconds: 10
           periodSeconds: 5
         readinessProbe:
           httpGet:
             path: /ping
-            port: tcp-web
+            port: http
           initialDelaySeconds: 10
           periodSeconds: 10
         ports:
           - containerPort: 8080
-            name: tcp-web
+            name: http
             protocol: TCP
-        {{- with .Values.resources }}
+        {{- with .Values.resourcesMonitor.resources }}
         resources:
           {{- toYaml . | nindent 10 }}
         {{- end }}
         env:
           {{- include "platformMonitoring.env.common" . | nindent 10 }}
-          {{- if eq .Values.logs.persistence.type "es" }}
-          - name: NP_MONITORING_LOGS_STORAGE_TYPE
-            value: elasticsearch
-          - name: NP_MONITORING_ES_HOSTS
-          {{- with .Values.logs.persistence.es }}
-            value: "http://{{ .host }}:{{ .port }}"
-          {{- end }}
-          {{- else if eq .Values.logs.persistence.type "s3" }}
-          {{- include "platformMonitoring.env.s3" . | indent 10 }}
-          {{- else if eq .Values.logs.persistence.type "loki" }}
-          {{- include "platformMonitoring.env.loki" . | indent 10 }}
-          {{- end }}
         volumeMounts:
           {{- include "platformMonitoring.volumeMounts.common" . | nindent 10 }}
       {{- if .Values.securityContext.enabled }}

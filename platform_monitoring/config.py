@@ -2,6 +2,7 @@ import enum
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
+from apolo_apps_client import AppsClientConfig
 from yarl import URL
 
 
@@ -25,12 +26,6 @@ class PlatformAuthConfig:
 
 @dataclass(frozen=True)
 class PlatformConfig:
-    url: URL
-    token: str = field(repr=False)
-
-
-@dataclass(frozen=True)
-class PlatformAppsConfig:
     url: URL
     token: str = field(repr=False)
 
@@ -119,6 +114,7 @@ class RegistryConfig:
 
 @dataclass(frozen=True)
 class ContainerRuntimeConfig:
+    host: str | None = None
     port: int = 9000
 
 
@@ -129,7 +125,7 @@ class Config:
     platform_api: PlatformApiConfig
     platform_auth: PlatformAuthConfig
     platform_config: PlatformConfig
-    platform_apps: PlatformAppsConfig
+    platform_apps: AppsClientConfig
     logs: LogsConfig
     kube: KubeConfig
     container_runtime: ContainerRuntimeConfig
@@ -137,3 +133,11 @@ class Config:
     elasticsearch: ElasticsearchConfig | None = None
     s3: S3Config | None = None
     loki: LokiConfig | None = None
+
+
+@dataclass(frozen=True)
+class ResourcesMonitorConfig:
+    server: ServerConfig
+    kube: KubeConfig
+    platform_config: PlatformConfig
+    cluster_name: str

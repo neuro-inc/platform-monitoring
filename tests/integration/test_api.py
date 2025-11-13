@@ -26,6 +26,19 @@ from aiohttp.web_exceptions import (
     HTTPNotFound,
     HTTPUnauthorized,
 )
+from apolo_apps_client import (
+    AppInstance,
+    AppsApiClient,
+    AppsApiException,
+)
+from apolo_kube_client import (
+    KubeClientSelector,
+    V1Container,
+    V1ObjectMeta,
+    V1Pod,
+    V1PodSpec,
+)
+from apolo_kube_client.apolo import generate_namespace_name
 from yarl import URL
 
 from platform_monitoring.api import (
@@ -40,15 +53,11 @@ from platform_monitoring.config import (
     LokiConfig,
     PlatformApiConfig,
 )
-from platform_monitoring.platform_apps_client import (
-    AppInstance,
-    AppsApiClient,
-    AppsApiException,
-)
+from platform_monitoring.kube_client import get_pod, wait_pod_is_running
 
 from .conftest import ApiAddress, create_local_app_server, random_str
 from .conftest_admin import ProjectUser
-from .conftest_kube import MyKubeClient
+from .conftest_kube import MyKubeClient, wait_pod_is_terminated
 
 
 logger = logging.getLogger(__name__)
@@ -78,12 +87,16 @@ class MonitoringApiEndpoints:
     address: ApiAddress
 
     @property
+    def base_url(self) -> URL:
+        return URL(f"http://{self.address.host}:{self.address.port}")
+
+    @property
     def api_v1_endpoint(self) -> URL:
-        return URL(f"http://{self.address.host}:{self.address.port}/api/v1")
+        return self.base_url / "api" / "v1"
 
     @property
     def ping_url(self) -> URL:
-        return self.api_v1_endpoint / "ping"
+        return self.base_url / "ping"
 
     @property
     def endpoint(self) -> URL:
@@ -867,7 +880,7 @@ class TestSaveApi:
         infinite_job: tuple[str, str],
     ) -> None:
         job_id, _ = infinite_job
-        invalid_runtime_config = ContainerRuntimeConfig(port=1)
+        invalid_runtime_config = ContainerRuntimeConfig(host="localhost", port=1)
         config = config_factory(container_runtime=invalid_runtime_config)
 
         app = await create_app(config)
@@ -1511,23 +1524,57 @@ def app_name() -> str:
 
 
 @pytest.fixture
-async def apps_basic_pod(
-    kube_client: MyKubeClient,
+async def apps_basic_pod_v2(
+    kube_client_selector: KubeClientSelector,
     regular_user1: ProjectUser,
     app_name: str,
-) -> AsyncIterator[MyAppsPodDescriptor]:
-    pod_name = f"test-pod-{uuid4()}"
-    apps_pod_description = MyAppsPodDescriptor(pod_name)
-    apps_pod_description.add_labels(
-        {
-            K8S_LABEL_APOLO_ORG: regular_user1.org_name,
-            K8S_LABEL_APOLO_PROJECT: regular_user1.project_name,
-            K8S_LABEL_APOLO_APP_INSTANCE_NAME: app_name,
-        }
-    )
-    await kube_client.create_pod(apps_pod_description.payload)
-    yield apps_pod_description
-    await kube_client.delete_pod(apps_pod_description.name)
+) -> AsyncIterator[V1Pod]:
+    async with kube_client_selector.get_client(
+        org_name=regular_user1.org_name,
+        project_name=regular_user1.project_name,
+    ) as cli:
+        pod = V1Pod(
+            api_version="v1",
+            kind="Pod",
+            metadata=V1ObjectMeta(
+                name=f"test-pod-{uuid4()}",
+                labels={
+                    "platform.apolo.us/app": "app_instance_id",
+                    K8S_LABEL_APOLO_ORG: regular_user1.org_name,
+                    K8S_LABEL_APOLO_PROJECT: regular_user1.project_name,
+                    K8S_LABEL_APOLO_APP_INSTANCE_NAME: app_name,
+                },
+            ),
+            spec=V1PodSpec(
+                restart_policy="Never",
+                image_pull_secrets=[],
+                tolerations=[],
+                containers=[
+                    V1Container(
+                        name="container1",
+                        image="busybox",
+                        command=[
+                            "/bin/sh",
+                            "-c",
+                            "for i in $(seq 1 5); do echo container1_$i; sleep 1; done",
+                        ],
+                    ),
+                    V1Container(
+                        name="container2",
+                        image="busybox",
+                        command=[
+                            "/bin/sh",
+                            "-c",
+                            "for i in $(seq 1 5); do echo container2_$i; sleep 1; done",
+                        ],
+                    ),
+                ],
+            ),
+        )
+        await cli.core_v1.pod.create(pod)
+        yield pod
+        assert pod.metadata.name
+        await cli.core_v1.pod.delete(pod.metadata.name)
 
 
 @pytest.fixture
@@ -1541,9 +1588,14 @@ def _get_app_mock(
         return AppInstance(
             id="app_instance_id",
             name=app_name,
+            creator="creator",
+            cluster_name="default",
             org_name=regular_user1.org_name,
             project_name=regular_user1.project_name,
-            namespace=kube_client.namespace,
+            namespace=generate_namespace_name(
+                regular_user1.org_name,
+                regular_user1.project_name,
+            ),
             created_at=datetime.now(UTC) - timedelta(days=1),
         )
 
@@ -1638,16 +1690,25 @@ class TestAppsLogApi:
         apps_monitoring_api: AppsMonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         regular_user1: ProjectUser,
-        apps_basic_pod: MyAppsPodDescriptor,
-        kube_client: MyKubeClient,
+        apps_basic_pod_v2: V1Pod,
+        kube_client_selector: KubeClientSelector,
         loki_config: LokiConfig,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         since = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        pod_name = apps_basic_pod.name
+        pod_name = apps_basic_pod_v2.metadata.name
+        assert pod_name
+        assert apps_basic_pod_v2.spec
 
-        for container_name in apps_basic_pod.containers:
-            await kube_client.wait_pod_is_terminated(pod_name, container_name)
+        async with kube_client_selector.get_client(
+            org_name=regular_user1.org_name,
+            project_name=regular_user1.project_name,
+        ) as kube_client:
+            for container in apps_basic_pod_v2.spec.containers:
+                await wait_pod_is_terminated(
+                    kube_client,
+                    pod_name,
+                    container_name=container.name,
+                )
 
         await asyncio.sleep(loki_config.archive_delay_s)
 
@@ -1733,7 +1794,11 @@ class TestAppsLogApi:
             re_log_template=r"container[c_number]_[l_number]\n",
         )
 
-        pod = await kube_client.get_pod(pod_name)
+        async with kube_client_selector.get_client(
+            org_name=regular_user1.org_name,
+            project_name=regular_user1.project_name,
+        ) as kube_client:
+            pod = await get_pod(kube_client, pod_name)
 
         # test with since container1
         params = base_params.copy()
@@ -1791,7 +1856,7 @@ class TestAppsLogApi:
         self.assert_archive_logs_as_ndjson(
             actual_log=actual_log,
             pod_name=pod_name,
-            namespace=kube_client.namespace,
+            namespace=kube_client._namespace,
             container_count_start=1,
             container_count_end=2,
             logs_count_start=1,
@@ -1812,7 +1877,7 @@ class TestAppsLogApi:
         self.assert_archive_logs_as_ndjson(
             actual_log=actual_log,
             pod_name=pod_name,
-            namespace=kube_client.namespace,
+            namespace=kube_client._namespace,
             container_count_start=1,
             container_count_end=2,
             logs_count_start=1,
@@ -1834,7 +1899,7 @@ class TestAppsLogApi:
         self.assert_archive_logs_as_ndjson(
             actual_log=actual_log,
             pod_name=pod_name,
-            namespace=kube_client.namespace,
+            namespace=kube_client._namespace,
             container_count_start=1,
             container_count_end=2,
             logs_count_start=1,
@@ -1848,13 +1913,11 @@ class TestAppsLogApi:
         apps_monitoring_api: AppsMonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         regular_user1: ProjectUser,
-        apps_basic_pod: MyAppsPodDescriptor,
-        kube_client: MyKubeClient,
+        apps_basic_pod_v2: V1Pod,
         loki_config: LokiConfig,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         since = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        pod_name = apps_basic_pod.name
+        pod_name = apps_basic_pod_v2.metadata.name
 
         headers = regular_user1.headers
         url = apps_monitoring_api.generate_log_url(app_id="app_instance_id")
@@ -2013,16 +2076,24 @@ class TestAppsLogApi:
         apps_monitoring_api: AppsMonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         regular_user1: ProjectUser,
-        apps_basic_pod: MyAppsPodDescriptor,
-        kube_client: MyKubeClient,
+        apps_basic_pod_v2: V1Pod,
+        kube_client_selector: KubeClientSelector,
     ) -> None:
-        pod_name = apps_basic_pod.name
+        pod_name = apps_basic_pod_v2.metadata.name
+        assert pod_name
+        assert apps_basic_pod_v2.spec
         since = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        for container_name in apps_basic_pod.containers:
-            await kube_client.wait_pod_is_terminated(
-                pod_name, container_name=container_name, namespace=kube_client.namespace
-            )
+        async with kube_client_selector.get_client(
+            org_name=regular_user1.org_name,
+            project_name=regular_user1.project_name,
+        ) as kube_client:
+            for container in apps_basic_pod_v2.spec.containers:
+                await wait_pod_is_terminated(
+                    kube_client,
+                    pod_name,
+                    container_name=container.name,
+                )
 
         headers = regular_user1.headers
         url = apps_monitoring_api.generate_containers_url(app_id="app_instance_id")
@@ -2030,29 +2101,41 @@ class TestAppsLogApi:
         async with client.get(url, headers=headers) as response:
             assert response.status == HTTPOk.status_code
             containers = await response.json()
-            assert set(containers) == set(apps_basic_pod.containers)
+            assert set(containers) == {
+                c.name for c in apps_basic_pod_v2.spec.containers
+            }
 
         params = {"since": since}
         async with client.get(url, headers=headers, params=params) as response:
             assert response.status == HTTPOk.status_code
             containers = await response.json()
-            assert set(containers) == set(apps_basic_pod.containers)
+            assert set(containers) == {
+                c.name for c in apps_basic_pod_v2.spec.containers
+            }
 
     async def test_apps_logs_exceptions(
         self,
         apps_monitoring_api: AppsMonitoringApiEndpoints,
         client: aiohttp.ClientSession,
         regular_user1: ProjectUser,
-        apps_basic_pod: MyAppsPodDescriptor,
-        kube_client: MyKubeClient,
+        apps_basic_pod_v2: V1Pod,
+        kube_client_selector: KubeClientSelector,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        pod_name = apps_basic_pod.name
+        pod_name = apps_basic_pod_v2.metadata.name
+        assert pod_name
 
-        for container_name in apps_basic_pod.containers:
-            await kube_client.wait_pod_is_running(
-                pod_name, namespace=kube_client.namespace, container_name=container_name
-            )
+        async with kube_client_selector.get_client(
+            org_name=regular_user1.org_name,
+            project_name=regular_user1.project_name,
+        ) as kube_client:
+            assert apps_basic_pod_v2.spec
+            for container in apps_basic_pod_v2.spec.containers:
+                await wait_pod_is_running(
+                    kube_client,
+                    pod_name,
+                    container_name=container.name,
+                )
 
         headers = regular_user1.headers
         url = apps_monitoring_api.generate_log_url(app_id="app_instance_id")

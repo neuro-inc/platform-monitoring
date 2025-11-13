@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from unittest import mock
+from unittest.mock import Mock
 
 import pytest
 from aiobotocore.client import AioBaseClient
@@ -57,46 +58,44 @@ def config_factory() -> Callable[[LogsStorageType], Config]:
 
 
 def test_create_es_logs_service(
-    config_factory: Callable[[LogsStorageType], Config], kube_client: KubeClient
+    config_factory: Callable[[LogsStorageType], Config],
 ) -> None:
     config = config_factory(LogsStorageType.ELASTICSEARCH)
     result = create_logs_service(
-        config, kube_client, es_client=mock.Mock(spec=AsyncElasticsearch)
+        config, Mock(), es_client=mock.Mock(spec=AsyncElasticsearch)
     )
     assert isinstance(result, ElasticsearchLogsService)
 
 
 def test_create_s3_logs_service(
-    config_factory: Callable[[LogsStorageType], Config], kube_client: KubeClient
+    config_factory: Callable[[LogsStorageType], Config],
 ) -> None:
     config = config_factory(LogsStorageType.S3)
     result = create_logs_service(
-        config, kube_client, s3_client=mock.Mock(spec=AioBaseClient)
+        config, Mock(), s3_client=mock.Mock(spec=AioBaseClient)
     )
     assert isinstance(result, S3LogsService)
 
 
 def test_create_loki_logs_service(
-    config_factory: Callable[[LogsStorageType], Config], kube_client: KubeClient
+    config_factory: Callable[[LogsStorageType], Config],
 ) -> None:
     config = config_factory(LogsStorageType.LOKI)
-    result = create_logs_service(
-        config, kube_client, loki_client=mock.Mock(spec=LokiClient)
-    )
+    result = create_logs_service(config, Mock(), loki_client=mock.Mock(spec=LokiClient))
     assert isinstance(result, LokiLogsService)
 
 
 def test_create_logs_service_raises(
-    config_factory: Callable[[LogsStorageType], Config], kube_client: KubeClient
+    config_factory: Callable[[LogsStorageType], Config],
 ) -> None:
     config = config_factory(LogsStorageType.S3)
     with pytest.raises(AssertionError):
-        create_logs_service(config, kube_client)
+        create_logs_service(config, Mock())
 
     config = config_factory(LogsStorageType.ELASTICSEARCH)
     with pytest.raises(AssertionError):
-        create_logs_service(config, kube_client)
+        create_logs_service(config, Mock())
 
     config = config_factory(LogsStorageType.LOKI)
     with pytest.raises(AssertionError):
-        create_logs_service(config, kube_client)
+        create_logs_service(config, Mock())

@@ -2,6 +2,7 @@ import logging
 import os
 from pathlib import Path
 
+from apolo_apps_client import AppsClientConfig
 from yarl import URL
 
 from .config import (
@@ -15,10 +16,10 @@ from .config import (
     LogsStorageType,
     LokiConfig,
     PlatformApiConfig,
-    PlatformAppsConfig,
     PlatformAuthConfig,
     PlatformConfig,
     RegistryConfig,
+    ResourcesMonitorConfig,
     S3Config,
     ServerConfig,
 )
@@ -54,6 +55,14 @@ class EnvironConfigFactory:
             container_runtime=self._create_container_runtime(),
         )
 
+    def create_resources_monitor(self) -> ResourcesMonitorConfig:
+        return ResourcesMonitorConfig(
+            server=self._create_server(),
+            kube=self._create_kube(),
+            platform_config=self._create_platform_config(),
+            cluster_name=self._environ["NP_MONITORING_CLUSTER_NAME"],
+        )
+
     def _create_server(self) -> ServerConfig:
         host = self._environ.get("NP_MONITORING_API_HOST", ServerConfig.host)
         port = int(self._environ.get("NP_MONITORING_API_PORT", ServerConfig.port))
@@ -69,10 +78,10 @@ class EnvironConfigFactory:
         token = self._environ["NP_MONITORING_PLATFORM_AUTH_TOKEN"]
         return PlatformAuthConfig(url=url, token=token)
 
-    def _create_platform_apps_config(self) -> PlatformAppsConfig:
-        url = URL(self._environ["NP_MONITORING_PLATFORM_APPS_URL"])
+    def _create_platform_apps_config(self) -> AppsClientConfig:
+        url = self._environ["NP_MONITORING_PLATFORM_APPS_URL"]
         token = self._environ["NP_MONITORING_PLATFORM_APPS_TOKEN"]
-        return PlatformAppsConfig(url=url, token=token)
+        return AppsClientConfig(url=url, token=token)
 
     def _create_platform_config(self) -> PlatformConfig:
         url = URL(self._environ["NP_MONITORING_PLATFORM_CONFIG_URL"])

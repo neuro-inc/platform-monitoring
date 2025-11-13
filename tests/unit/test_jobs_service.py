@@ -8,13 +8,29 @@ from unittest import mock
 import pytest
 from apolo_api_client import ApiClient
 from neuro_config_client import (
+    AMDGPU,
+    ACMEEnvironment,
+    AMDGPUPreset,
+    AppsConfig,
+    BucketsConfig,
     Cluster,
-    ClusterStatus,
     ConfigClient,
+    DisksConfig,
+    DNSConfig,
+    EnergyConfig,
+    IngressConfig,
+    MetricsConfig,
+    MonitoringConfig,
+    NvidiaGPU,
+    NvidiaGPUPreset,
     OrchestratorConfig,
+    RegistryConfig,
     ResourcePoolType,
     ResourcePreset,
+    SecretsConfig,
+    StorageConfig,
 )
+from yarl import URL
 
 from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
 from platform_monitoring.jobs_service import JobsService
@@ -27,6 +43,7 @@ def create_node(
     cpu: float,
     memory: int,
     nvidia_gpu: int = 0,
+    nvidia_mig: dict[str, int] | None = None,
     amd_gpu: int = 0,
 ) -> Node:
     return Node.from_primitive(
@@ -42,6 +59,10 @@ def create_node(
                     "cpu": str(cpu),
                     "memory": str(memory),
                     "nvidia.com/gpu": str(nvidia_gpu),
+                    **{
+                        f"nvidia.com/mig-{key}": str(count)
+                        for key, count in (nvidia_mig or {}).items()
+                    },
                     "amd.com/gpu": str(amd_gpu),
                 },
                 "nodeInfo": {"containerRuntimeVersion": "containerd"},
@@ -73,6 +94,7 @@ def create_pod(
     cpu_m: int,
     memory: int,
     nvidia_gpu: int = 0,
+    nvidia_migs: dict[str, int] | None = None,
     amd_gpu: int = 0,
 ) -> Pod:
     job_id = f"job-{uuid.uuid4()}"
@@ -82,6 +104,9 @@ def create_pod(
     }
     if nvidia_gpu:
         resources["nvidia.com/gpu"] = str(nvidia_gpu)
+    if nvidia_migs:
+        for profile_name, count in nvidia_migs.items():
+            resources[f"nvidia.com/mig-{profile_name}"] = str(count)
     if amd_gpu:
         resources["amd.com/gpu"] = str(amd_gpu)
     payload: dict[str, Any] = {
@@ -105,11 +130,9 @@ def create_pod(
 def cluster() -> Cluster:
     return Cluster(
         name="default",
-        status=ClusterStatus.DEPLOYED,
         created_at=datetime.datetime(2022, 4, 6),
         orchestrator=OrchestratorConfig(
             job_hostname_template="",
-            job_internal_hostname_template="",
             job_fallback_hostname="",
             job_schedule_timeout_s=1,
             job_schedule_scale_up_timeout_s=1,
@@ -120,8 +143,24 @@ def cluster() -> Cluster:
                     max_size=2,
                     cpu=1,
                     memory=2**30,
-                    nvidia_gpu=1,
-                    amd_gpu=2,
+                    nvidia_gpu=NvidiaGPU(count=1, model="nvidia-gpu"),
+                    amd_gpu=AMDGPU(count=2, model="amd-gpu"),
+                ),
+                ResourcePoolType(
+                    name="minikube-nvidia-mig",
+                    max_size=1,
+                    cpu=1,
+                    memory=2**30,
+                    nvidia_gpu=NvidiaGPU(
+                        count=1,
+                        model="nvidia-gpu",
+                    ),
+                    nvidia_migs={
+                        "1g.5gb": NvidiaGPU(
+                            count=7,
+                            model="nvidia-gpu-1g-5gb",
+                        )
+                    },
                 ),
             ],
             resource_presets=[
@@ -145,19 +184,47 @@ def cluster() -> Cluster:
                     credits_per_hour=Decimal(10),
                     cpu=0.2,
                     memory=100 * 2**20,
-                    nvidia_gpu=1,
-                    available_resource_pool_names=["minikube-gpu"],
+                    nvidia_gpu=NvidiaGPUPreset(count=1),
+                    available_resource_pool_names=[
+                        "minikube-gpu",
+                        "minikube-nvidia-mig",
+                    ],
+                ),
+                ResourcePreset(
+                    name="nvidia-mig",
+                    credits_per_hour=Decimal(10),
+                    cpu=0.1,
+                    memory=100 * 2**20,
+                    nvidia_migs={"1g.5gb": NvidiaGPUPreset(count=1)},
+                    available_resource_pool_names=["minikube-nvidia-mig"],
                 ),
                 ResourcePreset(
                     name="amd-gpu",
                     credits_per_hour=Decimal(10),
                     cpu=0.2,
                     memory=100 * 2**20,
-                    amd_gpu=1,
+                    amd_gpu=AMDGPUPreset(count=1),
                     available_resource_pool_names=["minikube-gpu"],
                 ),
             ],
         ),
+        storage=StorageConfig(url=URL("https://default.org.apolo.us")),
+        registry=RegistryConfig(url=URL("https://default.org.apolo.us")),
+        buckets=BucketsConfig(url=URL("https://default.org.apolo.us")),
+        disks=DisksConfig(
+            url=URL("https://default.org.apolo.us"),
+            storage_limit_per_user=10240 * 2**30,
+        ),
+        monitoring=MonitoringConfig(url=URL("https://default.org.apolo.us")),
+        dns=DNSConfig(name="default.org.apolo.us"),
+        ingress=IngressConfig(acme_environment=ACMEEnvironment.PRODUCTION),
+        secrets=SecretsConfig(url=URL("https://default.org.apolo.us")),
+        metrics=MetricsConfig(url=URL("https://default.org.apolo.us")),
+        apps=AppsConfig(
+            apps_hostname_templates=["{app_name}.apps.default.org.apolo.us"],
+            app_proxy_url=URL("https://proxy.apps.default.org.apolo.us"),
+        ),
+        energy=EnergyConfig(),
     )
 
 
@@ -203,6 +270,22 @@ def kube_client() -> mock.Mock:
                 nvidia_gpu=1,
                 amd_gpu=2,
             ),
+            create_node(
+                "minikube-nvidia-mig",
+                "minikube-nvidia-mig-1",
+                cpu=1,
+                memory=2**30,
+                nvidia_gpu=1,
+                nvidia_mig={"1g.5gb": 7},
+            ),
+            create_node(
+                "minikube-nvidia-mig",
+                "minikube-nvidia-mig-2",
+                cpu=1,
+                memory=2**30,
+                nvidia_gpu=1,
+                nvidia_mig={"1g.5gb": 7},
+            ),
         ]
 
     client = mock.Mock(spec=KubeClient)
@@ -213,14 +296,16 @@ def kube_client() -> mock.Mock:
 
 @pytest.fixture
 def service(
-    config_client: ConfigClient, jobs_client: ApiClient, kube_client: KubeClient
+    config_client: ConfigClient,
+    jobs_client: ApiClient,
+    kube_client: KubeClient,
 ) -> JobsService:
     return JobsService(
         config_client=config_client,
         jobs_client=jobs_client,
         kube_client=kube_client,
         container_runtime_client_registry=ContainerRuntimeClientRegistry(
-            container_runtime_port=9000
+            container_runtime_port=9000,
         ),
         cluster_name="default",
     )
@@ -235,18 +320,42 @@ class TestJobsService:
             create_pod("minikube-gpu-1", cpu_m=100, memory=256 * 2**20, nvidia_gpu=1),
             create_pod("minikube-cpu-2", cpu_m=50, memory=128 * 2**20),
             create_pod("minikube-gpu-1", cpu_m=100, memory=256 * 2**20, amd_gpu=1),
+            create_pod(
+                "minikube-nvidia-mig-1",
+                cpu_m=100,
+                memory=256 * 2**20,
+                nvidia_migs={"1g.5gb": 1},
+            ),
+            create_pod(
+                "minikube-nvidia-mig-2",
+                cpu_m=100,
+                memory=256 * 2**20,
+                nvidia_migs={"1g.5gb": 1},
+            ),
         )
 
         result = await service.get_available_jobs_counts()
 
-        assert result == {"cpu": 8, "nvidia-gpu": 1, "amd-gpu": 3, "cpu-p": 0}
+        assert result == {
+            "cpu": 8,
+            "nvidia-gpu": 3,
+            "nvidia-mig": 12,
+            "amd-gpu": 3,
+            "cpu-p": 0,
+        }
 
     async def test_get_available_jobs_count_free_nodes(
         self, service: JobsService
     ) -> None:
         result = await service.get_available_jobs_counts()
 
-        assert result == {"cpu": 10, "nvidia-gpu": 2, "amd-gpu": 4, "cpu-p": 0}
+        assert result == {
+            "cpu": 10,
+            "nvidia-gpu": 4,
+            "amd-gpu": 4,
+            "cpu-p": 0,
+            "nvidia-mig": 14,
+        }
 
     async def test_get_available_jobs_count_busy_nodes(
         self, service: JobsService, kube_client: mock.Mock
@@ -256,11 +365,29 @@ class TestJobsService:
             create_pod("minikube-cpu-2", cpu_m=1000, memory=2**30),
             create_pod("minikube-gpu-1", cpu_m=1000, memory=2**30, nvidia_gpu=1),
             create_pod("minikube-gpu-2", cpu_m=1000, memory=2**30, nvidia_gpu=1),
+            create_pod(
+                "minikube-nvidia-mig-1",
+                cpu_m=1000,
+                memory=2**30,
+                nvidia_migs={"1g.5gb": 7},
+            ),
+            create_pod(
+                "minikube-nvidia-mig-2",
+                cpu_m=1000,
+                memory=2**30,
+                nvidia_migs={"1g.5gb": 7},
+            ),
         )
 
         result = await service.get_available_jobs_counts()
 
-        assert result == {"cpu": 0, "nvidia-gpu": 0, "amd-gpu": 0, "cpu-p": 0}
+        assert result == {
+            "cpu": 0,
+            "nvidia-gpu": 0,
+            "nvidia-mig": 0,
+            "amd-gpu": 0,
+            "cpu-p": 0,
+        }
 
     async def test_get_available_jobs_count_for_pods_without_nodes(
         self, service: JobsService, kube_client: mock.Mock
@@ -271,4 +398,10 @@ class TestJobsService:
 
         result = await service.get_available_jobs_counts()
 
-        assert result == {"cpu": 10, "nvidia-gpu": 2, "amd-gpu": 4, "cpu-p": 0}
+        assert result == {
+            "cpu": 10,
+            "nvidia-gpu": 4,
+            "nvidia-mig": 14,
+            "amd-gpu": 4,
+            "cpu-p": 0,
+        }

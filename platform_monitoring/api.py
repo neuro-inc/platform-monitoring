@@ -24,8 +24,18 @@ from aiohttp.web import (
     json_response,
     middleware,
 )
-from aiohttp.web_urldispatcher import AbstractRoute
 from apolo_api_client import ApiClient, Job
+from apolo_apps_client import (
+    AppInstance,
+    AppsApiClient,
+    AppsApiException,
+    AppsClientConfig,
+)
+from apolo_kube_client import (
+    KubeClientAuthType as ApoloKubeClientAuthType,
+    KubeClientSelector,
+    KubeConfig as ApoloKubeConfig,
+)
 from elasticsearch import AsyncElasticsearch
 from neuro_auth_client import AuthClient, Permission, check_permissions
 from neuro_auth_client.security import AuthScheme, setup_security
@@ -62,7 +72,6 @@ from .logs import (
     s3_client_error,
 )
 from .loki_client import LokiClient
-from .platform_apps_client import AppInstance, AppsApiClient, AppsApiException
 from .user import untrusted_user
 from .utils import JobsHelper, KubeHelper, parse_date
 from .validators import (
@@ -86,6 +95,7 @@ K8S_LABEL_APOLO_APP_INSTANCE_NAME = "platform.apolo.us/app-instance-name"
 
 CONFIG_KEY = aiohttp.web.AppKey("config", Config)
 KUBE_CLIENT_KEY = aiohttp.web.AppKey("kube_client", KubeClient)
+KUBE_CLIENT_SELECTOR = aiohttp.web.AppKey("apolo_kube_client", KubeClientSelector)
 LOKI_CLIENT_KEY = aiohttp.web.AppKey("loki_client", LokiClient)
 JOBS_SERVICE_KEY = aiohttp.web.AppKey("jobs_service", JobsService)
 LOGS_SERVICE_KEY = aiohttp.web.AppKey("logs_service", LogsService)
@@ -100,18 +110,6 @@ APPS_API_CLIENT_KEY = aiohttp.web.AppKey("apps_api_client", AppsApiClient)
 DEFAULT_SEPARATOR = "=== Live logs ==="
 
 logger = logging.getLogger(__name__)
-
-
-class ApiHandler:
-    def register(self, app: aiohttp.web.Application) -> list[AbstractRoute]:
-        return app.add_routes(
-            [
-                aiohttp.web.get("/ping", self.handle_ping),
-            ]
-        )
-
-    async def handle_ping(self, request: Request) -> Response:
-        return Response(text="Pong")
 
 
 class MonitoringApiHandler:
@@ -214,7 +212,9 @@ class MonitoringApiHandler:
 
         async with self._logs_service.get_pod_log_reader(
             pod_name,
-            job.namespace or self._config.kube.namespace,
+            namespace=job.namespace,
+            org_name=job.org_name,
+            project_name=job.project_name,
             separator=separator.encode(),
             since=since,
             timestamps=timestamps,
@@ -248,7 +248,9 @@ class MonitoringApiHandler:
 
         async with self._logs_service.get_pod_log_reader(
             pod_name,
-            job.namespace or self._config.kube.namespace,
+            namespace=job.namespace,
+            org_name=job.org_name,
+            project_name=job.project_name,
             separator=separator.encode(),
             since=since,
             timestamps=timestamps,
@@ -532,8 +534,8 @@ class AppsMonitoringApiHandler:
         return self._app[APPS_API_CLIENT_KEY]
 
     @property
-    def _kube_client(self) -> KubeClient:
-        return self._app[KUBE_CLIENT_KEY]
+    def _kube_client_selector(self) -> KubeClientSelector:
+        return self._app[KUBE_CLIENT_SELECTOR]
 
     @property
     def _logs_storage_type(self) -> LogsStorageType:
@@ -575,17 +577,20 @@ class AppsMonitoringApiHandler:
         label_selector = ",".join(
             f"{key}={value}" for key, value in k8s_label_selector.items()
         )
+        async with self._kube_client_selector.get_client(
+            org_name=app_instance.org_name,
+            project_name=app_instance.project_name,
+        ) as kube_client:
+            pods = await kube_client.core_v1.pod.get_list(label_selector=label_selector)
 
-        pods = await self._kube_client.get_pods(
-            namespace=app_instance.namespace, label_selector=label_selector
+        return list(
+            {
+                container.name
+                for pod in pods.items
+                if pod.metadata.name and pod.spec
+                for container in pod.spec.containers
+            }
         )
-
-        return [
-            container.name
-            for pod in pods
-            if pod.metadata.name
-            for container in pod.spec.containers
-        ]
 
     async def containers(self, request: Request) -> Response:
         app_instance = await self._resolve_app_instance(request=request)
@@ -604,16 +609,15 @@ class AppsMonitoringApiHandler:
 
         assert isinstance(self._logs_service, LokiLogsService)
 
-        containers = await self._get_containers_from_k8s(app_instance)
-        if not containers:
-            containers = await self._logs_service.get_label_values(
-                label="container",
-                loki_label_selector=loki_label_selector,
-                since=start_dt,
-                until=end_dt,
-            )
+        k8s_containers = await self._get_containers_from_k8s(app_instance)
+        loki_containers = await self._logs_service.get_label_values(
+            label="container",
+            loki_label_selector=loki_label_selector,
+            since=start_dt,
+            until=end_dt,
+        )
 
-        return json_response(containers)
+        return json_response(list(set(k8s_containers + loki_containers)))
 
     @staticmethod
     def _as_ndjson(request: Request) -> bool:
@@ -664,7 +668,8 @@ class AppsMonitoringApiHandler:
             containers,
             loki_label_selector,
             k8s_label_selector,
-            app_instance.namespace,
+            org_name=app_instance.org_name,
+            project_name=app_instance.project_name,
             separator=separator.encode(),
             since=since,
             timestamps=timestamps,
@@ -711,7 +716,8 @@ class AppsMonitoringApiHandler:
             containers,
             loki_label_selector,
             k8s_label_selector,
-            app_instance.namespace,
+            org_name=app_instance.org_name,
+            project_name=app_instance.project_name,
             separator=separator.encode(),
             since=since,
             timestamps=timestamps,
@@ -922,11 +928,9 @@ async def create_platform_api_client(
 
 @asynccontextmanager
 async def create_platform_apps_api_client(
-    url: URL, token: str, trace_configs: list[aiohttp.TraceConfig] | None = None
+    config: AppsClientConfig, trace_configs: list[aiohttp.TraceConfig] | None = None
 ) -> AsyncIterator[AppsApiClient]:
-    async with AppsApiClient(
-        url=url, token=token, trace_configs=trace_configs
-    ) as client:
+    async with AppsApiClient(config=config, trace_configs=trace_configs) as client:
         yield client
 
 
@@ -1010,26 +1014,26 @@ async def create_s3_logs_bucket(client: AioBaseClient, config: S3Config) -> None
 
 def create_logs_service(
     config: Config,
-    kube_client: KubeClient,
+    kube_client_selector: KubeClientSelector,
     es_client: AsyncElasticsearch | None = None,
     s3_client: AioBaseClient | None = None,
     loki_client: LokiClient | None = None,
 ) -> LogsService:
     if config.logs.storage_type == LogsStorageType.ELASTICSEARCH:
         assert es_client
-        return ElasticsearchLogsService(kube_client, es_client)
+        return ElasticsearchLogsService(kube_client_selector, es_client)
 
     if config.logs.storage_type == LogsStorageType.S3:
         assert s3_client
         return create_s3_logs_service(
-            config, kube_client, s3_client, cache_log_metadata=False
+            config, kube_client_selector, s3_client, cache_log_metadata=False
         )
 
     if config.logs.storage_type == LogsStorageType.LOKI:
         assert loki_client
         assert config.loki
         return LokiLogsService(
-            kube_client, loki_client, config.loki.max_query_lookback_s
+            kube_client_selector, loki_client, config.loki.max_query_lookback_s
         )
 
     msg = f"{config.logs.storage_type} storage is not supported"
@@ -1038,7 +1042,7 @@ def create_logs_service(
 
 def create_s3_logs_service(
     config: Config,
-    kube_client: KubeClient,
+    kube_client_selector: KubeClientSelector,
     s3_client: AioBaseClient,
     *,
     cache_log_metadata: bool = False,
@@ -1052,7 +1056,7 @@ def create_s3_logs_service(
     metadata_service = S3LogsMetadataService(
         s3_client, metadata_storage, kube_namespace_name=config.kube.namespace
     )
-    return S3LogsService(kube_client, s3_client, metadata_service)
+    return S3LogsService(kube_client_selector, s3_client, metadata_service)
 
 
 async def add_version_to_header(request: Request, response: StreamResponse) -> None:
@@ -1109,6 +1113,25 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             )
             app[MONITORING_APP_KEY][KUBE_CLIENT_KEY] = kube_client
 
+            apolo_kube_config = ApoloKubeConfig(
+                endpoint_url=config.kube.endpoint_url,
+                cert_authority_data_pem=config.kube.cert_authority_data_pem,
+                cert_authority_path=config.kube.cert_authority_path,
+                auth_type=ApoloKubeClientAuthType(config.kube.auth_type.value),
+                auth_cert_path=config.kube.auth_cert_path,
+                auth_cert_key_path=config.kube.auth_cert_key_path,
+                token=config.kube.token,
+                token_path=config.kube.token_path,
+                namespace=config.kube.namespace,
+                client_conn_timeout_s=config.kube.client_conn_timeout_s,
+                client_read_timeout_s=config.kube.client_read_timeout_s,
+                client_conn_pool_size=config.kube.client_conn_pool_size,
+            )
+            kube_client_selector = await exit_stack.enter_async_context(
+                KubeClientSelector(config=apolo_kube_config)
+            )
+            app[MONITORING_APP_KEY][KUBE_CLIENT_SELECTOR] = kube_client_selector
+
             logger.info("Initializing Platform Config client")
             config_client = await exit_stack.enter_async_context(
                 ConfigClient(config.platform_config.url, config.platform_config.token)
@@ -1116,18 +1139,18 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             app[MONITORING_APP_KEY][CONFIG_CLIENT_KEY] = config_client
 
             logs_service = create_logs_service(
-                config, kube_client, es_client, s3_client, loki_client
+                config, kube_client_selector, es_client, s3_client, loki_client
             )
             app[MONITORING_APP_KEY][LOGS_SERVICE_KEY] = logs_service
             app[APPS_MONITORING_APP_KEY][LOGS_SERVICE_KEY] = logs_service
-            app[APPS_MONITORING_APP_KEY][KUBE_CLIENT_KEY] = kube_client
             app[APPS_MONITORING_APP_KEY][LOGS_STORAGE_TYPE_KEY] = (
                 config.logs.storage_type
             )
+            app[APPS_MONITORING_APP_KEY][KUBE_CLIENT_SELECTOR] = kube_client_selector
 
             container_runtime_client_registry = await exit_stack.enter_async_context(
                 ContainerRuntimeClientRegistry(
-                    container_runtime_port=config.container_runtime.port
+                    container_runtime_port=config.container_runtime.port,
                 )
             )
             jobs_service = JobsService(
@@ -1141,9 +1164,7 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             app[MONITORING_APP_KEY][JOBS_SERVICE_KEY] = jobs_service
 
             platform_apps_api_client = await exit_stack.enter_async_context(
-                create_platform_apps_api_client(
-                    config.platform_apps.url, config.platform_apps.token
-                )
+                create_platform_apps_api_client(config=config.platform_apps)
             )
             app[APPS_MONITORING_APP_KEY][APPS_API_CLIENT_KEY] = platform_apps_api_client
 
@@ -1152,8 +1173,6 @@ async def create_app(config: Config) -> aiohttp.web.Application:
     app.cleanup_ctx.append(_init_app)
 
     api_v1_app = aiohttp.web.Application()
-    api_v1_handler = ApiHandler()
-    api_v1_handler.register(api_v1_app)
 
     monitoring_app = await create_monitoring_app(config)
     app[MONITORING_APP_KEY] = monitoring_app
@@ -1176,10 +1195,12 @@ async def create_app(config: Config) -> aiohttp.web.Application:
 
 
 def main() -> None:  # pragma: no coverage
-    init_logging()
+    init_logging(health_check_url_path="/ping")
     config = EnvironConfigFactory().create()
-    logging.info("Loaded config: %r", config)
-    setup_sentry()
+    # NOTE: If config is passed as arg all secrets will be logged in
+    # log record args attribute.
+    logging.info(f"Loaded config: {config!r}")  # noqa: G004
+    setup_sentry(health_check_url_path="/ping")
     aiohttp.web.run_app(
         create_app(config), host=config.server.host, port=config.server.port
     )

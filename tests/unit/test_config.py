@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from apolo_apps_client import AppsClientConfig
 from yarl import URL
 
 from platform_monitoring.config import (
@@ -14,10 +15,10 @@ from platform_monitoring.config import (
     LogsConfig,
     LogsStorageType,
     PlatformApiConfig,
-    PlatformAppsConfig,
     PlatformAuthConfig,
     PlatformConfig,
     RegistryConfig,
+    ResourcesMonitorConfig,
     S3Config,
     ServerConfig,
 )
@@ -88,8 +89,8 @@ def test_create(environ: dict[str, Any], token_path: str) -> None:
         platform_config=PlatformConfig(
             url=URL("http://platformconfig"), token="platform-config-token"
         ),
-        platform_apps=PlatformAppsConfig(
-            url=URL("http://platform-apps"), token="platform-apps-token"
+        platform_apps=AppsClientConfig(
+            url="http://platform-apps", token="platform-apps-token"
         ),
         elasticsearch=ElasticsearchConfig(hosts=["http://es1", "http://es2"]),
         logs=LogsConfig(storage_type=LogsStorageType.ELASTICSEARCH),
@@ -242,3 +243,29 @@ def test_create_with_logs_interval_custom(environ: dict[str, Any]) -> None:
 def test_registry_config_host(url: URL, expected_host: str) -> None:
     config = RegistryConfig(url)
     assert config.host == expected_host
+
+
+def test_create_resources_monitor(environ: dict[str, Any], token_path: str) -> None:
+    config = EnvironConfigFactory(environ).create_resources_monitor()
+    assert config == ResourcesMonitorConfig(
+        server=ServerConfig(host="0.0.0.0", port=8080),
+        platform_config=PlatformConfig(
+            url=URL("http://platformconfig"), token="platform-config-token"
+        ),
+        kube=KubeConfig(
+            endpoint_url="https://localhost:8443",
+            cert_authority_data_pem=CA_DATA_PEM,
+            auth_type=KubeClientAuthType.TOKEN,
+            token=TOKEN,
+            token_path=token_path,
+            auth_cert_path="/cert_path",
+            auth_cert_key_path="/cert_key_path",
+            namespace="other-namespace",
+            client_conn_timeout_s=111,
+            client_read_timeout_s=222,
+            client_conn_pool_size=333,
+            kubelet_node_port=12321,
+            nvidia_dcgm_node_port=12322,
+        ),
+        cluster_name="default",
+    )

@@ -14,8 +14,6 @@ function minikube::start {
         --wait=all \
         --wait-timeout=5m
     kubectl config use-context minikube
-    kubectl get nodes -o name | xargs -I {} kubectl label {} --overwrite \
-        platform.neuromation.io/nodepool=minikube
 }
 
 function minikube::load_images {
@@ -26,6 +24,8 @@ function minikube::load_images {
 function minikube::apply_all_configurations {
     echo "Applying configurations..."
     kubectl config use-context minikube
+    kubectl get nodes -o name | xargs -I {} \
+        kubectl label {} --overwrite platform.neuromation.io/nodepool=minikube
     kubectl apply -f tests/k8s/rbac.yml
     kubectl apply -f tests/k8s/logging.yml
     kubectl apply -f tests/k8s/platformauth.yml

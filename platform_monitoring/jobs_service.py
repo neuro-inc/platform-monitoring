@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import aiohttp
 from apolo_api_client import ApiClient, Job
-from neuro_config_client import ConfigClient, ResourcePoolType
+from neuro_config_client import ConfigClient, ResourcePoolType, ResourcePreset
 
 from .config import KubeConfig
 from .container_runtime_client import (
@@ -208,17 +208,11 @@ class JobsService:
     async def get_available_jobs_counts(self) -> Mapping[str, int]:
         result: dict[str, int] = {}
         cluster = await self._config_client.get_cluster(self._cluster_name)
-        assert cluster.orchestrator is not None
         available_resources = await self._get_available_resources_by_node_pool()
         pool_types = {p.name: p for p in cluster.orchestrator.resource_pool_types}
         for preset in cluster.orchestrator.resource_presets:
             available_jobs_count = 0
-            preset_resources = ContainerResources(
-                cpu_m=int(preset.cpu * 1000),
-                memory=preset.memory,
-                nvidia_gpu=preset.nvidia_gpu or 0,
-                amd_gpu=preset.amd_gpu or 0,
-            )
+            preset_resources = self._create_resources_from_preset(preset)
             node_pools = [pool_types[r] for r in preset.available_resource_pool_names]
             for node_pool in node_pools:
                 node_resource_limit = self._get_node_resource_limit(node_pool)
@@ -231,8 +225,8 @@ class JobsService:
                 # in the current node pool
                 for node_available_resources in node_pool_available_resources:
                     available_jobs_count += min(
-                        node_available_resources // preset_resources,
                         node_available_resources.pods,
+                        node_available_resources // preset_resources,
                     )
                 # get number of jobs that can be scheduled on free nodes
                 # in the current node pool
@@ -243,6 +237,22 @@ class JobsService:
                     )
             result[preset.name] = available_jobs_count
         return result
+
+    @classmethod
+    def _create_resources_from_preset(
+        cls, preset: ResourcePreset
+    ) -> ContainerResources:
+        return ContainerResources(
+            cpu_m=int(preset.cpu * 1000),
+            memory=preset.memory,
+            nvidia_gpu=preset.nvidia_gpu.count if preset.nvidia_gpu else 0,
+            nvidia_migs=(
+                {key: value.count for key, value in preset.nvidia_migs.items()}
+                if preset.nvidia_migs
+                else {}
+            ),
+            amd_gpu=preset.amd_gpu.count if preset.amd_gpu else 0,
+        )
 
     async def _get_available_resources_by_node_pool(
         self,
@@ -258,21 +268,21 @@ class JobsService:
                 ),
             ),
         )
+        pods_by_node = self._get_pods_by_node(pods)
         nodes = await self._kube_client.get_nodes(
             label_selector=self._kube_node_pool_label
         )
-        nodes_by_name = {node.metadata.name: node for node in nodes}
-        for node_name, node_pods in self._get_pods_by_node(pods).items():
-            if not (node := nodes_by_name.get(node_name)):
-                continue
+        for node in nodes:
+            assert node.metadata.name
+            available_resources = node.status.allocatable
+            node_pods = pods_by_node.get(node.metadata.name, [])
+            if node_pods:
+                pod_resource_requests = sum(
+                    (pod.resource_requests for pod in node_pods), ContainerResources()
+                )
+                available_resources -= pod_resource_requests
+                available_resources = available_resources.reduce_pods(len(node_pods))
             node_pool_name = node.metadata.labels[self._kube_node_pool_label]
-            resource_requests = sum(
-                (pod.resource_requests for pod in node_pods), ContainerResources()
-            )
-            available_resources = node.status.allocatable - resource_requests
-            available_resources = available_resources.with_pods(
-                available_resources.pods - len(node_pods)
-            )
             result[node_pool_name].append(available_resources)
         return result
 
@@ -289,6 +299,11 @@ class JobsService:
         return ContainerResources(
             cpu_m=int(node_pool.available_cpu * 1000),
             memory=node_pool.available_memory,
-            nvidia_gpu=node_pool.nvidia_gpu or 0,
-            amd_gpu=node_pool.amd_gpu or 0,
+            nvidia_gpu=node_pool.nvidia_gpu.count if node_pool.nvidia_gpu else 0,
+            nvidia_migs=(
+                {key: value.count for key, value in node_pool.nvidia_migs.items()}
+                if node_pool.nvidia_migs
+                else {}
+            ),
+            amd_gpu=node_pool.amd_gpu.count if node_pool.amd_gpu else 0,
         )
