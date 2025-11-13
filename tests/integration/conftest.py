@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
-from uuid import uuid1
+from uuid import uuid1, uuid4
 
 import aiohttp
 import aiohttp.web
@@ -124,17 +124,18 @@ async def container_runtime_config(in_minikube: bool) -> ContainerRuntimeConfig:
         "platform-container-runtime", url / "api/v1/ping", timeout_s=120
     )
     assert url.port
-    return ContainerRuntimeConfig(port=url.port)
+    return ContainerRuntimeConfig(
+        port=url.port, host=None if in_minikube else "localhost"
+    )
 
 
 @pytest.fixture
 async def container_runtime_client_registry(
     *,
-    in_minikube: bool,
     container_runtime_config: ContainerRuntimeConfig,
 ) -> AsyncIterator[ContainerRuntimeClientRegistry]:
     async with ContainerRuntimeClientRegistry(
-        container_runtime_port=container_runtime_config.port
+        container_runtime_port=container_runtime_config.port,
     ) as registry:
         yield registry
 
@@ -347,3 +348,13 @@ def get_service_url(service_name: str, namespace: str = "default") -> str:
         timeout_s -= interval_s
 
     pytest.fail(f"Service {service_name} is unavailable.")
+
+
+@pytest.fixture
+def org_name() -> str:
+    return uuid4().hex
+
+
+@pytest.fixture
+def project_name() -> str:
+    return uuid4().hex

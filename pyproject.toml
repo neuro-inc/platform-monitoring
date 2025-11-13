@@ -21,7 +21,7 @@ dependencies = [
     "aiobotocore==2.22.0",
     "aiohttp[speedups]==3.12.14",
     "aioitertools==0.12.0",
-    "apolo-api-client==25.6.0",
+    "apolo-api-client (>=25.6.0,<26.0.0)",
     "cachetools==5.5.2",
     "docker-image-py==0.1.13",
     "elasticsearch<8.0.0",

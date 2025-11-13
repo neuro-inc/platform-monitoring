@@ -57,7 +57,7 @@ from platform_monitoring.kube_client import get_pod, wait_pod_is_running
 
 from .conftest import ApiAddress, create_local_app_server, random_str
 from .conftest_admin import ProjectUser
-from .conftest_kube import MyKubeClient, wait_pod_is_terminated
+from .conftest_kube import wait_pod_is_terminated
 
 
 logger = logging.getLogger(__name__)
@@ -846,16 +846,21 @@ class TestSaveApi:
         client: aiohttp.ClientSession,
         jobs_client: JobsClient,
         infinite_job: tuple[str, str],
+        regular_user1: ProjectUser,
         config: Config,
-        kube_client: MyKubeClient,
+        kube_client_selector: KubeClientSelector,
     ) -> None:
         job_id, namespace = infinite_job
         await jobs_client.delete_job(job_id)
-        await kube_client.wait_pod_is_terminated(
-            pod_name=job_id,
-            namespace=namespace,
-            allow_pod_not_exists=True,
-        )
+        async with kube_client_selector.get_client(
+            org_name=regular_user1.org_name,
+            project_name=regular_user1.project_name,
+        ) as kube_client:
+            await wait_pod_is_terminated(
+                kube_client,
+                pod_name=job_id,
+                allow_pod_not_exists=True,
+            )
 
         url = monitoring_api.generate_save_url(job_id=job_id)
         headers = jobs_client.headers
@@ -1581,7 +1586,6 @@ async def apps_basic_pod_v2(
 def _get_app_mock(
     monkeypatch: pytest.MonkeyPatch,
     regular_user1: ProjectUser,
-    kube_client: MyKubeClient,
     app_name: str,
 ) -> None:
     async def mock_get_app(*args: Any, **kwargs: Any) -> AppInstance:

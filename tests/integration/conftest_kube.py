@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import asyncio
 import json
-import shlex
 import subprocess
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import pytest
 from _pytest.fixtures import FixtureRequest
@@ -14,13 +16,17 @@ from apolo_kube_client import (
     KubeClientSelector,
     KubeConfig as ApoloKubeConfig,
     ResourceNotFound,
+    V1Container,
+    V1HostPathVolumeSource,
+    V1ObjectMeta,
+    V1Pod,
+    V1PodSpec,
+    V1ResourceRequirements,
+    V1Volume,
 )
 
-from platform_monitoring.config import KubeConfig
+from platform_monitoring.config import KubeClientAuthType, KubeConfig
 from platform_monitoring.kube_client import (
-    JobNotFoundException,
-    KubeClient,
-    KubeClientAuthType,
     Node,
     get_container_status,
 )
@@ -34,158 +40,6 @@ def in_docker() -> bool:
 @pytest.fixture(scope="session")
 def in_minikube(in_docker: bool) -> bool:  # noqa: FBT001
     return in_docker
-
-
-class MyKubeClient(KubeClient):
-    # TODO (A Yushkovskiy, 30-May-2019) delete pods automatically
-
-    async def create_pod(self, job_pod_descriptor: dict[str, Any]) -> str:
-        payload = await self._request(
-            method="POST",
-            url=self._namespaced_pods_url(self.namespace),
-            json=job_pod_descriptor,
-        )
-        self._assert_resource_kind(expected_kind="Pod", payload=payload)
-        return self._parse_pod_status(payload)
-
-    async def delete_pod(self, pod_name: str, *, force: bool = False) -> str:
-        url = self._generate_pod_url(pod_name, self.namespace)
-        request_payload = None
-        if force:
-            request_payload = {
-                "apiVersion": "v1",
-                "kind": "DeleteOptions",
-                "gracePeriodSeconds": 0,
-            }
-        payload = await self._request(method="DELETE", url=url, json=request_payload)
-        self._assert_resource_kind(expected_kind="Pod", payload=payload)
-        return self._parse_pod_status(payload)
-
-    def _parse_pod_status(self, payload: dict[str, Any]) -> str:
-        if "status" in payload:
-            return payload["status"]
-        msg = f"Missing pod status: `{payload}`"
-        raise ValueError(msg)
-
-    async def wait_pod_is_terminated(
-        self,
-        pod_name: str,
-        container_name: str | None = None,
-        namespace: str | None = None,
-        timeout_s: float = 10.0 * 60,
-        interval_s: float = 1.0,
-        *,
-        allow_pod_not_exists: bool = False,
-    ) -> None:
-        namespace = namespace or self.namespace
-        try:
-            async with asyncio.timeout(timeout_s):
-                while True:
-                    try:
-                        state = await self._get_raw_container_state(
-                            pod_name, container_name=container_name, namespace=namespace
-                        )
-
-                    except JobNotFoundException:
-                        # job's pod does not exist: maybe it's already garbage-collected
-                        if allow_pod_not_exists:
-                            return
-                        raise
-                    is_terminated = bool(state) and "terminated" in state
-                    if is_terminated:
-                        return
-                    await asyncio.sleep(interval_s)
-        except TimeoutError:
-            pytest.fail(f"Pod {pod_name} has not terminated yet")
-
-    async def wait_pod_is_deleted(
-        self,
-        pod_name: str,
-        timeout_s: float = 10.0 * 60,
-        interval_s: float = 1.0,
-    ) -> None:
-        try:
-            async with asyncio.timeout(timeout_s):
-                while await self.check_pod_exists(pod_name):  # noqa: ASYNC110
-                    await asyncio.sleep(interval_s)
-        except TimeoutError:
-            pytest.fail(f"Pod {pod_name} has not deleted yet")
-
-    async def get_node_list(self) -> dict[str, Any]:
-        url = f"{self._api_v1_url}/nodes"
-        return await self._request(method="GET", url=url)
-
-    async def wait_container_is_restarted(
-        self,
-        name: str,
-        count: int = 1,
-        *,
-        timeout_s: float = 10.0 * 60,
-        interval_s: float = 1.0,
-    ) -> None:
-        try:
-            async with asyncio.timeout(timeout_s):
-                while True:
-                    status = await self.get_container_status(name)
-                    if status.restart_count >= count:
-                        break
-                    await asyncio.sleep(interval_s)
-        except TimeoutError:
-            pytest.fail(f"Container {name} has not restarted yet")
-
-
-class MyPodDescriptor:
-    def __init__(self, job_id: str, **kwargs: dict[str, Any]) -> None:
-        self._payload: dict[str, Any] = {
-            "kind": "Pod",
-            "apiVersion": "v1",
-            "metadata": {
-                "name": job_id,
-                "labels": {"job": job_id},
-                "namespace": "default",
-            },
-            "spec": {
-                "containers": [
-                    {
-                        "name": job_id,
-                        "image": "ubuntu:20.10",
-                        "env": [],
-                        "volumeMounts": [],
-                        "terminationMessagePolicy": "FallbackToLogsOnError",
-                        "args": ["true"],
-                        "resources": {"limits": {"cpu": "100m", "memory": "128Mi"}},
-                    }
-                ],
-                "volumes": [
-                    {
-                        "name": "storage",
-                        "hostPath": {"path": "/tmp", "type": "Directory"},
-                    }
-                ],
-                "restartPolicy": "Never",
-                "imagePullSecrets": [],
-                "tolerations": [],
-            },
-            **kwargs,
-        }
-
-    def set_image(self, image: str) -> None:
-        self._payload["spec"]["containers"][0]["image"] = image
-
-    def set_command(self, command: str) -> None:
-        self._payload["spec"]["containers"][0]["args"] = shlex.split(command)
-
-    def set_restart_policy(self, policy: str) -> None:
-        self._payload["spec"]["restartPolicy"]
-        self._payload["spec"]["restartPolicy"] = policy
-
-    @property
-    def payload(self) -> dict[str, Any]:
-        return self._payload
-
-    @property
-    def name(self) -> str:
-        return self._payload["metadata"]["name"]
 
 
 @pytest.fixture(scope="session")
@@ -282,31 +136,10 @@ async def kube_client_selector(
 
 
 @pytest.fixture
-async def kube_client(kube_config: KubeConfig) -> AsyncIterator[MyKubeClient]:
-    # TODO (A Danshyn 06/06/18): create a factory method
-    client = MyKubeClient(
-        base_url=kube_config.endpoint_url,
-        auth_type=kube_config.auth_type,
-        cert_authority_data_pem=kube_config.cert_authority_data_pem,
-        cert_authority_path=None,  # disabled, see `cert_authority_data_pem`
-        auth_cert_path=kube_config.auth_cert_path,
-        auth_cert_key_path=kube_config.auth_cert_key_path,
-        token_path=kube_config.token_path,
-        token=kube_config.token,
-        namespace=kube_config.namespace,
-        conn_timeout_s=kube_config.client_conn_timeout_s,
-        read_timeout_s=kube_config.client_read_timeout_s,
-        conn_pool_size=kube_config.client_conn_pool_size,
-    )
-    async with client:
-        yield client
-
-
-@pytest.fixture
-async def _kube_node(kube_client: KubeClient) -> Node:
-    nodes = await kube_client.get_nodes()
-    assert len(nodes) == 1, "Should be exactly one minikube node"
-    return nodes[0]
+async def _kube_node(kube_client_selector: KubeClientSelector) -> Node:
+    nodes = await kube_client_selector.host_client.core_v1.node.get_list()
+    assert len(nodes.items) == 1, "Should be exactly one minikube node"
+    return Node.from_model(nodes.items[0])
 
 
 @pytest.fixture
@@ -386,3 +219,40 @@ async def wait_container_is_restarted(
                 await asyncio.sleep(interval_s)
     except TimeoutError:
         pytest.fail(f"Container {name} has not restarted yet")
+
+
+@pytest.fixture
+def job_pod() -> V1Pod:
+    job_id = f"job-{uuid4()}"
+    return V1Pod(
+        metadata=V1ObjectMeta(
+            name=job_id,
+            labels={"job": job_id},
+        ),
+        spec=V1PodSpec(
+            tolerations=[],
+            image_pull_secrets=[],
+            restart_policy="Never",
+            volumes=[
+                V1Volume(
+                    name="storage",
+                    host_path=V1HostPathVolumeSource(path="/tmp", type="Directory"),
+                )
+            ],
+            containers=[
+                V1Container(
+                    name=job_id,
+                    image="ubuntu:20.10",
+                    env=[],
+                    volume_mounts=[],
+                    termination_message_policy="FallbackToLogsOnError",
+                    args=[
+                        "true",
+                    ],
+                    resources=V1ResourceRequirements(
+                        limits={"cpu": "100m", "memory": "128Mi"}
+                    ),
+                )
+            ],
+        ),
+    )

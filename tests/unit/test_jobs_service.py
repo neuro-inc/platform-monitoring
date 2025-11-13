@@ -1,12 +1,26 @@
+import asyncio
 import datetime
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from decimal import Decimal
+from types import SimpleNamespace
 from typing import Any
 from unittest import mock
 
 import pytest
 from apolo_api_client import ApiClient
+from apolo_kube_client import (
+    KubeClientSelector,
+    V1Container,
+    V1Node,
+    V1NodeStatus,
+    V1NodeSystemInfo,
+    V1ObjectMeta,
+    V1Pod,
+    V1PodSpec,
+    V1PodStatus,
+    V1ResourceRequirements,
+)
 from neuro_config_client import (
     AMDGPU,
     ACMEEnvironment,
@@ -34,7 +48,7 @@ from yarl import URL
 
 from platform_monitoring.container_runtime_client import ContainerRuntimeClientRegistry
 from platform_monitoring.jobs_service import JobsService
-from platform_monitoring.kube_client import KubeClient, Node, Pod
+from platform_monitoring.kube_client import Node, Pod
 
 
 def create_node(
@@ -46,16 +60,28 @@ def create_node(
     nvidia_mig: dict[str, int] | None = None,
     amd_gpu: int = 0,
 ) -> Node:
-    return Node.from_primitive(
-        {
-            "metadata": {
-                "name": node_name,
-                "labels": {
+    return Node.from_model(
+        V1Node(
+            metadata=V1ObjectMeta(
+                name=node_name,
+                labels={
                     "platform.neuromation.io/nodepool": node_pool_name,
                 },
-            },
-            "status": {
-                "allocatable": {
+            ),
+            status=V1NodeStatus(
+                node_info=V1NodeSystemInfo(
+                    architecture="a",
+                    boot_id="b",
+                    kernel_version="k",
+                    kube_proxy_version="1",
+                    kubelet_version="1",
+                    machine_id="1",
+                    operating_system="os",
+                    os_image="i",
+                    system_uuid="u",
+                    container_runtime_version="containerd",
+                ),
+                allocatable={
                     "cpu": str(cpu),
                     "memory": str(memory),
                     "nvidia.com/gpu": str(nvidia_gpu),
@@ -65,9 +91,8 @@ def create_node(
                     },
                     "amd.com/gpu": str(amd_gpu),
                 },
-                "nodeInfo": {"containerRuntimeVersion": "containerd"},
-            },
-        }
+            ),
+        )
     )
 
 
@@ -109,21 +134,30 @@ def create_pod(
             resources[f"nvidia.com/mig-{profile_name}"] = str(count)
     if amd_gpu:
         resources["amd.com/gpu"] = str(amd_gpu)
-    payload: dict[str, Any] = {
-        "metadata": {
-            "name": job_id,
-            "labels": {"job": job_id, "platform.neuromation.io/job": job_id},
-        },
-        "spec": {
-            "containers": [
-                {"name": "container_name", "resources": {"requests": resources}}
-            ]
-        },
-        "status": {"phase": "Running"},
-    }
+
+    spec = V1PodSpec(
+        containers=[
+            V1Container(
+                name="container_name",
+                resources=V1ResourceRequirements(requests=resources),
+            )
+        ]
+    )
     if node_name:
-        payload["spec"]["nodeName"] = node_name
-    return Pod.from_primitive(payload)
+        spec.node_name = node_name
+
+    pod = V1Pod(
+        metadata=V1ObjectMeta(
+            name=job_id,
+            labels={
+                "job": job_id,
+                "platform.neuromation.io/job": job_id,
+            },
+        ),
+        spec=spec,
+        status=V1PodStatus(phase="Running"),
+    )
+    return Pod.from_model(pod)
 
 
 @pytest.fixture
@@ -248,8 +282,116 @@ def jobs_client() -> mock.Mock:
 
 
 @pytest.fixture
-def kube_client() -> mock.Mock:
-    async def get_nodes(label_selector: str = "") -> Sequence[Node]:
+def kube_client_selector() -> KubeClientSelector:  # noqa: C901
+    class AsyncFn:
+        def __init__(self) -> None:
+            self.side_effect: Any | None = None
+
+        async def __call__(self, *args: Any, **kwargs: Any) -> Any:
+            fn = self.side_effect
+            if fn is None:
+                return []
+            res = fn(*args, **kwargs)
+            if asyncio.iscoroutine(res):
+                return await res
+            return res
+
+    def _to_v1_pod_list(pods: Sequence[Pod]) -> Any:
+        items: list[Any] = []
+        for p in pods:
+            meta = SimpleNamespace(
+                name=p.metadata.name,
+                labels=dict(p.metadata.labels),
+                annotations=dict(p.metadata.annotations),
+                resource_version=p.metadata.resource_version,
+            )
+            containers: list[Any] = []
+            for c in p.spec.containers:
+                reqs: dict[str, Any] = {
+                    "cpu": f"{c.resource_requests.cpu_m}m",
+                    "memory": c.resource_requests.memory,
+                }
+                if c.resource_requests.nvidia_gpu:
+                    reqs["nvidia.com/gpu"] = str(c.resource_requests.nvidia_gpu)
+                for k, v in c.resource_requests.nvidia_migs.items():
+                    reqs[f"nvidia.com/mig-{k}"] = str(v)
+                if c.resource_requests.amd_gpu:
+                    reqs["amd.com/gpu"] = str(c.resource_requests.amd_gpu)
+                containers.append(
+                    SimpleNamespace(
+                        name=c.name,
+                        resources=SimpleNamespace(requests=reqs),
+                        stdin=None,
+                        stdin_once=None,
+                        tty=None,
+                    )
+                )
+            spec = SimpleNamespace(
+                node_name=p.spec.node_name, restart_policy=None, containers=containers
+            )
+            status = SimpleNamespace(
+                phase="Running", pod_ip=None, host_ip=None, container_statuses=[]
+            )
+            items.append(SimpleNamespace(metadata=meta, spec=spec, status=status))
+        return SimpleNamespace(items=items)
+
+    def _to_v1_node_list(nodes: Sequence[Node]) -> Any:
+        items: list[Any] = []
+        for n in nodes:
+            meta = SimpleNamespace(
+                name=n.metadata.name,
+                labels=dict(n.metadata.labels),
+                resource_version=None,
+                annotations={},
+            )
+            alloc = n.status.allocatable
+            alloc_map: dict[str, Any] = {
+                "cpu": f"{alloc.cpu_m}m",
+                "memory": alloc.memory,
+                "pods": alloc.pods,
+            }
+            if alloc.nvidia_gpu:
+                alloc_map["nvidia.com/gpu"] = str(alloc.nvidia_gpu)
+            for k, v in (alloc.nvidia_migs or {}).items():
+                alloc_map[f"nvidia.com/mig-{k}"] = str(v)
+            if alloc.amd_gpu:
+                alloc_map["amd.com/gpu"] = str(alloc.amd_gpu)
+            status = SimpleNamespace(
+                capacity=alloc_map,
+                allocatable=alloc_map,
+                node_info=SimpleNamespace(container_runtime_version="containerd"),
+            )
+            items.append(SimpleNamespace(metadata=meta, status=status))
+        return SimpleNamespace(items=items)
+
+    host_client = SimpleNamespace()
+    host_client.get_pods = AsyncFn()
+    host_client.get_nodes = AsyncFn()
+
+    async def _pods_get_list(
+        *,
+        all_namespaces: bool | None = None,
+        label_selector: str | None = None,
+        field_selector: str | None = None,
+        namespace: str | None = None,
+    ) -> Any:  # noqa: ARG001, E501
+        pods = await host_client.get_pods(
+            all_namespaces=bool(all_namespaces),
+            label_selector=label_selector,
+            field_selector=field_selector,
+        )
+        return _to_v1_pod_list(pods)
+
+    async def _nodes_get_list(*, label_selector: str | None = None) -> Any:
+        nodes = await host_client.get_nodes(label_selector=label_selector or "")
+        return _to_v1_node_list(nodes)
+
+    host_client.core_v1 = SimpleNamespace(
+        pod=SimpleNamespace(get_list=_pods_get_list),
+        node=SimpleNamespace(get_list=_nodes_get_list),
+    )
+
+    async def _default_get_nodes(label_selector: str = "") -> Sequence[Node]:
         assert label_selector == "platform.neuromation.io/nodepool"
         return [
             create_node("minikube-cpu", "minikube-cpu-1", cpu=1, memory=2**30),
@@ -288,22 +430,37 @@ def kube_client() -> mock.Mock:
             ),
         ]
 
-    client = mock.Mock(spec=KubeClient)
-    client.get_nodes.side_effect = get_nodes
-    client.get_pods.side_effect = get_pods_factory()
-    return client
+    host_client.get_nodes.side_effect = _default_get_nodes
+    host_client.get_pods.side_effect = get_pods_factory()
+
+    class _ACM:
+        async def __aenter__(self) -> Any:
+            return host_client
+
+        async def __aexit__(self, *args: object) -> None:  # noqa: ARG002
+            return None
+
+    def get_client(*, org_name: str, project_name: str) -> Any:  # noqa: ARG001
+        return _ACM()
+
+    return SimpleNamespace(host_client=host_client, get_client=get_client)  # type: ignore[return-value]
+
+
+@pytest.fixture
+def kube_client(kube_client_selector: KubeClientSelector) -> Any:
+    return kube_client_selector.host_client
 
 
 @pytest.fixture
 def service(
     config_client: ConfigClient,
     jobs_client: ApiClient,
-    kube_client: KubeClient,
+    kube_client_selector: KubeClientSelector,
 ) -> JobsService:
     return JobsService(
         config_client=config_client,
         jobs_client=jobs_client,
-        kube_client=kube_client,
+        kube_client_selector=kube_client_selector,
         container_runtime_client_registry=ContainerRuntimeClientRegistry(
             container_runtime_port=9000,
         ),
@@ -313,9 +470,9 @@ def service(
 
 class TestJobsService:
     async def test_get_available_jobs_count(
-        self, service: JobsService, kube_client: mock.Mock
+        self, service: JobsService, kube_client_selector: mock.Mock
     ) -> None:
-        kube_client.get_pods.side_effect = get_pods_factory(
+        kube_client_selector.host_client.get_pods.side_effect = get_pods_factory(
             create_pod("minikube-cpu-1", cpu_m=50, memory=128 * 2**20),
             create_pod("minikube-gpu-1", cpu_m=100, memory=256 * 2**20, nvidia_gpu=1),
             create_pod("minikube-cpu-2", cpu_m=50, memory=128 * 2**20),

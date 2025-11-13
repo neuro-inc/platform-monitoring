@@ -15,13 +15,7 @@ from apolo_kube_client import (
     KubeClientException,
     KubeClientProxy,
     KubeClientSelector,
-    V1Container,
-    V1HostPathVolumeSource,
-    V1ObjectMeta,
     V1Pod,
-    V1PodSpec,
-    V1ResourceRequirements,
-    V1Volume,
 )
 from elasticsearch import AsyncElasticsearch
 
@@ -53,53 +47,6 @@ from tests.integration.conftest_kube import (
 
 
 logger = logging.getLogger(__name__)
-
-
-@pytest.fixture
-def job_pod() -> V1Pod:
-    job_id = f"job-{uuid4()}"
-    return V1Pod(
-        metadata=V1ObjectMeta(
-            name=job_id,
-            labels={"job": job_id},
-        ),
-        spec=V1PodSpec(
-            tolerations=[],
-            image_pull_secrets=[],
-            restart_policy="Never",
-            volumes=[
-                V1Volume(
-                    name="storage",
-                    host_path=V1HostPathVolumeSource(path="/tmp", type="Directory"),
-                )
-            ],
-            containers=[
-                V1Container(
-                    name=job_id,
-                    image="ubuntu:20.10",
-                    env=[],
-                    volume_mounts=[],
-                    termination_message_policy="FallbackToLogsOnError",
-                    args=[
-                        "true",
-                    ],
-                    resources=V1ResourceRequirements(
-                        limits={"cpu": "100m", "memory": "128Mi"}
-                    ),
-                )
-            ],
-        ),
-    )
-
-
-@pytest.fixture
-def org_name() -> str:
-    return uuid4().hex
-
-
-@pytest.fixture
-def project_name() -> str:
-    return uuid4().hex
 
 
 @pytest.fixture

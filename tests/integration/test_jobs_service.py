@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 from apolo_api_client import ApiClient
+from apolo_kube_client import KubeClientSelector
 from apolo_sdk import (
     Client as JobsClient,
     Container as JobContainer,
@@ -28,7 +29,6 @@ from platform_monitoring.container_runtime_client import ContainerRuntimeClientR
 from platform_monitoring.jobs_service import JobException, JobsService
 
 from .conftest_admin import ProjectUser
-from .conftest_kube import MyKubeClient
 
 
 # arguments: (image, command, resources)
@@ -117,14 +117,14 @@ class TestJobsService:
         self,
         platform_config_client: ConfigClient,
         platform_api_client: ApiClient,
-        kube_client: MyKubeClient,
+        kube_client_selector: KubeClientSelector,
         container_runtime_client_registry: ContainerRuntimeClientRegistry,
         cluster_name: str,
     ) -> JobsService:
         return JobsService(
             config_client=platform_config_client,
             jobs_client=platform_api_client,
-            kube_client=kube_client,
+            kube_client_selector=kube_client_selector,
             container_runtime_client_registry=container_runtime_client_registry,
             cluster_name=cluster_name,
         )

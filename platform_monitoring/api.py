@@ -12,6 +12,7 @@ import aiohttp.hdrs
 import aiohttp.web
 from aiobotocore.client import AioBaseClient
 from aiobotocore.config import AioConfig
+from aiohttp import WSCloseCode
 from aiohttp.client_ws import ClientWebSocketResponse
 from aiohttp.web import (
     HTTPBadRequest,
@@ -48,7 +49,6 @@ from .base import JobStats, Telemetry
 from .config import (
     Config,
     ElasticsearchConfig,
-    KubeConfig,
     LogsStorageType,
     LokiConfig,
     S3Config,
@@ -60,7 +60,7 @@ from .container_runtime_client import (
     ContainerRuntimeClientRegistry,
 )
 from .jobs_service import JobException, JobNotRunningException, JobsService
-from .kube_client import KubeClient, KubeTelemetry
+from .kube_client import KubeTelemetry, TelemetryError
 from .logs import (
     DEFAULT_ARCHIVE_DELAY,
     ElasticsearchLogsService,
@@ -94,7 +94,6 @@ K8S_LABEL_APOLO_APP_INSTANCE_NAME = "platform.apolo.us/app-instance-name"
 
 
 CONFIG_KEY = aiohttp.web.AppKey("config", Config)
-KUBE_CLIENT_KEY = aiohttp.web.AppKey("kube_client", KubeClient)
 KUBE_CLIENT_SELECTOR = aiohttp.web.AppKey("apolo_kube_client", KubeClientSelector)
 LOKI_CLIENT_KEY = aiohttp.web.AppKey("loki_client", LokiClient)
 JOBS_SERVICE_KEY = aiohttp.web.AppKey("jobs_service", JobsService)
@@ -113,7 +112,11 @@ logger = logging.getLogger(__name__)
 
 
 class MonitoringApiHandler:
-    def __init__(self, app: aiohttp.web.Application, config: Config) -> None:
+    def __init__(
+        self,
+        app: aiohttp.web.Application,
+        config: Config,
+    ) -> None:
         self._app = app
         self._config = config
         self._jobs_helper = JobsHelper()
@@ -126,6 +129,8 @@ class MonitoringApiHandler:
         self._exec_create_request_payload_validator = (
             create_exec_create_request_payload_validator()
         )
+        self._kubelet_port = config.kube.kubelet_node_port
+        self._nvidia_dcgm_port = config.kube.nvidia_dcgm_node_port
 
     def register(self, app: aiohttp.web.Application) -> None:
         app.add_routes(
@@ -152,8 +157,8 @@ class MonitoringApiHandler:
         return self._app[JOBS_SERVICE_KEY]
 
     @property
-    def _kube_client(self) -> KubeClient:
-        return self._app[KUBE_CLIENT_KEY]
+    def _kube_client_selector(self) -> KubeClientSelector:
+        return self._app[KUBE_CLIENT_SELECTOR]
 
     @property
     def _loki_client(self) -> LokiClient:
@@ -301,7 +306,13 @@ class MonitoringApiHandler:
                 break
 
             if self._jobs_helper.is_job_running(job):
-                job_stats = await telemetry.get_latest_stats()
+                try:
+                    job_stats = await telemetry.get_latest_stats()
+                except TelemetryError as e:
+                    await ws.close(
+                        code=WSCloseCode.INTERNAL_ERROR, message=str(e).encode("utf-8")
+                    )
+                    return
                 if ws.closed:
                     break
                 if job_stats:
@@ -338,11 +349,16 @@ class MonitoringApiHandler:
 
     async def _get_job_telemetry(self, job: Job) -> Telemetry:
         pod_name = self._kube_helper.get_job_pod_name(job)
+        assert job.org_name, "job must be linked to an org"
         return KubeTelemetry(
-            self._kube_client,
+            self._kube_client_selector,
             namespace_name=job.namespace,
+            org_name=job.org_name,
+            project_name=job.project_name,
             pod_name=pod_name,
             container_name=pod_name,
+            kubelet_node_port=self._kubelet_port,
+            nvidia_dcgm_node_port=self._nvidia_dcgm_port,
         )
 
     def _convert_job_stats_to_ws_message(self, job_stats: JobStats) -> dict[str, Any]:
@@ -935,34 +951,6 @@ async def create_platform_apps_api_client(
 
 
 @asynccontextmanager
-async def create_kube_client(
-    config: KubeConfig, trace_configs: list[aiohttp.TraceConfig] | None = None
-) -> AsyncIterator[KubeClient]:
-    client = KubeClient(
-        base_url=config.endpoint_url,
-        namespace=config.namespace,
-        cert_authority_path=config.cert_authority_path,
-        cert_authority_data_pem=config.cert_authority_data_pem,
-        auth_type=config.auth_type,
-        auth_cert_path=config.auth_cert_path,
-        auth_cert_key_path=config.auth_cert_key_path,
-        token=config.token,
-        token_path=config.token_path,
-        conn_timeout_s=config.client_conn_timeout_s,
-        read_timeout_s=config.client_read_timeout_s,
-        conn_pool_size=config.client_conn_pool_size,
-        kubelet_node_port=config.kubelet_node_port,
-        nvidia_dcgm_node_port=config.nvidia_dcgm_node_port,
-        trace_configs=trace_configs,
-    )
-    try:
-        await client.init()
-        yield client
-    finally:
-        await client.close()
-
-
-@asynccontextmanager
 async def create_loki_client(config: LokiConfig) -> AsyncIterator[LokiClient]:
     client = LokiClient(
         base_url=config.endpoint_url,
@@ -1107,12 +1095,7 @@ async def create_app(config: Config) -> aiohttp.web.Application:
                     create_loki_client(config.loki)
                 )
 
-            logger.info("Initializing Kubernetes client")
-            kube_client = await exit_stack.enter_async_context(
-                create_kube_client(config.kube)
-            )
-            app[MONITORING_APP_KEY][KUBE_CLIENT_KEY] = kube_client
-
+            logger.info("Initializing Kube Selector")
             apolo_kube_config = ApoloKubeConfig(
                 endpoint_url=config.kube.endpoint_url,
                 cert_authority_data_pem=config.kube.cert_authority_data_pem,
@@ -1156,7 +1139,7 @@ async def create_app(config: Config) -> aiohttp.web.Application:
             jobs_service = JobsService(
                 config_client=config_client,
                 jobs_client=platform_api_client,
-                kube_client=kube_client,
+                kube_client_selector=kube_client_selector,
                 container_runtime_client_registry=container_runtime_client_registry,
                 cluster_name=config.cluster_name,
                 kube_node_pool_label=config.kube.node_pool_label,
