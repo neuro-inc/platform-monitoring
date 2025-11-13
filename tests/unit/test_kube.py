@@ -4,6 +4,18 @@ from unittest import mock
 
 import aiohttp
 import pytest
+from apolo_kube_client import (
+    V1Container,
+    V1ContainerStatus,
+    V1Node,
+    V1NodeStatus,
+    V1NodeSystemInfo,
+    V1ObjectMeta,
+    V1Pod,
+    V1PodSpec,
+    V1PodStatus,
+    V1ResourceRequirements,
+)
 
 from platform_monitoring.kube_client import (
     ContainerResources,
@@ -24,45 +36,63 @@ from platform_monitoring.logs import filter_out_rpc_error
 
 class TestPod:
     def test_no_node_name(self) -> None:
-        pod = Pod.from_primitive({"metadata": {"name": "pod"}, "spec": {}})
+        pod = Pod.from_model(
+            V1Pod(
+                metadata=V1ObjectMeta(name="pod"),
+                spec=V1PodSpec(containers=[]),
+            )
+        )
         assert pod.spec.node_name is None
 
     def test_node_name(self) -> None:
-        pod = Pod.from_primitive(
-            {
-                "metadata": {"name": "pod"},
-                "spec": {"nodeName": "testnode"},
-            }
+        pod = Pod.from_model(
+            V1Pod(
+                metadata=V1ObjectMeta(name="pod"),
+                spec=V1PodSpec(containers=[], node_name="testnode"),
+            )
         )
         assert pod.spec.node_name == "testnode"
 
     def test_no_status(self) -> None:
-        pod = Pod.from_primitive({"metadata": {"name": "pod"}, "spec": {}})
+        pod = Pod.from_model(
+            V1Pod(
+                metadata=V1ObjectMeta(name="pod"),
+                spec=V1PodSpec(containers=[]),
+            )
+        )
         assert pod.get_container_status("testcontainer") == ContainerStatus(
             name="testcontainer"
         )
 
     def test_no_container_status(self) -> None:
-        pod = Pod.from_primitive(
-            {
-                "metadata": {"name": "pod"},
-                "spec": {},
-                "status": {"containerStatuses": []},
-            }
+        pod = Pod.from_model(
+            V1Pod(
+                metadata=V1ObjectMeta(name="pod"),
+                spec=V1PodSpec(containers=[]),
+                status=V1PodStatus(container_statuses=[]),
+            )
         )
         assert pod.get_container_status("testcontainer") == ContainerStatus(
             name="testcontainer"
         )
 
     def test_container_status(self) -> None:
-        pod = Pod.from_primitive(
-            {
-                "metadata": {"name": "pod"},
-                "spec": {"restartPolicy": "Never"},
-                "status": {
-                    "containerStatuses": [{"name": ""}, {"name": "testcontainer"}]
-                },
-            }
+        pod = Pod.from_model(
+            V1Pod(
+                metadata=V1ObjectMeta(name="pod"),
+                spec=V1PodSpec(containers=[], restart_policy="Never"),
+                status=V1PodStatus(
+                    container_statuses=[
+                        V1ContainerStatus(
+                            name="testcontainer",
+                            image_id="image",
+                            image="image",
+                            ready=True,
+                            restart_count=0,
+                        )
+                    ]
+                ),
+            )
         )
         container_status = pod.get_container_status("testcontainer")
         assert container_status == ContainerStatus(
@@ -70,217 +100,237 @@ class TestPod:
         )
 
     def test_no_container_id(self) -> None:
-        pod = Pod.from_primitive(
-            {
-                "metadata": {"name": "pod"},
-                "spec": {},
-                "status": {"containerStatuses": [{"name": "testcontainer"}]},
-            }
+        pod = Pod.from_model(
+            V1Pod(
+                metadata=V1ObjectMeta(name="pod"),
+                spec=V1PodSpec(containers=[]),
+                status=V1PodStatus(
+                    container_statuses=[
+                        V1ContainerStatus(
+                            name="testcontainer",
+                            image_id="image",
+                            image="image",
+                            ready=True,
+                            restart_count=0,
+                        )
+                    ]
+                ),
+            )
         )
         container_id = pod.get_container_id("testcontainer")
         assert container_id is None
 
     def test_container_id(self) -> None:
-        pod = Pod.from_primitive(
-            {
-                "metadata": {"name": "pod"},
-                "spec": {},
-                "status": {
-                    "containerStatuses": [
-                        {
-                            "name": "testcontainer",
-                            "containerID": "docker://testcontainerid",
-                        }
+        pod = Pod.from_model(
+            V1Pod(
+                metadata=V1ObjectMeta(name="pod"),
+                spec=V1PodSpec(containers=[]),
+                status=V1PodStatus(
+                    container_statuses=[
+                        V1ContainerStatus(
+                            name="testcontainer",
+                            container_id="docker://testcontainerid",
+                            image_id="image",
+                            image="image",
+                            ready=True,
+                            restart_count=0,
+                        )
                     ]
-                },
-            }
+                ),
+            )
         )
         container_id = pod.get_container_id("testcontainer")
         assert container_id == "testcontainerid"
 
     def test_phase(self) -> None:
-        pod = Pod.from_primitive(
-            {
-                "metadata": {"name": "pod"},
-                "spec": {},
-                "status": {"phase": "Running"},
-            }
+        pod = Pod.from_model(
+            V1Pod(
+                metadata=V1ObjectMeta(name="pod"),
+                spec=V1PodSpec(containers=[]),
+                status=V1PodStatus(phase="Running"),
+            )
         )
         assert pod.status.phase == PodPhase.RUNNING
 
     def test_phase_is_running_false(self) -> None:
-        pod = Pod.from_primitive(
-            {
-                "metadata": {"name": "pod"},
-                "spec": {},
-                "status": {"phase": "Pending"},
-            }
+        pod = Pod.from_model(
+            V1Pod(
+                metadata=V1ObjectMeta(name="pod"),
+                spec=V1PodSpec(containers=[]),
+                status=V1PodStatus(phase="Pending"),
+            )
         )
         assert not pod.status.is_running
 
     def test_phase_is_running(self) -> None:
-        pod = Pod.from_primitive(
-            {
-                "metadata": {"name": "pod"},
-                "spec": {},
-                "status": {"phase": "Running"},
-            }
+        pod = Pod.from_model(
+            V1Pod(
+                metadata=V1ObjectMeta(name="pod"),
+                spec=V1PodSpec(containers=[]),
+                status=V1PodStatus(phase="Running"),
+            )
         )
         assert pod.status.is_running
 
     def test_no_resource_requests(self) -> None:
-        pod = Pod.from_primitive(
-            {
-                "metadata": {"name": "pod"},
-                "spec": {"containers": [{"name": "container_name", "resources": {}}]},
-            }
+        pod = Pod.from_model(
+            V1Pod(
+                metadata=V1ObjectMeta(name="pod"),
+                spec=V1PodSpec(containers=[V1Container(name="container_name")]),
+            )
         )
         assert pod.resource_requests == ContainerResources()
 
     def test_resource_requests_cpu_milicores(self) -> None:
-        pod = Pod.from_primitive(
-            {
-                "metadata": {"name": "pod"},
-                "spec": {
-                    "containers": [
-                        {
-                            "name": "container_name",
-                            "resources": {"requests": {"cpu": "100m"}},
-                        }
+        pod = Pod.from_model(
+            V1Pod(
+                metadata=V1ObjectMeta(name="pod"),
+                spec=V1PodSpec(
+                    containers=[
+                        V1Container(
+                            name="container_name",
+                            resources=V1ResourceRequirements(requests={"cpu": "100m"}),
+                        )
                     ]
-                },
-            }
+                ),
+            )
         )
         assert pod.resource_requests == ContainerResources(cpu_m=100)
 
     def test_resource_requests_cpu_cores(self) -> None:
-        pod = Pod.from_primitive(
-            {
-                "metadata": {"name": "pod"},
-                "spec": {
-                    "containers": [
-                        {
-                            "name": "container_name",
-                            "resources": {"requests": {"cpu": "1"}},
-                        }
+        pod = Pod.from_model(
+            V1Pod(
+                metadata=V1ObjectMeta(name="pod"),
+                spec=V1PodSpec(
+                    containers=[
+                        V1Container(
+                            name="container_name",
+                            resources=V1ResourceRequirements(requests={"cpu": "1"}),
+                        )
                     ]
-                },
-            }
+                ),
+            )
         )
         assert pod.resource_requests == ContainerResources(cpu_m=1000)
 
     def test_resource_requests_memory_mebibytes(self) -> None:
-        pod = Pod.from_primitive(
-            {
-                "metadata": {"name": "pod"},
-                "spec": {
-                    "containers": [
-                        {
-                            "name": "container_name",
-                            "resources": {"requests": {"memory": "1000Mi"}},
-                        }
+        pod = Pod.from_model(
+            V1Pod(
+                metadata=V1ObjectMeta(name="pod"),
+                spec=V1PodSpec(
+                    containers=[
+                        V1Container(
+                            name="container_name",
+                            resources=V1ResourceRequirements(
+                                requests={"memory": "1000Mi"}
+                            ),
+                        )
                     ]
-                },
-            }
+                ),
+            )
         )
         assert pod.resource_requests == ContainerResources(memory=1000 * 2**20)
 
     def test_resource_requests_memory_gibibytes(self) -> None:
-        pod = Pod.from_primitive(
-            {
-                "metadata": {"name": "pod"},
-                "spec": {
-                    "containers": [
-                        {
-                            "name": "container_name",
-                            "resources": {"requests": {"memory": "1Gi"}},
-                        }
+        pod = Pod.from_model(
+            V1Pod(
+                metadata=V1ObjectMeta(name="pod"),
+                spec=V1PodSpec(
+                    containers=[
+                        V1Container(
+                            name="container_name",
+                            resources=V1ResourceRequirements(
+                                requests={"memory": "1Gi"}
+                            ),
+                        )
                     ]
-                },
-            }
+                ),
+            )
         )
         assert pod.resource_requests == ContainerResources(memory=1024 * 2**20)
 
     def test_resource_requests_memory_terabytes(self) -> None:
-        pod = Pod.from_primitive(
-            {
-                "metadata": {"name": "pod"},
-                "spec": {
-                    "containers": [
-                        {
-                            "name": "container_name",
-                            "resources": {"requests": {"memory": "4T"}},
-                        }
+        pod = Pod.from_model(
+            V1Pod(
+                metadata=V1ObjectMeta(name="pod"),
+                spec=V1PodSpec(
+                    containers=[
+                        V1Container(
+                            name="container_name",
+                            resources=V1ResourceRequirements(requests={"memory": "4T"}),
+                        )
                     ]
-                },
-            }
+                ),
+            )
         )
         assert pod.resource_requests == ContainerResources(memory=4 * 10**12)
 
     def test_resource_requests_memory_tebibytes(self) -> None:
-        pod = Pod.from_primitive(
-            {
-                "metadata": {"name": "pod"},
-                "spec": {
-                    "containers": [
-                        {
-                            "name": "container_name",
-                            "resources": {"requests": {"memory": "4Ti"}},
-                        }
+        pod = Pod.from_model(
+            V1Pod(
+                metadata=V1ObjectMeta(name="pod"),
+                spec=V1PodSpec(
+                    containers=[
+                        V1Container(
+                            name="container_name",
+                            resources=V1ResourceRequirements(
+                                requests={"memory": "4Ti"}
+                            ),
+                        )
                     ]
-                },
-            }
+                ),
+            )
         )
         assert pod.resource_requests == ContainerResources(memory=4 * 2**40)
 
     def test_resource_requests_gpu(self) -> None:
-        pod = Pod.from_primitive(
-            {
-                "metadata": {"name": "pod"},
-                "spec": {
-                    "containers": [
-                        {
-                            "name": "container_name",
-                            "resources": {
-                                "requests": {
+        pod = Pod.from_model(
+            V1Pod(
+                metadata=V1ObjectMeta(name="pod"),
+                spec=V1PodSpec(
+                    containers=[
+                        V1Container(
+                            name="container_name",
+                            resources=V1ResourceRequirements(
+                                requests={
                                     "nvidia.com/gpu": "1",
                                     "amd.com/gpu": "2",
                                 }
-                            },
-                        }
+                            ),
+                        )
                     ]
-                },
-            }
+                ),
+            )
         )
         assert pod.resource_requests.has_gpu
         assert pod.resource_requests == ContainerResources(nvidia_gpu=1, amd_gpu=2)
 
     def test_resource_requests_for_multiple_containers(self) -> None:
-        pod = Pod.from_primitive(
-            {
-                "metadata": {"name": "pod"},
-                "spec": {
-                    "containers": [
-                        {
-                            "name": "container_name1",
-                            "resources": {
-                                "requests": {"cpu": "0.5", "memory": "512Mi"}
-                            },
-                        },
-                        {
-                            "name": "container_name2",
-                            "resources": {
-                                "requests": {
+        pod = Pod.from_model(
+            V1Pod(
+                metadata=V1ObjectMeta(name="pod"),
+                spec=V1PodSpec(
+                    containers=[
+                        V1Container(
+                            name="container_name1",
+                            resources=V1ResourceRequirements(
+                                requests={"cpu": "0.5", "memory": "512Mi"}
+                            ),
+                        ),
+                        V1Container(
+                            name="container_name2",
+                            resources=V1ResourceRequirements(
+                                requests={
                                     "cpu": "1",
                                     "memory": "1Gi",
                                     "nvidia.com/gpu": "1",
                                     "amd.com/gpu": "2",
                                 }
-                            },
-                        },
+                            ),
+                        ),
                     ]
-                },
-            }
+                ),
+            )
         )
         assert pod.resource_requests == ContainerResources(
             cpu_m=1500, memory=1536 * 2**20, nvidia_gpu=1, amd_gpu=2
@@ -670,20 +720,46 @@ class TestFilterOutRPCError:
 
 class TestNode:
     def test_name(self) -> None:
-        node = Node.from_primitive(
-            {
-                "metadata": {"name": "default"},
-                "status": {"nodeInfo": {"containerRuntimeVersion": "containerd"}},
-            }
+        node = Node.from_model(
+            V1Node(
+                metadata=V1ObjectMeta(name="default"),
+                status=V1NodeStatus(
+                    node_info=V1NodeSystemInfo(
+                        architecture="a",
+                        boot_id="b",
+                        kernel_version="k",
+                        kube_proxy_version="1",
+                        kubelet_version="1",
+                        machine_id="1",
+                        operating_system="os",
+                        os_image="i",
+                        system_uuid="u",
+                        container_runtime_version="containerd",
+                    )
+                ),
+            )
         )
         assert node.metadata.name == "default"
 
     def test_labels(self) -> None:
-        node = Node.from_primitive(
-            {
-                "metadata": {"labels": {"hello": "world"}},
-                "status": {"nodeInfo": {"containerRuntimeVersion": "containerd"}},
-            }
+        node = Node.from_model(
+            V1Node(
+                metadata=V1ObjectMeta(name="default", labels={"hello": "world"}),
+                status=V1NodeStatus(
+                    node_info=V1NodeSystemInfo(
+                        architecture="a",
+                        boot_id="b",
+                        kernel_version="k",
+                        kube_proxy_version="1",
+                        kubelet_version="1",
+                        machine_id="1",
+                        operating_system="os",
+                        os_image="i",
+                        system_uuid="u",
+                        container_runtime_version="containerd",
+                    )
+                ),
+            )
         )
         assert node.metadata.labels == {"hello": "world"}
 

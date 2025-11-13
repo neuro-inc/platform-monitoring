@@ -6,7 +6,10 @@ from dataclasses import dataclass
 
 import aiohttp
 from apolo_api_client import ApiClient, Job
+from apolo_kube_client import KubeClientSelector, ResourceNotFound, V1Pod
 from neuro_config_client import ConfigClient, ResourcePoolType, ResourcePreset
+
+from platform_monitoring.kube_client import get_pod
 
 from .config import KubeConfig
 from .container_runtime_client import (
@@ -17,8 +20,7 @@ from .container_runtime_client import (
 from .kube_client import (
     DEFAULT_MAX_PODS_PER_NODE,
     ContainerResources,
-    JobNotFoundException,
-    KubeClient,
+    Node,
     NodeResources,
     Pod,
 )
@@ -54,14 +56,14 @@ class JobsService:
         *,
         config_client: ConfigClient,
         jobs_client: ApiClient,
-        kube_client: KubeClient,
+        kube_client_selector: KubeClientSelector,
         container_runtime_client_registry: ContainerRuntimeClientRegistry,
         cluster_name: str,
         kube_node_pool_label: str = KubeConfig.node_pool_label,
     ) -> None:
         self._config_client = config_client
         self._jobs_client = jobs_client
-        self._kube_client = kube_client
+        self._kube_client_selector = kube_client_selector
         self._kube_helper = KubeHelper()
         self._container_runtime_client_registry = container_runtime_client_registry
         self._cluster_name = cluster_name
@@ -73,7 +75,8 @@ class JobsService:
     @asyncgeneratorcontextmanager
     async def save(self, job: Job, user: User, image: str) -> AsyncGenerator[bytes]:
         pod_name = self._kube_helper.get_job_pod_name(job)
-        pod = await self._get_running_jobs_pod(pod_name, job.namespace)
+        assert job.org_name, "job must be linked to an org"
+        pod = await self._get_running_jobs_pod(pod_name, job.org_name, job.project_name)
         cont_id = pod.get_container_id(pod_name)
         assert cont_id
 
@@ -108,7 +111,8 @@ class JobsService:
         stderr: bool = True,
     ) -> AsyncIterator[aiohttp.ClientWebSocketResponse]:
         pod_name = self._kube_helper.get_job_pod_name(job)
-        pod = await self._get_running_jobs_pod(pod_name, job.namespace)
+        assert job.org_name, "job must be linked to an org"
+        pod = await self._get_running_jobs_pod(pod_name, job.org_name, job.project_name)
         cont_id = pod.get_container_id(pod_name)
         assert cont_id
 
@@ -149,7 +153,8 @@ class JobsService:
         stderr: bool = True,
     ) -> AsyncIterator[aiohttp.ClientWebSocketResponse]:
         pod_name = self._kube_helper.get_job_pod_name(job)
-        pod = await self._get_running_jobs_pod(pod_name, job.namespace)
+        assert job.org_name, "job must be linked to an org"
+        pod = await self._get_running_jobs_pod(pod_name, job.org_name, job.project_name)
         cont_id = pod.get_container_id(pod_name)
         assert cont_id
 
@@ -165,8 +170,8 @@ class JobsService:
 
     async def kill(self, job: Job) -> None:
         pod_name = self._kube_helper.get_job_pod_name(job)
-
-        pod = await self._get_running_jobs_pod(pod_name, job.namespace)
+        assert job.org_name, "job must be linked to an org"
+        pod = await self._get_running_jobs_pod(pod_name, job.org_name, job.project_name)
         cont_id = pod.get_container_id(pod_name)
         assert cont_id
 
@@ -181,23 +186,29 @@ class JobsService:
         self, job: Job, port: int
     ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         pod_name = self._kube_helper.get_job_pod_name(job)
-        pod = await self._get_running_jobs_pod(pod_name, job.namespace)
+        assert job.org_name, "job must be linked to an org"
+        pod = await self._get_running_jobs_pod(pod_name, job.org_name, job.project_name)
         reader, writer = await asyncio.open_connection(pod.status.pod_ip, port)
         return reader, writer
 
     async def _get_running_jobs_pod(
         self,
         job_id: str,
-        namespace: str,
+        org_name: str,
+        project_name: str,
     ) -> Pod:
         pod: Pod | None
-        try:
-            pod = await self._kube_client.get_pod(job_id, namespace)
-            if not pod.status.is_running:
+        async with self._kube_client_selector.get_client(
+            org_name=org_name,
+            project_name=project_name,
+        ) as kube_client:
+            try:
+                pod = await get_pod(kube_client, job_id)
+                if not pod.status.is_running:
+                    pod = None
+            except ResourceNotFound:
+                # job's pod does not exist: it might be already garbage-collected
                 pod = None
-        except JobNotFoundException:
-            # job's pod does not exist: it might be already garbage-collected
-            pod = None
 
         if not pod:
             msg = f"Job '{job_id}' is not running."
@@ -258,8 +269,8 @@ class JobsService:
         self,
     ) -> dict[str, list[NodeResources]]:
         result: dict[str, list[NodeResources]] = defaultdict(list)
-        pods = await self._kube_client.get_pods(
-            all_namespaces=True,
+        kube_client = self._kube_client_selector.host_client
+        pods = await kube_client.core_v1.pod.get_list(
             field_selector=",".join(
                 (
                     "status.phase!=Failed",
@@ -267,11 +278,17 @@ class JobsService:
                     "status.phase!=Unknown",
                 ),
             ),
+            all_namespaces=True,
         )
-        pods_by_node = self._get_pods_by_node(pods)
-        nodes = await self._kube_client.get_nodes(
-            label_selector=self._kube_node_pool_label
-        )
+        pods_by_node = self._get_pods_by_node(pods.items)
+        nodes = [
+            Node.from_model(n)
+            for n in (
+                await kube_client.core_v1.node.get_list(
+                    label_selector=self._kube_node_pool_label
+                )
+            ).items
+        ]
         for node in nodes:
             assert node.metadata.name
             available_resources = node.status.allocatable
@@ -286,11 +303,14 @@ class JobsService:
             result[node_pool_name].append(available_resources)
         return result
 
-    def _get_pods_by_node(self, pods: Sequence[Pod]) -> dict[str, list[Pod]]:
+    def _get_pods_by_node(self, pods: Sequence[V1Pod]) -> dict[str, list[Pod]]:
         result: dict[str, list[Pod]] = defaultdict(list)
         for pod in pods:
-            if pod.spec.node_name:
-                result[pod.spec.node_name].append(pod)
+            if not pod.spec:
+                continue
+            if not pod.spec.node_name:
+                continue
+            result[pod.spec.node_name].append(Pod.from_model(pod))
         return result
 
     def _get_node_resource_limit(

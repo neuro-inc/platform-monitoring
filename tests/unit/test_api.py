@@ -17,18 +17,12 @@ from platform_monitoring.config import (
     LokiConfig,
     S3Config,
 )
-from platform_monitoring.kube_client import KubeClient
 from platform_monitoring.logs import (
     ElasticsearchLogsService,
     LokiLogsService,
     S3LogsService,
 )
 from platform_monitoring.loki_client import LokiClient
-
-
-@pytest.fixture
-def kube_client() -> mock.Mock:
-    return mock.Mock(spec=KubeClient)
 
 
 @pytest.fixture

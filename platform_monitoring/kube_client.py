@@ -2,33 +2,32 @@ from __future__ import annotations
 
 import asyncio
 import enum
-import json
 import logging
 import re
-import ssl
 import typing as t
 from collections import defaultdict
 from collections.abc import Mapping
-from contextlib import suppress
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
-from pathlib import Path
-from urllib.parse import urlsplit
 
 import aiohttp
-from aiohttp import ContentTypeError
 from apolo_kube_client import (
     KubeClientProxy,
+    KubeClientSelector,
     V1Container,
     V1ContainerStatus,
+    V1Node,
+    V1NodeStatus,
+    V1NodeSystemInfo,
     V1ObjectMeta,
     V1Pod,
     V1PodSpec,
     V1PodStatus,
 )
+from apolo_kube_client.apolo import generate_namespace_name
 
 from .base import JobStats, Telemetry
-from .config import KubeClientAuthType, KubeConfig
+from .config import KubeConfig
 from .utils import format_date, parse_date
 
 
@@ -39,26 +38,6 @@ DEFAULT_MAX_PODS_PER_NODE = 110
 NVIDIA_DCGM_LABEL_SELECTOR = "app=nvidia-dcgm-exporter"
 
 type JSON = dict[str, t.Any]
-
-
-class KubeClientException(Exception):
-    pass
-
-
-class KubeClientUnauthorizedException(KubeClientException):
-    pass
-
-
-class ExpiredException(KubeClientException):
-    pass
-
-
-class ResourceGoneException(KubeClientException):
-    pass
-
-
-class ConflictException(KubeClientException):
-    pass
 
 
 class JobException(Exception):
@@ -73,24 +52,12 @@ class JobNotFoundException(JobException):
     pass
 
 
-class Resource(t.Protocol):
-    @classmethod
-    def from_primitive(cls, payload: JSON) -> t.Self: ...
-
-
 @dataclass(frozen=True)
 class Metadata:
     name: str | None
     resource_version: str | None = None
     labels: t.Mapping[str, str] = field(default_factory=dict)
-
-    @classmethod
-    def from_primitive(cls, payload: JSON) -> Metadata:
-        return cls(
-            name=payload.get("name"),
-            resource_version=payload.get("resourceVersion"),
-            labels=payload.get("labels", {}),
-        )
+    annotations: t.Mapping[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_model(cls, model: V1ObjectMeta) -> t.Self:
@@ -98,23 +65,7 @@ class Metadata:
             name=model.name,
             resource_version=model.resource_version,
             labels=model.labels,
-        )
-
-
-@dataclass(frozen=True)
-class ListResult[TResource: Resource]:
-    metadata: Metadata
-    items: list[TResource]
-
-    @classmethod
-    def from_primitive(
-        cls, payload: JSON, *, resource_cls: type[TResource]
-    ) -> ListResult[TResource]:
-        return cls(
-            metadata=Metadata.from_primitive(payload.get("metadata", {})),
-            items=[
-                resource_cls.from_primitive(item) for item in payload.get("items", ())
-            ],
+            annotations=model.annotations,
         )
 
 
@@ -137,7 +88,7 @@ def parse_memory(memory: str) -> int:
         if memory.endswith(f"{suffix}i"):
             return int(memory[:-2]) * 1024**power
     msg = f"Memory unit for {memory} is not supported"
-    raise KubeClientException(msg)
+    raise ValueError(msg)
 
 
 @dataclass(frozen=True)
@@ -259,18 +210,6 @@ class Container:
     tty: bool | None
 
     @classmethod
-    def from_primitive(cls, payload: JSON) -> t.Self:
-        return cls(
-            name=payload["name"],
-            resource_requests=ContainerResources.from_primitive(
-                payload.get("resources", {}).get("requests", {})
-            ),
-            stdin=payload.get("stdin"),
-            stdin_once=payload.get("stdinOnce"),
-            tty=payload.get("tty"),
-        )
-
-    @classmethod
     def from_model(cls, model: V1Container) -> t.Self:
         return cls(
             name=model.name,
@@ -290,18 +229,6 @@ class PodSpec:
     containers: t.Sequence[Container] = field(default_factory=list)
 
     @classmethod
-    def from_primitive(cls, payload: JSON) -> t.Self:
-        return cls(
-            node_name=payload.get("nodeName"),
-            restart_policy=PodRestartPolicy(
-                payload.get("restartPolicy", cls.restart_policy)
-            ),
-            containers=[
-                Container.from_primitive(c) for c in payload.get("containers", ())
-            ],
-        )
-
-    @classmethod
     def from_model(cls, model: V1PodSpec) -> t.Self:
         return cls(
             node_name=model.node_name,
@@ -316,18 +243,6 @@ class PodStatus:
     pod_ip: str | None
     host_ip: str | None
     container_statuses: t.Sequence[ContainerStatus] = field(default_factory=list)
-
-    @classmethod
-    def from_primitive(cls, payload: JSON) -> t.Self:
-        return cls(
-            phase=PodPhase(payload.get("phase", PodPhase.PENDING.value)),
-            pod_ip=payload.get("podIP") or None,
-            host_ip=payload.get("hostIP") or None,
-            container_statuses=[
-                ContainerStatus.from_primitive(s)
-                for s in payload.get("containerStatuses", ())
-            ],
-        )
 
     @classmethod
     def from_model(cls, payload: V1PodStatus) -> t.Self:
@@ -347,18 +262,10 @@ class PodStatus:
 
 
 @dataclass(frozen=True)
-class Pod(Resource):
+class Pod:
     metadata: Metadata
     spec: PodSpec
     status: PodStatus
-
-    @classmethod
-    def from_primitive(cls, payload: JSON) -> t.Self:
-        return cls(
-            metadata=Metadata.from_primitive(payload["metadata"]),
-            spec=PodSpec.from_primitive(payload["spec"]),
-            status=PodStatus.from_primitive(payload.get("status", {})),
-        )
 
     @classmethod
     def from_model(cls, model: V1Pod) -> t.Self:
@@ -449,34 +356,33 @@ class NodeStatus:
         container_runtime_version: str
 
         @classmethod
-        def from_primitive(cls, payload: JSON) -> t.Self:
-            return cls(
-                container_runtime_version=payload["containerRuntimeVersion"],
-            )
+        def from_model(cls, model: V1NodeSystemInfo) -> t.Self:
+            return cls(container_runtime_version=model.container_runtime_version)
 
     capacity: NodeResources
     allocatable: NodeResources
     node_info: NodeInfo
 
     @classmethod
-    def from_primitive(cls, payload: JSON) -> t.Self:
+    def from_model(cls, model: V1NodeStatus) -> t.Self:
+        assert model.node_info, "node info must be present"
         return cls(
-            capacity=NodeResources.from_primitive(payload.get("capacity", {})),
-            allocatable=NodeResources.from_primitive(payload.get("allocatable", {})),
-            node_info=cls.NodeInfo.from_primitive(payload["nodeInfo"]),
+            capacity=NodeResources.from_primitive(model.capacity),
+            allocatable=NodeResources.from_primitive(model.allocatable),
+            node_info=cls.NodeInfo.from_model(model.node_info),
         )
 
 
 @dataclass(frozen=True)
-class Node(Resource):
+class Node:
     metadata: Metadata
     status: NodeStatus
 
     @classmethod
-    def from_primitive(cls, payload: JSON) -> Node:
+    def from_model(cls, model: V1Node) -> Node:
         return cls(
-            metadata=Metadata.from_primitive(payload["metadata"]),
-            status=NodeStatus.from_primitive(payload["status"]),
+            metadata=Metadata.from_model(model.metadata),
+            status=NodeStatus.from_model(model.status),
         )
 
 
@@ -489,17 +395,6 @@ class ContainerStatus:
     last_state: t.Mapping[str, t.Any] = field(default_factory=dict)
 
     pod_restart_policy: PodRestartPolicy = PodRestartPolicy.ALWAYS
-
-    @classmethod
-    def from_primitive(cls, payload: JSON) -> t.Self:
-        return cls(
-            name=payload["name"],
-            container_id=payload.get("containerID", "").replace("docker://", "")
-            or None,
-            restart_count=payload.get("restartCount", 0),
-            state=payload.get("state", {}),
-            last_state=payload.get("lastState", {}),
-        )
 
     @classmethod
     def from_model(cls, payload: V1ContainerStatus) -> t.Self:
@@ -594,435 +489,6 @@ class ContainerStatus:
             # first run
             return None
         return parse_date(date_str)
-
-
-class KubeClient:
-    def __init__(
-        self,
-        *,
-        base_url: str,
-        namespace: str,
-        cert_authority_path: str | None = None,
-        cert_authority_data_pem: str | None = None,
-        auth_type: KubeClientAuthType = KubeClientAuthType.CERTIFICATE,
-        auth_cert_path: str | None = None,
-        auth_cert_key_path: str | None = None,
-        token: str | None = None,
-        token_path: str | None = None,
-        token_update_interval_s: int = 300,
-        conn_timeout_s: int = 300,
-        read_timeout_s: int = 100,
-        conn_pool_size: int = 100,
-        kubelet_node_port: int = KubeConfig.kubelet_node_port,
-        nvidia_dcgm_node_port: int | None = KubeConfig.nvidia_dcgm_node_port,
-        trace_configs: list[aiohttp.TraceConfig] | None = None,
-    ) -> None:
-        self._base_url = base_url
-        self._namespace = namespace
-
-        self._cert_authority_data_pem = cert_authority_data_pem
-        self._cert_authority_path = cert_authority_path
-
-        self._auth_type = auth_type
-        self._auth_cert_path = auth_cert_path
-        self._auth_cert_key_path = auth_cert_key_path
-        self._token = token
-        self._token_path = token_path
-        self._token_update_interval_s = token_update_interval_s
-
-        self._conn_timeout_s = conn_timeout_s
-        self._read_timeout_s = read_timeout_s
-        self._conn_pool_size = conn_pool_size
-
-        self._kubelet_port = kubelet_node_port
-        self._nvidia_dcgm_port = nvidia_dcgm_node_port
-
-        self._trace_configs = trace_configs
-
-        self._client: aiohttp.ClientSession | None = None
-        self._token_updater_task: asyncio.Task[None] | None = None
-
-    @property
-    def _is_ssl(self) -> bool:
-        return urlsplit(self._base_url).scheme == "https"
-
-    def _create_ssl_context(self) -> bool | ssl.SSLContext:
-        if not self._is_ssl:
-            return True
-        ssl_context = ssl.create_default_context(
-            cafile=self._cert_authority_path, cadata=self._cert_authority_data_pem
-        )
-        if self._auth_type == KubeClientAuthType.CERTIFICATE:
-            ssl_context.load_cert_chain(
-                self._auth_cert_path,  # type: ignore
-                self._auth_cert_key_path,
-            )
-        return ssl_context
-
-    async def init(self) -> None:
-        connector = aiohttp.TCPConnector(
-            limit=self._conn_pool_size, ssl=self._create_ssl_context()
-        )
-        if self._token_path:
-            self._token = Path(self._token_path).read_text()
-            self._token_updater_task = asyncio.create_task(self._start_token_updater())
-        timeout = aiohttp.ClientTimeout(
-            connect=self._conn_timeout_s, total=self._read_timeout_s
-        )
-        self._client = aiohttp.ClientSession(
-            connector=connector,
-            timeout=timeout,
-            trace_configs=self._trace_configs,
-        )
-
-    async def _start_token_updater(self) -> None:
-        if not self._token_path:
-            return
-        while True:
-            try:
-                token = Path(self._token_path).read_text()
-                if token != self._token:
-                    self._token = token
-                    logger.info("Kube token was refreshed")
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                logger.exception("Failed to update kube token: %s", exc)
-            await asyncio.sleep(self._token_update_interval_s)
-
-    @property
-    def namespace(self) -> str:
-        return self._namespace
-
-    async def close(self) -> None:
-        if self._client:
-            await self._client.close()
-            self._client = None
-        if self._token_updater_task:
-            self._token_updater_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await self._token_updater_task
-            self._token_updater_task = None
-
-    async def __aenter__(self) -> t.Self:
-        await self.init()
-        return self
-
-    async def __aexit__(self, *args: object) -> None:
-        await self.close()
-
-    @property
-    def _api_v1_url(self) -> str:
-        return f"{self._base_url}/api/v1"
-
-    @property
-    def _nodes_url(self) -> str:
-        return f"{self._api_v1_url}/nodes"
-
-    def _generate_node_url(self, name: str) -> str:
-        return f"{self._nodes_url}/{name}"
-
-    def _generate_namespace_url(self, namespace_name: str) -> str:
-        return f"{self._api_v1_url}/namespaces/{namespace_name}"
-
-    def _namespace_url(self, namespace: str | None) -> str:
-        return self._generate_namespace_url(namespace or self._namespace)
-
-    @property
-    def _pods_url(self) -> str:
-        return f"{self._api_v1_url}/pods"
-
-    def _namespaced_pods_url(self, namespace: str | None) -> str:
-        return f"{self._namespace_url(namespace)}/pods"
-
-    def _generate_pod_url(self, pod_name: str, namespace: str | None) -> str:
-        return f"{self._namespaced_pods_url(namespace)}/{pod_name}"
-
-    def _generate_node_proxy_url(self, name: str, port: int) -> str:
-        return f"{self._api_v1_url}/nodes/{name}:{port}/proxy"
-
-    def _generate_node_stats_summary_url(self, name: str) -> str:
-        proxy_url = self._generate_node_proxy_url(name, self._kubelet_port)
-        return f"{proxy_url}/stats/summary"
-
-    def _generate_nvidia_gpu_metrics_url(self, pod_ip: str) -> str | None:
-        if not self._nvidia_dcgm_port:
-            return None
-        return f"http://{pod_ip}:{self._nvidia_dcgm_port}/metrics"
-
-    def _create_headers(
-        self, headers: dict[str, t.Any] | None = None
-    ) -> dict[str, t.Any]:
-        headers = dict(headers) if headers else {}
-        if self._auth_type == KubeClientAuthType.TOKEN and self._token:
-            headers["Authorization"] = "Bearer " + self._token
-        return headers
-
-    async def _request(self, *args: t.Any, **kwargs: t.Any) -> dict[str, t.Any]:
-        headers = self._create_headers(kwargs.pop("headers", None))
-        assert self._client, "client is not initialized"
-        async with self._client.request(*args, headers=headers, **kwargs) as response:
-            await self._check_response_status(response)
-            payload = await response.json()
-            logger.debug("k8s response payload: %s", payload)
-            return payload
-
-    async def get_raw_pod(
-        self, pod_name: str, namespace: str | None = None
-    ) -> dict[str, t.Any]:
-        namespace = namespace or self._namespace
-        url = self._generate_pod_url(pod_name, namespace)
-        payload = await self._request(method="GET", url=url)
-        self._assert_resource_kind(
-            expected_kind="Pod", payload=payload, job_id=pod_name
-        )
-        return payload
-
-    async def get_pod(self, pod_name: str, namespace: str | None = None) -> Pod:
-        namespace = namespace or self._namespace
-        payload = await self.get_raw_pod(pod_name, namespace)
-        return Pod.from_primitive(payload)
-
-    async def _get_raw_container_state(
-        self,
-        pod_name: str,
-        container_name: str | None = None,
-        namespace: str | None = None,
-    ) -> dict[str, t.Any]:
-        namespace = namespace or self._namespace
-        pod = await self.get_pod(pod_name, namespace)
-        container_name = container_name or pod_name
-        container_status = pod.get_container_status(container_name)
-        return {**container_status.state}
-
-    async def get_container_status(
-        self, name: str, container_name: str | None = None, namespace: str | None = None
-    ) -> ContainerStatus:
-        namespace = namespace or self._namespace
-        pod = await self.get_pod(name, namespace)
-        container_name = container_name or name
-        return pod.get_container_status(container_name)
-
-    async def wait_pod_is_running(
-        self,
-        pod_name: str,
-        *,
-        namespace: str | None = None,
-        container_name: str | None = None,
-        timeout_s: float = 10.0 * 60,
-        interval_s: float = 1.0,
-    ) -> ContainerStatus:
-        """Wait until the pod transitions to the running state.
-
-        Raise JobNotFoundException if there is no such pod.
-        Raise asyncio.TimeoutError if it takes too long for the pod.
-        """
-        if not container_name:
-            container_name = pod_name
-        async with asyncio.timeout(timeout_s):
-            while True:
-                status = await self.get_container_status(
-                    pod_name, container_name, namespace
-                )
-                if status.is_running:
-                    return status
-                if status.is_terminated and not status.can_restart:
-                    raise JobNotFoundException
-                await asyncio.sleep(interval_s)
-
-    async def wait_pod_is_not_waiting(
-        self,
-        pod_name: str,
-        *,
-        namespace: str | None = None,
-        container_name: str | None = None,
-        timeout_s: float = 10.0 * 60,
-        interval_s: float = 1.0,
-    ) -> ContainerStatus:
-        """Wait until the pod transitions from the waiting state.
-
-        Raise JobNotFoundException if there is no such pod.
-        Raise asyncio.TimeoutError if it takes too long for the pod.
-        """
-        if not container_name:
-            container_name = pod_name
-        async with asyncio.timeout(timeout_s):
-            while True:
-                status = await self.get_container_status(
-                    pod_name, container_name, namespace
-                )
-                if not status.is_waiting:
-                    return status
-                await asyncio.sleep(interval_s)
-
-    async def get_pod_container_stats(
-        self,
-        node_name: str,
-        pod_name: str,
-        container_name: str,
-        namespace: str | None = None,
-    ) -> PodContainerStats | None:
-        """
-        https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/apis/stats/v1alpha1/types.go
-        """
-        try:
-            namespace = namespace or self._namespace
-            url = self._generate_node_stats_summary_url(node_name)
-            payload = await self._request(method="GET", url=url)
-            summary = StatsSummary(payload)
-            return summary.get_pod_container_stats(namespace, pod_name, container_name)
-        except JobNotFoundException:
-            return None
-        except ContentTypeError as exc:
-            logger.info("Failed to parse response", exc, exc_info=True)
-            return None
-
-    async def get_pod_container_gpu_stats(
-        self,
-        node_name: str,
-        pod_name: str,
-        container_name: str,
-        namespace: str | None = None,
-    ) -> PodContainerGPUStats | None:
-        namespace = namespace or self._namespace
-        nvidia_dcgm_pod_ip = await self._get_nvidia_dcgm_pod_ip(node_name)
-        logger.debug("Nvidia DCGM exporter pod ip: %s", nvidia_dcgm_pod_ip)
-        if not nvidia_dcgm_pod_ip:
-            return None
-        url = self._generate_nvidia_gpu_metrics_url(nvidia_dcgm_pod_ip)
-        logger.debug("Nvidia DCGM exporter metrics url: %s", url)
-        if not url:
-            return None
-        try:
-            assert self._client
-            async with self._client.get(
-                url, headers=self._create_headers(), raise_for_status=True
-            ) as resp:
-                text = await resp.text()
-                gpu_counters = GPUCounters.parse(text)
-            return gpu_counters.get_pod_container_stats(
-                namespace, pod_name, container_name
-            )
-        except aiohttp.ClientError as e:
-            logger.exception(e)
-        return None
-
-    async def _get_nvidia_dcgm_pod_ip(self, node_name: str) -> str | None:
-        if not self._nvidia_dcgm_port:
-            return None
-        payload = await self._request(
-            method="GET",
-            url=self._pods_url,
-            headers=self._create_headers(),
-            params={
-                "labelSelector": NVIDIA_DCGM_LABEL_SELECTOR,
-                "fieldSelector": f"spec.nodeName={node_name}",
-            },
-        )
-        self._assert_resource_kind(expected_kind="PodList", payload=payload)
-        items = payload.get("items", [])
-        if len(items) != 1:
-            return None
-        return items[0].get("status", {}).get("podIP") or None
-
-    async def check_pod_exists(self, pod_name: str) -> bool:
-        try:
-            await self.get_raw_pod(pod_name)
-            return True
-        except JobNotFoundException:
-            return False
-
-    async def get_pods(
-        self,
-        *,
-        namespace: str | None = None,
-        all_namespaces: bool = False,
-        label_selector: str | None = None,
-        field_selector: str | None = None,
-    ) -> list[Pod]:
-        if not namespace and not all_namespaces:
-            exc_txt = "Cannot get pods without namespace or all_namespaces"
-            raise Exception(exc_txt)
-        url = self._pods_url if all_namespaces else self._namespaced_pods_url(namespace)
-        params = {}
-        if label_selector:
-            params["labelSelector"] = label_selector
-        if field_selector:
-            params["fieldSelector"] = field_selector
-        payload = await self._request(method="get", url=url, params=params)
-        self._assert_resource_kind("PodList", payload)
-        pod_list = ListResult.from_primitive(payload, resource_cls=Pod)
-        return pod_list.items
-
-    async def get_node(self, name: str) -> Node:
-        payload = await self._request(method="get", url=self._generate_node_url(name))
-        self._assert_resource_kind("Node", payload)
-        return Node.from_primitive(payload)
-
-    async def get_nodes(self, *, label_selector: str | None = None) -> list[Node]:
-        params = None
-        if label_selector:
-            params = {"labelSelector": label_selector}
-        payload = await self._request(method="get", url=self._nodes_url, params=params)
-        self._assert_resource_kind("NodeList", payload)
-        node_list = ListResult.from_primitive(payload, resource_cls=Node)
-        return node_list.items
-
-    async def _check_response_status(
-        self, response: aiohttp.ClientResponse, job_id: str | None = None
-    ) -> None:
-        if not 200 <= response.status < 300:
-            payload = await response.text()
-            try:
-                pod = json.loads(payload)
-            except ValueError:
-                pod = {"code": response.status, "message": payload}
-            self._raise_for_status(pod, job_id=job_id)
-
-    def _assert_resource_kind(
-        self, expected_kind: str, payload: JSON, job_id: str | None = None
-    ) -> None:
-        kind = payload["kind"]
-        if kind == "Status":
-            self._raise_for_status(payload, job_id=job_id)
-        elif kind != expected_kind:
-            msg = f"unknown kind: {kind}"
-            raise ValueError(msg)
-
-    @staticmethod
-    def _raise_for_status(payload: JSON, job_id: str | None = None) -> t.NoReturn:  # noqa: C901
-        code = payload["code"]
-        reason = payload.get("reason")
-        if code == 400 and job_id:
-            if "ContainerCreating" in payload["message"]:
-                msg = f"Job '{job_id}' has not been created yet"
-                raise JobNotFoundException(msg)
-            if "is not available" in payload["message"]:
-                msg = f"Job '{job_id}' is not available"
-                raise JobNotFoundException(msg)
-            if "is terminated" in payload["message"]:
-                msg = f"Job '{job_id}' is terminated"
-                raise JobNotFoundException(msg)
-        elif code == 401:
-            raise KubeClientUnauthorizedException(payload)
-        elif code == 404 and job_id:
-            msg = f"Job '{job_id}' not found"
-            raise JobNotFoundException(msg)
-        elif code == 404:
-            raise JobNotFoundException(payload)
-        elif code == 409 and job_id:
-            msg = f"Job '{job_id}' already exists"
-            raise JobError(msg)
-        elif code == 409:
-            raise ConflictException(payload)
-        elif code == 410:
-            raise ResourceGoneException(payload)
-        elif code == 422:
-            msg = f"Cannot create job with id '{job_id}'"
-            raise JobError(msg)
-        elif reason == "Expired":
-            raise ExpiredException(payload)
-        raise KubeClientException(payload)
 
 
 @dataclass(frozen=True)
@@ -1149,57 +615,139 @@ class StatsSummary:
         return PodContainerStats.from_primitive(container_stats)
 
 
+class TelemetryError(Exception): ...
+
+
 class KubeTelemetry(Telemetry):
+    _VCLUSTER_LABEL_NAMESPACE = "vcluster.loft.sh/namespace"
+    _VCLUSTER_LABEL_OBJECT_NAME = "vcluster.loft.sh/object-name"
+    _VCLUSTER_LABEL_HOST_OBJECT_NAME = "vcluster.loft.sh/object-host-name"
+
     def __init__(
         self,
-        kube_client: KubeClient,
+        kube_client_selector: KubeClientSelector,
         namespace_name: str,
+        org_name: str,
+        project_name: str,
         pod_name: str,
         container_name: str,
+        kubelet_node_port: int = KubeConfig.kubelet_node_port,
+        nvidia_dcgm_node_port: int | None = KubeConfig.nvidia_dcgm_node_port,
     ) -> None:
-        self._kube_client = kube_client
-
+        self._kube_client_selector = kube_client_selector
+        self._org_name = org_name
+        self._project_name = project_name
         self._namespace_name = namespace_name
         self._pod_name = pod_name
         self._container_name = container_name
+        self._kubelet_port = kubelet_node_port
+        self._nvidia_dcgm_port = nvidia_dcgm_node_port
+
+    async def _get_real_names(
+        self,
+        kube_client: KubeClientProxy,
+    ) -> tuple[str, str]:
+        """
+        Returns a pair of namespace and pod names based on a fact if a kube client
+        is a vcluster-based or not.
+        Whenever we need a telemetry from the vcluster pod, we need to obtain a
+        real host namespace name, and a host pod name, to be able to find those
+        names via node proxy API.
+        """
+        if not kube_client.is_vcluster:
+            return self._namespace_name, self._pod_name
+
+        real_namespace_name = generate_namespace_name(
+            self._org_name, self._project_name
+        )
+
+        # fetch all vcluster pods
+        pods = await self._kube_client_selector.host_client.core_v1.pod.get_list(
+            label_selector=self._VCLUSTER_LABEL_NAMESPACE,
+            namespace=real_namespace_name,
+        )
+        real_pod_name = None
+        for pod in pods.items:
+            metadata = pod.metadata
+            assert metadata, "pod must have a metadata"
+            vcluster_object_name = metadata.annotations.get(
+                self._VCLUSTER_LABEL_OBJECT_NAME
+            )
+            if not vcluster_object_name:
+                continue
+            if vcluster_object_name != self._pod_name:
+                continue
+            real_pod_name = metadata.annotations[self._VCLUSTER_LABEL_HOST_OBJECT_NAME]
+            break
+
+        if not real_pod_name:
+            err_message = "Unable to obtain a telemetry"
+            logger.error(
+                err_message,
+                extra={
+                    "pod_name": self._pod_name,
+                    "namespace_name": self._namespace_name,
+                    "real_pod_name": real_pod_name,
+                    "real_namespace": real_namespace_name,
+                    "pods_found": len(pods.items),
+                },
+            )
+            raise TelemetryError(err_message)
+
+        return real_namespace_name, real_pod_name
 
     async def get_latest_stats(self) -> JobStats | None:
-        pod = await self._kube_client.get_pod(
-            self._pod_name,
-            self._namespace_name,
-        )
-        if not pod.spec.node_name:
-            return None
-        if pod.resource_requests.has_gpu:
-            return await self._get_latest_gpu_pod_stats(pod.spec.node_name)
-        return await self._get_latest_cpu_pod_stats(pod.spec.node_name)
+        async with self._kube_client_selector.get_client(
+            org_name=self._org_name,
+            project_name=self._project_name,
+        ) as kube_client:
+            pod = await get_pod(kube_client, self._pod_name)
+            if not pod.spec.node_name:
+                return None
+            if pod.resource_requests.has_gpu:
+                return await self._get_latest_gpu_pod_stats(kube_client, pod)
+            return await self._get_latest_cpu_pod_stats(kube_client, pod)
 
-    async def _get_latest_cpu_pod_stats(self, node_name: str) -> JobStats | None:
-        pod_stats = await self._kube_client.get_pod_container_stats(
-            node_name,
-            self._pod_name,
-            self._container_name,
-            namespace=self._namespace_name,
+    async def _get_latest_cpu_pod_stats(
+        self,
+        kube_client: KubeClientProxy,
+        pod: Pod,
+    ) -> JobStats | None:
+        assert pod.spec.node_name, "pod must be scheduled on a node"
+        node_name = pod.spec.node_name
+        namespace_name, pod_name = await self._get_real_names(kube_client)
+        pod_stats = await self._get_pod_container_stats(
+            node_name=node_name,
+            pod_name=pod_name,
+            container_name=self._container_name,
+            namespace=namespace_name,
         )
         if not pod_stats:
             return None
         return JobStats(cpu=pod_stats.cpu, memory=pod_stats.memory)
 
-    async def _get_latest_gpu_pod_stats(self, node_name: str) -> JobStats | None:
+    async def _get_latest_gpu_pod_stats(
+        self,
+        kube_client: KubeClientProxy,
+        pod: Pod,
+    ) -> JobStats | None:
+        assert pod.spec.node_name, "pod must be scheduled on a node"
+        node_name = pod.spec.node_name
+        namespace_name, pod_name = await self._get_real_names(kube_client)
         pod_stats_task = asyncio.create_task(
-            self._kube_client.get_pod_container_stats(
-                node_name,
-                self._pod_name,
-                self._container_name,
-                namespace=self._namespace_name,
+            self._get_pod_container_stats(
+                node_name=node_name,
+                pod_name=pod_name,
+                container_name=self._container_name,
+                namespace=namespace_name,
             )
         )
         pod_gpu_stats_task = asyncio.create_task(
-            self._kube_client.get_pod_container_gpu_stats(
-                node_name,
-                self._pod_name,
-                self._container_name,
-                namespace=self._namespace_name,
+            self._get_pod_container_gpu_stats(
+                node_name=node_name,
+                pod_name=pod_name,
+                container_name=self._container_name,
+                namespace=namespace_name,
             )
         )
         await asyncio.wait(
@@ -1217,6 +765,68 @@ class KubeTelemetry(Telemetry):
             gpu_utilization=pod_gpu_stats.utilization,
             gpu_memory_used=pod_gpu_stats.memory_used,
         )
+
+    async def _get_pod_container_stats(
+        self,
+        node_name: str,
+        pod_name: str,
+        container_name: str,
+        namespace: str,
+    ) -> PodContainerStats | None:
+        kube_core = self._kube_client_selector.host_client.core
+        url = (
+            f"{kube_core.base_url}"
+            f"/api/v1/nodes/{node_name}:{self._kubelet_port}/proxy/stats/summary"
+        )
+        try:
+            async with kube_core.request(method="GET", url=url) as response:
+                data = await response.json()
+                summary = StatsSummary(data)
+                return summary.get_pod_container_stats(
+                    namespace, pod_name, container_name
+                )
+        except aiohttp.ClientError:
+            return None
+
+    async def _get_pod_container_gpu_stats(
+        self,
+        node_name: str,
+        pod_name: str,
+        container_name: str,
+        namespace: str,
+    ) -> PodContainerGPUStats | None:
+        if not self._nvidia_dcgm_port:
+            return None
+        nvidia_dcgm_pod_ip = await self._get_nvidia_dcgm_pod_ip(node_name)
+        logger.debug("Nvidia DCGM exporter pod ip: %s", nvidia_dcgm_pod_ip)
+        if not nvidia_dcgm_pod_ip:
+            return None
+        url = f"http://{nvidia_dcgm_pod_ip}:{self._nvidia_dcgm_port}/metrics"
+        logger.debug("Nvidia DCGM exporter metrics url: %s", url)
+        kube_core = self._kube_client_selector.host_client.core
+        try:
+            async with kube_core.request(method="GET", url=url) as response:
+                text = await response.text()
+            gpu_counters = GPUCounters.parse(text)
+            return gpu_counters.get_pod_container_stats(
+                namespace, pod_name, container_name
+            )
+        except aiohttp.ClientError as e:
+            logger.exception(e)
+        return None
+
+    async def _get_nvidia_dcgm_pod_ip(self, node_name: str) -> str | None:
+        pods = await self._kube_client_selector.host_client.core_v1.pod.get_list(
+            label_selector=NVIDIA_DCGM_LABEL_SELECTOR,
+            field_selector=f"spec.nodeName={node_name}",
+            all_namespaces=True,
+        )
+        if len(pods.items) != 1:
+            return None
+        try:
+            return pods.items[0].status.pod_ip
+        except AttributeError:
+            return None
 
 
 async def get_pod(
