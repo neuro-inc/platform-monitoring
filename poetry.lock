@@ -2195,6 +2195,24 @@ pytest = ">=7"
 testing = ["process-tests", "pytest-xdist", "virtualenv"]
 
 [[package]]
+name = "pytest-retry"
+version = "1.7.0"
+description = "Adds the ability to retry flaky tests in CI environments"
+optional = false
+python-versions = ">=3.9"
+groups = ["dev"]
+files = [
+    {file = "pytest_retry-1.7.0-py3-none-any.whl", hash = "sha256:a2dac85b79a4e2375943f1429479c65beb6c69553e7dae6b8332be47a60954f4"},
+    {file = "pytest_retry-1.7.0.tar.gz", hash = "sha256:f8d52339f01e949df47c11ba9ee8d5b362f5824dff580d3870ec9ae0057df80f"},
+]
+
+[package.dependencies]
+pytest = ">=7.0.0"
+
+[package.extras]
+dev = ["black", "flake8", "isort", "mypy"]
+
+[[package]]
 name = "pytest-xdist"
 version = "3.8.0"
 description = "pytest xdist plugin for distributed testing, most importantly across multiple CPUs"
@@ -3031,4 +3049,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13,<4.0"
-content-hash = "19089fa1d3b98c0af656850e17c30d21f73f0f6fc7b3503ffaa3b6bae1181d87"
+content-hash = "11a6925d17707736d6e7670b104b1588da6f3b1e3035eb7605c92007f65d3adc"

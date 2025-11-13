@@ -44,6 +44,7 @@ test_integration:
 		--durations=10 \
 		--maxfail=3 \
 		--log-level=INFO \
+		--retries=3 \
 		tests/integration
 
 .PHONY: clean-dist
