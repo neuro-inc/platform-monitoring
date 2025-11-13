@@ -280,14 +280,14 @@ pydantic = ">=2.11.7,<3.0.0"
 
 [[package]]
 name = "apolo-kube-client"
-version = "25.11.3"
+version = "25.11.4"
 description = "Apolo internal client for kubernetes API"
 optional = false
 python-versions = "<4.0,>=3.13"
 groups = ["main"]
 files = [
-    {file = "apolo_kube_client-25.11.3-py3-none-any.whl", hash = "sha256:115bf24e68f8dbd71e6a0ee4115088cee1a042c11552bbd07fdea44e65988b53"},
-    {file = "apolo_kube_client-25.11.3.tar.gz", hash = "sha256:7849b7c0b169394c096be617ee604fccc0c2ba606c6896876d2839abe647e648"},
+    {file = "apolo_kube_client-25.11.4-py3-none-any.whl", hash = "sha256:336ccb76574140a951ed69b86e8624efa1683f630dd87093e15af0de3156bcad"},
+    {file = "apolo_kube_client-25.11.4.tar.gz", hash = "sha256:53e82498248ded108b2757497a502a87c605744b6964eca5c6dfe35588f1d962"},
 ]
 
 [package.dependencies]
@@ -3066,4 +3066,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13,<4.0"
-content-hash = "11a6925d17707736d6e7670b104b1588da6f3b1e3035eb7605c92007f65d3adc"
+content-hash = "6f9d722a43545a7e9ada31f57406e4448ff7532143c0192733103546130088ef"
