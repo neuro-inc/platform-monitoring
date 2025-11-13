@@ -27,18 +27,18 @@ boto3 = ["boto3 (>=1.37.2,<1.37.4)"]
 
 [[package]]
 name = "aiodns"
-version = "3.4.0"
+version = "3.5.0"
 description = "Simple DNS resolver for asyncio"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "aiodns-3.4.0-py3-none-any.whl", hash = "sha256:4da2b25f7475343f3afbb363a2bfe46afa544f2b318acb9a945065e622f4ed24"},
-    {file = "aiodns-3.4.0.tar.gz", hash = "sha256:24b0ae58410530367f21234d0c848e4de52c1f16fbddc111726a4ab536ec1b2f"},
+    {file = "aiodns-3.5.0-py3-none-any.whl", hash = "sha256:6d0404f7d5215849233f6ee44854f2bb2481adf71b336b2279016ea5990ca5c5"},
+    {file = "aiodns-3.5.0.tar.gz", hash = "sha256:11264edbab51896ecf546c18eb0dd56dff0428c6aa6d2cd87e643e07300eb310"},
 ]
 
 [package.dependencies]
-pycares = ">=4.0.0"
+pycares = ">=4.9.0"
 
 [[package]]
 name = "aiodocker"
