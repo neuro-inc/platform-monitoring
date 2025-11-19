@@ -2302,6 +2302,21 @@ pytest = ">=7.0.0"
 dev = ["black", "flake8", "isort", "mypy"]
 
 [[package]]
+name = "pytest-test-groups"
+version = "1.2.1"
+description = "A Pytest plugin for running a subset of your tests by splitting them in to equally sized groups."
+optional = false
+python-versions = ">=3.8"
+groups = ["dev"]
+files = [
+    {file = "pytest_test_groups-1.2.1-py3-none-any.whl", hash = "sha256:8c7a016448f9ad347fb69a62f417f0a2358ecbf129fe44bc44ee991918a0bb73"},
+    {file = "pytest_test_groups-1.2.1.tar.gz", hash = "sha256:67576b295522fc144b3a42fa1801f50ae962389e984b48bab4336686d09032f1"},
+]
+
+[package.dependencies]
+pytest = ">=7.0.0"
+
+[[package]]
 name = "pytest-xdist"
 version = "3.8.0"
 description = "pytest xdist plugin for distributed testing, most importantly across multiple CPUs"
@@ -3140,4 +3155,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13,<4.0"
-content-hash = "e13902adab9e21c7f5e6f38e5bde2cd1544bee827b13ab0eab5b440725b58bee"
+content-hash = "4e13f606a5ad3215ad2d3dce60e106bdb875623f59b9a2aa14cfead0ba727df8"
