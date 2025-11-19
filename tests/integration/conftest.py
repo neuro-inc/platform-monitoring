@@ -46,15 +46,6 @@ from platform_monitoring.loki_client import LokiClient
 logger = logging.getLogger(__name__)
 
 
-pytest_plugins = [
-    "tests.integration.conftest_admin",
-    "tests.integration.conftest_auth",
-    "tests.integration.conftest_config",
-    "tests.integration.conftest_kube",
-    "tests.integration.conftest_s3",
-]
-
-
 def random_str(length: int = 8) -> str:
     return str(uuid1())[:length]
 
