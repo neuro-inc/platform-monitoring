@@ -1,3 +1,14 @@
+COUNT ?=
+GROUP ?=
+
+ifeq ($(COUNT), )
+EXTRA_ARGS :=
+else
+EXTRA_ARGS :=  --test-group-count=$(COUNT) --test-group=$(GROUP)
+endif
+
+
+
 .PHONY: all test clean
 all test clean:
 
@@ -45,6 +56,7 @@ test_integration:
 		--maxfail=3 \
 		--log-level=INFO \
 		--retries=3 \
+		$(EXTRA_ARGS) \
 		tests/integration
 
 .PHONY: clean-dist
