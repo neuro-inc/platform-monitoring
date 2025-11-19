@@ -56,7 +56,7 @@ test_integration:
 		--maxfail=3 \
 		--log-level=INFO \
 		--retries=3 \
-		$(EXTRA_ARGS)
+		$(EXTRA_ARGS) \
 		tests/integration
 
 .PHONY: clean-dist
