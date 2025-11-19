@@ -21,10 +21,10 @@ dependencies = [
     "aiobotocore==2.22.0",
     "aiohttp[speedups]==3.12.14",
     "aioitertools==0.12.0",
-    "apolo-api-client (>=25.6.0,<26.0.0)",
+    "apolo-api-client==25.6.0",
     "cachetools==5.5.2",
     "docker-image-py==0.1.13",
-    "elasticsearch<8.0.0",
+    "elasticsearch==9.2.0",
     "iso8601==2.1.0",
     "neuro-auth-client==25.5.1",
     "neuro-config-client==25.10.0",
@@ -33,8 +33,8 @@ dependencies = [
     "trafaret==2.1.1",
     "uvloop==0.21.0",
     "apolo-apps-client==25.8.1",
-    "apolo-kube-client (>=25.11.4,<26.0.0)",
-    "tenacity (>=9.1.2,<10.0.0)",
+    "apolo-kube-client (>=25.11.5,<26.0.0)",
+    "tenacity==9.1.2",
 ]
 
 # Remove this section when poetry-dynamic-versioning drops [tool.poetry] support in favor of [project].
