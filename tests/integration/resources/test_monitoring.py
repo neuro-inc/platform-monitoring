@@ -19,6 +19,8 @@ from apolo_kube_client import (
     V1Pod,
     V1PodSpec,
     V1ResourceRequirements,
+    PatchAdd,
+    PatchRemove,
 )
 
 from neuro_config_client import (
@@ -290,7 +292,7 @@ class TestMonitoringService:
         # Remove all labels
         node_name = cast(str, node.metadata.name)
         await kube_client.core_v1.node.patch_json(
-            node_name, [{"op": "remove", "path": "/metadata/labels"}]
+            node_name, [PatchRemove(path="/metadata/labels")]
         )
 
         async for attempt in tenacity.AsyncRetrying(
@@ -310,21 +312,18 @@ class TestMonitoringService:
         await kube_client.core_v1.node.patch_json(
             node_name,
             [
-                {
-                    "op": "add",
-                    "path": "/metadata/labels",
-                    "value": {},  # type: ignore
-                },
-                {
-                    "op": "add",
-                    "path": f"/metadata/labels/{escape_json_pointer(APOLO_PLATFORM_ROLE_LABEL_KEY)}",
-                    "value": "workload",
-                },
-                {
-                    "op": "add",
-                    "path": f"/metadata/labels/{escape_json_pointer(APOLO_PLATFORM_NODE_POOL_LABEL_KEY)}",
-                    "value": node_pool_name,
-                },
+                PatchAdd(
+                    path="/metadata/labels",
+                    value={},
+                ),
+                PatchAdd(
+                    path=f"/metadata/labels/{escape_json_pointer(APOLO_PLATFORM_ROLE_LABEL_KEY)}",
+                    value="workload",
+                ),
+                PatchAdd(
+                    path=f"/metadata/labels/{escape_json_pointer(APOLO_PLATFORM_NODE_POOL_LABEL_KEY)}",
+                    value=node_pool_name,
+                ),
             ],
         )
 
@@ -435,11 +434,10 @@ class TestMonitoringService:
         await kube_client.core_v1.pod.patch_json(
             pod_name,
             [
-                {
-                    "op": "add",
-                    "path": f"/metadata/labels/{escape_json_pointer(APOLO_PLATFORM_JOB_LABEL_KEY)}",
-                    "value": "test-job",
-                }
+                PatchAdd(
+                    path=f"/metadata/labels/{escape_json_pointer(APOLO_PLATFORM_JOB_LABEL_KEY)}",
+                    value="test-job",
+                )
             ],
             namespace="default",
         )
@@ -464,10 +462,9 @@ class TestMonitoringService:
         await kube_client.core_v1.pod.patch_json(
             pod_name,
             [
-                {
-                    "op": "remove",
-                    "path": f"/metadata/labels/{escape_json_pointer(APOLO_PLATFORM_JOB_LABEL_KEY)}",
-                }
+                PatchRemove(
+                    path=f"/metadata/labels/{escape_json_pointer(APOLO_PLATFORM_JOB_LABEL_KEY)}",
+                )
             ],
             namespace="default",
         )
