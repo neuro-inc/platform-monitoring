@@ -23,9 +23,7 @@ def s3_logs_metadata_service(
     s3_logs_metadata_storage: S3LogsMetadataStorage,
     kube_config: KubeConfig,
 ) -> S3LogsMetadataService:
-    return S3LogsMetadataService(
-        s3_client, s3_logs_metadata_storage, kube_config.namespace
-    )
+    return S3LogsMetadataService(s3_client, s3_logs_metadata_storage, "default")
 
 
 @pytest.fixture

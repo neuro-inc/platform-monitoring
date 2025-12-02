@@ -41,7 +41,6 @@ class App:
                 auth_cert_key_path=config.kube.auth_cert_key_path,
                 token=config.kube.token,
                 token_path=config.kube.token_path,
-                namespace=config.kube.namespace,
                 client_conn_timeout_s=config.kube.client_conn_timeout_s,
                 client_read_timeout_s=config.kube.client_read_timeout_s,
                 client_conn_pool_size=config.kube.client_conn_pool_size,
