@@ -1042,7 +1042,7 @@ def create_s3_logs_service(
         cache_metadata=cache_log_metadata,
     )
     metadata_service = S3LogsMetadataService(
-        s3_client, metadata_storage, kube_namespace_name=config.kube.namespace
+        s3_client, metadata_storage, kube_namespace_name="default"
     )
     return S3LogsService(kube_client_selector, s3_client, metadata_service)
 
@@ -1105,7 +1105,6 @@ async def create_app(config: Config) -> aiohttp.web.Application:
                 auth_cert_key_path=config.kube.auth_cert_key_path,
                 token=config.kube.token,
                 token_path=config.kube.token_path,
-                namespace=config.kube.namespace,
                 client_conn_timeout_s=config.kube.client_conn_timeout_s,
                 client_read_timeout_s=config.kube.client_read_timeout_s,
                 client_conn_pool_size=config.kube.client_conn_pool_size,
