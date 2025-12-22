@@ -406,11 +406,12 @@ class ContainerStatus:
             (last_state, "last_state"),
         ):
             state_attr = getattr(payload, state_attr_name)
-            if state_attr.running.started_at:
-                prop["running"] = {
-                    "startedAt": format_date(state_attr.running.started_at)
-                }
-            if state_attr.terminated:
+            if state_attr.running is not None:
+                if state_attr.running.started_at:
+                    prop["running"] = {
+                        "startedAt": format_date(state_attr.running.started_at)
+                    }
+            if state_attr.terminated is not None:
                 terminated = {"exitCode": state_attr.terminated.exit_code}
                 if state_attr.terminated.started_at:
                     terminated["startedAt"] = format_date(
@@ -421,8 +422,9 @@ class ContainerStatus:
                         state_attr.terminated.finished_at
                     )
                 prop["terminated"] = terminated
-            if state_attr.waiting.message or state_attr.waiting.reason:
-                prop["waiting"] = True
+            if state_attr.waiting is not None:
+                if state_attr.waiting.message or state_attr.waiting.reason:
+                    prop["waiting"] = True
         return cls(
             name=payload.name,
             container_id=(payload.container_id or "").replace("docker://", "") or None,
