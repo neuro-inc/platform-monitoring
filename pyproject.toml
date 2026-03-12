@@ -29,7 +29,7 @@ dependencies = [
     "neuro-auth-client==25.5.1",
     "neuro-config-client==25.10.0",
     "neuro-logging==25.1.0",
-    "orjson==3.10.18",
+    "orjson==3.11.6",
     "trafaret==2.1.1",
     "uvloop==0.21.0",
     "apolo-apps-client==25.8.1",
