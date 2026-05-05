@@ -12,11 +12,11 @@ loki:
       s3:
         bucketnames: logs
         insecure: false
-        region: minio
-        access_key_id: access_key
-        endpoint: http://minio:9000
+        region: us-east-1
+        access_key_id: admin_access_key_id
+        endpoint: http://seaweedfs-s3.platform.svc.cluster.local:9000
         s3forcepathstyle: true
-        secret_access_key: secret_key
+        secret_access_key: admin_secret_access_key
 
   schemaConfig:
     configs:
@@ -38,10 +38,10 @@ loki:
   storage_config:
     aws:
       bucketnames: logs
-      endpoint: http://minio:9000
-      region: minio
-      access_key_id: access_key
-      secret_access_key: secret_key
+      endpoint: http://seaweedfs-s3.platform.svc.cluster.local:9000
+      region: us-east-1
+      access_key_id: admin_access_key_id
+      secret_access_key: admin_secret_access_key
       insecure: false
       s3forcepathstyle: true
 
