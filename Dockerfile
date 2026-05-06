@@ -6,10 +6,10 @@ ENV PATH=/root/.local/bin:$PATH
 
 WORKDIR /tmp
 COPY requirements.txt /tmp/
-RUN pip install -q --user --no-cache-dir -r requirements.txt
+RUN pip install --user --no-cache-dir -r requirements.txt
 
 COPY dist /tmp/dist/
-RUN pip install -q --user --no-cache-dir --find-links /tmp/dist platform-monitoring
+RUN pip install --user --no-cache-dir --find-links /tmp/dist platform-monitoring
 
 FROM python:${PY_VERSION}-slim AS runtime
 LABEL org.opencontainers.image.source="https://github.com/neuro-inc/platform-monitoring"

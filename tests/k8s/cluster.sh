@@ -96,20 +96,26 @@ function k8s::wait_for_all_pods_ready {
     for ns in $namespaces; do
         if kubectl get deployment -n "$ns" --no-headers 2>/dev/null | grep -q .; then
             echo "Waiting for deployments ($ns)..."
-            kubectl rollout status deployment --all -n "$ns" --timeout="$timeout" \
-                || { k8s::dump_failed_pods; return 1; }
+            while read -r name; do
+                kubectl rollout status "deployment/$name" -n "$ns" --timeout="$timeout" \
+                    || { k8s::dump_failed_pods; return 1; }
+            done < <(kubectl get deployment -n "$ns" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
         fi
 
         if kubectl get statefulset -n "$ns" --no-headers 2>/dev/null | grep -q .; then
             echo "Waiting for statefulsets ($ns)..."
-            kubectl rollout status statefulset --all -n "$ns" --timeout="$timeout" \
-                || { k8s::dump_failed_pods; return 1; }
+            while read -r name; do
+                kubectl rollout status "statefulset/$name" -n "$ns" --timeout="$timeout" \
+                    || { k8s::dump_failed_pods; return 1; }
+            done < <(kubectl get statefulset -n "$ns" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
         fi
 
         if kubectl get daemonset -n "$ns" --no-headers 2>/dev/null | grep -q .; then
             echo "Waiting for daemonsets ($ns)..."
-            kubectl rollout status daemonset --all -n "$ns" --timeout="$timeout" \
-                || { k8s::dump_failed_pods; return 1; }
+            while read -r name; do
+                kubectl rollout status "daemonset/$name" -n "$ns" --timeout="$timeout" \
+                    || { k8s::dump_failed_pods; return 1; }
+            done < <(kubectl get daemonset -n "$ns" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
         fi
     done
 
