@@ -69,13 +69,22 @@ spec:
         imagePullPolicy: Always
         env:
         - name: NP_JWT_SECRET
-          value: secret
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: jwt_secret
         - name: NP_ADMIN_AUTH_TOKEN
-          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImFkbWluIiwiaHR0cHM6Ly9wbGF0Zm9ybS5uZXVyb21hdGlvbi5pby91c2VyIjoiYWRtaW4ifQ._F3y_fr2W0yiJ_-r46NPszsv3H1LzWAvGNXjl0eXwVI
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: token_admin
         - name: NP_ADMIN_AUTH_URL
           value: http://platformauthapi:8080
         - name: NP_ADMIN_CONFIG_TOKEN
-          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImFkbWluIiwiaHR0cHM6Ly9wbGF0Zm9ybS5uZXVyb21hdGlvbi5pby91c2VyIjoiYWRtaW4ifQ._F3y_fr2W0yiJ_-r46NPszsv3H1LzWAvGNXjl0eXwVI
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: token_admin
         - name: NP_ADMIN_CONFIG_URL
           value: http://platformconfig:8080
         - name: NP_ADMIN_POSTGRES_DSN
@@ -83,7 +92,10 @@ spec:
         - name: NP_ADMIN_NOTIFICATIONS_URL
           value: http://platformnotifications:8080
         - name: NP_ADMIN_NOTIFICATIONS_TOKEN
-          value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZGVudGl0eSI6ImNvbXB1dGUifQ.IJDlKCfbiuNGZH9Sh6p-CdUL5KxEK5JStqzfDk4-RAA
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: token_compute
       volumes:
         - name: jwks-secret-volume
           secret:
@@ -136,7 +148,7 @@ spec:
         - -ec
         - |
           curl -fsS -X POST \
-            -H "Authorization: Bearer $NP_CLUSTER_ADMIN_TOKEN" \
+            -H "Authorization: Bearer $NP_ADMIN_TOKEN" \
             -H "Content-Type: application/json" \
             -d @- \
             "$NP_PLATFORM_CONFIG_URL/api/v1/clusters" <<EOM
@@ -147,7 +159,7 @@ spec:
           EOM
 
           curl -fsS -X POST \
-            -H "Authorization: Bearer $NP_CLUSTER_ADMIN_TOKEN" \
+            -H "Authorization: Bearer $NP_ADMIN_TOKEN" \
             -H "Content-Type: application/json" \
             -d @- \
             "$NP_PLATFORM_CONFIG_URL/api/v1/clusters" <<EOM
@@ -223,7 +235,7 @@ spec:
           EOM
 
           curl -fsS -X POST \
-            -H "Authorization: Bearer $NP_CLUSTER_ADMIN_TOKEN" \
+            -H "Authorization: Bearer $NP_ADMIN_TOKEN" \
             -H "Content-Type: application/json" \
             -d @- \
             "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/clusters" <<EOM
@@ -233,7 +245,7 @@ spec:
           EOM
 
           curl -fsS -X POST \
-            -H "Authorization: Bearer $NP_CLUSTER_ADMIN_TOKEN" \
+            -H "Authorization: Bearer $NP_ADMIN_TOKEN" \
             -H "Content-Type: application/json" \
             -d @- \
             "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/clusters" <<EOM
@@ -247,8 +259,17 @@ spec:
         - name: NP_PLATFORM_ADMIN_URL
           value: http://platformadmin:8080
         - name: NP_CLUSTER_TOKEN
-          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImNsdXN0ZXIifQ.kZG6EyaHMa2gNzrgKQlwVnZ0OZ5mruFZ0xVAbntm-dU
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: token_cluster
         - name: NP_ADMIN_TOKEN
-          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImFkbWluIiwiaHR0cHM6Ly9wbGF0Zm9ybS5uZXVyb21hdGlvbi5pby91c2VyIjoiYWRtaW4ifQ._F3y_fr2W0yiJ_-r46NPszsv3H1LzWAvGNXjl0eXwVI
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: token_admin
         - name: NP_CLUSTER_ADMIN_TOKEN
-          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImNsdXN0ZXItYWRtaW4iLCJodHRwczovL3BsYXRmb3JtLm5ldXJvbWF0aW9uLmlvL3VzZXIiOiJjbHVzdGVyLWFkbWluIn0.ee3ufWpd0XRtRmsPhbma1_d1BZeb3c3sEsxiYk0GuFI
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: token_cluster_admin

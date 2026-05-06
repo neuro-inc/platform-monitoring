@@ -34,6 +34,7 @@ function k8s::apply_all_configurations {
     kubectl get nodes -o name | xargs -I {} \
         kubectl label {} --overwrite platform.neuromation.io/nodepool=minikube
     kubectl apply -f tests/k8s/rbac.yml
+    kubectl apply -f tests/k8s/tokens.yml
     kubectl apply -f tests/k8s/logging.yml
     kubectl apply -f tests/k8s/platformauth.yml
     kubectl apply -f tests/k8s/platformconfig.yml
@@ -106,11 +107,23 @@ function k8s::wait_for_all_pods_ready {
         (( remaining > 0 ))
     }
 
+    function k8s::run_with_remaining_timeout {
+        if ! k8s::remaining_wait_seconds; then
+            echo "Timed out waiting for k8s readiness (${timeout_seconds}s)"
+            return 1
+        fi
+        timeout "${remaining}s" "$@"
+    }
+
     if ! k8s::remaining_wait_seconds; then
         echo "Timed out waiting for k8s readiness (${timeout_seconds}s)"
         return 1
     fi
-    namespaces="$(kubectl get namespaces --request-timeout="${remaining}s" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')"
+    namespaces="$(
+        k8s::run_with_remaining_timeout \
+            kubectl get namespaces --request-timeout="${remaining}s" \
+            -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'
+    )"
 
     for ns in $namespaces; do
         for kind in deployment statefulset daemonset; do
@@ -121,8 +134,11 @@ function k8s::wait_for_all_pods_ready {
                 return 1
             fi
 
-            names="$(kubectl get "$kind" -n "$ns" --request-timeout="${remaining}s" \
-                -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')"
+            names="$(
+                k8s::run_with_remaining_timeout \
+                    kubectl get "$kind" -n "$ns" --request-timeout="${remaining}s" \
+                    -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'
+            )"
             [[ -z "$names" ]] && continue
 
             echo "Waiting for ${kind}s ($ns)..."
@@ -134,7 +150,8 @@ function k8s::wait_for_all_pods_ready {
                     return 1
                 fi
 
-                kubectl rollout status "$kind/$name" -n "$ns" --request-timeout="${remaining}s" --timeout="${remaining}s" \
+                k8s::run_with_remaining_timeout \
+                    kubectl rollout status "$kind/$name" -n "$ns" --request-timeout="${remaining}s" --timeout="${remaining}s" \
                     || return 1
             done <<< "$names"
         done
@@ -146,7 +163,10 @@ function k8s::wait_for_all_pods_ready {
     fi
 
     local job_get_output
-    if ! job_get_output="$(kubectl get job create-cluster -n default --request-timeout="${remaining}s" 2>&1 >/dev/null)"; then
+    if ! job_get_output="$(
+        k8s::run_with_remaining_timeout \
+            kubectl get job create-cluster -n default --request-timeout="${remaining}s" 2>&1 >/dev/null
+    )"; then
         if [[ "$job_get_output" != *"NotFound"* ]]; then
             echo "$job_get_output"
             return 1
@@ -163,8 +183,16 @@ function k8s::wait_for_all_pods_ready {
             return 1
         fi
 
-        succeeded="$(kubectl get job create-cluster -n default --request-timeout="${remaining}s" -o jsonpath='{.status.succeeded}')"
-        failed="$(kubectl get job create-cluster -n default --request-timeout="${remaining}s" -o jsonpath='{.status.failed}')"
+        succeeded="$(
+            k8s::run_with_remaining_timeout \
+                kubectl get job create-cluster -n default --request-timeout="${remaining}s" \
+                -o jsonpath='{.status.succeeded}'
+        )"
+        failed="$(
+            k8s::run_with_remaining_timeout \
+                kubectl get job create-cluster -n default --request-timeout="${remaining}s" \
+                -o jsonpath='{.status.failed}'
+        )"
 
         if [[ "$succeeded" == "1" ]]; then
             break

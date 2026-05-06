@@ -29,13 +29,22 @@ spec:
         - name: NP_MONITORING_PLATFORM_API_URL
           value: http://platformapi:8080
         - name: NP_MONITORING_PLATFORM_API_TOKEN
-          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImFkbWluIiwiaHR0cHM6Ly9wbGF0Zm9ybS5uZXVyb21hdGlvbi5pby91c2VyIjoiYWRtaW4ifQ._F3y_fr2W0yiJ_-r46NPszsv3H1LzWAvGNXjl0eXwVI
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: token_admin
         - name: NP_MONITORING_PLATFORM_AUTH_TOKEN
-          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImFkbWluIiwiaHR0cHM6Ly9wbGF0Zm9ybS5uZXVyb21hdGlvbi5pby91c2VyIjoiYWRtaW4ifQ._F3y_fr2W0yiJ_-r46NPszsv3H1LzWAvGNXjl0eXwVI
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: token_admin
         - name: NP_MONITORING_PLATFORM_AUTH_URL
           value: http://platformauthapi:8080
         - name: NP_MONITORING_PLATFORM_CONFIG_TOKEN
-          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImFkbWluIiwiaHR0cHM6Ly9wbGF0Zm9ybS5uZXVyb21hdGlvbi5pby91c2VyIjoiYWRtaW4ifQ._F3y_fr2W0yiJ_-r46NPszsv3H1LzWAvGNXjl0eXwVI
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: token_admin
         - name: NP_MONITORING_PLATFORM_CONFIG_URL
           value: http://platformconfig:8080
         - name: NP_MONITORING_NODE_LABEL_NODE_POOL
@@ -73,7 +82,10 @@ spec:
         - name: NP_MONITORING_PLATFORM_APPS_URL
           value: http://platform-apps:8080
         - name: NP_MONITORING_PLATFORM_APPS_TOKEN
-          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImFkbWluIiwiaHR0cHM6Ly9wbGF0Zm9ybS5uZXVyb21hdGlvbi5pby91c2VyIjoiYWRtaW4ifQ._F3y_fr2W0yiJ_-r46NPszsv3H1LzWAvGNXjl0eXwVI
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: token_admin
 ---
 apiVersion: v1
 kind: Service

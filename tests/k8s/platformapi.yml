@@ -62,7 +62,10 @@ spec:
         - name: NP_PLATFORM_CONFIG_URL
           value: http://platformconfig:8080
         - name: NP_TOKEN
-          value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZGVudGl0eSI6ImNvbXB1dGUifQ.IJDlKCfbiuNGZH9Sh6p-CdUL5KxEK5JStqzfDk4-RAA
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: token_compute
       - name: platformapi-migrations
         image: ghcr.io/neuro-inc/platformapi:latest
         imagePullPolicy: Always
@@ -103,13 +106,19 @@ spec:
         - name: NP_NOTIFICATIONS_URL
           value: http://platformnotifications:8080
         - name: NP_NOTIFICATIONS_TOKEN
-          value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZGVudGl0eSI6ImNvbXB1dGUifQ.IJDlKCfbiuNGZH9Sh6p-CdUL5KxEK5JStqzfDk4-RAA
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: token_compute
         - name: NP_AUTH_URL
           value: http://platformauthapi:8080
         - name: NP_AUTH_PUBLIC_URL
           value: http://platformauthapi:8080
         - name: NP_AUTH_TOKEN
-          value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZGVudGl0eSI6ImNvbXB1dGUifQ.IJDlKCfbiuNGZH9Sh6p-CdUL5KxEK5JStqzfDk4-RAA
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: token_compute
         - name: NP_ADMIN_URL
           value: http://platformadmin:8080/apis/admin/v1
         - name: NP_ADMIN_PUBLIC_URL
@@ -151,7 +160,10 @@ spec:
         - name: NP_PLATFORM_API_URL
           value: http://platformapi:8080
         - name: NP_TOKEN
-          value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZGVudGl0eSI6ImNvbXB1dGUifQ.IJDlKCfbiuNGZH9Sh6p-CdUL5KxEK5JStqzfDk4-RAA
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: token_compute
       containers:
       - name: platformapi
         image: ghcr.io/neuro-inc/platformapi:latest
@@ -165,7 +177,10 @@ spec:
         - name: NP_AUTH_PUBLIC_URL
           value: http://platformauthapi:8080
         - name: NP_AUTH_TOKEN
-          value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZGVudGl0eSI6ImNvbXB1dGUifQ.IJDlKCfbiuNGZH9Sh6p-CdUL5KxEK5JStqzfDk4-RAA
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: token_compute
         - name: NP_PLATFORM_API_URL
           value: http://platformapi:8080/api/v1
         - name: NP_PLATFORM_CONFIG_URI

@@ -61,7 +61,10 @@ spec:
         - name: NP_PLATFORM_AUTH_URL
           value: http://platformauthapi:8080
         - name: NP_PLATFORM_CONFIG_TOKEN
-          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImNsdXN0ZXIifQ.kZG6EyaHMa2gNzrgKQlwVnZ0OZ5mruFZ0xVAbntm-dU
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: token_cluster
         - name: NP_PUBLIC_NEURO_REGISTRY_URL
           value: not-important
         - name: NP_PUBLIC_NEURO_HELM_URL
