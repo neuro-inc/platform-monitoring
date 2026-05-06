@@ -15,8 +15,8 @@ function k8s::install_minikube {
 
 function k8s::start {
     export KUBECONFIG=$HOME/.kube/config
-    mkdir -p $(dirname $KUBECONFIG)
-    touch $KUBECONFIG
+    mkdir -p "$(dirname "$KUBECONFIG")"
+    touch "$KUBECONFIG"
 
     minikube start \
         --vm-driver=docker \
@@ -89,69 +89,97 @@ function k8s::dump_failed_pods {
 
 function k8s::wait_for_all_pods_ready {
     local timeout_seconds=${K8S_WAIT_TIMEOUT_SECONDS:-300}
-    local timeout="${timeout_seconds}s"
-    local namespaces
-    namespaces="$(kubectl get namespaces -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')"
+    local started_at deadline namespaces remaining sleep_seconds
+
+    if [[ ! "$timeout_seconds" =~ ^[0-9]+$ ]]; then
+        echo "K8S_WAIT_TIMEOUT_SECONDS must be an integer number of seconds, got: $timeout_seconds"
+        return 1
+    fi
+
+    started_at=$(date +%s)
+    deadline=$((started_at + timeout_seconds))
+
+    function k8s::remaining_wait_seconds {
+        local now
+        now=$(date +%s)
+        remaining=$((deadline - now))
+        (( remaining > 0 ))
+    }
+
+    if ! k8s::remaining_wait_seconds; then
+        echo "Timed out waiting for k8s readiness (${timeout_seconds}s)"
+        return 1
+    fi
+    namespaces="$(kubectl get namespaces --request-timeout="${remaining}s" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')"
 
     for ns in $namespaces; do
-        if kubectl get deployment -n "$ns" --no-headers 2>/dev/null | grep -q .; then
-            echo "Waiting for deployments ($ns)..."
-            while read -r name; do
-                kubectl rollout status "deployment/$name" -n "$ns" --timeout="$timeout" \
-                    || { k8s::dump_failed_pods; return 1; }
-            done < <(kubectl get deployment -n "$ns" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
-        fi
+        for kind in deployment statefulset daemonset; do
+            local names
 
-        if kubectl get statefulset -n "$ns" --no-headers 2>/dev/null | grep -q .; then
-            echo "Waiting for statefulsets ($ns)..."
-            while read -r name; do
-                kubectl rollout status "statefulset/$name" -n "$ns" --timeout="$timeout" \
-                    || { k8s::dump_failed_pods; return 1; }
-            done < <(kubectl get statefulset -n "$ns" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
-        fi
+            if ! k8s::remaining_wait_seconds; then
+                echo "Timed out waiting for k8s readiness (${timeout_seconds}s)"
+                return 1
+            fi
 
-        if kubectl get daemonset -n "$ns" --no-headers 2>/dev/null | grep -q .; then
-            echo "Waiting for daemonsets ($ns)..."
+            names="$(kubectl get "$kind" -n "$ns" --request-timeout="${remaining}s" \
+                -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')"
+            [[ -z "$names" ]] && continue
+
+            echo "Waiting for ${kind}s ($ns)..."
             while read -r name; do
-                kubectl rollout status "daemonset/$name" -n "$ns" --timeout="$timeout" \
-                    || { k8s::dump_failed_pods; return 1; }
-            done < <(kubectl get daemonset -n "$ns" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
-        fi
+                [[ -z "$name" ]] && continue
+
+                if ! k8s::remaining_wait_seconds; then
+                    echo "Timed out waiting for k8s readiness (${timeout_seconds}s)"
+                    return 1
+                fi
+
+                kubectl rollout status "$kind/$name" -n "$ns" --request-timeout="${remaining}s" --timeout="${remaining}s" \
+                    || return 1
+            done <<< "$names"
+        done
     done
 
-    if kubectl get job create-cluster -n default >/dev/null 2>&1; then
-        echo "Waiting for create-cluster job (default)..."
-        local started_at elapsed failed succeeded
-        started_at=$(date +%s)
-
-        while true; do
-            succeeded="$(kubectl get job create-cluster -n default -o jsonpath='{.status.succeeded}' 2>/dev/null || true)"
-            failed="$(kubectl get job create-cluster -n default -o jsonpath='{.status.failed}' 2>/dev/null || true)"
-
-            if [[ "$succeeded" == "1" ]]; then
-                break
-            fi
-
-            if [[ "$failed" =~ ^[1-9][0-9]*$ ]]; then
-                echo "create-cluster job failed early (status.failed=$failed)"
-                kubectl describe job/create-cluster -n default || true
-                kubectl logs job/create-cluster -n default --all-containers=true || true
-                k8s::dump_failed_pods
-                return 1
-            fi
-
-            elapsed=$(( $(date +%s) - started_at ))
-            if (( elapsed >= timeout_seconds )); then
-                echo "Timed out waiting for create-cluster job completion (${timeout_seconds}s)"
-                kubectl describe job/create-cluster -n default || true
-                kubectl logs job/create-cluster -n default --all-containers=true || true
-                k8s::dump_failed_pods
-                return 1
-            fi
-
-            sleep 2
-        done
+    if ! k8s::remaining_wait_seconds; then
+        echo "Timed out waiting for k8s readiness (${timeout_seconds}s)"
+        return 1
     fi
+
+    local job_get_output
+    if ! job_get_output="$(kubectl get job create-cluster -n default --request-timeout="${remaining}s" 2>&1 >/dev/null)"; then
+        if [[ "$job_get_output" != *"NotFound"* ]]; then
+            echo "$job_get_output"
+            return 1
+        fi
+        return 0
+    fi
+
+    echo "Waiting for create-cluster job (default)..."
+    local failed succeeded
+
+    while true; do
+        if ! k8s::remaining_wait_seconds; then
+            echo "Timed out waiting for k8s readiness (${timeout_seconds}s)"
+            return 1
+        fi
+
+        succeeded="$(kubectl get job create-cluster -n default --request-timeout="${remaining}s" -o jsonpath='{.status.succeeded}')"
+        failed="$(kubectl get job create-cluster -n default --request-timeout="${remaining}s" -o jsonpath='{.status.failed}')"
+
+        if [[ "$succeeded" == "1" ]]; then
+            break
+        fi
+
+        if [[ "$failed" =~ ^[1-9][0-9]*$ ]]; then
+            echo "create-cluster job failed early (status.failed=$failed)"
+            return 1
+        fi
+
+        k8s::remaining_wait_seconds || true
+        sleep_seconds=2
+        (( remaining < sleep_seconds )) && sleep_seconds=$remaining
+        (( sleep_seconds > 0 )) && sleep "$sleep_seconds"
+    done
 
 }
 
@@ -167,11 +195,11 @@ function k8s::stop {
 function k8s::test {
     kubectl delete jobs testjob1 2>/dev/null || :
     kubectl create -f tests/k8s/pod.yml
-    for i in {1..300}; do
-        if [ "$(kubectl get job testjob1 --template {{.status.succeeded}})" == "1" ]; then
+    for _ in {1..300}; do
+        if [ "$(kubectl get job testjob1 --template='{{.status.succeeded}}')" == "1" ]; then
             exit 0
         fi
-        if [ "$(kubectl get job testjob1 --template {{.status.failed}})" == "1" ]; then
+        if [ "$(kubectl get job testjob1 --template='{{.status.failed}}')" == "1" ]; then
             exit 1
         fi
         sleep 1
