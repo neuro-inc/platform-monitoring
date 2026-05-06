@@ -32,6 +32,8 @@ endif
 .PHONY: all test clean
 all test clean:
 
+include k8s.mk
+
 .PHONY: venv
 venv:
 	poetry lock
