@@ -175,7 +175,7 @@ async def platform_monitoring_api_address(in_minikube: bool) -> "ApiAddress":  #
 
 @pytest.fixture(scope="session")
 def s3_config() -> S3Config:
-    s3_url = get_service_url(service_name="seaweedfs-s3", namespace="platform")
+    s3_url = get_service_url(service_name="seaweedfs-s3", namespace="default")
     return S3Config(
         region="us-east-1",
         access_key_id="admin_access_key_id",

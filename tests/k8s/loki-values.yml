@@ -14,7 +14,7 @@ loki:
         insecure: false
         region: us-east-1
         access_key_id: admin_access_key_id
-        endpoint: http://seaweedfs-s3.platform.svc.cluster.local:9000
+        endpoint: http://seaweedfs-s3:9000
         s3forcepathstyle: true
         secret_access_key: admin_secret_access_key
 
@@ -38,7 +38,7 @@ loki:
   storage_config:
     aws:
       bucketnames: logs
-      endpoint: http://seaweedfs-s3.platform.svc.cluster.local:9000
+      endpoint: http://seaweedfs-s3:9000
       region: us-east-1
       access_key_id: admin_access_key_id
       secret_access_key: admin_secret_access_key

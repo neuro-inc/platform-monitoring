@@ -68,9 +68,6 @@ jobs:
     name: Integration tests
     runs-on: ubuntu-latest
     timeout-minutes: 75
-    strategy:
-      matrix:
-        chunks: [1]
     steps:
     - name: Checkout commit
       uses: actions/checkout@v6
@@ -124,31 +121,12 @@ jobs:
         make wait_k8s_pods_ready
         kubectl get pods -A
         make test_k8s
-    - name: Dump failed pod logs after setup
-      if: failure()
-      run: make dump_failed_k8s_logs
     - name: Port-forward registry
       run: kubectl port-forward -n kube-system svc/registry-lb 5000:5000 &
     - name: Wait for port-forwards
       run: sleep 5
-    - name: Increment index
-      id: group
-      shell: python
-      run: |
-        import os
-        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-          f.write(f"group={int(os.environ['ARG']) + 1}")
-      env:
-        ARG: ${{ strategy.job-index }}
     - name: Run integration tests
       run: make test_integration
-      env:
-        COUNT: ${{ strategy.job-total }}
-        GROUP: ${{ steps.group.outputs.group }}
-        COVERAGE_FILE: ${{ strategy.job-index }}.coverage
-    - name: Dump failed pod logs after tests
-      if: failure()
-      run: make dump_failed_k8s_logs
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5
       with:

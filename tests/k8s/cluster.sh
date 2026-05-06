@@ -56,8 +56,52 @@ function k8s::apply_all_configurations {
 }
 
 
+function k8s::dump_failed_pods {
+    echo ""
+    echo "=== Pod overview ==="
+    kubectl get pods -A
+
+    kubectl get pods -A --no-headers | while read -r ns pod ready status restarts _age; do
+        current="${ready%%/*}"
+        total="${ready##*/}"
+        restart_count="${restarts%% *}"
+
+        bad_status=false
+        not_ready=false
+        has_restarts=false
+
+        [[ "$status" != "Running" && "$status" != "Completed" && "$status" != "Succeeded" ]] && bad_status=true
+        [[ "$current" != "$total" ]] && not_ready=true
+        [[ "$restart_count" =~ ^[0-9]+$ && "$restart_count" -gt 0 ]] && has_restarts=true
+
+        if $bad_status || $not_ready || $has_restarts; then
+            echo ""
+            echo "########## $pod (ns=$ns) ##########"
+            echo "--- Events ---"
+            kubectl describe pod "$pod" -n "$ns" 2>&1
+            echo "--- Logs ---"
+            kubectl logs "$pod" -n "$ns" --all-containers 2>&1 || true
+            echo "--- Previous logs ---"
+            kubectl logs "$pod" -n "$ns" --all-containers --previous 2>&1 || true
+        fi
+    done
+}
+
 function k8s::wait_for_all_pods_ready {
-    ./tests/k8s/wait-pods-ready.sh 300 5
+    local timeout=300s
+
+    echo "Waiting for deployments (default)..."
+    kubectl rollout status deployment --all --timeout="$timeout" \
+        || { k8s::dump_failed_pods; return 1; }
+
+    echo "Waiting for statefulsets (default)..."
+    kubectl rollout status statefulset --all --timeout="$timeout" \
+        || { k8s::dump_failed_pods; return 1; }
+
+    echo "Waiting for daemonsets (default)..."
+    kubectl rollout status daemonset --all --timeout="$timeout" \
+        || { k8s::dump_failed_pods; return 1; }
+
 }
 
 

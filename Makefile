@@ -1,6 +1,3 @@
-COUNT ?=
-GROUP ?=
-
 LOKI_HELM_VERSION ?= 6.55.0
 ALLOY_HELM_VERSION ?= 1.8.1
 LOKI_CHART ?= grafana/loki
@@ -20,14 +17,6 @@ PYTEST_DURATIONS ?= 10
 PYTEST_MAXFAIL ?= 3
 PYTEST_LOG_LEVEL ?= INFO
 PYTEST_RETRIES ?= 3
-
-DESCRIBE_TAIL_LINES ?= 40
-
-ifeq ($(COUNT), )
-EXTRA_ARGS :=
-else
-EXTRA_ARGS := --test-group-count=$(COUNT) --test-group=$(GROUP)
-endif
 
 .PHONY: all test clean
 all test clean:
@@ -77,7 +66,6 @@ test_integration:
 		--maxfail=$(PYTEST_MAXFAIL) \
 		--log-level=$(PYTEST_LOG_LEVEL) \
 		--retries=$(PYTEST_RETRIES) \
-		$(EXTRA_ARGS) \
 		$(INT_TEST_PATH)
 
 .PHONY: clean-dist
@@ -106,23 +94,3 @@ install_helm_loki:
 .PHONY: install_helm_alloy
 install_helm_alloy:
 	helm upgrade alloy $(ALLOY_CHART) -f $(ALLOY_VALUES) --version $(ALLOY_HELM_VERSION) --install
-
-.PHONY: dump_failed_k8s_logs
-dump_failed_k8s_logs:
-	@echo "=== Pod overview ===" && kubectl get pods -A
-	@kubectl get pods -A --no-headers \
-	  | awk '{ \
-	      split($$3, r, "/"); not_ready = (r[1] != r[2]); \
-	      bad_status = ($$4 != "Running" && $$4 != "Completed" && $$4 != "Succeeded"); \
-	      has_restarts = ($$5+0 > 0); \
-	      if (bad_status || not_ready || has_restarts) print $$1, $$2 \
-	    }' \
-	  | while read -r ns pod; do \
-	    echo ""; \
-	    echo "=== Describe: $$pod (ns=$$ns) ==="; \
-	    kubectl describe pod "$$pod" -n "$$ns" 2>&1 | tail -$(DESCRIBE_TAIL_LINES); \
-	    echo "=== Logs: $$pod (ns=$$ns) ==="; \
-	    kubectl logs "$$pod" -n "$$ns" --all-containers 2>&1 || true; \
-	    echo "=== Previous logs: $$pod (ns=$$ns) ==="; \
-	    kubectl logs "$$pod" -n "$$ns" --all-containers --previous 2>&1 || true; \
-	  done
