@@ -1,5 +1,7 @@
 COUNT ?=
 GROUP ?=
+LOKI_HELM_VERSION ?= 6.55.0
+ALLOY_HELM_VERSION ?= 1.8.1
 
 ifeq ($(COUNT), )
 EXTRA_ARGS :=
@@ -106,7 +108,7 @@ clean_k8s:
 	docker rm $$(docker ps -a -q)
 
 install_helm_loki:
-	helm upgrade loki grafana/loki -f tests/k8s/loki-values.yml --version 6.28.0 --install
+	helm upgrade loki grafana/loki -f tests/k8s/loki-values.yml --version $(LOKI_HELM_VERSION) --install
 
 install_helm_alloy:
-	helm upgrade alloy grafana/alloy  -f tests/k8s/alloy-values.yml --version 0.12.3 --install
+	helm upgrade alloy grafana/alloy -f tests/k8s/alloy-values.yml --version $(ALLOY_HELM_VERSION) --install
