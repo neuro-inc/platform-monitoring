@@ -88,19 +88,64 @@ function k8s::dump_failed_pods {
 }
 
 function k8s::wait_for_all_pods_ready {
-    local timeout=300s
+    local timeout_seconds=${K8S_WAIT_TIMEOUT_SECONDS:-300}
+    local timeout="${timeout_seconds}s"
+    local namespaces
+    namespaces="$(kubectl get namespaces -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')"
 
-    echo "Waiting for deployments (default)..."
-    kubectl rollout status deployment --all --timeout="$timeout" \
-        || { k8s::dump_failed_pods; return 1; }
+    for ns in $namespaces; do
+        if kubectl get deployment -n "$ns" --no-headers 2>/dev/null | grep -q .; then
+            echo "Waiting for deployments ($ns)..."
+            kubectl rollout status deployment --all -n "$ns" --timeout="$timeout" \
+                || { k8s::dump_failed_pods; return 1; }
+        fi
 
-    echo "Waiting for statefulsets (default)..."
-    kubectl rollout status statefulset --all --timeout="$timeout" \
-        || { k8s::dump_failed_pods; return 1; }
+        if kubectl get statefulset -n "$ns" --no-headers 2>/dev/null | grep -q .; then
+            echo "Waiting for statefulsets ($ns)..."
+            kubectl rollout status statefulset --all -n "$ns" --timeout="$timeout" \
+                || { k8s::dump_failed_pods; return 1; }
+        fi
 
-    echo "Waiting for daemonsets (default)..."
-    kubectl rollout status daemonset --all --timeout="$timeout" \
-        || { k8s::dump_failed_pods; return 1; }
+        if kubectl get daemonset -n "$ns" --no-headers 2>/dev/null | grep -q .; then
+            echo "Waiting for daemonsets ($ns)..."
+            kubectl rollout status daemonset --all -n "$ns" --timeout="$timeout" \
+                || { k8s::dump_failed_pods; return 1; }
+        fi
+    done
+
+    if kubectl get job create-cluster -n default >/dev/null 2>&1; then
+        echo "Waiting for create-cluster job (default)..."
+        local started_at elapsed failed succeeded
+        started_at=$(date +%s)
+
+        while true; do
+            succeeded="$(kubectl get job create-cluster -n default -o jsonpath='{.status.succeeded}' 2>/dev/null || true)"
+            failed="$(kubectl get job create-cluster -n default -o jsonpath='{.status.failed}' 2>/dev/null || true)"
+
+            if [[ "$succeeded" == "1" ]]; then
+                break
+            fi
+
+            if [[ "$failed" =~ ^[1-9][0-9]*$ ]]; then
+                echo "create-cluster job failed early (status.failed=$failed)"
+                kubectl describe job/create-cluster -n default || true
+                kubectl logs job/create-cluster -n default --all-containers=true || true
+                k8s::dump_failed_pods
+                return 1
+            fi
+
+            elapsed=$(( $(date +%s) - started_at ))
+            if (( elapsed >= timeout_seconds )); then
+                echo "Timed out waiting for create-cluster job completion (${timeout_seconds}s)"
+                kubectl describe job/create-cluster -n default || true
+                kubectl logs job/create-cluster -n default --all-containers=true || true
+                k8s::dump_failed_pods
+                return 1
+            fi
+
+            sleep 2
+        done
+    fi
 
 }
 

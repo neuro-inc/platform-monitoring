@@ -116,20 +116,12 @@ spec:
         args:
         - -c
         - |
-          code=-1
-
-          while [ $code != 0 ]
-          do
+          until curl -fsS "$NP_PLATFORM_CONFIG_URL/ping"; do
             sleep 1
-            curl -f "$NP_PLATFORM_CONFIG_URL/ping"
-            code=$?
           done
 
-          while [ $code != 0 ]
-          do
+          until curl -fsS "$NP_PLATFORM_ADMIN_URL/ping"; do
             sleep 1
-            curl -f "$NP_PLATFORM_ADMIN_URL/ping"
-            code=$?
           done
         env:
         - name: NP_PLATFORM_CONFIG_URL
@@ -211,6 +203,14 @@ spec:
               "buckets": {
                   "url": "http://platformapi/api/v1/buckets",
                   "disable_creation": false
+              },
+              "grafana": {"url": "http://grafana.default:3000"},
+              "prometheus": {"url": "http://prometheus.default:9090"},
+              "apps": {
+                  "apps_hostname_templates": [
+                      "{app_name}.apps.default.org.neu.ro"
+                  ],
+                  "app_proxy_url": "https://proxy.apps.default.org.neu.ro"
               },
               "ingress": {"acme_environment": "staging"},
               "energy": {"co2_grams_eq_per_kwh": 0, "schedules": []},

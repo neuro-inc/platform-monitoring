@@ -68,6 +68,8 @@ jobs:
     name: Integration tests
     runs-on: ubuntu-latest
     timeout-minutes: 75
+    env:
+      K8S_WAIT_TIMEOUT_SECONDS: "600"
     steps:
     - name: Checkout commit
       uses: actions/checkout@v6
@@ -113,20 +115,56 @@ jobs:
       id: install
     - name: Setup services in minikube
       run: |
-        kubectl create secret docker-registry ghcr-secret --docker-server=https://ghcr.io --docker-username=${{ github.actor }} --docker-password=${{ secrets.GITHUB_TOKEN }}
+        set -euo pipefail
+        kubectl create secret docker-registry ghcr-secret --docker-server=https://ghcr.io --docker-username=${{ github.actor }} --docker-password=${{ secrets.GITHUB_TOKEN }} --dry-run=client -o yaml | kubectl apply -f -
         make apply_configuration_k8s
-        helm repo add grafana https://grafana.github.io/helm-charts
-        make install_helm_loki
-        make install_helm_alloy
-        make wait_k8s_pods_ready
+        make install_helm_stack
+    - name: Wait for k8s readiness
+      run: |
+        set -euo pipefail
+        if ! make wait_k8s_pods_ready; then
+          make dump_failed_k8s_logs || true
+          exit 1
+        fi
+    - name: Run k8s smoke test
+      run: make test_k8s
+    - name: Print k8s state
+      run: |
         kubectl get pods -A
-        make test_k8s
-    - name: Port-forward registry
-      run: kubectl port-forward -n kube-system svc/registry-lb 5000:5000 &
-    - name: Wait for port-forwards
-      run: sleep 5
+        kubectl get jobs -A
+    - name: Setup registry port-forward
+      run: |
+        set -euo pipefail
+        kubectl port-forward -n kube-system svc/registry-lb 5000:5000 >/tmp/registry-port-forward.log 2>&1 &
+        echo $! >/tmp/registry-port-forward.pid
+
+        for _ in $(seq 1 60); do
+          if (echo > /dev/tcp/127.0.0.1/5000) >/dev/null 2>&1; then
+            break
+          fi
+          sleep 1
+        done
+
+        if ! (echo > /dev/tcp/127.0.0.1/5000) >/dev/null 2>&1; then
+          echo "Registry port-forward did not become ready in time"
+          cat /tmp/registry-port-forward.log || true
+          exit 1
+        fi
+
     - name: Run integration tests
-      run: make test_integration
+      run: |
+        set -euo pipefail
+        make test_integration
+    - name: Stop registry port-forward
+      if: always()
+      run: |
+        if [ -f /tmp/registry-port-forward.pid ]; then
+          kill "$(cat /tmp/registry-port-forward.pid)" >/dev/null 2>&1 || true
+          rm -f /tmp/registry-port-forward.pid
+        fi
+    - name: Dump failed k8s logs
+      if: failure()
+      run: make dump_failed_k8s_logs
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5
       with:
