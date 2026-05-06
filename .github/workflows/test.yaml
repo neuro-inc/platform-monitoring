@@ -70,7 +70,7 @@ jobs:
     timeout-minutes: 75
     strategy:
       matrix:
-        chunks: [1, 2, 3]
+        chunks: [1]
     steps:
     - name: Checkout commit
       uses: actions/checkout@v6
@@ -124,6 +124,9 @@ jobs:
         make wait_k8s_pods_ready
         kubectl get pods -A
         make test_k8s
+    - name: Dump failed pod logs after setup
+      if: failure()
+      run: make dump_failed_k8s_logs
     - name: Port-forward registry
       run: kubectl port-forward -n kube-system svc/registry-lb 5000:5000 &
     - name: Wait for port-forwards
@@ -143,15 +146,9 @@ jobs:
         COUNT: ${{ strategy.job-total }}
         GROUP: ${{ steps.group.outputs.group }}
         COVERAGE_FILE: ${{ strategy.job-index }}.coverage
-    - name: Dump pod logs for debugging
+    - name: Dump failed pod logs after tests
       if: failure()
-      run: |
-        echo "Collecting logs from all pods:"
-        kubectl --context minikube get pods -o name | while read -r pod; do
-          echo "=== Logs for $pod ==="
-          kubectl --context minikube logs "$pod" || true
-          echo
-        done
+      run: make dump_failed_k8s_logs
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5
       with:
