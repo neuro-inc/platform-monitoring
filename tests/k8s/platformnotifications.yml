@@ -61,13 +61,8 @@ spec:
         args:
         - -c
         - |
-          code=-1
-
-          while [ $code != 0 ]
-          do
+          until curl -fsS -H "Authorization: Bearer $NP_TOKEN" "$NP_PLATFORM_API_URL/api/v1/config" >/dev/null; do
             sleep 1
-            curl -f -H "Authorization: Bearer $NP_TOKEN" "$NP_PLATFORM_API_URL/api/v1/config"
-            code=$?
           done
         env:
         - name: NP_PLATFORM_API_URL

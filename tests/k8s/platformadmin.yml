@@ -135,36 +135,9 @@ spec:
         args:
         - -ec
         - |
-          curl -vv -X POST \
+          curl -fsS -X PUT \
             -H "Authorization: Bearer $NP_ADMIN_TOKEN" \
-            -d @- \
-            "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/users" <<EOM
-          {
-            "name": "cluster-admin",
-            "email": "cluster-admin@neu.ro"
-          }
-          EOM
-
-          curl -vv -X POST \
-            -H "Authorization: Bearer $NP_CLUSTER_ADMIN_TOKEN" \
-            -d @- \
-            "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/clusters" <<EOM
-          {
-            "name": "default"
-          }
-          EOM
-
-          curl -vv -X POST \
-            -H "Authorization: Bearer $NP_CLUSTER_ADMIN_TOKEN" \
-            -d @- \
-            "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/clusters" <<EOM
-          {
-            "name": "default2"
-          }
-          EOM
-
-          curl -vv -X PUT \
-            -H "Authorization: Bearer $NP_ADMIN_TOKEN" \
+            -H "Content-Type: application/json" \
             -d @- \
             "$NP_PLATFORM_CONFIG_URL/api/v1/clusters/default" <<EOM
           {
@@ -172,7 +145,6 @@ spec:
               "orchestrator": {
                   "is_http_ingress_secure": true,
                   "job_hostname_template": "{job_id}.jobs.neu.ro",
-                  "job_internal_hostname_template": "{job_id}.default",
                   "resource_pool_types": [
                       {
                           "name": "minikube",
@@ -208,13 +180,48 @@ spec:
               "prometheus": {"url": "http://prometheus.default:9090"},
               "apps": {
                   "apps_hostname_templates": [
-                      "{app_name}.apps.default.org.neu.ro"
+                      "{app_name}.apps.default.kubernetes.default.svc."
                   ],
-                  "app_proxy_url": "https://proxy.apps.default.org.neu.ro"
+                  "app_proxy_url": "https://proxy.apps.default.kubernetes.default.svc"
               },
               "ingress": {"acme_environment": "staging"},
               "energy": {"co2_grams_eq_per_kwh": 0, "schedules": []},
               "timezone": "UTC"
+          }
+          EOM
+
+          until curl -fsS -H "Authorization: Bearer $NP_TOKEN" "$NP_PLATFORM_API_URL/api/v1/config" >/dev/null; do
+            sleep 1
+          done
+
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $NP_ADMIN_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d @- \
+            "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/users" <<EOM
+          {
+            "name": "cluster-admin",
+            "email": "cluster-admin@neu.ro"
+          }
+          EOM
+
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $NP_CLUSTER_ADMIN_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d @- \
+            "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/clusters" <<EOM
+          {
+            "name": "default"
+          }
+          EOM
+
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $NP_CLUSTER_ADMIN_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d @- \
+            "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/clusters" <<EOM
+          {
+            "name": "default2"
           }
           EOM
         env:
@@ -222,6 +229,10 @@ spec:
           value: http://platformconfig:8080
         - name: NP_PLATFORM_ADMIN_URL
           value: http://platformadmin:8080
+        - name: NP_PLATFORM_API_URL
+          value: http://platformapi:8080
+        - name: NP_TOKEN
+          value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZGVudGl0eSI6ImNvbXB1dGUifQ.IJDlKCfbiuNGZH9Sh6p-CdUL5KxEK5JStqzfDk4-RAA
         - name: NP_ADMIN_TOKEN
           value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6ImFkbWluIiwiaHR0cHM6Ly9wbGF0Zm9ybS5uZXVyb21hdGlvbi5pby91c2VyIjoiYWRtaW4ifQ._F3y_fr2W0yiJ_-r46NPszsv3H1LzWAvGNXjl0eXwVI
         - name: NP_CLUSTER_ADMIN_TOKEN
