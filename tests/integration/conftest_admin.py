@@ -72,6 +72,16 @@ def regular_user_factory(
         cluster_admin_url = admin_url / "apis/admin/v1/clusters" / cluster_name
 
         async with aiohttp.ClientSession() as client:
+            # Ensure the cluster exists in platformadmin. The cluster creation
+            # endpoint is idempotent for our purposes; treat 409 as ok.
+            async with client.post(
+                admin_url / "apis/admin/v1/clusters",
+                headers={"Authorization": f"Bearer {admin_token}"},
+                json={"name": cluster_name},
+            ) as resp:
+                if resp.status not in (200, 201, 409):
+                    resp.raise_for_status()
+
             async with client.post(
                 admin_url / "apis/admin/v1/users",
                 headers={"Authorization": f"Bearer {admin_token}"},
