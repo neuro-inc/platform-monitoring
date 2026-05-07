@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: postgres
-        image: postgres:16.11
+        image: public.ecr.aws/docker/library/postgres:16.13
         env:
           - name: POSTGRES_DB
             value: postgres
@@ -56,6 +56,15 @@ spec:
       imagePullSecrets:
         - name: ghcr-secret
       initContainers:
+      - name: wait-for-postgres
+        image: public.ecr.aws/docker/library/postgres:16.13
+        command: ["sh"]
+        args:
+          - -ec
+          - |
+            until pg_isready -h platformadmin-postgres -p 5432 -U postgres; do
+              sleep 1
+            done
       - name: platformadmin-migrations
         image: ghcr.io/neuro-inc/platformadmin:latest
         imagePullPolicy: Always
@@ -73,6 +82,8 @@ spec:
             secretKeyRef:
               name: platform-tokens
               key: jwt_secret
+        - name: NP_ADMIN_POSTGRES_DSN
+          value: postgresql://postgres:postgres@platformadmin-postgres:5432/postgres
         - name: NP_ADMIN_AUTH_TOKEN
           valueFrom:
             secretKeyRef:
@@ -118,6 +129,8 @@ kind: Job
 metadata:
   name: create-cluster
 spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 60
   template:
     spec:
       restartPolicy: Never
@@ -147,112 +160,85 @@ spec:
         args:
         - -ec
         - |
-          curl -fsS -X POST \
-            -H "Authorization: Bearer $NP_ADMIN_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d @- \
-            "$NP_PLATFORM_CONFIG_URL/api/v1/clusters" <<EOM
-          {
-              "name": "default",
-              "token": "$NP_CLUSTER_TOKEN"
-          }
-          EOM
+          call_json() {
+            # Usage: call_json <METHOD> <URL> <TOKEN> [<BODY_JSON>]
+            method="$1"
+            url="$2"
+            token="$3"
+            body="${4:-}"
 
-          curl -fsS -X POST \
-            -H "Authorization: Bearer $NP_ADMIN_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d @- \
-            "$NP_PLATFORM_CONFIG_URL/api/v1/clusters" <<EOM
-          {
-              "name": "default2",
-              "token": "$NP_CLUSTER_TOKEN"
-          }
-          EOM
+            tmp_body="$(mktemp)"
+            if [ -n "$body" ]; then
+              code="$(curl -sS -o "$tmp_body" -w "%{http_code}" -X "$method" \
+                -H "Authorization: Bearer $token" \
+                -H "Content-Type: application/json" \
+                -d "$body" \
+                "$url" || true)"
+            else
+              code="$(curl -sS -o "$tmp_body" -w "%{http_code}" -X "$method" \
+                -H "Authorization: Bearer $token" \
+                "$url" || true)"
+            fi
 
-          curl -fsS -X PATCH \
-            -H "Authorization: Bearer $NP_ADMIN_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d @- \
-            "$NP_PLATFORM_CONFIG_URL/api/v1/clusters/default" <<EOM
-          {
-              "orchestrator": {
-                  "is_http_ingress_secure": true,
-                  "job_hostname_template": "{job_id}.jobs.neu.ro",
-                  "resource_pool_types": [
-                      {
-                          "name": "minikube",
-                          "min_size": 1,
-                          "max_size": 1,
-                          "cpu": 1.0,
-                          "available_cpu": 1.0,
-                          "memory": 1073741824,
-                          "available_memory": 1073741824
-                      }
-                  ],
-                  "resource_presets": [
-                      {
-                          "name": "cpu-small",
-                          "credits_per_hour": "0.0",
-                          "cpu": 0.1,
-                          "memory": 104857600
-                      }
-                  ]
+            if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then
+              rm -f "$tmp_body"
+              return 0
+            fi
+
+            echo "HTTP $code $method $url"
+            cat "$tmp_body" || true
+            rm -f "$tmp_body"
+            return 1
+          }
+
+          # Idempotent cluster creation: treat 409 as ok by probing first.
+          if ! call_json GET "$NP_PLATFORM_CONFIG_URL/api/v1/clusters/default" "$NP_ADMIN_TOKEN"; then
+            call_json POST "$NP_PLATFORM_CONFIG_URL/api/v1/clusters" "$NP_ADMIN_TOKEN" \
+              "{\"name\":\"default\"}"
+          fi
+          if ! call_json GET "$NP_PLATFORM_CONFIG_URL/api/v1/clusters/default2" "$NP_ADMIN_TOKEN"; then
+            call_json POST "$NP_PLATFORM_CONFIG_URL/api/v1/clusters" "$NP_ADMIN_TOKEN" \
+              "{\"name\":\"default2\"}"
+          fi
+
+          call_json PATCH "$NP_PLATFORM_CONFIG_URL/api/v1/clusters/default" "$NP_ADMIN_TOKEN" \
+            "{
+              \"orchestrator\": {
+                \"is_http_ingress_secure\": true,
+                \"job_hostname_template\": \"{job_id}.jobs.neu.ro\",
+                \"resource_pool_types\": [
+                  {\"name\": \"minikube\", \"min_size\": 1, \"max_size\": 1, \"cpu\": 1.0, \"available_cpu\": 1.0, \"memory\": 1073741824, \"available_memory\": 1073741824}
+                ],
+                \"resource_presets\": [
+                  {\"name\": \"cpu-small\", \"credits_per_hour\": \"0.0\", \"cpu\": 0.1, \"memory\": 104857600}
+                ]
               },
-              "storage": {"url": "http://platformapi/api/v1/storage"},
-              "blob_storage": {"url": "http://platformapi/api/v1/blob"},
-              "registry": {"url": "http://localhost:5000"},
-              "monitoring": {"url": "http://platformapi/api/v1/jobs"},
-              "secrets": {"url": "http://platformapi/api/v1/secrets"},
-              "metrics": {"url": "http://platformapi/api/v1/metrics"},
-              "disks": {"url": "http://platformapi/api/v1/disk"},
-              "buckets": {
-                  "url": "http://platformapi/api/v1/buckets",
-                  "disable_creation": false
+              \"storage\": {\"url\": \"http://platformapi/api/v1/storage\"},
+              \"blob_storage\": {\"url\": \"http://platformapi/api/v1/blob\"},
+              \"registry\": {\"url\": \"http://localhost:5000\"},
+              \"monitoring\": {\"url\": \"http://platformapi/api/v1/jobs\"},
+              \"secrets\": {\"url\": \"http://platformapi/api/v1/secrets\"},
+              \"metrics\": {\"url\": \"http://platformapi/api/v1/metrics\"},
+              \"disks\": {\"url\": \"http://platformapi/api/v1/disk\"},
+              \"buckets\": {\"url\": \"http://platformapi/api/v1/buckets\", \"disable_creation\": false},
+              \"grafana\": {\"url\": \"http://grafana.default:3000\"},
+              \"prometheus\": {\"url\": \"http://prometheus.default:9090\"},
+              \"apps\": {
+                \"apps_hostname_templates\": [\"{app_name}.apps.default.kubernetes.default.svc.\"],
+                \"app_proxy_url\": \"https://proxy.apps.default.kubernetes.default.svc\"
               },
-              "grafana": {"url": "http://grafana.default:3000"},
-              "prometheus": {"url": "http://prometheus.default:9090"},
-              "apps": {
-                  "apps_hostname_templates": [
-                      "{app_name}.apps.default.kubernetes.default.svc."
-                  ],
-                  "app_proxy_url": "https://proxy.apps.default.kubernetes.default.svc"
-              },
-              "ingress": {"acme_environment": "staging"},
-              "energy": {"co2_grams_eq_per_kwh": 0, "schedules": []},
-              "timezone": "UTC"
-          }
-          EOM
+              \"ingress\": {\"acme_environment\": \"staging\"},
+              \"energy\": {\"co2_grams_eq_per_kwh\": 0, \"schedules\": []},
+              \"timezone\": \"UTC\"
+            }"
 
-          curl -fsS -X POST \
-            -H "Authorization: Bearer $NP_ADMIN_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d @- \
-            "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/users" <<EOM
-          {
-            "name": "cluster-admin",
-            "email": "cluster-admin@neu.ro"
-          }
-          EOM
-
-          curl -fsS -X POST \
-            -H "Authorization: Bearer $NP_ADMIN_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d @- \
-            "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/clusters" <<EOM
-          {
-            "name": "default"
-          }
-          EOM
-
-          curl -fsS -X POST \
-            -H "Authorization: Bearer $NP_ADMIN_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d @- \
-            "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/clusters" <<EOM
-          {
-            "name": "default2"
-          }
-          EOM
+          # User and cluster objects in platformadmin can be idempotent too; try and ignore conflicts.
+          call_json POST "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/users" "$NP_ADMIN_TOKEN" \
+            "{\"name\":\"cluster-admin\",\"email\":\"cluster-admin@neu.ro\"}" || true
+          call_json POST "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/clusters" "$NP_ADMIN_TOKEN" \
+            "{\"name\":\"default\"}" || true
+          call_json POST "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/clusters" "$NP_ADMIN_TOKEN" \
+            "{\"name\":\"default2\"}" || true
         env:
         - name: NP_PLATFORM_CONFIG_URL
           value: http://platformconfig:8080

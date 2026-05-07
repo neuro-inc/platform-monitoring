@@ -39,6 +39,8 @@ spec:
         imagePullPolicy: Always
         command: ["alembic", "upgrade", "head"]
         env:
+        - name: NP_DB_POSTGRES_DSN
+          value: postgresql://postgres:postgres@platformconfig-postgres:5432/postgres
         - name: NP_POSTGRES_HOST
           value: platformconfig-postgres
         - name: NP_POSTGRES_PORT
@@ -58,6 +60,8 @@ spec:
           value: INFO
         - name: NP_API_PORT
           value: "8080"
+        - name: NP_DB_POSTGRES_DSN
+          value: postgresql://postgres:postgres@platformconfig-postgres:5432/postgres
         - name: NP_PLATFORM_AUTH_URL
           value: http://platformauthapi:8080
         - name: NP_PLATFORM_CONFIG_TOKEN
@@ -145,7 +149,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16.11
+          image: public.ecr.aws/docker/library/postgres:16.13
           imagePullPolicy: "IfNotPresent"
           ports:
             - containerPort: 5432

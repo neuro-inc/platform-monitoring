@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: platformpostgres
-        image: postgres:16.11
+        image: public.ecr.aws/docker/library/postgres:16.13
         env:
           - name: POSTGRES_DB
             value: postgres
@@ -83,6 +83,10 @@ spec:
         env:
         - name: NP_LOG_LEVEL
           value: INFO
+        - name: NP_VCLUSTER_PUBLIC_URL
+          value: http://not-important
+        - name: NP_VCLUSTER_API_URL
+          value: http://not-important
         - name: NP_OAUTH_AUTH_URL
           value: not-important-NP_OAUTH_AUTH_URL
         - name: NP_OAUTH_TOKEN_URL
@@ -123,6 +127,11 @@ spec:
           value: http://platformadmin:8080/apis/admin/v1
         - name: NP_ADMIN_PUBLIC_URL
           value: http://platformadmin:8080/apis/admin/v1
+        - name: NP_ADMIN_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: token_admin
         - name: NP_API_URL
           value: http://platformapi/api/v1
         - name: NP_PLATFORM_CONFIG_URI
@@ -187,6 +196,11 @@ spec:
           value: http://platformconfig:8080
         - name: NP_PLATFORM_ADMIN_URI
           value: http://platformadmin:8080/apis/admin/v1
+        - name: NP_ADMIN_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: token_admin
         - name: NP_CLUSTER_NAME
           value: default
         - name: NP_KUBE_URL
