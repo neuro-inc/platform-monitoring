@@ -61,13 +61,13 @@ endif
 .PHONY: test_unit
 test_unit:
 	poetry run pytest -vv \
-		--cov-config=pyproject.toml --cov-report xml:$(UNIT_COVERAGE_FILE) \
+		--cov=platform_monitoring --cov-config=pyproject.toml --cov-report xml:$(UNIT_COVERAGE_FILE) \
 		$(UNIT_TEST_PATH)
 
 .PHONY: test_integration
 test_integration:
 	poetry run pytest -vv \
-		--cov-config=pyproject.toml --cov-report xml:$(COVERAGE_FILE) \
+		--cov=platform_monitoring --cov-config=pyproject.toml --cov-report xml:$(COVERAGE_FILE) \
 		--durations=$(PYTEST_DURATIONS) \
 		--maxfail=$(PYTEST_MAXFAIL) \
 		--log-level=$(PYTEST_LOG_LEVEL) \
