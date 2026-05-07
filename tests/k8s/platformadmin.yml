@@ -191,6 +191,44 @@ spec:
             return 1
           }
 
+          ensure_admin_user() {
+            name="$1"
+            email="$2"
+
+            if call_json GET "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/users/$name" "$NP_ADMIN_TOKEN"; then
+              return 0
+            fi
+
+            if call_json POST "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/users" "$NP_ADMIN_TOKEN" \
+              "{\"name\":\"$name\",\"email\":\"$email\"}"; then
+              return 0
+            fi
+
+            # platformadmin may commit the user and fail while sending a notification
+            # if platformnotifications is not up yet.
+            call_json GET "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/users/$name" "$NP_ADMIN_TOKEN"
+          }
+
+          ensure_admin_cluster() {
+            name="$1"
+
+            if call_json GET "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/clusters/$name" "$NP_ADMIN_TOKEN"; then
+              return 0
+            fi
+
+            if call_json POST "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/clusters" "$NP_ADMIN_TOKEN" \
+              "{\"name\":\"$name\",\"default_quota\":{},\"default_role\":\"user\",\"maintenance\":false}"; then
+              return 0
+            fi
+
+            call_json GET "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/clusters/$name" "$NP_ADMIN_TOKEN"
+          }
+
+          ensure_admin_user "admin" "admin@neu.ro"
+          ensure_admin_user "compute" "compute@neu.ro"
+          ensure_admin_user "cluster-admin" "cluster-admin@neu.ro"
+          ensure_admin_user "notification" "notification@neu.ro"
+
           # Idempotent cluster creation: treat 409 as ok by probing first.
           if ! call_json GET "$NP_PLATFORM_CONFIG_URL/api/v1/clusters/default" "$NP_ADMIN_TOKEN"; then
             call_json POST "$NP_PLATFORM_CONFIG_URL/api/v1/clusters" "$NP_ADMIN_TOKEN" \
@@ -232,13 +270,8 @@ spec:
               \"timezone\": \"UTC\"
             }"
 
-          # User and cluster objects in platformadmin can be idempotent too; try and ignore conflicts.
-          call_json POST "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/users" "$NP_ADMIN_TOKEN" \
-            "{\"name\":\"cluster-admin\",\"email\":\"cluster-admin@neu.ro\"}" || true
-          call_json POST "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/clusters" "$NP_ADMIN_TOKEN" \
-            "{\"name\":\"default\"}" || true
-          call_json POST "$NP_PLATFORM_ADMIN_URL/apis/admin/v1/clusters" "$NP_ADMIN_TOKEN" \
-            "{\"name\":\"default2\"}" || true
+          ensure_admin_cluster "default"
+          ensure_admin_cluster "default2"
         env:
         - name: NP_PLATFORM_CONFIG_URL
           value: http://platformconfig:8080

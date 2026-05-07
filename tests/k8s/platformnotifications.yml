@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: redis
-        image: redis:4
+        image: public.ecr.aws/docker/library/redis:7-alpine
 ---
 apiVersion: v1
 kind: Service
