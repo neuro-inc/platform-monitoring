@@ -175,11 +175,11 @@ async def platform_monitoring_api_address(in_minikube: bool) -> "ApiAddress":  #
 
 @pytest.fixture(scope="session")
 def s3_config() -> S3Config:
-    s3_url = get_service_url(service_name="minio")
+    s3_url = get_service_url(service_name="seaweedfs-s3", namespace="default")
     return S3Config(
-        region="minio",
-        access_key_id="access_key",
-        secret_access_key="secret_key",
+        region="us-east-1",
+        access_key_id="admin_access_key_id",
+        secret_access_key="admin_secret_access_key",
         endpoint_url=URL(s3_url),
         job_logs_bucket_name="logs",
     )
@@ -310,6 +310,10 @@ async def create_local_app_server(
 
 
 def get_service_url(service_name: str, namespace: str = "default") -> str:
+    env_name = f"TEST_SERVICE_URL_{namespace}_{service_name}".upper().replace("-", "_")
+    if url := os.getenv(env_name):
+        return url
+
     # ignore type because the linter does not know that `pytest.fail` throws an
     # exception, so it requires to `return None` explicitly, so that the method
     # will return `Optional[List[str]]` which is incorrect

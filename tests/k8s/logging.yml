@@ -33,66 +33,89 @@ spec:
   selector:
     service: elasticsearch-logging
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: seaweedfs-s3-config
+data:
+  s3.json: |
+    {
+      "identities": [
+        {
+          "name": "admin",
+          "credentials": [
+            {
+              "accessKey": "admin_access_key_id",
+              "secretKey": "admin_secret_access_key"
+            }
+          ],
+          "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+        }
+      ]
+    }
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: minio
+  name: seaweedfs-s3
 spec:
   replicas: 1
   selector:
     matchLabels:
-      service: minio
+      service: seaweedfs-s3
   template:
     metadata:
       labels:
-        service: minio
+        service: seaweedfs-s3
     spec:
-      initContainers:
-        - name: create-buckets
-          image: minio/minio:RELEASE.2023-10-14T05-17-22Z
-          command: [ "/bin/sh", "-c" ]
+      containers:
+        - name: seaweedfs-s3
+          image: chrislusf/seaweedfs:4.23
+          command: ["/bin/sh", "-c"]
           args:
             - |
-              mc alias set myminio http://minio:9000 access_key secret_key
-              mc mb myminio/logs
-              mc mb myminio/loki-logs
-      containers:
-        - image: minio/minio:RELEASE.2023-10-14T05-17-22Z
-          name: minio
-          args:
-            - server
-            - /data
-          env:
-            - name: MINIO_ROOT_USER
-              value: access_key
-            - name: MINIO_ROOT_PASSWORD
-              value: secret_key
-            - name: MINIO_STORAGE_CLASS_STANDARD
-              value: EC:0
+              weed server -dir=/data -s3 -s3.port=9000 -s3.config=/etc/seaweedfs/s3.json &
+              WEED_PID=$!
+              until wget -qO/dev/null http://localhost:8888/ 2>/dev/null; do
+                echo "Waiting for SeaweedFS filer..."
+                sleep 2
+              done
+              printf 's3.bucket.create -name logs\ns3.bucket.create -name loki-logs\n' \
+                | weed shell -filer=localhost:8888 || true
+              echo "SeaweedFS buckets ready"
+              wait $WEED_PID
+          ports:
+            - containerPort: 9000
+              name: s3
           volumeMounts:
             - mountPath: /data
               name: data
+            - mountPath: /etc/seaweedfs/s3.json
+              name: s3-config
+              subPath: s3.json
           livenessProbe:
-            httpGet:
-              path: /minio/health/live
+            tcpSocket:
               port: 9000
             initialDelaySeconds: 30
             periodSeconds: 5
       volumes:
         - name: data
           emptyDir: {}
+        - name: s3-config
+          configMap:
+            name: seaweedfs-s3-config
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: minio
+  name: seaweedfs-s3
 spec:
   type: LoadBalancer
   ports:
   - port: 9000
     targetPort: 9000
   selector:
-    service: minio
+    service: seaweedfs-s3
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -171,9 +194,9 @@ data:
     [OUTPUT]
         Name             s3
         Match            *
-        endpoint         http://minio:9000
+        endpoint         http://seaweedfs-s3:9000
         bucket           logs
-        region           minio
+        region           us-east-1
         total_file_size  1M
         upload_timeout   1s
         use_put_object   On
@@ -203,9 +226,9 @@ spec:
         name: fluent-bit
         env:
         - name: AWS_ACCESS_KEY_ID
-          value: access_key
+          value: admin_access_key_id
         - name: AWS_SECRET_ACCESS_KEY
-          value: secret_key
+          value: admin_secret_access_key
         volumeMounts:
         - mountPath: /var/log
           name: varlog

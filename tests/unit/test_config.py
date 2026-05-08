@@ -141,12 +141,16 @@ def test_create_with_s3__default(environ: dict[str, Any]) -> None:
         job_logs_bucket_name="logs",
     )
 
-    environ["NP_MONITORING_S3_ENDPOINT_URL"] = "http://minio:9000"
+    environ["NP_MONITORING_S3_ENDPOINT_URL"] = (
+        "http://seaweedfs-s3.platform.svc.cluster.local:9000"
+    )
 
     config = EnvironConfigFactory(environ).create()
 
     assert config.s3
-    assert config.s3.endpoint_url == URL("http://minio:9000")
+    assert config.s3.endpoint_url == URL(
+        "http://seaweedfs-s3.platform.svc.cluster.local:9000"
+    )
 
 
 def test_create_with_s3(environ: dict[str, Any]) -> None:
@@ -164,12 +168,16 @@ def test_create_with_s3(environ: dict[str, Any]) -> None:
         job_logs_bucket_name="logs",
     )
 
-    environ["NP_MONITORING_S3_ENDPOINT_URL"] = "http://minio:9000"
+    environ["NP_MONITORING_S3_ENDPOINT_URL"] = (
+        "http://seaweedfs-s3.platform.svc.cluster.local:9000"
+    )
 
     config = EnvironConfigFactory(environ).create()
 
     assert config.s3
-    assert config.s3.endpoint_url == URL("http://minio:9000")
+    assert config.s3.endpoint_url == URL(
+        "http://seaweedfs-s3.platform.svc.cluster.local:9000"
+    )
 
 
 def test_create_with_logs_compact(environ: dict[str, Any]) -> None:
