@@ -88,7 +88,6 @@ async def kube_config(request: FixtureRequest, in_minikube: bool) -> KubeConfig:
             token=Path(
                 "/var/run/secrets/kubernetes.io/serviceaccount/token"
             ).read_text(),
-            namespace="default",
         )
     cluster = request.getfixturevalue("kube_config_cluster_payload")
     user = request.getfixturevalue("kube_config_user_payload")
@@ -98,7 +97,6 @@ async def kube_config(request: FixtureRequest, in_minikube: bool) -> KubeConfig:
         cert_authority_data_pem=ca_data_pem,
         auth_cert_path=user["client-certificate"],
         auth_cert_key_path=user["client-key"],
-        namespace="default",
     )
 
 

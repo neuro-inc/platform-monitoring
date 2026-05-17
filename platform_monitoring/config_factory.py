@@ -185,7 +185,6 @@ class EnvironConfigFactory:
             ),
             token=token,
             token_path=token_path,
-            namespace=self._environ.get("NP_MONITORING_K8S_NS", KubeConfig.namespace),
             client_conn_timeout_s=int(
                 self._environ.get("NP_MONITORING_K8S_CLIENT_CONN_TIMEOUT")
                 or KubeConfig.client_conn_timeout_s
