@@ -57,7 +57,7 @@ jobs:
     - name: Run unit tests
       run: make test_unit
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@v7
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: .coverage-unit.xml
@@ -166,7 +166,7 @@ jobs:
       if: failure()
       run: make dump_failed_k8s_logs
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@v7
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: .coverage-integration.xml
