@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout commit
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Install python
       uses: actions/setup-python@v6
       with:
@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout commit
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Install python
       uses: actions/setup-python@v6
       with:
@@ -72,7 +72,7 @@ jobs:
       K8S_WAIT_TIMEOUT_SECONDS: "120"
     steps:
     - name: Checkout commit
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Install python
       uses: actions/setup-python@v6
       with:
@@ -178,7 +178,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout commit
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Install python
       uses: actions/setup-python@v6
       with:
