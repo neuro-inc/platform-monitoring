@@ -19,7 +19,7 @@ jobs:
       run: |
         pipx install poetry
     - name: Setup Python dependencies cache
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.cache/pypoetry
         key: poetry-${{ hashFiles('**/poetry.lock') }}
@@ -46,7 +46,7 @@ jobs:
       run: |
         pipx install poetry
     - name: Setup Python dependencies cache
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.cache/pypoetry
         key: poetry-${{ hashFiles('**/poetry.lock') }}
@@ -83,7 +83,7 @@ jobs:
       run: |
         pipx install poetry
     - name: Setup Python dependencies cache
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.cache/pypoetry
         key: poetry-${{ hashFiles('**/poetry.lock') }}
@@ -189,7 +189,7 @@ jobs:
       run: |
         pipx install poetry
     - name: Setup Python dependencies cache
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.cache/pypoetry
         key: poetry-${{ hashFiles('**/poetry.lock') }}
