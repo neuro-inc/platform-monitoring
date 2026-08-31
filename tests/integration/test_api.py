@@ -274,8 +274,8 @@ def _kubectl(*args: str) -> str:
 def _dump_job_state(namespace: str | None) -> None:
     commands: list[tuple[str, ...]] = [
         ("-n", "default", "get", "pods", "-o", "wide"),
-        ("-n", "default", "logs", "-l", "service=platformapi", "--tail=200"),
-        ("-n", "default", "logs", "-l", "service=platformapi-poller", "--tail=200"),
+        ("-n", "default", "logs", "-l", "service=platformapi", "--tail=500"),
+        ("-n", "default", "logs", "-l", "service=platformapi-poller", "--tail=-1"),
     ]
     if namespace:
         commands = [
