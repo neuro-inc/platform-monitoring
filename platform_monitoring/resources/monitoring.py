@@ -523,7 +523,7 @@ class ClusterSyncer:
                 replace(
                     pool_type,
                     min_size=current_pool_type.min_size,
-                    max_size=current_pool_type.max_size,
+                    max_size=max(current_pool_type.max_size, pool_type.max_size),
                 )
             )
         return updated_pool_types
@@ -539,8 +539,9 @@ class ClusterSyncer:
         for pool_type in current_pool_types:
             if pool_type.name in pool_types_by_name:
                 continue
-            if pool_type.min_size != pool_type.max_size:
-                downscaled_pool_types.append(pool_type)
+            if pool_type.min_size == pool_type.max_size:
+                pool_type = replace(pool_type, min_size=0)
+            downscaled_pool_types.append(pool_type)
         return downscaled_pool_types
 
 
