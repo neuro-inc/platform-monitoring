@@ -668,4 +668,4 @@ class TestMonitoringService:
 
                 pool_type = self._get_pool_type(patch_request, cold_pool_name)
                 assert pool_type.min_size == 0
-                assert pool_type.max_size == 1
+                assert pool_type.max_size == 0

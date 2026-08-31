@@ -448,16 +448,6 @@ class TestClusterSyncer:
 
         assert result == [ResourcePoolType(name="pool", min_size=0, max_size=10)]
 
-    def test_update_resource_pool_sizes__raises_max_size_to_live_nodes(self) -> None:
-        syncer = self._create_syncer()
-
-        result = syncer._update_resource_pool_sizes(
-            pool_types=[ResourcePoolType(name="pool", min_size=2, max_size=2)],
-            current_pool_types=[ResourcePoolType(name="pool", min_size=0, max_size=1)],
-        )
-
-        assert result == [ResourcePoolType(name="pool", min_size=0, max_size=2)]
-
     def test_update_resource_pool_sizes__overrides_fixed_sizes(self) -> None:
         syncer = self._create_syncer()
 
@@ -492,7 +482,7 @@ class TestClusterSyncer:
         )
 
         assert result == [
-            ResourcePoolType(name="pool", min_size=0, max_size=1, nvidia_gpu=gpu)
+            ResourcePoolType(name="pool", min_size=0, max_size=0, nvidia_gpu=gpu)
         ]
 
     def test_get_downscaled_resource_pools__skips_live_pool(self) -> None:
@@ -504,3 +494,30 @@ class TestClusterSyncer:
         )
 
         assert result == []
+
+    def test_sync_sequence__cold_pool_survives_and_comes_back(self) -> None:
+        syncer = self._create_syncer()
+
+        def sync(
+            live: list[ResourcePoolType], current: list[ResourcePoolType]
+        ) -> list[ResourcePoolType]:
+            result = syncer._update_resource_pool_sizes(
+                pool_types=live, current_pool_types=current
+            )
+            result.extend(
+                syncer._get_downscaled_resource_pools(
+                    pool_types=result, current_pool_types=current
+                )
+            )
+            return result
+
+        state = sync([ResourcePoolType(name="pool", min_size=1, max_size=1)], [])
+        assert state == [ResourcePoolType(name="pool", min_size=1, max_size=1)]
+
+        state = sync([], state)
+        assert state == [ResourcePoolType(name="pool", min_size=0, max_size=0)]
+
+        assert sync([], state) == state
+
+        state = sync([ResourcePoolType(name="pool", min_size=2, max_size=2)], state)
+        assert state == [ResourcePoolType(name="pool", min_size=2, max_size=2)]
