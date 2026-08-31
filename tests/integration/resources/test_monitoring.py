@@ -615,3 +615,57 @@ class TestMonitoringService:
                 pool_type = self._get_pool_type(patch_request, downscaled_pool_name)
                 assert pool_type.min_size == 0
                 assert pool_type.max_size == 1
+
+    async def test_start__keep_cold_auto_registered_pools(
+        self,
+        config_client: mock.AsyncMock,
+        kube_client: KubeClient,
+        delete_node_later: Callable[[V1Node], None],
+        service: MonitoringService,
+        cluster_name: str,
+    ) -> None:
+        node_pool_name = str(uuid4())
+        node = await kube_client.core_v1.node.create(
+            V1Node(
+                metadata=V1ObjectMeta(
+                    name=str(uuid4()),
+                    labels={
+                        APOLO_PLATFORM_ROLE_LABEL_KEY: "workload",
+                        APOLO_PLATFORM_NODE_POOL_LABEL_KEY: node_pool_name,
+                    },
+                ),
+                status=V1NodeStatus(
+                    capacity={"cpu": "1", "memory": "1Gi"},
+                    allocatable={"cpu": "1", "memory": "1Gi"},
+                ),
+            )
+        )
+        delete_node_later(node)
+
+        cold_pool_name = str(uuid4())
+        config_client.get_cluster.return_value = self._create_cluster(
+            resource_pool_types=[
+                ResourcePoolType(name=cold_pool_name, min_size=1, max_size=1)
+            ]
+        )
+
+        await service.start()
+
+        async for attempt in tenacity.AsyncRetrying(
+            wait=tenacity.wait_fixed(0.1),
+            stop=tenacity.stop_after_delay(5),
+            reraise=True,
+        ):
+            with attempt:
+                config_client.patch_cluster.assert_awaited()
+
+                assert (
+                    config_client.patch_cluster.call_args_list[-1][0][0] == cluster_name
+                )
+
+                patch_request = config_client.patch_cluster.call_args_list[-1][0][1]
+                assert self._has_pool_type(patch_request, cold_pool_name)
+
+                pool_type = self._get_pool_type(patch_request, cold_pool_name)
+                assert pool_type.min_size == 0
+                assert pool_type.max_size == 0
