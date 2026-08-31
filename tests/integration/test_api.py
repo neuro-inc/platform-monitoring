@@ -4,6 +4,7 @@ import logging
 import re
 import shlex
 import signal
+import subprocess
 import textwrap
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -263,6 +264,30 @@ def platform_api(
     return PlatformApiEndpoints(url=platform_api_config.url)
 
 
+def _kubectl(*args: str) -> str:
+    result = subprocess.run(
+        ("kubectl", *args), capture_output=True, text=True, timeout=60, check=False
+    )
+    return result.stdout + result.stderr
+
+
+def _dump_job_state(namespace: str | None) -> None:
+    commands: list[tuple[str, ...]] = [
+        ("-n", "default", "get", "pods", "-o", "wide"),
+        ("-n", "default", "logs", "-l", "service=platformapi", "--tail=500"),
+        ("-n", "default", "logs", "-l", "service=platformapi-poller", "--tail=-1"),
+    ]
+    if namespace:
+        commands = [
+            ("-n", namespace, "get", "pods", "-o", "wide"),
+            ("-n", namespace, "get", "events", "--sort-by=.lastTimestamp"),
+            ("-n", namespace, "describe", "pods"),
+            *commands,
+        ]
+    for args in commands:
+        logger.error("$ kubectl %s\n%s", " ".join(args), _kubectl(*args))
+
+
 class JobsClient:
     def __init__(
         self,
@@ -328,6 +353,7 @@ class JobsClient:
             await asyncio.sleep(max(interval_s, time.monotonic() - t0))
             current_time = time.monotonic() - t0
             if current_time > max_time:
+                _dump_job_state(response.get("namespace"))
                 pytest.fail(f"too long: {current_time:.3f} sec; resp: {response}")
             interval_s *= 1.5
 
