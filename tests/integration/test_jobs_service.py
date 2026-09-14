@@ -352,7 +352,8 @@ class TestJobsService:
             f"InvalidImageName:{image_tag}"
         )
 
-        with pytest.raises(JobException, match="repository name must be lowercase"):  # noqa: PT012
+        match = r"repository name .*must be lowercase"
+        with pytest.raises(JobException, match=match):  # noqa: PT012
             async with jobs_service.save(job, user, image) as it:
                 async for _ in it:
                     pass
