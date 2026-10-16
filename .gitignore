@@ -112,3 +112,6 @@ temp_deploy/
 
 # macOS Finder
 .DS_Store
+
+# Generated integration-test credentials
+tests/k8s/tokens.json
