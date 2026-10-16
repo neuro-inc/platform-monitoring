@@ -22,7 +22,10 @@ spec:
         - name: NP_LOG_LEVEL
           value: INFO
         - name: NP_JWT_SECRET
-          value: secret
+          valueFrom:
+            secretKeyRef:
+              name: platform-tokens
+              key: jwt_secret
 ---
 apiVersion: v1
 kind: Service

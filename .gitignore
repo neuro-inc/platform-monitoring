@@ -109,3 +109,6 @@ temp_deploy/
 
 # IDE
 .idea
+
+# macOS Finder
+.DS_Store

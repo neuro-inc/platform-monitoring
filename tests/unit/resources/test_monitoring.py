@@ -1,3 +1,5 @@
+from unittest import mock
+
 from apolo_kube_client import (
     V1Container,
     V1ObjectMeta,
@@ -9,6 +11,7 @@ from neuro_config_client import AMDGPU, NvidiaGPU, ResourcePoolType
 
 from platform_monitoring.kube_client import ContainerResources, NodeResources
 from platform_monitoring.resources.monitoring import (
+    ClusterSyncer,
     ResourcePoolTypeFactory,
     _Node,
     _Pod,
@@ -427,3 +430,94 @@ class TestPod:
                 amd_gpu=2,
             ),
         )
+
+
+class TestClusterSyncer:
+    def _create_syncer(self) -> ClusterSyncer:
+        return ClusterSyncer(
+            kube_state=mock.Mock(), config_client=mock.Mock(), cluster_name="default"
+        )
+
+    def test_update_resource_pool_sizes__keeps_autoscaling_sizes(self) -> None:
+        syncer = self._create_syncer()
+
+        result = syncer._update_resource_pool_sizes(
+            pool_types=[ResourcePoolType(name="pool", min_size=3, max_size=3)],
+            current_pool_types=[ResourcePoolType(name="pool", min_size=0, max_size=10)],
+        )
+
+        assert result == [ResourcePoolType(name="pool", min_size=0, max_size=10)]
+
+    def test_update_resource_pool_sizes__overrides_fixed_sizes(self) -> None:
+        syncer = self._create_syncer()
+
+        result = syncer._update_resource_pool_sizes(
+            pool_types=[ResourcePoolType(name="pool", min_size=2, max_size=2)],
+            current_pool_types=[ResourcePoolType(name="pool", min_size=1, max_size=1)],
+        )
+
+        assert result == [ResourcePoolType(name="pool", min_size=2, max_size=2)]
+
+    def test_get_downscaled_resource_pools__keeps_autoscaling_pool(self) -> None:
+        syncer = self._create_syncer()
+
+        result = syncer._get_downscaled_resource_pools(
+            pool_types=[],
+            current_pool_types=[ResourcePoolType(name="pool", min_size=1, max_size=2)],
+        )
+
+        assert result == [ResourcePoolType(name="pool", min_size=1, max_size=2)]
+
+    def test_get_downscaled_resource_pools__keeps_fixed_pool_as_scaled_to_zero(
+        self,
+    ) -> None:
+        syncer = self._create_syncer()
+        gpu = NvidiaGPU(count=1, model="A100", memory=40 * 2**30)
+
+        result = syncer._get_downscaled_resource_pools(
+            pool_types=[],
+            current_pool_types=[
+                ResourcePoolType(name="pool", min_size=1, max_size=1, nvidia_gpu=gpu)
+            ],
+        )
+
+        assert result == [
+            ResourcePoolType(name="pool", min_size=0, max_size=0, nvidia_gpu=gpu)
+        ]
+
+    def test_get_downscaled_resource_pools__skips_live_pool(self) -> None:
+        syncer = self._create_syncer()
+
+        result = syncer._get_downscaled_resource_pools(
+            pool_types=[ResourcePoolType(name="pool", min_size=1, max_size=1)],
+            current_pool_types=[ResourcePoolType(name="pool", min_size=1, max_size=1)],
+        )
+
+        assert result == []
+
+    def test_sync_sequence__cold_pool_survives_and_comes_back(self) -> None:
+        syncer = self._create_syncer()
+
+        def sync(
+            live: list[ResourcePoolType], current: list[ResourcePoolType]
+        ) -> list[ResourcePoolType]:
+            result = syncer._update_resource_pool_sizes(
+                pool_types=live, current_pool_types=current
+            )
+            result.extend(
+                syncer._get_downscaled_resource_pools(
+                    pool_types=result, current_pool_types=current
+                )
+            )
+            return result
+
+        state = sync([ResourcePoolType(name="pool", min_size=1, max_size=1)], [])
+        assert state == [ResourcePoolType(name="pool", min_size=1, max_size=1)]
+
+        state = sync([], state)
+        assert state == [ResourcePoolType(name="pool", min_size=0, max_size=0)]
+
+        assert sync([], state) == state
+
+        state = sync([ResourcePoolType(name="pool", min_size=2, max_size=2)], state)
+        assert state == [ResourcePoolType(name="pool", min_size=2, max_size=2)]

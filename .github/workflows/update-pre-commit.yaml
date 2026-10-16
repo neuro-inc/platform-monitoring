@@ -6,9 +6,9 @@ jobs:
   auto-update:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v7
     - name: Set up Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version-file: .python-version
     - name: Install pre-commit
@@ -21,7 +21,7 @@ jobs:
         app_id: ${{ secrets.BOT_APP_ID }}
         private_key: ${{ secrets.BOT_PRIVATE_KEY }}
     - name: Create Pull Request
-      uses: peter-evans/create-pull-request@v7.0.8
+      uses: peter-evans/create-pull-request@v8.1.1
       with:
         token: ${{ steps.generate_token.outputs.token }}
         branch: update/pre-commit-autoupdate

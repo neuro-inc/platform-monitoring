@@ -406,7 +406,7 @@ class ContainerStatus:
             (last_state, "last_state"),
         ):
             state_attr = getattr(payload, state_attr_name)
-            if state_attr.running.started_at:
+            if state_attr.running and state_attr.running.started_at:
                 prop["running"] = {
                     "startedAt": format_date(state_attr.running.started_at)
                 }
@@ -421,7 +421,9 @@ class ContainerStatus:
                         state_attr.terminated.finished_at
                     )
                 prop["terminated"] = terminated
-            if state_attr.waiting.message or state_attr.waiting.reason:
+            if state_attr.waiting and (
+                state_attr.waiting.message or state_attr.waiting.reason
+            ):
                 prop["waiting"] = True
         return cls(
             name=payload.name,

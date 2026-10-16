@@ -19,6 +19,8 @@ from apolo_kube_client import (
     V1Pod,
     V1PodSpec,
     V1ResourceRequirements,
+    PatchAdd,
+    PatchRemove,
 )
 
 from neuro_config_client import (
@@ -30,10 +32,11 @@ from neuro_config_client import (
     DisksConfig,
     DNSConfig,
     EnergyConfig,
+    GrafanaConfig,
     IngressConfig,
-    MetricsConfig,
     MonitoringConfig,
     OrchestratorConfig,
+    PrometheusConfig,
     PatchClusterRequest,
     RegistryConfig,
     ResourcePoolType,
@@ -191,10 +194,14 @@ class TestMonitoringService:
             dns=DNSConfig(name=f"{name}.org.apolo.us"),
             ingress=IngressConfig(acme_environment=ACMEEnvironment.PRODUCTION),
             secrets=SecretsConfig(url=URL(f"https://{name}.org.apolo.us")),
-            metrics=MetricsConfig(url=URL(f"https://{name}.org.apolo.us")),
             apps=AppsConfig(
+                launchpad_use_subdomain=False,
                 apps_hostname_templates=[f"{{app_name}}.apps.{name}.org.apolo.us"],
                 app_proxy_url=URL(f"https://proxy.apps.{name}.org.apolo.us"),
+            ),
+            grafana=GrafanaConfig(url=URL(f"https://grafana.{name}.org.apolo.us")),
+            prometheus=PrometheusConfig(
+                url=URL(f"https://prometheus.{name}.org.apolo.us")
             ),
             energy=EnergyConfig(),
         )
@@ -290,7 +297,7 @@ class TestMonitoringService:
         # Remove all labels
         node_name = cast(str, node.metadata.name)
         await kube_client.core_v1.node.patch_json(
-            node_name, [{"op": "remove", "path": "/metadata/labels"}]
+            node_name, [PatchRemove(path="/metadata/labels")]
         )
 
         async for attempt in tenacity.AsyncRetrying(
@@ -310,21 +317,18 @@ class TestMonitoringService:
         await kube_client.core_v1.node.patch_json(
             node_name,
             [
-                {
-                    "op": "add",
-                    "path": "/metadata/labels",
-                    "value": {},  # type: ignore
-                },
-                {
-                    "op": "add",
-                    "path": f"/metadata/labels/{escape_json_pointer(APOLO_PLATFORM_ROLE_LABEL_KEY)}",
-                    "value": "workload",
-                },
-                {
-                    "op": "add",
-                    "path": f"/metadata/labels/{escape_json_pointer(APOLO_PLATFORM_NODE_POOL_LABEL_KEY)}",
-                    "value": node_pool_name,
-                },
+                PatchAdd(
+                    path="/metadata/labels",
+                    value={},
+                ),
+                PatchAdd(
+                    path=f"/metadata/labels/{escape_json_pointer(APOLO_PLATFORM_ROLE_LABEL_KEY)}",
+                    value="workload",
+                ),
+                PatchAdd(
+                    path=f"/metadata/labels/{escape_json_pointer(APOLO_PLATFORM_NODE_POOL_LABEL_KEY)}",
+                    value=node_pool_name,
+                ),
             ],
         )
 
@@ -435,11 +439,10 @@ class TestMonitoringService:
         await kube_client.core_v1.pod.patch_json(
             pod_name,
             [
-                {
-                    "op": "add",
-                    "path": f"/metadata/labels/{escape_json_pointer(APOLO_PLATFORM_JOB_LABEL_KEY)}",
-                    "value": "test-job",
-                }
+                PatchAdd(
+                    path=f"/metadata/labels/{escape_json_pointer(APOLO_PLATFORM_JOB_LABEL_KEY)}",
+                    value="test-job",
+                )
             ],
             namespace="default",
         )
@@ -464,10 +467,9 @@ class TestMonitoringService:
         await kube_client.core_v1.pod.patch_json(
             pod_name,
             [
-                {
-                    "op": "remove",
-                    "path": f"/metadata/labels/{escape_json_pointer(APOLO_PLATFORM_JOB_LABEL_KEY)}",
-                }
+                PatchRemove(
+                    path=f"/metadata/labels/{escape_json_pointer(APOLO_PLATFORM_JOB_LABEL_KEY)}",
+                )
             ],
             namespace="default",
         )
@@ -618,3 +620,57 @@ class TestMonitoringService:
                 pool_type = self._get_pool_type(patch_request, downscaled_pool_name)
                 assert pool_type.min_size == 0
                 assert pool_type.max_size == 1
+
+    async def test_start__keep_cold_auto_registered_pools(
+        self,
+        config_client: mock.AsyncMock,
+        kube_client: KubeClient,
+        delete_node_later: Callable[[V1Node], None],
+        service: MonitoringService,
+        cluster_name: str,
+    ) -> None:
+        node_pool_name = str(uuid4())
+        node = await kube_client.core_v1.node.create(
+            V1Node(
+                metadata=V1ObjectMeta(
+                    name=str(uuid4()),
+                    labels={
+                        APOLO_PLATFORM_ROLE_LABEL_KEY: "workload",
+                        APOLO_PLATFORM_NODE_POOL_LABEL_KEY: node_pool_name,
+                    },
+                ),
+                status=V1NodeStatus(
+                    capacity={"cpu": "1", "memory": "1Gi"},
+                    allocatable={"cpu": "1", "memory": "1Gi"},
+                ),
+            )
+        )
+        delete_node_later(node)
+
+        cold_pool_name = str(uuid4())
+        config_client.get_cluster.return_value = self._create_cluster(
+            resource_pool_types=[
+                ResourcePoolType(name=cold_pool_name, min_size=1, max_size=1)
+            ]
+        )
+
+        await service.start()
+
+        async for attempt in tenacity.AsyncRetrying(
+            wait=tenacity.wait_fixed(0.1),
+            stop=tenacity.stop_after_delay(5),
+            reraise=True,
+        ):
+            with attempt:
+                config_client.patch_cluster.assert_awaited()
+
+                assert (
+                    config_client.patch_cluster.call_args_list[-1][0][0] == cluster_name
+                )
+
+                patch_request = config_client.patch_cluster.call_args_list[-1][0][1]
+                assert self._has_pool_type(patch_request, cold_pool_name)
+
+                pool_type = self._get_pool_type(patch_request, cold_pool_name)
+                assert pool_type.min_size == 0
+                assert pool_type.max_size == 0
