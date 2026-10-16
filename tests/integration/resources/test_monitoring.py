@@ -32,10 +32,11 @@ from neuro_config_client import (
     DisksConfig,
     DNSConfig,
     EnergyConfig,
+    GrafanaConfig,
     IngressConfig,
-    MetricsConfig,
     MonitoringConfig,
     OrchestratorConfig,
+    PrometheusConfig,
     PatchClusterRequest,
     RegistryConfig,
     ResourcePoolType,
@@ -193,10 +194,14 @@ class TestMonitoringService:
             dns=DNSConfig(name=f"{name}.org.apolo.us"),
             ingress=IngressConfig(acme_environment=ACMEEnvironment.PRODUCTION),
             secrets=SecretsConfig(url=URL(f"https://{name}.org.apolo.us")),
-            metrics=MetricsConfig(url=URL(f"https://{name}.org.apolo.us")),
             apps=AppsConfig(
+                launchpad_use_subdomain=False,
                 apps_hostname_templates=[f"{{app_name}}.apps.{name}.org.apolo.us"],
                 app_proxy_url=URL(f"https://proxy.apps.{name}.org.apolo.us"),
+            ),
+            grafana=GrafanaConfig(url=URL(f"https://grafana.{name}.org.apolo.us")),
+            prometheus=PrometheusConfig(
+                url=URL(f"https://prometheus.{name}.org.apolo.us")
             ),
             energy=EnergyConfig(),
         )
