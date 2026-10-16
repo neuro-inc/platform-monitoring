@@ -1,3 +1,12 @@
+COUNT ?=
+GROUP ?=
+
+ifeq ($(COUNT), )
+EXTRA_ARGS :=
+else
+EXTRA_ARGS := --test-group-count=$(COUNT) --test-group=$(GROUP)
+endif
+
 LOKI_HELM_VERSION ?= 6.55.0
 ALLOY_HELM_VERSION ?= 1.8.1
 GRAFANA_HELM_VERSION ?= 10.1.5
@@ -72,6 +81,7 @@ test_integration:
 		--maxfail=$(PYTEST_MAXFAIL) \
 		--log-level=$(PYTEST_LOG_LEVEL) \
 		--retries=$(PYTEST_RETRIES) \
+		$(EXTRA_ARGS) \
 		$(INT_TEST_PATH)
 
 .PHONY: dump_failed_k8s_logs
