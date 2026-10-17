@@ -149,7 +149,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: public.ecr.aws/docker/library/postgres:16.13
+          image: docker.io/library/postgres:16.13
           imagePullPolicy: "IfNotPresent"
           ports:
             - containerPort: 5432

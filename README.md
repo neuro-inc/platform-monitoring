@@ -1,6 +1,13 @@
 # platform-monitoring
 
 ## Local Development
+
+`make apply_configuration_k8s` generates random test credentials in
+`tests/k8s/tokens.json` using the Poetry dev environment. This file is Git-ignored
+and readable/writable only by its owner. Pytest uses the same generated signing
+key. Repeated setup runs reuse the file; delete it when recreating the test
+cluster to generate new credentials.
+
 1. Install minikube (https://github.com/kubernetes/minikube#installation);
 1. Authenticate local docker:
     ```shell
