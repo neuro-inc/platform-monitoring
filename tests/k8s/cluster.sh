@@ -34,7 +34,8 @@ function k8s::apply_all_configurations {
     kubectl get nodes -o name | xargs -I {} \
         kubectl label {} --overwrite platform.neuromation.io/nodepool=minikube
     kubectl apply -f tests/k8s/rbac.yml
-    kubectl apply -f tests/k8s/tokens.yml
+    poetry run python tests/k8s/generate_tokens.py
+    kubectl apply -f tests/k8s/tokens.json
     kubectl apply -f tests/k8s/logging.yml
     kubectl apply -f tests/k8s/platformauth.yml
     kubectl apply -f tests/k8s/platformconfig.yml

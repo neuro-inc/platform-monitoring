@@ -100,7 +100,7 @@ async def platform_api_config(
     await wait_for_service("platformapi", url / "api/v1/ping", timeout_s=120)
     return PlatformApiConfig(
         url=url,
-        token=token_factory("compute"),  # token is hard-coded in the yaml configuration
+        token=token_factory("compute"),
     )
 
 

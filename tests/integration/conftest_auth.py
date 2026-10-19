@@ -1,3 +1,4 @@
+import json
 from collections.abc import AsyncGenerator, Callable
 
 import pytest
@@ -6,15 +7,18 @@ from neuro_auth_client import AuthClient
 from yarl import URL
 
 from platform_monitoring.config import PlatformAuthConfig
+from tests.k8s.generate_tokens import TOKENS_PATH
 
 from .conftest import get_service_url
 
 
 @pytest.fixture(scope="session")
 def token_factory() -> Callable[[str], str]:
+    key = json.loads(TOKENS_PATH.read_text())["stringData"]["jwt_secret"]
+
     def _factory(name: str) -> str:
         payload = {"identity": name}
-        return jwt.encode(payload, "secret", algorithm="HS256")
+        return jwt.encode(payload, key, algorithm="HS256")
 
     return _factory
 
@@ -40,7 +44,7 @@ def auth_config(
         platform_auth = get_service_url("platformauthapi", namespace="default")
     return PlatformAuthConfig(
         url=URL(platform_auth),
-        token=token_factory("compute"),  # token is hard-coded in the yaml configuration
+        token=token_factory("compute"),
     )
 
 
