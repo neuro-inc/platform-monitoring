@@ -67,7 +67,7 @@ pytest-cov = "7.0.0"
 pytest-xdist = "3.8.0"
 python-jose = "3.5.0"
 ruff = "0.17.1"
-types-cachetools = "6.2.0.20251022"
+types-cachetools = "7.0.0.20260713"
 pytest-retry = "^1.7.0"
 pytest-test-groups = "^1.2.1"
 
