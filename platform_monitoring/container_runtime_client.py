@@ -2,6 +2,7 @@ import logging
 from asyncio.locks import Lock
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
+from typing import Self
 
 import aiohttp
 from yarl import URL
@@ -171,13 +172,13 @@ class ContainerRuntimeClientRegistry:
         self._trace_configs = trace_configs
         self._lock = Lock()
 
-    async def __aenter__(self) -> "ContainerRuntimeClientRegistry":
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, *args: object) -> None:
         await self._exit_stack.aclose()
 
-    async def get(self, host: str) -> "ContainerRuntimeClient":
+    async def get(self, host: str) -> ContainerRuntimeClient:
         host = self._container_runtime_host or host
         client = self._registry.get(host)
 

@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from types import TracebackType
+from typing import Self
 
 
 class LogReader(ABC):
@@ -49,7 +50,7 @@ class JobStats:
 
 
 class Telemetry(ABC):
-    async def __aenter__(self) -> "Telemetry":
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, *args: object) -> None:
