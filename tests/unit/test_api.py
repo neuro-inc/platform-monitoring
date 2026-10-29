@@ -4,10 +4,11 @@ from unittest.mock import Mock
 
 import pytest
 from aiobotocore.client import AioBaseClient
+from aiohttp import web
 from elasticsearch import AsyncElasticsearch
 from yarl import URL
 
-from platform_monitoring.api import create_logs_service
+from platform_monitoring.api import MonitoringApiHandler, create_logs_service
 from platform_monitoring.config import (
     Config,
     ContainerRuntimeConfig,
@@ -93,3 +94,19 @@ def test_create_logs_service_raises(
     config = config_factory(LogsStorageType.LOKI)
     with pytest.raises(AssertionError):
         create_logs_service(config, Mock())
+
+
+@pytest.mark.asyncio
+async def test_port_forward_rejects_invalid_port() -> None:
+    config = Mock()
+    config.registry.host = "registry"
+    config.kube.kubelet_node_port = 0
+    config.kube.nvidia_dcgm_node_port = 0
+    handler = MonitoringApiHandler(Mock(), config)
+    request = Mock()
+    request.match_info = {"port": "not-a-port"}
+
+    with pytest.raises(web.HTTPBadRequest) as exc_info:
+        await handler.port_forward(request)
+
+    assert exc_info.value.status == 400

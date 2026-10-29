@@ -1,8 +1,16 @@
 from datetime import datetime
+from unittest.mock import AsyncMock, Mock
 
+import pytest
 from iso8601 import UTC
 
-from platform_monitoring.logs import S3LogFile, S3LogRecord, S3LogsMetadata
+from platform_monitoring.kube_client import JobNotFoundException
+from platform_monitoring.logs import (
+    LokiLogsService,
+    S3LogFile,
+    S3LogRecord,
+    S3LogsMetadata,
+)
 
 
 class TestS3LogRecord:
@@ -107,6 +115,30 @@ class TestS3LogRecord:
             message="hello",
             container_id="container",
         )
+
+
+@pytest.mark.asyncio
+async def test_loki_live_logs_ignore_missing_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = LokiLogsService(Mock(), Mock(), max_query_lookback_s=86400)
+    monkeypatch.setattr(
+        "platform_monitoring.logs.get_container_status",
+        AsyncMock(side_effect=JobNotFoundException),
+    )
+
+    logs = [
+        chunk
+        async for chunk in service.get_pod_container_live_log_reader(
+            Mock(),
+            pod_name="job",
+            container_name="container",
+            org_name="org",
+            project_name="project",
+        )
+    ]
+
+    assert logs == []
 
 
 class TestS3LogFile:
