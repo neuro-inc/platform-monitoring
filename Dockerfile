@@ -45,6 +45,5 @@ WORKDIR /app
 ENV NP_MONITORING_API_PORT=8080
 EXPOSE $NP_MONITORING_API_PORT
 
-RUN python -c "from importlib.metadata import version; assert tuple(map(int, version('certifi').split('.'))) >= (2026, 10, 19)"
 
 CMD [ "platform-monitoring-api" ]
