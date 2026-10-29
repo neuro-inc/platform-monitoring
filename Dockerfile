@@ -6,7 +6,9 @@ ENV PATH=/root/.local/bin:$PATH
 
 WORKDIR /tmp
 COPY requirements.txt /tmp/
-RUN pip install --user --no-cache-dir -r requirements.txt
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential && \
+    pip install --user --no-cache-dir -r requirements.txt && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY dist /tmp/dist/
 RUN pip install --user --no-cache-dir --find-links /tmp/dist platform-monitoring
