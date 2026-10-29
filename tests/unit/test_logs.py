@@ -9,6 +9,7 @@ from platform_monitoring.logs import (
     LokiLogsService,
     S3LogFile,
     S3LogRecord,
+    S3LogRecordsWriter,
     S3LogsMetadata,
 )
 
@@ -139,6 +140,54 @@ async def test_loki_live_logs_ignore_missing_job(
     ]
 
     assert logs == []
+
+
+def test_loki_logs_reject_short_retention() -> None:
+    with pytest.raises(ValueError, match="Retention period should be at least 1 day"):
+        LokiLogsService(Mock(), Mock(), max_query_lookback_s=86399)
+
+
+@pytest.mark.asyncio
+async def test_loki_live_logs_include_context_for_unexpected_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = LokiLogsService(Mock(), Mock(), max_query_lookback_s=86400)
+    cause = RuntimeError("Kubernetes connection failed")
+    monkeypatch.setattr(
+        "platform_monitoring.logs.get_container_status",
+        AsyncMock(side_effect=cause),
+    )
+
+    reader = service.get_pod_container_live_log_reader(
+        Mock(),
+        pod_name="job",
+        container_name="container",
+        org_name="org",
+        project_name="project",
+    )
+    with pytest.raises(
+        Exception, match="Error while get_pod_container_live_log_reader"
+    ) as exc_info:
+        await anext(reader)
+
+    assert "pod_name='job'" in str(exc_info.value)
+    assert "container_name='container'" in str(exc_info.value)
+    assert "Kubernetes connection failed" in str(exc_info.value)
+    assert exc_info.value.__cause__ is cause
+
+
+@pytest.mark.asyncio
+async def test_s3_log_writer_reports_exhausted_timeouts() -> None:
+    cause = TimeoutError("S3 write timed out")
+    client = Mock()
+    client.put_object = AsyncMock(side_effect=cause)
+    writer = S3LogRecordsWriter(client, "logs", "job", write_buffer_attempts=3)
+
+    with pytest.raises(TimeoutError, match="S3 write timed out") as exc_info:
+        await writer._put_buffer_to_s3("job/log.gz")
+
+    assert client.put_object.await_count == 3
+    assert exc_info.value is cause
 
 
 class TestS3LogFile:
