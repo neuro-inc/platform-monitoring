@@ -17,9 +17,6 @@ RUN pip install --user --no-cache-dir --find-links /tmp/dist platform-monitoring
 
 FROM python:${PY_VERSION}-slim AS runtime
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && python -c "from importlib.metadata import version; assert tuple(map(int, version('pip').split('.'))) >= (26, 2, 2)"
 LABEL org.opencontainers.image.source="https://github.com/neuro-inc/platform-monitoring"
 
 # Name of your service (folder under /home)
