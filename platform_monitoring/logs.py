@@ -1110,7 +1110,7 @@ class LogsService(abc.ABC):
                     interval_s=interval_s,
                 )
                 since = start = status.started_at
-        except (JobNotFoundException, ResourceNotFound):  # fmt: skip
+        except JobNotFoundException, ResourceNotFound:
             pass
 
     @abc.abstractmethod
@@ -1474,7 +1474,7 @@ async def get_first_log_entry_time(
                         time_str += chunk[:pos]
                         break
                     time_str += chunk
-    except (TimeoutError, JobNotFoundException):  # fmt: skip
+    except TimeoutError, JobNotFoundException:
         return None
     try:
         return parse_date(time_str.decode())
@@ -1646,7 +1646,7 @@ class LokiLogsService(BaseLogsService):
                 # There is a case f.e. when pod terminated at 12:00:00.666 and last log
                 # was at 12:00:00.555 but finished_at truncated to 12:00:00.000 by api,
                 # so this logs appeared as live logs and not appeared in archive.
-            except (JobNotFoundException, ResourceNotFound):  # fmt: skip
+            except JobNotFoundException, ResourceNotFound:
                 should_get_live_logs = False
                 archive_border_dt = now_dt
 
@@ -1711,7 +1711,7 @@ class LokiLogsService(BaseLogsService):
                             interval_s=interval_s,
                         )
                         since = status.started_at
-                except (JobNotFoundException, ResourceNotFound):  # fmt: skip
+                except JobNotFoundException, ResourceNotFound:
                     pass
 
     async def get_pod_container_live_log_reader(
@@ -1778,7 +1778,7 @@ class LokiLogsService(BaseLogsService):
                     project_name=project_name,
                 )
                 since = status.started_at
-        except (JobNotFoundException, ResourceNotFound):  # fmt: skip
+        except JobNotFoundException, ResourceNotFound:
             pass
         except Exception as e:
             exc_txt = (
