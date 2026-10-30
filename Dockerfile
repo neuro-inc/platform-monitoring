@@ -2,9 +2,8 @@ ARG PY_VERSION=3.14.10
 
 FROM python:${PY_VERSION}-slim AS builder
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates build-essential \
-    && rm -rf /var/lib/apt/lists/* \
-    && python -c "from importlib.metadata import version; assert tuple(map(int, version('pip').split('.'))) >= (26, 2, 2)"
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 ENV PATH=/root/.local/bin:$PATH
 
@@ -16,7 +15,6 @@ COPY dist /tmp/dist/
 RUN pip install --user --no-cache-dir --find-links /tmp/dist platform-monitoring
 
 FROM python:${PY_VERSION}-slim AS runtime
-
 LABEL org.opencontainers.image.source="https://github.com/neuro-inc/platform-monitoring"
 
 # Name of your service (folder under /home)
@@ -41,6 +39,5 @@ WORKDIR /app
 
 ENV NP_MONITORING_API_PORT=8080
 EXPOSE $NP_MONITORING_API_PORT
-
 
 CMD [ "platform-monitoring-api" ]
