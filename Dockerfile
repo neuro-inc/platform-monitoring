@@ -1,6 +1,9 @@
-ARG PY_VERSION=3.13
+ARG PY_VERSION=3.14.10
 
 FROM python:${PY_VERSION}-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 ENV PATH=/root/.local/bin:$PATH
 

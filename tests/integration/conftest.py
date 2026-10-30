@@ -164,7 +164,7 @@ async def es_client(
 
 
 @pytest.fixture(scope="session")
-async def platform_monitoring_api_address(in_minikube: bool) -> "ApiAddress":  # noqa: FBT001
+async def platform_monitoring_api_address(in_minikube: bool) -> ApiAddress:  # noqa: FBT001
     if in_minikube:
         return ApiAddress("platform-monitoring", 8080)
     url = URL(get_service_url("platform-monitoring"))
