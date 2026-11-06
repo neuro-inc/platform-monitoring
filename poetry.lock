@@ -705,6 +705,7 @@ description = "Python CFFI bindings to the Brotli library"
 optional = false
 python-versions = ">=3.8"
 groups = ["main", "dev"]
+markers = "platform_python_implementation != \"CPython\""
 files = [
     {file = "brotlicffi-1.2.1.0-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:fea6f5450a6bd73ec222e92282d4db25030943946190697c1f2cd41087c59bc6"},
     {file = "brotlicffi-1.2.1.0-cp314-cp314t-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:b77704eb33e345e00d0a2854abf7966b86e1709a1f89bcc143b6c8437256d7c7"},
@@ -726,7 +727,6 @@ files = [
     {file = "brotlicffi-1.2.1.0-pp312-pypy312_pp80-win_amd64.whl", hash = "sha256:52b99120543ffa3b0667e922c6a7dc6b6e01350f7fd38f21aaca511bb9f8b4f2"},
     {file = "brotlicffi-1.2.1.0.tar.gz", hash = "sha256:5d0b89e959f643aab4c58c15c06e1e87b6f6605e5e88c3c1c28f5ce1c58c4e5f"},
 ]
-markers = {main = "platform_python_implementation != \"CPython\""}
 
 [package.dependencies]
 cffi = {version = ">=1.17.0", markers = "python_version >= \"3.13\""}
@@ -2795,18 +2795,18 @@ dev = ["argcomplete", "attrs (>=19.2)", "hypothesis (>=3.56)", "mock", "requests
 
 [[package]]
 name = "pytest-asyncio"
-version = "1.4.1"
+version = "1.4.1.post1"
 description = "Pytest support for asyncio"
 optional = false
 python-versions = ">=3.10"
 groups = ["dev"]
 files = [
-    {file = "pytest_asyncio-1.4.1-py3-none-any.whl", hash = "sha256:507afa78ec77c6661164ef1a2368bc7820383fd1a14b2a7f813de8b5a92949cc"},
-    {file = "pytest_asyncio-1.4.1.tar.gz", hash = "sha256:e8266eb094e5ee9ffdb2068c9836f33e209ea77a970eb846933d416b5602669b"},
+    {file = "pytest_asyncio-1.4.1.post1-py3-none-any.whl", hash = "sha256:0755e488cc0a2b9bd2eab7292cc6390d4cbb8390f1020745647bae5a708e0165"},
+    {file = "pytest_asyncio-1.4.1.post1.tar.gz", hash = "sha256:f582d9ea4a1c082195abe8bd29a1fe106aeb1cd435e3dad2d3bc2749935c36a2"},
 ]
 
 [package.dependencies]
-pytest = ">=8.4,<10"
+pytest = ">=8.4"
 
 [package.extras]
 docs = ["sphinx (>=5.3)", "sphinx-rtd-theme (>=1)", "sphinx-tabs (>=3.5)"]
@@ -3769,4 +3769,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14,<3.15"
-content-hash = "a6bea0fcd85269320478881c79fae80b502f6096ea7b2a1959cb8165cbfb446b"
+content-hash = "e9a2e28c4f187989015d2fb735f793d3097d16d88d31d9c5be2e7e5c081987d9"
