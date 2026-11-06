@@ -705,6 +705,7 @@ description = "Python CFFI bindings to the Brotli library"
 optional = false
 python-versions = ">=3.8"
 groups = ["main", "dev"]
+markers = "platform_python_implementation != \"CPython\""
 files = [
     {file = "brotlicffi-1.2.1.0-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:fea6f5450a6bd73ec222e92282d4db25030943946190697c1f2cd41087c59bc6"},
     {file = "brotlicffi-1.2.1.0-cp314-cp314t-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:b77704eb33e345e00d0a2854abf7966b86e1709a1f89bcc143b6c8437256d7c7"},
@@ -726,7 +727,6 @@ files = [
     {file = "brotlicffi-1.2.1.0-pp312-pypy312_pp80-win_amd64.whl", hash = "sha256:52b99120543ffa3b0667e922c6a7dc6b6e01350f7fd38f21aaca511bb9f8b4f2"},
     {file = "brotlicffi-1.2.1.0.tar.gz", hash = "sha256:5d0b89e959f643aab4c58c15c06e1e87b6f6605e5e88c3c1c28f5ce1c58c4e5f"},
 ]
-markers = {main = "platform_python_implementation != \"CPython\""}
 
 [package.dependencies]
 cffi = {version = ">=1.17.0", markers = "python_version >= \"3.13\""}
@@ -1365,14 +1365,14 @@ testing = ["hatch", "pre-commit", "pytest", "tox"]
 
 [[package]]
 name = "filelock"
-version = "4.2.4"
+version = "4.2.7"
 description = "A platform independent file lock."
 optional = false
 python-versions = ">=3.11"
 groups = ["dev"]
 files = [
-    {file = "filelock-4.2.4-py3-none-any.whl", hash = "sha256:301241438c57936ef93f4243a94f2559022268bfcf9b375a9a72eb0f8db8358e"},
-    {file = "filelock-4.2.4.tar.gz", hash = "sha256:c6d8663535e1650ee430507b4ffbac7b464dd64b7647ea0112a9f406499d163d"},
+    {file = "filelock-4.2.7-py3-none-any.whl", hash = "sha256:d08972bbca2b8767ee552aff877b091dd111ffb1d22de7de885766ea7d719d5e"},
+    {file = "filelock-4.2.7.tar.gz", hash = "sha256:31f6f7e3a8b6f0bd89114d30c5d5218ea1cfb63e5c4aa695b7559314a209bc7f"},
 ]
 
 [[package]]
