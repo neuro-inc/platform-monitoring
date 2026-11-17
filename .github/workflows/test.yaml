@@ -102,6 +102,10 @@ jobs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ github.token }}
+    - name: Raise inotify limits
+      run: |
+        sysctl fs.inotify.max_user_instances fs.inotify.max_user_watches
+        sudo sysctl -w fs.inotify.max_user_instances=1280 fs.inotify.max_user_watches=655360
     - name: Start minikube
       uses: medyagh/setup-minikube@latest
       id: minikube
