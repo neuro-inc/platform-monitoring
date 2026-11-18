@@ -4,6 +4,7 @@ from typing import Protocol
 
 import aiohttp
 import pytest
+import pytest_asyncio
 from aiohttp.hdrs import AUTHORIZATION
 from neuro_auth_client import AuthClient, Permission
 from yarl import URL
@@ -161,14 +162,14 @@ def regular_user_factory(
     return _factory
 
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def regular_user1(
     regular_user_factory: Callable[..., Awaitable[ProjectUser]],
 ) -> ProjectUser:
     return await regular_user_factory()
 
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def regular_user2(
     regular_user_factory: Callable[..., Awaitable[ProjectUser]],
 ) -> ProjectUser:

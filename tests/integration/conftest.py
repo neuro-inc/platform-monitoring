@@ -12,6 +12,7 @@ from uuid import uuid1, uuid4
 import aiohttp
 import aiohttp.web
 import pytest
+import pytest_asyncio
 from _pytest.fixtures import FixtureRequest
 from aiobotocore.client import AioBaseClient
 from apolo_apps_client import AppsClientConfig
@@ -85,7 +86,7 @@ async def wait_for_service(
             await asyncio.sleep(interval_s)
 
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def platform_api_config(
     request: FixtureRequest,
     in_minikube: bool,  # noqa: FBT001
@@ -104,7 +105,7 @@ async def platform_api_config(
     )
 
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def container_runtime_config(in_minikube: bool) -> ContainerRuntimeConfig:  # noqa: FBT001
     if in_minikube:
         url = URL("http://platform-container-runtime:9000")
@@ -131,7 +132,7 @@ async def container_runtime_client_registry(
         yield registry
 
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def es_config(
     request: FixtureRequest,
     in_minikube: bool,  # noqa: FBT001
@@ -163,7 +164,7 @@ async def es_client(
         yield es_client
 
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def platform_monitoring_api_address(in_minikube: bool) -> ApiAddress:  # noqa: FBT001
     if in_minikube:
         return ApiAddress("platform-monitoring", 8080)
@@ -217,7 +218,7 @@ async def logs_config() -> LogsConfig:
     return LogsConfig(storage_type=LogsStorageType.S3, cleanup_interval_sec=0.5)
 
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def registry_config(request: FixtureRequest, in_minikube: bool) -> RegistryConfig:  # noqa: FBT001
     if in_minikube:
         external_url = URL("http://registry.kube-system")
