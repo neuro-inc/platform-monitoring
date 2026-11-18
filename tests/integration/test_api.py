@@ -17,6 +17,7 @@ from uuid import uuid4
 import aiohttp
 import aiohttp.hdrs
 import pytest
+import pytest_asyncio
 from aiohttp import WSServerHandshakeError
 from aiohttp.web import HTTPOk
 from aiohttp.web_exceptions import (
@@ -241,7 +242,7 @@ async def apps_monitoring_api(
         yield AppsMonitoringApiEndpoints(address=address)
 
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def monitoring_api_ep(
     platform_monitoring_api_address: ApiAddress,
 ) -> MonitoringApiEndpoints:

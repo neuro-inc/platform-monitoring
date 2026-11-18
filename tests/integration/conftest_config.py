@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import AsyncIterator, Callable
 
 import pytest
+import pytest_asyncio
 from apolo_apps_client import AppsClientConfig
 from neuro_config_client import ConfigClient
 from yarl import URL
@@ -14,7 +15,7 @@ from platform_monitoring.config import (
 from tests.integration.conftest import get_service_url
 
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def cluster_name() -> str:
     return "default"
 
@@ -24,7 +25,7 @@ def cluster_token(token_factory: Callable[[str], str]) -> str:
     return token_factory("cluster")
 
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def platform_config_url(
     platform_api_config: PlatformApiConfig,
     in_minikube: bool,  # noqa: FBT001
