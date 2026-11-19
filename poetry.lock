@@ -378,14 +378,14 @@ yarl = ">=1.20"
 
 [[package]]
 name = "apolo-sdk"
-version = "26.9.0"
+version = "26.11.2"
 description = "Apolo SDK"
 optional = false
-python-versions = ">=3.10.0"
+python-versions = ">=3.12.0"
 groups = ["dev"]
 files = [
-    {file = "apolo_sdk-26.9.0-py3-none-any.whl", hash = "sha256:0bce83c17be38ad31720ed79a161741e97b5f2f8ab7459eb4e91302f6cd4fdc0"},
-    {file = "apolo_sdk-26.9.0.tar.gz", hash = "sha256:376e11c5ad3b76353c8e196c97981217d95b60972dfcd59709ef3d7a6dc2fc48"},
+    {file = "apolo_sdk-26.11.2-py3-none-any.whl", hash = "sha256:3c35077337454e750d24f044fed4105abe0a412dc9f993ed35f2c70412eaadf5"},
+    {file = "apolo_sdk-26.11.2.tar.gz", hash = "sha256:822cd785f270687549cc508222f8be2329e27a6bd4bc9a3e40c226ca2156960d"},
 ]
 
 [package.dependencies]
@@ -3769,4 +3769,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14,<3.15"
-content-hash = "d7cf2bab2ae8cc4631b352d52f108bfed67e2edcd1013fb492a029fde846254f"
+content-hash = "eabe8a156ee54c7bfad789508c8a82f1c9b02d8ee104a890d42f8926fcd57ede"
