@@ -1517,14 +1517,14 @@ files = [
 
 [[package]]
 name = "google-auth"
-version = "2.62.0"
+version = "2.62.2"
 description = "Google Authentication Library"
 optional = false
 python-versions = ">=3.10"
 groups = ["dev"]
 files = [
-    {file = "google_auth-2.62.0-py3-none-any.whl", hash = "sha256:4ff4319aeb4ad128409759d397a9fcafad126d0031d241cc0dd6b9a00b43e3f3"},
-    {file = "google_auth-2.62.0.tar.gz", hash = "sha256:0bef0ce54bdf9ce226c5d66e4264413bd918141c31bbe49fb52eac882f513d69"},
+    {file = "google_auth-2.62.2-py3-none-any.whl", hash = "sha256:e9bcdb0679b6a4369ac327c5c59f06d92f7b4cd2624e7100294c14632f55a36b"},
+    {file = "google_auth-2.62.2.tar.gz", hash = "sha256:046c61a72d3a847d6df6417a7f0d5cf054e3b82bbcb54fb1e69d47880964049c"},
 ]
 
 [package.dependencies]
